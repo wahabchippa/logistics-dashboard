@@ -3,46 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>G-Ops 3PL Dashboard</title>
+    <title>3PL Executive Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js"></script>
 </head>
-<body class="bg-[#050505] text-slate-200 font-sans min-h-screen">
-    <div class="max-w-full mx-auto p-4 md:p-6">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-[#111] p-5 rounded-xl border border-zinc-800">
+<body class="bg-[#0a0a0a] text-zinc-300 font-sans min-h-screen">
+    <div class="max-w-7xl mx-auto p-4 md:p-10">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-6 bg-zinc-900/50 p-8 rounded-3xl border border-zinc-800 shadow-2xl">
             <div>
-                <h1 class="text-xl font-bold tracking-tighter text-emerald-500 uppercase">
-                    3PL WEEKLY PERFORMANCE SUMMARY
+                <h1 class="text-3xl font-black tracking-tighter text-white uppercase italic">
+                    G-Ops <span class="text-emerald-500">3PL Summary</span>
                 </h1>
-                <p class="text-zinc-500 text-xs uppercase tracking-widest">Live Logistics Intelligence Dashboard</p>
+                <p id="debug-info" class="text-zinc-500 text-[10px] uppercase tracking-[0.2em] mt-2">Live Cloud Data Synchronization Active</p>
             </div>
-            <div class="flex items-center gap-4 bg-black p-2 px-4 rounded-lg border border-zinc-800">
-                <span class="text-zinc-400 text-xs font-bold uppercase">Select Week:</span>
+            <div class="flex items-center gap-4 bg-black p-3 px-6 rounded-2xl border border-zinc-700">
+                <span class="text-emerald-500 text-xs font-bold uppercase">Week Starting:</span>
                 <input type="date" id="datePicker" class="bg-transparent border-none text-white text-sm focus:ring-0 cursor-pointer outline-none">
             </div>
         </div>
 
-        <div class="bg-[#111] rounded-xl border border-zinc-800 overflow-hidden">
+        <div class="bg-zinc-900/30 rounded-3xl border border-zinc-800 overflow-hidden backdrop-blur-md">
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
                     <thead>
-                        <tr class="bg-zinc-900/50">
-                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black sticky left-0 bg-[#111] z-10 w-48">Partner Agency</th>
-                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black text-center">Mon</th>
-                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black text-center">Tue</th>
-                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black text-center">Wed</th>
-                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black text-center">Thu</th>
-                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black text-center">Fri</th>
-                            <th class="p-4 border-b border-zinc-800 text-emerald-700 text-[10px] uppercase font-black text-center bg-emerald-950/10">Sat</th>
-                            <th class="p-4 border-b border-zinc-800 text-emerald-700 text-[10px] uppercase font-black text-center bg-emerald-950/10">Sun</th>
+                        <tr class="bg-zinc-800/50">
+                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black sticky left-0 bg-zinc-900 z-10">Agency</th>
+                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black text-center">Mon</th>
+                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black text-center">Tue</th>
+                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black text-center">Wed</th>
+                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black text-center">Thu</th>
+                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black text-center">Fri</th>
+                            <th class="p-5 border-b border-zinc-800 text-emerald-500/50 text-xs uppercase font-black text-center bg-emerald-500/5">Sat</th>
+                            <th class="p-5 border-b border-zinc-800 text-emerald-500/50 text-xs uppercase font-black text-center bg-emerald-500/5">Sun</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody" class="divide-y divide-zinc-800/50">
-                        </tbody>
+                        <tr><td colspan="8" class="p-20 text-center text-zinc-600 animate-pulse uppercase tracking-widest text-xs">Awaiting Data Stream...</td></tr>
+                    </tbody>
                 </table>
             </div>
         </div>
-        <div id="loader" class="mt-4 text-center text-[10px] text-zinc-600 uppercase tracking-widest">System Ready. Awaiting Date Selection...</div>
     </div>
 
     <script>
@@ -55,25 +55,27 @@
         ];
 
         const dp = document.getElementById('datePicker');
-        // Initial Monday setup
         const now = new Date();
         const monday = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1)));
         dp.value = monday.toISOString().split('T')[0];
 
+        function cleanDate(str) {
+            if (!str) return "";
+            // Sirf date nikaalo agar time sath mein hai (e.g. 15/02/2026 10:00 -> 15/02/2026)
+            return str.split(' ')[0].trim().replace(/-/g, '/');
+        }
+
         async function fetchData() {
             const tableBody = document.getElementById('tableBody');
-            const loader = document.getElementById('loader');
-            loader.innerText = "⚡ FETCHING LIVE DATA FROM CLOUD...";
+            const debugInfo = document.getElementById('debug-info');
             
             const selectedDate = new Date(dp.value);
-            // Array to store 7 days of the week in multiple formats to match sheet
-            const weekFormats = Array.from({length: 7}, (_, i) => {
+            const weekDays = Array.from({length: 7}, (_, i) => {
                 const d = new Date(selectedDate);
                 d.setDate(d.getDate() + i);
-                const day = String(d.getDate()).padStart(2, '0');
-                const month = String(d.getMonth() + 1).padStart(2, '0');
-                const year = d.getFullYear();
-                return [`${day}/${month}/${year}`, `${day}-${month}-${year}`, d.toLocaleDateString('en-GB')];
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                return `${dd}/${mm}/${d.getFullYear()}`;
             });
 
             try {
@@ -82,33 +84,37 @@
                     const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(p.sheet)}`;
                     const res = await fetch(url);
                     const csv = await res.text();
-                    const data = Papa.parse(csv).data;
+                    const data = Papa.parse(csv, { skipEmptyLines: true }).data;
 
-                    html += `<tr class="hover:bg-zinc-900/30 transition-all border-l-2 border-transparent hover:border-emerald-500">
-                        <td class="p-4 font-bold text-xs text-zinc-400 sticky left-0 bg-[#050505] z-10">${p.name}</td>`;
+                    // Debugging: Show first row of data on first provider
+                    if (p === PROVIDERS[0] && data[1]) {
+                        debugInfo.innerText = `Sample Date from Sheet: ${data[1][p.dateIdx]} | Looking for: ${weekDays[0]}`;
+                    }
 
-                    weekFormats.forEach((formats, idx) => {
+                    html += `<tr class="hover:bg-emerald-500/[0.02] transition-colors group">
+                        <td class="p-5 font-black text-[10px] text-zinc-500 sticky left-0 bg-[#0a0a0a] z-10 group-hover:text-emerald-500">${p.name}</td>`;
+
+                    weekDays.forEach((targetDate, idx) => {
                         let boxes = 0, weight = 0;
                         data.forEach(row => {
-                            // Check if row date matches any of our formats
-                            if (formats.includes(String(row[p.dateIdx]).trim())) {
+                            const sheetDate = cleanDate(row[p.dateIdx]);
+                            if (sheetDate === targetDate) {
                                 boxes += parseInt(row[p.boxIdx]) || 0;
                                 weight += parseFloat(row[p.wgtIdx]) || 0;
                             }
                         });
 
-                        const isWeekend = idx >= 5;
-                        html += `<td class="p-4 text-center ${isWeekend ? 'bg-emerald-500/5' : ''}">
-                            <div class="text-sm font-bold ${boxes > 0 ? 'text-emerald-400' : 'text-zinc-700'}">${boxes}</div>
+                        const hasData = boxes > 0;
+                        html += `<td class="p-5 text-center ${idx >= 5 ? 'bg-emerald-500/[0.02]' : ''}">
+                            <div class="text-sm font-bold ${hasData ? 'text-white' : 'text-zinc-800'}">${boxes}</div>
                             <div class="text-[9px] font-mono text-zinc-600">${weight.toFixed(1)}kg</div>
                         </td>`;
                     });
                     html += `</tr>`;
                 }
                 tableBody.innerHTML = html;
-                loader.innerText = "✓ ALL STREAMS SYNCHRONIZED";
             } catch (e) {
-                loader.innerText = "❌ ERROR: CHECK SHEET PERMISSIONS";
+                debugInfo.innerText = "Connection Error. Check Sheet Sharing Settings.";
             }
         }
 
