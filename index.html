@@ -3,42 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3PL Executive Dashboard</title>
+    <title>G-Ops 3PL VIP Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js"></script>
 </head>
-<body class="bg-[#0a0a0a] text-zinc-300 font-sans min-h-screen">
-    <div class="max-w-7xl mx-auto p-4 md:p-10">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-6 bg-zinc-900/50 p-8 rounded-3xl border border-zinc-800 shadow-2xl">
+<body class="bg-[#050505] text-zinc-300 font-sans min-h-screen p-4 md:p-10">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8 bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800 shadow-2xl">
             <div>
-                <h1 class="text-3xl font-black tracking-tighter text-white uppercase italic">
-                    G-Ops <span class="text-emerald-500">3PL Summary</span>
-                </h1>
-                <p id="debug-info" class="text-zinc-500 text-[10px] uppercase tracking-[0.2em] mt-2">Live Cloud Data Synchronization Active</p>
+                <h1 class="text-2xl font-black text-emerald-500 italic tracking-tighter uppercase">G-OPS LIVE SUMMARY</h1>
+                <p id="status" class="text-[9px] text-zinc-500 uppercase tracking-[0.3em] mt-1 font-bold">System Online & Synchronized</p>
             </div>
-            <div class="flex items-center gap-4 bg-black p-3 px-6 rounded-2xl border border-zinc-700">
-                <span class="text-emerald-500 text-xs font-bold uppercase">Week Starting:</span>
+            <div class="flex items-center gap-4 bg-black p-3 px-6 rounded-xl border border-zinc-700 mt-4 md:mt-0">
+                <span class="text-emerald-500 text-xs font-bold uppercase">Week:</span>
                 <input type="date" id="datePicker" class="bg-transparent border-none text-white text-sm focus:ring-0 cursor-pointer outline-none">
             </div>
         </div>
 
-        <div class="bg-zinc-900/30 rounded-3xl border border-zinc-800 overflow-hidden backdrop-blur-md">
+        <div class="bg-zinc-900/30 rounded-2xl border border-zinc-800 overflow-hidden backdrop-blur-sm">
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
                     <thead>
-                        <tr class="bg-zinc-800/50">
-                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black sticky left-0 bg-zinc-900 z-10">Agency</th>
-                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black text-center">Mon</th>
-                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black text-center">Tue</th>
-                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black text-center">Wed</th>
-                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black text-center">Thu</th>
-                            <th class="p-5 border-b border-zinc-800 text-zinc-500 text-xs uppercase font-black text-center">Fri</th>
-                            <th class="p-5 border-b border-zinc-800 text-emerald-500/50 text-xs uppercase font-black text-center bg-emerald-500/5">Sat</th>
-                            <th class="p-5 border-b border-zinc-800 text-emerald-500/50 text-xs uppercase font-black text-center bg-emerald-500/5">Sun</th>
+                        <tr class="bg-zinc-800/40 text-[10px] uppercase font-black text-zinc-500 tracking-widest">
+                            <th class="p-5 border-b border-zinc-800 sticky left-0 bg-[#050505] z-10">3PL Provider</th>
+                            <th class="p-5 border-b border-zinc-800 text-center">Mon</th>
+                            <th class="p-5 border-b border-zinc-800 text-center">Tue</th>
+                            <th class="p-5 border-b border-zinc-800 text-center">Wed</th>
+                            <th class="p-5 border-b border-zinc-800 text-center">Thu</th>
+                            <th class="p-5 border-b border-zinc-800 text-center">Fri</th>
+                            <th class="p-5 border-b border-zinc-800 text-center bg-emerald-500/5 text-emerald-600">Sat</th>
+                            <th class="p-5 border-b border-zinc-800 text-center bg-emerald-500/5 text-emerald-600">Sun</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody" class="divide-y divide-zinc-800/50">
-                        <tr><td colspan="8" class="p-20 text-center text-zinc-600 animate-pulse uppercase tracking-widest text-xs">Awaiting Data Stream...</td></tr>
+                        <tr><td colspan="8" class="p-20 text-center text-zinc-700 animate-pulse uppercase text-xs tracking-widest">Awaiting Data Stream...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -46,80 +43,50 @@
     </div>
 
     <script>
-        const SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY';
-        const PROVIDERS = [
-            { name: 'GLOBAL EXPRESS (QC)', sheet: 'GE QC Center & Zone', dateIdx: 1, boxIdx: 2, wgtIdx: 5 },
-            { name: 'ECL LOGISTICS (QC)', sheet: 'ECL QC Center & Zone', dateIdx: 1, boxIdx: 2, wgtIdx: 5 },
-            { name: 'KERRY LOGISTICS', sheet: 'Kerry', dateIdx: 1, boxIdx: 2, wgtIdx: 5 },
-            { name: 'APX EXPRESS', sheet: 'APX', dateIdx: 1, boxIdx: 2, wgtIdx: 5 }
-        ];
+        const SCRIPT_URL = 'https://script.google.com/a/macros/joinfleek.com/s/AKfycbwmJk8syB41maPtmoE4rGsefJyRJYMYe79RM_iT-Zqef68QnfXioLmedGknI2sgagxd/exec'; 
 
         const dp = document.getElementById('datePicker');
-        const now = new Date();
-        const monday = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1)));
+        const today = new Date();
+        const monday = new Date(today.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1)));
         dp.value = monday.toISOString().split('T')[0];
 
-        function cleanDate(str) {
-            if (!str) return "";
-            // Sirf date nikaalo agar time sath mein hai (e.g. 15/02/2026 10:00 -> 15/02/2026)
-            return str.split(' ')[0].trim().replace(/-/g, '/');
-        }
-
-        async function fetchData() {
+        async function loadData() {
+            const status = document.getElementById('status');
             const tableBody = document.getElementById('tableBody');
-            const debugInfo = document.getElementById('debug-info');
-            
-            const selectedDate = new Date(dp.value);
-            const weekDays = Array.from({length: 7}, (_, i) => {
-                const d = new Date(selectedDate);
-                d.setDate(d.getDate() + i);
-                const dd = String(d.getDate()).padStart(2, '0');
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                return `${dd}/${mm}/${d.getFullYear()}`;
-            });
+            status.innerText = "⚡ FETCHING DATA FROM GOOGLE SHEETS...";
+            status.classList.add('text-emerald-500');
 
             try {
+                const response = await fetch(`${SCRIPT_URL}?week=${dp.value}`);
+                const data = await response.json();
+                
                 let html = '';
-                for (const p of PROVIDERS) {
-                    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(p.sheet)}`;
-                    const res = await fetch(url);
-                    const csv = await res.text();
-                    const data = Papa.parse(csv, { skipEmptyLines: true }).data;
-
-                    // Debugging: Show first row of data on first provider
-                    if (p === PROVIDERS[0] && data[1]) {
-                        debugInfo.innerText = `Sample Date from Sheet: ${data[1][p.dateIdx]} | Looking for: ${weekDays[0]}`;
-                    }
-
-                    html += `<tr class="hover:bg-emerald-500/[0.02] transition-colors group">
-                        <td class="p-5 font-black text-[10px] text-zinc-500 sticky left-0 bg-[#0a0a0a] z-10 group-hover:text-emerald-500">${p.name}</td>`;
-
-                    weekDays.forEach((targetDate, idx) => {
-                        let boxes = 0, weight = 0;
-                        data.forEach(row => {
-                            const sheetDate = cleanDate(row[p.dateIdx]);
-                            if (sheetDate === targetDate) {
-                                boxes += parseInt(row[p.boxIdx]) || 0;
-                                weight += parseFloat(row[p.wgtIdx]) || 0;
-                            }
-                        });
-
-                        const hasData = boxes > 0;
-                        html += `<td class="p-5 text-center ${idx >= 5 ? 'bg-emerald-500/[0.02]' : ''}">
-                            <div class="text-sm font-bold ${hasData ? 'text-white' : 'text-zinc-800'}">${boxes}</div>
-                            <div class="text-[9px] font-mono text-zinc-600">${weight.toFixed(1)}kg</div>
+                data.forEach(row => {
+                    html += `<tr class="hover:bg-emerald-500/[0.03] transition-colors group">
+                        <td class="p-5 font-bold text-xs text-zinc-400 sticky left-0 bg-[#050505] z-10 group-hover:text-emerald-400 border-r border-zinc-800/50">${row.name}</td>`;
+                    
+                    row.daily.forEach((day, idx) => {
+                        const isWeekend = idx >= 5;
+                        html += `<td class="p-5 text-center ${isWeekend ? 'bg-emerald-500/[0.01]' : ''}">
+                            <div class="text-sm font-black ${day.boxes > 0 ? 'text-white' : 'text-zinc-800'}">${day.boxes}</div>
+                            <div class="text-[9px] font-mono ${day.weight > 0 ? 'text-zinc-500' : 'text-zinc-700'}">${day.weight}kg</div>
                         </td>`;
                     });
                     html += `</tr>`;
-                }
+                });
                 tableBody.innerHTML = html;
+                status.innerText = "✓ ALL DATA STREAMS SYNCHRONIZED";
+                status.classList.remove('text-emerald-500');
+                status.classList.add('text-zinc-500');
             } catch (e) {
-                debugInfo.innerText = "Connection Error. Check Sheet Sharing Settings.";
+                status.innerText = "❌ CONNECTION ERROR: CHECK SCRIPT PERMISSIONS";
+                status.classList.add('text-red-500');
+                console.error(e);
             }
         }
 
-        dp.addEventListener('change', fetchData);
-        window.onload = fetchData;
+        dp.addEventListener('change', loadData);
+        window.onload = loadData;
     </script>
 </body>
 </html>
