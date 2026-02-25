@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logistics Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, sans-serif; }
+        body { background: #F1F5F9; }
+        .header { background: #0F2027; padding: 20px; border-bottom: 4px solid #FBBF24; text-align: center; }
+        .header h1 { color: #FBBF24; font-size: 24px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .date-box { background: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; }
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; }
+        th { background: #1E293B; color: white; padding: 12px; font-size: 12px; }
+        td { padding: 10px; border: 1px solid #E2E8F0; text-align: center; }
+        .region { background: #F8FAFC; font-weight: bold; }
+        .total { background: #F0FDF4; font-weight: bold; color: #166534; }
+        .loading { text-align: center; padding: 40px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>✦ GLOBAL LOGISTICS EXECUTIVE PORTAL ✦</h1>
+    </div>
+    
+    <div class="container">
+        <div class="date-box">
+            <label>📅 Select Week:</label>
+            <input type="date" id="datePicker" value="2024-01-01">
+            <span id="dateDisplay">01-Jan-2024</span>
+        </div>
+        
+        <div id="dashboard">Loading...</div>
+    </div>
+
+    <script>
+        // 🔁 YAHAN APNI SHEET ID AUR API KEY DAALO
+        const SPREADSHEET_ID = 'YOUR_GOOGLE_SHEET_ID_HERE';
+        const API_KEY = 'YOUR_GOOGLE_API_KEY_HERE';
+        
+        const days = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+        
+        const providers = [
+            { name: 'GLOBAL EXPRESS (QC)', sheet: 'GE QC Center & Zone', range: 'A:H' },
+            { name: 'GLOBAL EXPRESS (ZONES)', sheet: 'GE QC Center & Zone', range: 'K:Q' },
+            { name: 'ECL LOGISTICS (QC)', sheet: 'ECL QC Center & Zone', range: 'A:H' },
+            { name: 'ECL LOGISTICS (ZONES)', sheet: 'ECL QC Center & Zone', range: 'K:Q' },
+            { name: 'KERRY', sheet: 'Kerry', range: 'A:G' },
+            { name: 'APX', sheet: 'APX', range: 'A:H' }
+        ];
+
+        document.getElementById('datePicker').addEventListener('change', loadData);
+        
+        async function loadData() {
+            const date = document.getElementById('datePicker').value;
+            document.getElementById('dateDisplay').innerText = formatDate(new Date(date));
+            document.getElementById('dashboard').innerHTML = 'Loading...';
+            
+            let allHtml = '';
+            
+            for(let provider of providers) {
+                const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${provider.sheet}!${provider.range}?key=${API_KEY}`;
+                
+                try {
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    const rows = data.values || [];
+                    
+                    if(rows.length < 2) continue;
+                    
+                    const dataRows = rows.slice(1);
+                    
+                    const startDate = new Date(date);
+                    const endDate = new Date(date);
+                    endDate.setDate(endDate.getDate() + 6);
+                    
+                    const filtered = dataRows.filter(row => {
+                        if(!row[1]) return false;
+                        const rowDate = new Date(row[1]);
+                        return rowDate >= startDate && rowDate <= endDate;
+                    });
+                    
+                    if(filtered.length === 0) continue;
+                    
+                    const grouped = {};
+                    filtered.forEach(row => {
+                        const region = row[7] || row[6] || 'Unknown';
+                        if(!grouped[region]) {
+                            grouped[region] = { orders:0, boxes:0, weight:0, under20:0, over20:0, daily:{} };
+                        }
+                        
+                        const dayIdx = new Date(row[1]).getDay();
+                        if(!grouped[region].daily[dayIdx]) {
+                            grouped[region].daily[dayIdx] = { orders:0, boxes:0, weight:0, under20:0, over20:0 };
+                        }
+                        
+                        grouped[region].orders++;
+                        grouped[region].daily[dayIdx].orders++;
+                        
+                        const boxes = parseFloat(row[2]) || 0;
+                        grouped[region].boxes += boxes;
+                        grouped[region].daily[dayIdx].boxes += boxes;
+                        
+                        const weight = parseFloat(row[5]) || 0;
+                        grouped[region].weight += weight;
+                        grouped[region].daily[dayIdx].weight += weight;
+                        
+                        if(weight < 20) {
+                            grouped[region].under20++;
+                            grouped[region].daily[dayIdx].under20++;
+                        } else {
+                            grouped[region].over20++;
+                            grouped[region].daily[dayIdx].over20++;
+                        }
+                    });
+                    
+                    allHtml += `<div style="background:white; border-radius:10px; margin-bottom:30px; overflow:hidden;">`;
+                    allHtml += `<div style="background:#0F2027; color:#FBBF24; padding:15px;"><h3>✦ ${provider.name}</h3></div>`;
+                    allHtml += `<div style="overflow-x:auto;"><table>`;
+                    
+                    allHtml += `<tr><th>REGION</th>`;
+                    for(let d=0; d<7; d++) {
+                        allHtml += `<th colspan="5">${days[d]}<br><small>O|B|W|&lt;20|20+</small></th>`;
+                    }
+                    allHtml += `</tr>`;
+                    
+                    let regionIdx = 0;
+                    for(let region in grouped) {
+                        const bg = regionIdx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+                        allHtml += `<tr style="background:${bg}"><td class="region">${region}</td>`;
+                        
+                        for(let d=0; d<7; d++) {
+                            const dayData = grouped[region].daily[d] || {};
+                            allHtml += `<td>${dayData.orders || '-'}</td>`;
+                            allHtml += `<td>${dayData.boxes || '-'}</td>`;
+                            allHtml += `<td>${dayData.weight ? dayData.weight.toFixed(1) : '-'}</td>`;
+                            allHtml += `<td>${dayData.under20 || '-'}</td>`;
+                            allHtml += `<td>${dayData.over20 || '-'}</td>`;
+                        }
+                        allHtml += `</tr>`;
+                        regionIdx++;
+                    }
+                    
+                    allHtml += `<tr class="total"><td>TOTAL</td>`;
+                    for(let d=0; d<7; d++) {
+                        let totOrders=0, totBoxes=0, totWeight=0, totUnder=0, totOver=0;
+                        for(let region in grouped) {
+                            const dayData = grouped[region].daily[d] || {};
+                            totOrders += dayData.orders || 0;
+                            totBoxes += dayData.boxes || 0;
+                            totWeight += dayData.weight || 0;
+                            totUnder += dayData.under20 || 0;
+                            totOver += dayData.over20 || 0;
+                        }
+                        allHtml += `<td>${totOrders || '-'}</td>`;
+                        allHtml += `<td>${totBoxes || '-'}</td>`;
+                        allHtml += `<td>${totWeight ? totWeight.toFixed(1) : '-'}</td>`;
+                        allHtml += `<td>${totUnder || '-'}</td>`;
+                        allHtml += `<td>${totOver || '-'}</td>`;
+                    }
+                    allHtml += `</tr></table></div></div>`;
+                    
+                } catch(e) {
+                    console.log(provider.name, e);
+                }
+            }
+            
+            document.getElementById('dashboard').innerHTML = allHtml || 'No data found';
+        }
+        
+        function formatDate(date) {
+            const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return `${String(date.getDate()).padStart(2,'0')}-${months[date.getMonth()]}-${date.getFullYear()}`;
+        }
+        
+        window.onload = () => loadData();
+    </script>
+</body>
+</html>
