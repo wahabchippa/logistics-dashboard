@@ -3,46 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>G-Ops 3PL Analytics</title>
+    <title>G-Ops 3PL Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js"></script>
 </head>
-<body class="bg-[#0f172a] text-slate-200 font-sans min-h-screen">
-    <div class="max-w-7xl mx-auto p-4 md:p-8">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+<body class="bg-[#050505] text-slate-200 font-sans min-h-screen">
+    <div class="max-w-full mx-auto p-4 md:p-6">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-[#111] p-5 rounded-xl border border-zinc-800">
             <div>
-                <h1 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
-                    ✦ GLOBAL LOGISTICS EXECUTIVE PORTAL ✦
+                <h1 class="text-xl font-bold tracking-tighter text-emerald-500 uppercase">
+                    3PL WEEKLY PERFORMANCE SUMMARY
                 </h1>
-                <p class="text-slate-400 text-sm mt-1">Real-time 3PL Performance Summary</p>
+                <p class="text-zinc-500 text-xs uppercase tracking-widest">Live Logistics Intelligence Dashboard</p>
             </div>
-            <div class="flex items-center gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-700">
-                <span class="text-emerald-400 text-sm font-medium">Select Week:</span>
-                <input type="date" id="datePicker" class="bg-transparent border-none text-white focus:ring-0 cursor-pointer">
+            <div class="flex items-center gap-4 bg-black p-2 px-4 rounded-lg border border-zinc-800">
+                <span class="text-zinc-400 text-xs font-bold uppercase">Select Week:</span>
+                <input type="date" id="datePicker" class="bg-transparent border-none text-white text-sm focus:ring-0 cursor-pointer outline-none">
             </div>
         </div>
 
-        <div class="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden shadow-2xl">
+        <div class="bg-[#111] rounded-xl border border-zinc-800 overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
                     <thead>
-                        <tr class="bg-slate-800/80">
-                            <th class="p-4 border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wider font-bold sticky left-0 bg-slate-800 z-10">3PL Provider</th>
-                            <th class="p-4 border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wider font-bold text-center">Monday</th>
-                            <th class="p-4 border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wider font-bold text-center">Tuesday</th>
-                            <th class="p-4 border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wider font-bold text-center">Wednesday</th>
-                            <th class="p-4 border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wider font-bold text-center">Thursday</th>
-                            <th class="p-4 border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wider font-bold text-center">Friday</th>
-                            <th class="p-4 border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wider font-bold text-center bg-slate-700/30">Saturday</th>
-                            <th class="p-4 border-b border-slate-700 text-slate-400 text-xs uppercase tracking-wider font-bold text-center bg-slate-700/30">Sunday</th>
+                        <tr class="bg-zinc-900/50">
+                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black sticky left-0 bg-[#111] z-10 w-48">Partner Agency</th>
+                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black text-center">Mon</th>
+                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black text-center">Tue</th>
+                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black text-center">Wed</th>
+                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black text-center">Thu</th>
+                            <th class="p-4 border-b border-zinc-800 text-zinc-500 text-[10px] uppercase font-black text-center">Fri</th>
+                            <th class="p-4 border-b border-zinc-800 text-emerald-700 text-[10px] uppercase font-black text-center bg-emerald-950/10">Sat</th>
+                            <th class="p-4 border-b border-zinc-800 text-emerald-700 text-[10px] uppercase font-black text-center bg-emerald-950/10">Sun</th>
                         </tr>
                     </thead>
-                    <tbody id="tableBody" class="divide-y divide-slate-800">
-                        <tr><td colspan="8" class="p-20 text-center text-slate-500 animate-pulse">Initializing data streams...</td></tr>
-                    </tbody>
+                    <tbody id="tableBody" class="divide-y divide-zinc-800/50">
+                        </tbody>
                 </table>
             </div>
         </div>
+        <div id="loader" class="mt-4 text-center text-[10px] text-zinc-600 uppercase tracking-widest">System Ready. Awaiting Date Selection...</div>
     </div>
 
     <script>
@@ -54,59 +54,66 @@
             { name: 'APX EXPRESS', sheet: 'APX', dateIdx: 1, boxIdx: 2, wgtIdx: 5 }
         ];
 
-        // Set default date to current Monday
         const dp = document.getElementById('datePicker');
-        const today = new Date();
-        const monday = new Date(today.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1)));
+        // Initial Monday setup
+        const now = new Date();
+        const monday = new Date(now.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1)));
         dp.value = monday.toISOString().split('T')[0];
 
-        async function loadData() {
+        async function fetchData() {
             const tableBody = document.getElementById('tableBody');
-            tableBody.innerHTML = '<tr><td colspan="8" class="p-20 text-center text-emerald-400">Fetching Live Data...</td></tr>';
+            const loader = document.getElementById('loader');
+            loader.innerText = "⚡ FETCHING LIVE DATA FROM CLOUD...";
             
             const selectedDate = new Date(dp.value);
-            const weekDates = Array.from({length: 7}, (_, i) => {
+            // Array to store 7 days of the week in multiple formats to match sheet
+            const weekFormats = Array.from({length: 7}, (_, i) => {
                 const d = new Date(selectedDate);
                 d.setDate(d.getDate() + i);
-                return d.toLocaleDateString('en-GB').replace(/\//g, '-');
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const year = d.getFullYear();
+                return [`${day}/${month}/${year}`, `${day}-${month}-${year}`, d.toLocaleDateString('en-GB')];
             });
 
             try {
                 let html = '';
                 for (const p of PROVIDERS) {
                     const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(p.sheet)}`;
-                    const response = await fetch(url);
-                    const csvData = await response.text();
-                    const json = Papa.parse(csvData).data;
+                    const res = await fetch(url);
+                    const csv = await res.text();
+                    const data = Papa.parse(csv).data;
 
-                    html += `<tr class="hover:bg-slate-800/40 transition-colors">
-                        <td class="p-4 font-bold text-emerald-400 sticky left-0 bg-slate-900 border-r border-slate-800">${p.name}</td>`;
+                    html += `<tr class="hover:bg-zinc-900/30 transition-all border-l-2 border-transparent hover:border-emerald-500">
+                        <td class="p-4 font-bold text-xs text-zinc-400 sticky left-0 bg-[#050505] z-10">${p.name}</td>`;
 
-                    weekDates.forEach((dateStr, idx) => {
+                    weekFormats.forEach((formats, idx) => {
                         let boxes = 0, weight = 0;
-                        json.forEach(row => {
-                            if (row[p.dateIdx] === dateStr) {
+                        data.forEach(row => {
+                            // Check if row date matches any of our formats
+                            if (formats.includes(String(row[p.dateIdx]).trim())) {
                                 boxes += parseInt(row[p.boxIdx]) || 0;
                                 weight += parseFloat(row[p.wgtIdx]) || 0;
                             }
                         });
-                        
+
                         const isWeekend = idx >= 5;
-                        html += `<td class="p-4 text-center ${isWeekend ? 'bg-slate-800/20' : ''}">
-                            <div class="text-lg font-semibold text-white">${boxes}</div>
-                            <div class="text-[10px] text-slate-500 font-mono">${weight.toFixed(1)}kg</div>
+                        html += `<td class="p-4 text-center ${isWeekend ? 'bg-emerald-500/5' : ''}">
+                            <div class="text-sm font-bold ${boxes > 0 ? 'text-emerald-400' : 'text-zinc-700'}">${boxes}</div>
+                            <div class="text-[9px] font-mono text-zinc-600">${weight.toFixed(1)}kg</div>
                         </td>`;
                     });
                     html += `</tr>`;
                 }
                 tableBody.innerHTML = html;
-            } catch (err) {
-                tableBody.innerHTML = `<tr><td colspan="8" class="p-10 text-center text-red-400">Error: Please ensure Google Sheet is PUBLIC (Anyone with link can view)</td></tr>`;
+                loader.innerText = "✓ ALL STREAMS SYNCHRONIZED";
+            } catch (e) {
+                loader.innerText = "❌ ERROR: CHECK SHEET PERMISSIONS";
             }
         }
 
-        dp.addEventListener('change', loadData);
-        loadData();
+        dp.addEventListener('change', fetchData);
+        window.onload = fetchData;
     </script>
 </body>
 </html>
