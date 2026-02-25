@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>G-Ops 3PL VIP Dashboard</title>
+    <title>G-Ops Executive Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-[#050505] text-zinc-300 font-sans min-h-screen p-4 md:p-10">
@@ -11,10 +11,10 @@
         <div class="flex flex-col md:flex-row justify-between items-center mb-8 bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800 shadow-2xl">
             <div>
                 <h1 class="text-2xl font-black text-emerald-500 italic tracking-tighter uppercase">G-OPS LIVE SUMMARY</h1>
-                <p id="status" class="text-[9px] text-zinc-500 uppercase tracking-[0.3em] mt-1 font-bold">System Online & Synchronized</p>
+                <p id="status" class="text-[9px] text-zinc-500 uppercase tracking-[0.3em] mt-1 font-bold italic">Cloud Connection Active</p>
             </div>
             <div class="flex items-center gap-4 bg-black p-3 px-6 rounded-xl border border-zinc-700 mt-4 md:mt-0">
-                <span class="text-emerald-500 text-xs font-bold uppercase">Week:</span>
+                <span class="text-emerald-500 text-xs font-bold uppercase">Week Starting:</span>
                 <input type="date" id="datePicker" class="bg-transparent border-none text-white text-sm focus:ring-0 cursor-pointer outline-none">
             </div>
         </div>
@@ -35,7 +35,7 @@
                         </tr>
                     </thead>
                     <tbody id="tableBody" class="divide-y divide-zinc-800/50">
-                        <tr><td colspan="8" class="p-20 text-center text-zinc-700 animate-pulse uppercase text-xs tracking-widest">Awaiting Data Stream...</td></tr>
+                        <tr><td colspan="8" class="p-20 text-center text-zinc-700 animate-pulse uppercase text-xs tracking-widest font-bold">Initializing Data Stream...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -43,7 +43,8 @@
     </div>
 
     <script>
-        const SCRIPT_URL = 'https://script.google.com/a/macros/joinfleek.com/s/AKfycbwmJk8syB41maPtmoE4rGsefJyRJYMYe79RM_iT-Zqef68QnfXioLmedGknI2sgagxd/exec'; 
+        // Updated URL with your new App Script
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzvIgWNLr7AKYFIYBojblOAZiRY0CPzwiMS5_p2dhsHyZBTltXyYSx47oCHPGamSLC1/exec'; 
 
         const dp = document.getElementById('datePicker');
         const today = new Date();
@@ -53,10 +54,11 @@
         async function loadData() {
             const status = document.getElementById('status');
             const tableBody = document.getElementById('tableBody');
-            status.innerText = "⚡ FETCHING DATA FROM GOOGLE SHEETS...";
+            status.innerText = "⚡ FETCHING LIVE DATA...";
             status.classList.add('text-emerald-500');
 
             try {
+                // Fetching from App Script
                 const response = await fetch(`${SCRIPT_URL}?week=${dp.value}`);
                 const data = await response.json();
                 
@@ -75,11 +77,10 @@
                     html += `</tr>`;
                 });
                 tableBody.innerHTML = html;
-                status.innerText = "✓ ALL DATA STREAMS SYNCHRONIZED";
+                status.innerText = "✓ DASHBOARD UPDATED";
                 status.classList.remove('text-emerald-500');
-                status.classList.add('text-zinc-500');
             } catch (e) {
-                status.innerText = "❌ CONNECTION ERROR: CHECK SCRIPT PERMISSIONS";
+                status.innerText = "❌ PERMISSION ERROR: RE-DEPLOY SCRIPT AS ANYONE";
                 status.classList.add('text-red-500');
                 console.error(e);
             }
