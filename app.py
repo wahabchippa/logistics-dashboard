@@ -4,49 +4,74 @@ import csv
 from io import StringIO
 from datetime import datetime, timedelta
 from collections import defaultdict
+import time
 
 app = Flask(__name__)
 
 # Google Sheet ID
 SHEET_ID = "1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY"
 
+# Simple cache
+CACHE = {}
+CACHE_DURATION = 300  # 5 minutes
+
 def get_sheet_url(sheet_name):
     encoded_name = sheet_name.replace(" ", "%20").replace("&", "%26")
     return f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}"
 
-# Provider configs - EXACT from your Google Script (1-based indexing)
+# ✅ CORRECTED Provider configs - A=1, B=2, C=3, etc.
 PROVIDERS = [
-    # GE QC (A-H): Date=B(1), Cartons=C(2), Weight=F(5), Region=H(7)
-    {"name": "GLOBAL EXPRESS (QC)", "sheet": "GE QC Center & Zone", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
+    # GE QC: Date=B(2), Cartons=C(3), Weight=F(6), Region=H(8)
+    {"name": "GLOBAL EXPRESS (QC)", "sheet": "GE QC Center & Zone", "dateCol": 2, "boxCol": 3, "weightCol": 6, "regionCol": 8, "startRow": 2},
     
-    # GE Zone (J-R): Date=K(10), Cartons=L(11), Weight=P(15), Region=R(17)
-    {"name": "GLOBAL EXPRESS (ZONES)", "sheet": "GE QC Center & Zone", "dateCol": 10, "boxCol": 11, "weightCol": 15, "regionCol": 17, "startRow": 2},
+    # GE Zone: Date=K(11), Cartons=L(12), Weight=P(16), Region=R(18)
+    {"name": "GLOBAL EXPRESS (ZONES)", "sheet": "GE QC Center & Zone", "dateCol": 11, "boxCol": 12, "weightCol": 16, "regionCol": 18, "startRow": 2},
     
-    # ECL QC (A-H): Date=B(1), Cartons=C(2), Weight=F(5), Region=H(7)
-    {"name": "ECL LOGISTICS (QC)", "sheet": "ECL QC Center & Zone", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 3},
+    # ECL QC: Date=B(2), Cartons=C(3), Weight=F(6), Region=H(8)
+    {"name": "ECL LOGISTICS (QC)", "sheet": "ECL QC Center & Zone", "dateCol": 2, "boxCol": 3, "weightCol": 6, "regionCol": 8, "startRow": 3},
     
-    # ECL Zone (J-S): Date=K(10), Cartons=L(11), Weight=Q(16), Region=S(18)
-    {"name": "ECL LOGISTICS (ZONES)", "sheet": "ECL QC Center & Zone", "dateCol": 10, "boxCol": 11, "weightCol": 16, "regionCol": 18, "startRow": 3},
+    # ECL Zone: Date=K(11), Cartons=L(12), Weight=Q(17), Region=S(19)
+    {"name": "ECL LOGISTICS (ZONES)", "sheet": "ECL QC Center & Zone", "dateCol": 11, "boxCol": 12, "weightCol": 17, "regionCol": 19, "startRow": 3},
     
-    # Kerry (A-H): Date=B(1), Cartons=C(2), Weight=F(5), Region=H(7)
-    {"name": "KERRY LOGISTICS", "sheet": "Kerry", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
+    # Kerry: Date=B(2), Cartons=C(3), Weight=F(6), Region=H(8)
+    {"name": "KERRY LOGISTICS", "sheet": "Kerry", "dateCol": 2, "boxCol": 3, "weightCol": 6, "regionCol": 8, "startRow": 2},
     
-    # APX (A-H): Date=B(1), Cartons=C(2), Weight=F(5), Region=H(7)
-    {"name": "APX EXPRESS", "sheet": "APX", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
+    # APX: Date=B(2), Cartons=C(3), Weight=F(6), Region=H(8)
+    {"name": "APX EXPRESS", "sheet": "APX", "dateCol": 2, "boxCol": 3, "weightCol": 6, "regionCol": 8, "startRow": 2},
     
-    # UPS (A-H): Date=B(1), Cartons=C(2), Weight=F(5), Region=H(7)
-    {"name": "UPS", "sheet": "UPS", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
+    # UPS: Date=B(2), Cartons=C(3), Weight=F(6), Region=H(8)
+    {"name": "UPS", "sheet": "UPS", "dateCol": 2, "boxCol": 3, "weightCol": 6, "regionCol": 8, "startRow": 2},
 ]
 
 def fetch_sheet_data(sheet_name):
+    """Fetch with caching"""
+    global CACHE
+    
+    cache_key = f"sheet_{sheet_name}"
+    now = time.time()
+    
+    # Return cached data if valid
+    if cache_key in CACHE:
+        cached_time, cached_data = CACHE[cache_key]
+        if now - cached_time < CACHE_DURATION:
+            return cached_data
+    
+    # Fetch fresh data
     try:
         url = get_sheet_url(sheet_name)
-        response = requests.get(url, timeout=60)
+        response = requests.get(url, timeout=30)
         response.raise_for_status()
         reader = csv.reader(StringIO(response.text))
-        return list(reader)
+        data = list(reader)
+        
+        # Cache it
+        CACHE[cache_key] = (now, data)
+        return data
     except Exception as e:
         print(f"Error fetching {sheet_name}: {e}")
+        # Return stale cache if available
+        if cache_key in CACHE:
+            return CACHE[cache_key][1]
         return []
 
 def parse_date(date_str):
@@ -74,7 +99,7 @@ def is_valid_region(region):
     if not region:
         return False
     region = str(region).strip().upper()
-    invalid = ["", "N/A", "#N/A", "COUNTRY", "REGION", "NA", "-", "DESTINATION", "ZONE"]
+    invalid = ["", "N/A", "#N/A", "COUNTRY", "REGION", "NA", "-", "DESTINATION", "ZONE", "ORDER", "ORDER#", "ORDER NO"]
     return region not in invalid and len(region) > 1
 
 def get_rating(total_boxes):
@@ -104,6 +129,12 @@ def weekly_summary():
 @app.route('/flight-load')
 def flight_load():
     return render_template_string(HTML_TEMPLATE, page="flight")
+
+@app.route('/api/clear-cache')
+def clear_cache():
+    global CACHE
+    CACHE = {}
+    return jsonify({"status": "Cache cleared", "time": datetime.now().isoformat()})
 
 @app.route('/api/dashboard')
 def api_dashboard():
@@ -143,24 +174,30 @@ def api_dashboard():
             current_total = {"orders": 0, "boxes": 0, "weight": 0}
             prev_total = {"boxes": 0}
             
-            # Skip header rows based on startRow (1-based in config, so subtract 1 for 0-based)
+            # Skip header rows (startRow is 1-based, so subtract 1)
             start_idx = provider.get("startRow", 2) - 1
             
             for row in data[start_idx:]:
                 try:
+                    # Column indexes (config is 1-based, subtract 1 for 0-based)
+                    date_idx = provider["dateCol"] - 1
+                    box_idx = provider["boxCol"] - 1
+                    weight_idx = provider["weightCol"] - 1
+                    region_idx = provider["regionCol"] - 1
+                    
                     # Check row length
-                    if len(row) <= max(provider["dateCol"], provider["boxCol"], provider["weightCol"], provider["regionCol"]):
+                    max_idx = max(date_idx, box_idx, weight_idx, region_idx)
+                    if len(row) <= max_idx:
                         continue
                     
-                    # Get date (1-based index, so subtract 1)
-                    date_val = row[provider["dateCol"] - 1] if provider["dateCol"] - 1 < len(row) else ""
+                    # Get date
+                    date_val = row[date_idx] if date_idx < len(row) else ""
                     row_date = parse_date(date_val)
                     
                     if not row_date:
                         continue
                     
-                    # Get region (1-based index)
-                    region_idx = provider["regionCol"] - 1
+                    # Get region
                     region = str(row[region_idx]).strip() if region_idx < len(row) else ""
                     
                     if not is_valid_region(region):
@@ -168,9 +205,9 @@ def api_dashboard():
                     
                     region = region.upper()
                     
-                    # Get boxes and weight (1-based index)
-                    boxes = safe_float(row[provider["boxCol"] - 1]) if provider["boxCol"] - 1 < len(row) else 0
-                    weight = safe_float(row[provider["weightCol"] - 1]) if provider["weightCol"] - 1 < len(row) else 0
+                    # Get boxes and weight
+                    boxes = safe_float(row[box_idx]) if box_idx < len(row) else 0
+                    weight = safe_float(row[weight_idx]) if weight_idx < len(row) else 0
                     
                     # Skip if no data
                     if boxes <= 0 and weight <= 0:
@@ -276,16 +313,21 @@ def api_weekly_summary():
             
             for row in data[start_idx:]:
                 try:
-                    if len(row) <= max(provider["dateCol"], provider["boxCol"], provider["weightCol"], provider["regionCol"]):
+                    date_idx = provider["dateCol"] - 1
+                    box_idx = provider["boxCol"] - 1
+                    weight_idx = provider["weightCol"] - 1
+                    region_idx = provider["regionCol"] - 1
+                    
+                    max_idx = max(date_idx, box_idx, weight_idx, region_idx)
+                    if len(row) <= max_idx:
                         continue
                     
-                    date_val = row[provider["dateCol"] - 1] if provider["dateCol"] - 1 < len(row) else ""
+                    date_val = row[date_idx] if date_idx < len(row) else ""
                     row_date = parse_date(date_val)
                     
                     if not row_date:
                         continue
                     
-                    region_idx = provider["regionCol"] - 1
                     region = str(row[region_idx]).strip() if region_idx < len(row) else ""
                     
                     if not is_valid_region(region):
@@ -295,8 +337,8 @@ def api_weekly_summary():
                         day_diff = (row_date - week_start).days
                         
                         if 0 <= day_diff < 7:
-                            boxes = safe_float(row[provider["boxCol"] - 1]) if provider["boxCol"] - 1 < len(row) else 0
-                            weight = safe_float(row[provider["weightCol"] - 1]) if provider["weightCol"] - 1 < len(row) else 0
+                            boxes = safe_float(row[box_idx]) if box_idx < len(row) else 0
+                            weight = safe_float(row[weight_idx]) if weight_idx < len(row) else 0
                             
                             days_data[day_diff]["orders"] += 1
                             days_data[day_diff]["boxes"] += boxes
@@ -364,16 +406,21 @@ def api_flight_load():
             
             for row in data[start_idx:]:
                 try:
-                    if len(row) <= max(provider["dateCol"], provider["boxCol"], provider["weightCol"], provider["regionCol"]):
+                    date_idx = provider["dateCol"] - 1
+                    box_idx = provider["boxCol"] - 1
+                    weight_idx = provider["weightCol"] - 1
+                    region_idx = provider["regionCol"] - 1
+                    
+                    max_idx = max(date_idx, box_idx, weight_idx, region_idx)
+                    if len(row) <= max_idx:
                         continue
                     
-                    date_val = row[provider["dateCol"] - 1] if provider["dateCol"] - 1 < len(row) else ""
+                    date_val = row[date_idx] if date_idx < len(row) else ""
                     row_date = parse_date(date_val)
                     
                     if not row_date:
                         continue
                     
-                    region_idx = provider["regionCol"] - 1
                     region = str(row[region_idx]).strip() if region_idx < len(row) else ""
                     
                     if not is_valid_region(region):
@@ -383,8 +430,8 @@ def api_flight_load():
                         day_diff = (row_date - week_start).days
                         
                         if 0 <= day_diff < 7:
-                            boxes = safe_float(row[provider["boxCol"] - 1]) if provider["boxCol"] - 1 < len(row) else 0
-                            weight = safe_float(row[provider["weightCol"] - 1]) if provider["weightCol"] - 1 < len(row) else 0
+                            boxes = safe_float(row[box_idx]) if box_idx < len(row) else 0
+                            weight = safe_float(row[weight_idx]) if weight_idx < len(row) else 0
                             
                             days_data[day_diff]["orders"] += 1
                             days_data[day_diff]["boxes"] += boxes
@@ -442,8 +489,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', sans-serif; background: #0B1120; color: #fff; min-height: 100vh; display: flex; }
-        
-        /* Sidebar */
         .sidebar { width: 250px; background: #0F172A; border-right: 1px solid #1E293B; padding: 20px 0; position: fixed; height: 100vh; }
         .sidebar-header { padding: 0 20px 20px; border-bottom: 1px solid #1E293B; margin-bottom: 20px; }
         .sidebar-header h1 { color: #FBBF24; font-size: 16px; letter-spacing: 1px; }
@@ -452,23 +497,15 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         .nav-item:hover { background: #1E293B; color: #fff; }
         .nav-item.active { background: #1E293B; color: #FBBF24; border-left-color: #FBBF24; }
         .nav-item span { margin-left: 10px; }
-        
-        /* Main Content */
         .main-content { margin-left: 250px; flex: 1; min-height: 100vh; }
         .header { background: linear-gradient(135deg, #0B1120, #1E293B); padding: 20px 30px; border-bottom: 2px solid #FBBF24; }
         .header h1 { color: #FBBF24; font-size: 22px; letter-spacing: 2px; }
         .header p { color: #94A3B8; font-size: 12px; margin-top: 5px; }
-        
-        /* Week Selector */
         .week-selector { background: #1E293B; padding: 15px 30px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #334155; }
         .week-selector label { color: #94A3B8; font-size: 13px; }
         .week-selector input { background: #0F172A; border: 1px solid #334155; color: #fff; padding: 8px 12px; border-radius: 5px; cursor: pointer; }
         .week-info { color: #FBBF24; font-weight: bold; margin-left: auto; }
-        
-        /* Container */
         .container { padding: 20px 30px; }
-        
-        /* Provider Card */
         .provider-card { background: #1E293B; border-radius: 10px; margin-bottom: 25px; overflow: hidden; border: 1px solid #334155; }
         .provider-header { background: #0F172A; padding: 15px 20px; border-bottom: 2px solid #FBBF24; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
         .provider-title { display: flex; align-items: center; gap: 15px; }
@@ -480,8 +517,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         .provider-stats { display: flex; gap: 8px; flex-wrap: wrap; }
         .stat-badge { background: #334155; padding: 4px 10px; border-radius: 12px; font-size: 11px; }
         .stat-badge.highlight { background: #FBBF24; color: #0B1120; font-weight: 700; }
-        
-        /* Data Table */
         .table-wrapper { overflow-x: auto; }
         .data-table { width: 100%; border-collapse: collapse; min-width: 1200px; }
         .data-table th { background: #0F172A; padding: 8px 6px; font-size: 9px; color: #94A3B8; text-transform: uppercase; white-space: nowrap; }
@@ -493,8 +528,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         .data-table tr:hover { background: rgba(255,255,255,0.03); }
         .data-table .total-row { background: #0F172A; }
         .data-table .total-row td { color: #FBBF24; font-weight: 700; border-top: 2px solid #FBBF24; }
-        
-        /* Summary Table */
         .summary-section { margin-top: 20px; }
         .summary-header { background: #0B1120; padding: 15px 20px; border: 2px solid #FBBF24; border-bottom: none; border-radius: 10px 10px 0 0; }
         .summary-header h2 { color: #FBBF24; font-size: 14px; }
@@ -505,14 +538,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         .summary-table .winner { background: rgba(251, 191, 36, 0.15); }
         .summary-table .winner td:first-child { color: #FBBF24; font-weight: 700; }
         .grand-total { background: #0F172A !important; color: #FBBF24 !important; font-weight: 700 !important; }
-        
-        /* Loading & Error */
         .loading { text-align: center; padding: 60px; color: #94A3B8; }
         .loading-spinner { width: 40px; height: 40px; border: 3px solid #334155; border-top: 3px solid #FBBF24; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 15px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .error { background: #7F1D1D; color: #FCA5A5; padding: 20px; border-radius: 8px; text-align: center; margin: 20px; }
-        
-        /* Responsive */
         @media (max-width: 900px) {
             .sidebar { width: 60px; }
             .sidebar-header h1, .sidebar-header p, .nav-item span { display: none; }
@@ -587,7 +616,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         const FLIGHT_DAYS = [1, 3, 5];
         const COLS = ['O', 'B', 'W', '<20', '20+'];
         
-        // Set default date
         const today = new Date();
         const monday = new Date(today);
         monday.setDate(today.getDate() - today.getDay() + 1);
@@ -595,7 +623,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             document.getElementById('weekStart').value = monday.toISOString().split('T')[0];
         }
         
-        // Dashboard Page
         async function loadDashboard() {
             const weekStart = document.getElementById('weekStart').value;
             const container = document.getElementById('mainContent');
@@ -634,7 +661,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 
                 html += '<div class="table-wrapper"><table class="data-table">';
                 
-                // Header row 1 - Days
                 html += '<thead><tr><th class="region-col" rowspan="2">ACTIVE REGIONS</th>';
                 DAYS.forEach((day, i) => {
                     const cls = FLIGHT_DAYS.includes(i) ? 'flight' : '';
@@ -642,7 +668,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 });
                 html += '</tr>';
                 
-                // Header row 2 - Columns
                 html += '<tr>';
                 DAYS.forEach((day, i) => {
                     const cls = FLIGHT_DAYS.includes(i) ? 'flight' : '';
@@ -652,7 +677,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                 });
                 html += '</tr></thead>';
                 
-                // Data rows
                 html += '<tbody>';
                 regions.forEach(region => {
                     const rdata = provider.regions[region];
@@ -669,7 +693,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                     html += '</tr>';
                 });
                 
-                // Total row
                 html += '<tr class="total-row"><td class="region-col">▣ TOTAL SUMMARY</td>';
                 provider.day_totals.forEach((d, i) => {
                     const cls = FLIGHT_DAYS.includes(i) ? 'flight' : '';
@@ -687,7 +710,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             document.getElementById('mainContent').innerHTML = html;
         }
         
-        // Weekly Summary Page
         async function loadWeekly() {
             const weekStart = document.getElementById('weekStart').value;
             const container = document.getElementById('mainContent');
@@ -710,7 +732,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             html += '<div class="summary-header"><h2>📊 WEEKLY PERFORMANCE SUMMARY (🏆 HIGHEST WEIGHT WINNER)</h2></div>';
             html += '<div class="table-wrapper"><table class="summary-table">';
             
-            // Header
             html += '<thead><tr><th>PROVIDER</th>';
             DAYS.forEach((day, i) => {
                 const cls = FLIGHT_DAYS.includes(i) ? 'flight' : '';
@@ -724,7 +745,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             }
             html += '</tr></thead>';
             
-            // Data
             html += '<tbody>';
             data.providers.forEach(p => {
                 const winnerClass = p.is_winner ? 'winner' : '';
@@ -747,7 +767,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             document.getElementById('mainContent').innerHTML = html;
         }
         
-        // Flight Load Page
         async function loadFlight() {
             const weekStart = document.getElementById('weekStart').value;
             const container = document.getElementById('mainContent');
@@ -770,7 +789,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             html += '<div class="summary-header"><h2>✈️ CONSOLIDATED FLIGHT LOAD (PRE-FLIGHT + FLIGHT DAY)</h2></div>';
             html += '<div class="table-wrapper"><table class="summary-table">';
             
-            // Header
             html += '<thead><tr><th>PROVIDER</th>';
             html += '<th colspan="3" class="flight">✈️ TUE FLIGHT (Mon+Tue)</th>';
             html += '<th colspan="3" class="flight">✈️ THU FLIGHT (Wed+Thu)</th>';
@@ -783,27 +801,22 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             }
             html += '</tr></thead>';
             
-            // Data
             html += '<tbody>';
             data.providers.forEach(p => {
                 html += '<tr><td>' + p.name + '</td>';
                 
-                // Tue Flight
                 html += '<td>' + (p.tue_flight.orders || '-') + '</td>';
                 html += '<td>' + (p.tue_flight.boxes ? p.tue_flight.boxes.toFixed(0) : '-') + '</td>';
                 html += '<td>' + (p.tue_flight.weight ? p.tue_flight.weight.toFixed(1) : '-') + '</td>';
                 
-                // Thu Flight
                 html += '<td>' + (p.thu_flight.orders || '-') + '</td>';
                 html += '<td>' + (p.thu_flight.boxes ? p.thu_flight.boxes.toFixed(0) : '-') + '</td>';
                 html += '<td>' + (p.thu_flight.weight ? p.thu_flight.weight.toFixed(1) : '-') + '</td>';
                 
-                // Sat Flight
                 html += '<td>' + (p.sat_flight.orders || '-') + '</td>';
                 html += '<td>' + (p.sat_flight.boxes ? p.sat_flight.boxes.toFixed(0) : '-') + '</td>';
                 html += '<td>' + (p.sat_flight.weight ? p.sat_flight.weight.toFixed(1) : '-') + '</td>';
                 
-                // Total
                 html += '<td class="grand-total">' + p.total.orders + '</td>';
                 html += '<td class="grand-total">' + p.total.boxes.toFixed(0) + '</td>';
                 html += '<td class="grand-total">' + p.total.weight.toFixed(1) + '</td>';
@@ -814,7 +827,6 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             document.getElementById('mainContent').innerHTML = html;
         }
         
-        // Auto load based on page
         const page = '{{ page }}';
         if (page === 'dashboard') loadDashboard();
         else if (page === 'weekly') loadWeekly();
