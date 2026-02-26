@@ -1,376 +1,3 @@
-from flask import Flask, render_template_string, jsonify, request
-import requests
-import csv
-from io import StringIO
-from datetime import datetime, timedelta
-from collections import defaultdict
-import time
-
-app = Flask(__name__)
-
-SHEET_ID = "1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY"
-
-CACHE = {}
-CACHE_DURATION = 300
-
-def get_sheet_url(sheet_name):
-    encoded_name = sheet_name.replace(" ", "%20").replace("&", "%26")
-    return f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}"
-
-PROVIDERS = [
-    {"name": "GLOBAL EXPRESS (QC)", "sheet": "GE QC Center & Zone", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
-    {"name": "GLOBAL EXPRESS (ZONES)", "sheet": "GE QC Center & Zone", "dateCol": 10, "boxCol": 11, "weightCol": 15, "regionCol": 16, "startRow": 2},
-    {"name": "ECL LOGISTICS (QC)", "sheet": "ECL QC Center & Zone", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 3},
-    {"name": "ECL LOGISTICS (ZONES)", "sheet": "ECL QC Center & Zone", "dateCol": 10, "boxCol": 11, "weightCol": 15, "regionCol": 16, "startRow": 3},
-    {"name": "KERRY LOGISTICS", "sheet": "Kerry", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
-    {"name": "APX EXPRESS", "sheet": "APX", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
-]
-
-def fetch_sheet_data(sheet_name):
-    global CACHE
-    cache_key = f"sheet_{sheet_name}"
-    now = time.time()
-    if cache_key in CACHE:
-        cached_time, cached_data = CACHE[cache_key]
-        if now - cached_time < CACHE_DURATION:
-            return cached_data
-    try:
-        url = get_sheet_url(sheet_name)
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        reader = csv.reader(StringIO(response.text))
-        data = list(reader)
-        CACHE[cache_key] = (now, data)
-        return data
-    except Exception as e:
-        print(f"Error fetching {sheet_name}: {e}")
-        if cache_key in CACHE:
-            return CACHE[cache_key][1]
-        return []
-
-def parse_date(date_str):
-    if not date_str or str(date_str).strip() == "":
-        return None
-    date_str = str(date_str).strip()
-    formats = ["%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y", "%m/%d/%Y", "%Y/%m/%d"]
-    for fmt in formats:
-        try:
-            return datetime.strptime(date_str, fmt)
-        except:
-            continue
-    return None
-
-def safe_float(val):
-    try:
-        clean = str(val).replace(',', '').replace(' ', '').strip()
-        if clean == "" or clean == "-" or clean.upper() in ["N/A", "#N/A", "NA"]:
-            return 0
-        return float(clean)
-    except:
-        return 0
-
-def is_valid_region(region):
-    if not region:
-        return False
-    region = str(region).strip().upper()
-    invalid = ["", "N/A", "#N/A", "COUNTRY", "REGION", "NA", "-", "DESTINATION", "ZONE", "ORDER", "NOT APPLICABLE"]
-    return region not in invalid and len(region) > 1
-
-def get_rating(total_boxes):
-    if total_boxes >= 1500:
-        return 5
-    elif total_boxes >= 500:
-        return 4
-    elif total_boxes >= 100:
-        return 3
-    else:
-        return 2
-
-def get_trend(current, previous):
-    if current >= previous:
-        return {"text": "UP", "class": "up", "icon": "↑"}
-    else:
-        return {"text": "DOWN", "class": "down", "icon": "↓"}
-
-@app.route('/')
-def index():
-    return render_template_string(HTML_TEMPLATE, page="dashboard")
-
-@app.route('/weekly-summary')
-def weekly_summary():
-    return render_template_string(HTML_TEMPLATE, page="weekly")
-
-@app.route('/flight-load')
-def flight_load():
-    return render_template_string(HTML_TEMPLATE, page="flight")
-
-@app.route('/api/clear-cache')
-def clear_cache():
-    global CACHE
-    CACHE = {}
-    return jsonify({"status": "Cache cleared", "time": datetime.now().isoformat()})
-
-@app.route('/api/dashboard')
-def api_dashboard():
-    try:
-        week_start_str = request.args.get('week_start')
-        if week_start_str:
-            week_start = datetime.strptime(week_start_str, "%Y-%m-%d")
-        else:
-            today = datetime.now()
-            week_start = today - timedelta(days=today.weekday())
-        
-        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
-        prev_week_start = week_start - timedelta(days=7)
-        prev_week_end = week_start - timedelta(seconds=1)
-        
-        sheet_cache = {}
-        results = []
-        
-        for provider in PROVIDERS:
-            sheet_name = provider["sheet"]
-            if sheet_name not in sheet_cache:
-                sheet_cache[sheet_name] = fetch_sheet_data(sheet_name)
-            data = sheet_cache[sheet_name]
-            if not data:
-                continue
-            
-            regions_data = defaultdict(lambda: {
-                "days": [{"orders": 0, "boxes": 0, "weight": 0, "under20": 0, "over20": 0} for _ in range(7)],
-                "total": {"orders": 0, "boxes": 0, "weight": 0, "under20": 0, "over20": 0}
-            })
-            
-            current_total = {"orders": 0, "boxes": 0, "weight": 0}
-            prev_total = {"boxes": 0}
-            
-            start_idx = provider.get("startRow", 2) - 1
-            date_idx = provider["dateCol"]
-            box_idx = provider["boxCol"]
-            weight_idx = provider["weightCol"]
-            region_idx = provider["regionCol"]
-            
-            for row in data[start_idx:]:
-                try:
-                    max_idx = max(date_idx, box_idx, weight_idx, region_idx)
-                    if len(row) <= max_idx:
-                        continue
-                    date_val = row[date_idx] if date_idx < len(row) else ""
-                    row_date = parse_date(date_val)
-                    if not row_date:
-                        continue
-                    region = str(row[region_idx]).strip() if region_idx < len(row) else ""
-                    if not is_valid_region(region):
-                        continue
-                    region = region.upper()
-                    boxes = safe_float(row[box_idx]) if box_idx < len(row) else 0
-                    weight = safe_float(row[weight_idx]) if weight_idx < len(row) else 0
-                    if boxes <= 0 and weight <= 0:
-                        continue
-                    under20 = 1 if weight < 20 else 0
-                    over20 = 1 if weight >= 20 else 0
-                    
-                    if week_start <= row_date <= week_end:
-                        day_diff = (row_date - week_start).days
-                        if 0 <= day_diff < 7:
-                            regions_data[region]["days"][day_diff]["orders"] += 1
-                            regions_data[region]["days"][day_diff]["boxes"] += boxes
-                            regions_data[region]["days"][day_diff]["weight"] += weight
-                            regions_data[region]["days"][day_diff]["under20"] += under20
-                            regions_data[region]["days"][day_diff]["over20"] += over20
-                            regions_data[region]["total"]["orders"] += 1
-                            regions_data[region]["total"]["boxes"] += boxes
-                            regions_data[region]["total"]["weight"] += weight
-                            current_total["orders"] += 1
-                            current_total["boxes"] += boxes
-                            current_total["weight"] += weight
-                    
-                    if prev_week_start <= row_date <= prev_week_end:
-                        prev_total["boxes"] += boxes
-                except:
-                    continue
-            
-            day_totals = [{"orders": 0, "boxes": 0, "weight": 0, "under20": 0, "over20": 0} for _ in range(7)]
-            for region, rdata in regions_data.items():
-                for d in range(7):
-                    day_totals[d]["orders"] += rdata["days"][d]["orders"]
-                    day_totals[d]["boxes"] += rdata["days"][d]["boxes"]
-                    day_totals[d]["weight"] += rdata["days"][d]["weight"]
-                    day_totals[d]["under20"] += rdata["days"][d]["under20"]
-                    day_totals[d]["over20"] += rdata["days"][d]["over20"]
-            
-            grand_total = {
-                "orders": sum(d["orders"] for d in day_totals),
-                "boxes": sum(d["boxes"] for d in day_totals),
-                "weight": sum(d["weight"] for d in day_totals),
-                "under20": sum(d["under20"] for d in day_totals),
-                "over20": sum(d["over20"] for d in day_totals)
-            }
-            
-            results.append({
-                "name": provider["name"],
-                "regions": dict(regions_data),
-                "day_totals": day_totals,
-                "grand_total": grand_total,
-                "rating": get_rating(grand_total["boxes"]),
-                "trend": get_trend(current_total["boxes"], prev_total["boxes"])
-            })
-        
-        return jsonify({
-            "week_start": week_start.strftime("%d %b %Y"),
-            "week_end": (week_start + timedelta(days=6)).strftime("%d %b %Y"),
-            "week_start_iso": week_start.strftime("%Y-%m-%d"),
-            "providers": results
-        })
-    except Exception as e:
-        import traceback
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
-
-@app.route('/api/weekly-summary')
-def api_weekly_summary():
-    try:
-        week_start_str = request.args.get('week_start')
-        if week_start_str:
-            week_start = datetime.strptime(week_start_str, "%Y-%m-%d")
-        else:
-            today = datetime.now()
-            week_start = today - timedelta(days=today.weekday())
-        
-        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
-        
-        sheet_cache = {}
-        results = []
-        
-        for provider in PROVIDERS:
-            sheet_name = provider["sheet"]
-            if sheet_name not in sheet_cache:
-                sheet_cache[sheet_name] = fetch_sheet_data(sheet_name)
-            data = sheet_cache[sheet_name]
-            if not data:
-                continue
-            
-            days_data = [{"orders": 0, "boxes": 0, "weight": 0} for _ in range(7)]
-            start_idx = provider.get("startRow", 2) - 1
-            date_idx = provider["dateCol"]
-            box_idx = provider["boxCol"]
-            weight_idx = provider["weightCol"]
-            region_idx = provider["regionCol"]
-            
-            for row in data[start_idx:]:
-                try:
-                    max_idx = max(date_idx, box_idx, weight_idx, region_idx)
-                    if len(row) <= max_idx:
-                        continue
-                    date_val = row[date_idx] if date_idx < len(row) else ""
-                    row_date = parse_date(date_val)
-                    if not row_date:
-                        continue
-                    region = str(row[region_idx]).strip() if region_idx < len(row) else ""
-                    if not is_valid_region(region):
-                        continue
-                    if week_start <= row_date <= week_end:
-                        day_diff = (row_date - week_start).days
-                        if 0 <= day_diff < 7:
-                            boxes = safe_float(row[box_idx]) if box_idx < len(row) else 0
-                            weight = safe_float(row[weight_idx]) if weight_idx < len(row) else 0
-                            days_data[day_diff]["orders"] += 1
-                            days_data[day_diff]["boxes"] += boxes
-                            days_data[day_diff]["weight"] += weight
-                except:
-                    continue
-            
-            total = {
-                "orders": sum(d["orders"] for d in days_data),
-                "boxes": sum(d["boxes"] for d in days_data),
-                "weight": sum(d["weight"] for d in days_data)
-            }
-            results.append({"name": provider["name"], "days": days_data, "total": total})
-        
-        max_weight = max(p["total"]["weight"] for p in results) if results else 0
-        for p in results:
-            p["is_winner"] = p["total"]["weight"] == max_weight and max_weight > 0
-        
-        return jsonify({
-            "week_start": week_start.strftime("%d %b %Y"),
-            "week_end": (week_start + timedelta(days=6)).strftime("%d %b %Y"),
-            "week_start_iso": week_start.strftime("%Y-%m-%d"),
-            "providers": results
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/flight-load')
-def api_flight_load():
-    try:
-        week_start_str = request.args.get('week_start')
-        if week_start_str:
-            week_start = datetime.strptime(week_start_str, "%Y-%m-%d")
-        else:
-            today = datetime.now()
-            week_start = today - timedelta(days=today.weekday())
-        
-        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
-        
-        sheet_cache = {}
-        results = []
-        
-        for provider in PROVIDERS:
-            sheet_name = provider["sheet"]
-            if sheet_name not in sheet_cache:
-                sheet_cache[sheet_name] = fetch_sheet_data(sheet_name)
-            data = sheet_cache[sheet_name]
-            if not data:
-                continue
-            
-            days_data = [{"orders": 0, "boxes": 0, "weight": 0} for _ in range(7)]
-            start_idx = provider.get("startRow", 2) - 1
-            date_idx = provider["dateCol"]
-            box_idx = provider["boxCol"]
-            weight_idx = provider["weightCol"]
-            region_idx = provider["regionCol"]
-            
-            for row in data[start_idx:]:
-                try:
-                    max_idx = max(date_idx, box_idx, weight_idx, region_idx)
-                    if len(row) <= max_idx:
-                        continue
-                    date_val = row[date_idx] if date_idx < len(row) else ""
-                    row_date = parse_date(date_val)
-                    if not row_date:
-                        continue
-                    region = str(row[region_idx]).strip() if region_idx < len(row) else ""
-                    if not is_valid_region(region):
-                        continue
-                    if week_start <= row_date <= week_end:
-                        day_diff = (row_date - week_start).days
-                        if 0 <= day_diff < 7:
-                            boxes = safe_float(row[box_idx]) if box_idx < len(row) else 0
-                            weight = safe_float(row[weight_idx]) if weight_idx < len(row) else 0
-                            days_data[day_diff]["orders"] += 1
-                            days_data[day_diff]["boxes"] += boxes
-                            days_data[day_diff]["weight"] += weight
-                except:
-                    continue
-            
-            tue_flight = {"orders": days_data[0]["orders"] + days_data[1]["orders"], "boxes": days_data[0]["boxes"] + days_data[1]["boxes"], "weight": days_data[0]["weight"] + days_data[1]["weight"]}
-            thu_flight = {"orders": days_data[2]["orders"] + days_data[3]["orders"], "boxes": days_data[2]["boxes"] + days_data[3]["boxes"], "weight": days_data[2]["weight"] + days_data[3]["weight"]}
-            sat_flight = {"orders": days_data[4]["orders"] + days_data[5]["orders"], "boxes": days_data[4]["boxes"] + days_data[5]["boxes"], "weight": days_data[4]["weight"] + days_data[5]["weight"]}
-            total_flight = {"orders": tue_flight["orders"] + thu_flight["orders"] + sat_flight["orders"], "boxes": tue_flight["boxes"] + thu_flight["boxes"] + sat_flight["boxes"], "weight": tue_flight["weight"] + thu_flight["weight"] + sat_flight["weight"]}
-            
-            results.append({"name": provider["name"], "tue_flight": tue_flight, "thu_flight": thu_flight, "sat_flight": sat_flight, "total": total_flight})
-        
-        return jsonify({
-            "week_start": week_start.strftime("%d %b %Y"),
-            "week_end": (week_start + timedelta(days=6)).strftime("%d %b %Y"),
-            "week_start_iso": week_start.strftime("%Y-%m-%d"),
-            "providers": results
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 HTML_TEMPLATE = '''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -394,8 +21,8 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             --text-primary: #ffffff;
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
-            --glass-bg: rgba(26, 31, 53, 0.8);
-            --glass-border: rgba(255, 255, 255, 0.1);
+            --sidebar-width: 260px;
+            --sidebar-collapsed: 70px;
         }
         
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -413,30 +40,45 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         
         /* Sidebar */
         .sidebar {
-            width: 260px;
+            width: var(--sidebar-width);
             background: var(--bg-secondary);
             border-right: 1px solid var(--border-color);
-            padding: 0;
             position: fixed;
             height: 100vh;
             display: flex;
             flex-direction: column;
             z-index: 100;
+            transition: width 0.3s ease;
+        }
+        
+        .sidebar.collapsed {
+            width: var(--sidebar-collapsed);
         }
         
         .sidebar-header {
             padding: 24px;
             border-bottom: 1px solid var(--border-color);
             background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 90px;
+        }
+        
+        .sidebar.collapsed .sidebar-header {
+            padding: 16px;
+            justify-content: center;
         }
         
         .logo {
             display: flex;
             align-items: center;
             gap: 12px;
+            overflow: hidden;
         }
         
         .logo-icon {
+            min-width: 42px;
             width: 42px;
             height: 42px;
             background: linear-gradient(135deg, var(--accent-gold) 0%, var(--accent-gold-dim) 100%);
@@ -446,6 +88,17 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             justify-content: center;
             font-size: 20px;
             box-shadow: 0 4px 15px rgba(245, 185, 66, 0.3);
+        }
+        
+        .logo-text {
+            white-space: nowrap;
+            transition: opacity 0.2s ease;
+        }
+        
+        .sidebar.collapsed .logo-text {
+            opacity: 0;
+            width: 0;
+            display: none;
         }
         
         .logo-text h1 {
@@ -463,9 +116,45 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             letter-spacing: 1px;
         }
         
+        /* Toggle Button */
+        .sidebar-toggle {
+            position: absolute;
+            right: -14px;
+            top: 32px;
+            width: 28px;
+            height: 28px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 12px;
+            transition: all 0.2s ease;
+            z-index: 101;
+        }
+        
+        .sidebar-toggle:hover {
+            background: var(--accent-gold);
+            color: var(--bg-primary);
+            border-color: var(--accent-gold);
+            transform: scale(1.1);
+        }
+        
+        .sidebar.collapsed .sidebar-toggle {
+            transform: rotate(180deg);
+        }
+        
+        .sidebar.collapsed .sidebar-toggle:hover {
+            transform: rotate(180deg) scale(1.1);
+        }
+        
         .nav-section {
             padding: 20px 12px;
             flex: 1;
+            overflow-y: auto;
         }
         
         .nav-label {
@@ -475,6 +164,16 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             color: var(--text-muted);
             padding: 0 12px;
             margin-bottom: 12px;
+            white-space: nowrap;
+            transition: opacity 0.2s ease;
+        }
+        
+        .sidebar.collapsed .nav-label {
+            opacity: 0;
+            height: 0;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
         }
         
         .nav-item {
@@ -488,6 +187,13 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
             transition: all 0.2s ease;
             font-size: 14px;
             font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        
+        .sidebar.collapsed .nav-item {
+            justify-content: center;
+            padding: 14px;
         }
         
         .nav-item:hover {
@@ -502,16 +208,63 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         }
         
         .nav-icon {
+            min-width: 20px;
             width: 20px;
-            margin-right: 12px;
             text-align: center;
+            font-size: 16px;
+        }
+        
+        .nav-text {
+            margin-left: 12px;
+            transition: opacity 0.2s ease;
+        }
+        
+        .sidebar.collapsed .nav-text {
+            opacity: 0;
+            width: 0;
+            margin: 0;
+            display: none;
+        }
+        
+        /* Tooltip for collapsed sidebar */
+        .nav-item {
+            position: relative;
+        }
+        
+        .nav-item::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 100%;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            margin-left: 10px;
+            border: 1px solid var(--border-color);
+            z-index: 1000;
+        }
+        
+        .sidebar.collapsed .nav-item:hover::after {
+            opacity: 1;
         }
         
         /* Main Content */
         .main-content {
-            margin-left: 260px;
+            margin-left: var(--sidebar-width);
             flex: 1;
             min-height: 100vh;
+            transition: margin-left 0.3s ease;
+        }
+        
+        body.sidebar-collapsed .main-content {
+            margin-left: var(--sidebar-collapsed);
         }
         
         .header {
@@ -904,19 +657,38 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         }
         
         /* Responsive */
-        @media (max-width: 1200px) {
-            .sidebar { width: 70px; }
-            .sidebar-header { padding: 16px; }
-            .logo-text, .nav-label { display: none; }
-            .nav-item { justify-content: center; padding: 14px; }
-            .nav-icon { margin: 0; }
-            .main-content { margin-left: 70px; }
-        }
-        
         @media (max-width: 768px) {
-            .header-content { flex-direction: column; gap: 16px; align-items: flex-start; }
-            .week-selector { width: 100%; flex-wrap: wrap; }
-            .provider-header { flex-direction: column; align-items: flex-start; }
+            .sidebar {
+                width: var(--sidebar-collapsed);
+            }
+            .sidebar .logo-text,
+            .sidebar .nav-label,
+            .sidebar .nav-text {
+                display: none;
+            }
+            .sidebar .nav-item {
+                justify-content: center;
+                padding: 14px;
+            }
+            .main-content {
+                margin-left: var(--sidebar-collapsed);
+            }
+            .header-content {
+                flex-direction: column;
+                gap: 16px;
+                align-items: flex-start;
+            }
+            .week-selector {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .provider-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .sidebar-toggle {
+                display: none;
+            }
         }
 
         /* Scrollbar */
@@ -927,7 +699,10 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
     </style>
 </head>
 <body>
-    <nav class="sidebar">
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+            <span>«</span>
+        </div>
         <div class="sidebar-header">
             <div class="logo">
                 <div class="logo-icon">📦</div>
@@ -939,17 +714,17 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         </div>
         <div class="nav-section">
             <div class="nav-label">Navigation</div>
-            <a href="/" class="nav-item {{ 'active' if page == 'dashboard' else '' }}">
+            <a href="/" class="nav-item {{ 'active' if page == 'dashboard' else '' }}" data-tooltip="Dashboard">
                 <span class="nav-icon">📊</span>
-                <span>Dashboard</span>
+                <span class="nav-text">Dashboard</span>
             </a>
-            <a href="/weekly-summary" class="nav-item {{ 'active' if page == 'weekly' else '' }}">
+            <a href="/weekly-summary" class="nav-item {{ 'active' if page == 'weekly' else '' }}" data-tooltip="Weekly Summary">
                 <span class="nav-icon">📈</span>
-                <span>Weekly Summary</span>
+                <span class="nav-text">Weekly Summary</span>
             </a>
-            <a href="/flight-load" class="nav-item {{ 'active' if page == 'flight' else '' }}">
+            <a href="/flight-load" class="nav-item {{ 'active' if page == 'flight' else '' }}" data-tooltip="Flight Load">
                 <span class="nav-icon">✈️</span>
-                <span>Flight Load</span>
+                <span class="nav-text">Flight Load</span>
             </a>
         </div>
     </nav>
@@ -983,6 +758,23 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
         const FLIGHT_DAYS = [1, 3, 5];
         const COLS = ['O', 'B', 'W', '<20', '20+'];
+        
+        // Sidebar Toggle
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const toggle = document.getElementById('sidebarToggle');
+            sidebar.classList.toggle('collapsed');
+            document.body.classList.toggle('sidebar-collapsed');
+            
+            // Save state to localStorage
+            localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+        }
+        
+        // Restore sidebar state
+        if (localStorage.getItem('sidebarCollapsed') === 'true') {
+            document.getElementById('sidebar').classList.add('collapsed');
+            document.body.classList.add('sidebar-collapsed');
+        }
         
         // Set default week
         const today = new Date();
@@ -1195,6 +987,3 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
 </body>
 </html>
 '''
-
-if __name__ == '__main__':
-    app.run(debug=True)
