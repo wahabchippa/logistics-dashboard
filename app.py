@@ -3,53 +3,52 @@ from datetime import datetime, timedelta
 import requests
 import csv
 from io import StringIO
-from urllib.parse import quote
 
 app = Flask(__name__)
 
-# Google Sheet ID - SINGLE SHEET with multiple tabs
-SHEET_ID = "1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY"
-
-def get_sheet_url(sheet_name):
-    """Generate CSV URL for a specific sheet tab"""
-    encoded_name = quote(sheet_name)
-    return f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}"
-
-# Provider configurations - EXACT from your Google Script (converted to 0-based)
-# Google Script uses 1-based, Python uses 0-based (subtract 1)
+# DIRECT PUBLISHED CSV LINKS - YEH KAAM KARENGE!
 PROVIDERS = [
-    # GE QC (A-H): Date=B(1→0), Cartons=C(2→1), Weight=F(5→4), Region=H(7→6)
-    {"name": "GLOBAL EXPRESS (QC)", "sheet": "GE QC Center & Zone", "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 2},
-    
-    # GE Zone (J-R): Date=K(10→9), Cartons=L(11→10), Weight=P(15→14), Region=R(17→16)
-    {"name": "GLOBAL EXPRESS (ZONES)", "sheet": "GE QC Center & Zone", "dateCol": 9, "boxCol": 10, "weightCol": 14, "regionCol": 16, "startRow": 2},
-    
-    # ECL QC (A-H): Date=B(1→0), Cartons=C(2→1), Weight=F(5→4), Region=H(7→6)
-    {"name": "ECL LOGISTICS (QC)", "sheet": "ECL QC Center & Zone", "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 3},
-    
-    # ECL Zone (J-S): Date=K(10→9), Cartons=L(11→10), Weight=Q(16→15), Region=S(18→17)
-    {"name": "ECL LOGISTICS (ZONES)", "sheet": "ECL QC Center & Zone", "dateCol": 9, "boxCol": 10, "weightCol": 15, "regionCol": 17, "startRow": 3},
-    
-    # Kerry (A-H): Date=B(1→0), Cartons=C(2→1), Weight=F(5→4), Region=H(7→6)
-    {"name": "KERRY LOGISTICS", "sheet": "Kerry", "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 2},
-    
-    # APX (A-H): Date=B(1→0), Cartons=C(2→1), Weight=F(5→4), Region=H(7→6)
-    {"name": "APX EXPRESS", "sheet": "APX", "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 2},
-    
-    # UPS (A-H): Date=B(1→0), Cartons=C(2→1), Weight=F(5→4), Region=H(7→6)
-    {"name": "UPS", "sheet": "UPS", "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 2},
+    {
+        "name": "GLOBAL EXPRESS (QC)", 
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=710036753&single=true&output=csv",
+        "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 2
+    },
+    {
+        "name": "GLOBAL EXPRESS (ZONES)", 
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+        "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 2
+    },
+    {
+        "name": "ECL LOGISTICS (QC)", 
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+        "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 3
+    },
+    {
+        "name": "ECL LOGISTICS (ZONES)", 
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+        "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 3
+    },
+    {
+        "name": "KERRY LOGISTICS", 
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=0&single=true&output=csv",
+        "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 2
+    },
+    {
+        "name": "APX EXPRESS", 
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRDEzAMUwnFZ7aoThGoMERtxxsll2kfEaSpa9ksXIx6sqbdMncts6Go2d5mKKabepbNXDSoeaUlk-mP/pub?gid=0&single=true&output=csv",
+        "dateCol": 0, "boxCol": 1, "weightCol": 4, "regionCol": 6, "startRow": 2
+    },
 ]
 
-def fetch_sheet_data(sheet_name):
+def fetch_sheet_data(url):
     """Fetch CSV data from published Google Sheet"""
     try:
-        url = get_sheet_url(sheet_name)
         response = requests.get(url, timeout=30)
         response.raise_for_status()
         reader = csv.reader(StringIO(response.text))
         return list(reader)
     except Exception as e:
-        print(f"Error fetching {sheet_name}: {e}")
+        print(f"Error fetching data: {e}")
         return []
 
 def parse_date(date_str):
@@ -84,7 +83,7 @@ def is_valid_region(region):
     if not region:
         return False
     region = str(region).strip().upper()
-    invalid = ["", "N/A", "#N/A", "COUNTRY", "REGION", "NA", "-"]
+    invalid = ["", "N/A", "#N/A", "COUNTRY", "REGION", "NA", "-", "DESTINATION"]
     return region not in invalid and len(region) > 0
 
 def get_rating(total_boxes):
@@ -628,18 +627,11 @@ def get_data():
         prev_week_start = week_start - timedelta(days=7)
         prev_week_end = week_start - timedelta(days=1)
         
-        # Cache fetched sheets
-        sheet_cache = {}
         results = []
         
         for provider in PROVIDERS:
-            sheet_name = provider["sheet"]
-            
-            # Fetch sheet if not cached
-            if sheet_name not in sheet_cache:
-                sheet_cache[sheet_name] = fetch_sheet_data(sheet_name)
-            
-            data = sheet_cache[sheet_name]
+            # Fetch data using direct URL
+            data = fetch_sheet_data(provider["url"])
             
             # Initialize data structures
             regions_data = {}
