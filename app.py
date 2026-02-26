@@ -1,13 +1,20 @@
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, render_template_string, jsonify, request, session, redirect, url_for
+from functools import wraps
 import csv
 import urllib.request
 import urllib.parse
 from datetime import datetime, timedelta
 from collections import defaultdict
 import time
-import json
+import os
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
+
+# ============================================
+# ADMIN PASSWORD (Set in Vercel Environment Variables)
+# ============================================
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 
 # ============================================
 # CACHE CONFIGURATION
@@ -22,18 +29,7 @@ SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
 # ============================================
 # 🔒 LOCKED COLUMN MAPPINGS - VERIFIED FROM SCREENSHOTS
-# DO NOT CHANGE THESE VALUES!
 # ============================================
-# Provider    | Sheet                  | Date | Box | Weight | Region | startRow
-# ------------|------------------------|------|-----|--------|--------|----------
-# GE QC       | GE QC Center & Zone    | 1(B) | 2(C)| 5(F)   | 7(H)   | 2
-# GE ZONE     | GE QC Center & Zone    |10(K) |11(L)|14(O)   |16(Q)   | 2
-# ECL QC      | ECL QC Center & Zone   | 1(B) | 2(C)| 5(F)   | 7(H)   | 3
-# ECL ZONE    | ECL QC Center & Zone   |10(K) |11(L)|14(O)   |16(Q)   | 3  ✅ FIXED!
-# KERRY       | Kerry                  | 1(B) | 2(C)| 5(F)   | 7(H)   | 2
-# APX         | APX                    | 1(B) | 2(C)| 5(F)   | 7(H)   | 2
-# ============================================
-
 PROVIDERS = [
     {
         'name': 'GLOBAL EXPRESS (QC)',
@@ -70,7 +66,7 @@ PROVIDERS = [
         'sheet': 'ECL QC Center & Zone',
         'date_col': 10,
         'box_col': 11,
-        'weight_col': 14,  # ✅ FIXED: Column O (CW), not Column P
+        'weight_col': 14,
         'region_col': 16,
         'start_row': 3,
         'color': '#F59E0B'
@@ -100,11 +96,21 @@ PROVIDERS = [
 INVALID_REGIONS = {'', 'N/A', '#N/A', 'COUNTRY', 'REGION', 'DESTINATION', 'ZONE', 'ORDER', 'FLEEK ID', 'DATE', 'CARTONS'}
 
 # ============================================
+# LOGIN DECORATOR
+# ============================================
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ============================================
 # HELPER FUNCTIONS
 # ============================================
 
 def get_week_range(date=None):
-    """Get Monday 00:00 to Sunday 23:59 for the given date"""
     if date is None:
         date = datetime.now()
     monday = date - timedelta(days=date.weekday())
@@ -113,7 +119,6 @@ def get_week_range(date=None):
     return monday, sunday
 
 def parse_date(date_str):
-    """Parse various date formats"""
     if not date_str or str(date_str).strip() in ['', '#N/A', 'N/A', 'DATE']:
         return None
     
@@ -132,7 +137,6 @@ def parse_date(date_str):
     return None
 
 def fetch_sheet_data(sheet_name):
-    """Fetch CSV data from Google Sheet"""
     cache_key = f"sheet_{sheet_name}"
     current_time = time.time()
     
@@ -156,7 +160,6 @@ def fetch_sheet_data(sheet_name):
         return []
 
 def get_star_rating(boxes):
-    """Get star rating based on box count"""
     if boxes >= 1500:
         return 5
     elif boxes >= 500:
@@ -167,7 +170,6 @@ def get_star_rating(boxes):
         return 2
 
 def process_provider_data(provider, week_start, week_end):
-    """Process data for a single provider"""
     rows = fetch_sheet_data(provider['sheet'])
     
     if not rows:
@@ -238,10 +240,7 @@ def process_provider_data(provider, week_start, week_end):
         except Exception as e:
             continue
     
-    # Calculate star rating
     data['stars'] = get_star_rating(data['total_boxes'])
-    
-    # Convert regions defaultdict to regular dict
     data['regions'] = dict(data['regions'])
     for region in data['regions']:
         data['regions'][region] = dict(data['regions'][region])
@@ -249,7 +248,6 @@ def process_provider_data(provider, week_start, week_end):
     return data
 
 def calculate_trend(current_boxes, previous_boxes):
-    """Calculate trend percentage"""
     if previous_boxes == 0:
         if current_boxes > 0:
             return {'direction': 'up', 'percentage': 100}
@@ -261,6 +259,11 @@ def calculate_trend(current_boxes, previous_boxes):
         return {'direction': 'up', 'percentage': round(change, 1)}
     else:
         return {'direction': 'down', 'percentage': round(abs(change), 1)}
+
+# ============================================
+# FAVICON - Premium 3PL Gold Badge
+# ============================================
+FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='gold' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%23f4d03f'/%3E%3Cstop offset='50%25' style='stop-color:%23d4a853'/%3E%3Cstop offset='100%25' style='stop-color:%23b8942d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='46' fill='%230a0a0f' stroke='url(%23gold)' stroke-width='4'/%3E%3Ctext x='50' y='42' text-anchor='middle' font-family='Arial Black' font-size='24' font-weight='bold' fill='url(%23gold)'%3E3P%3C/text%3E%3Ctext x='50' y='68' text-anchor='middle' font-family='Arial' font-size='16' font-weight='bold' fill='%23d4a853'%3ELOGISTICS%3C/text%3E%3Ccircle cx='50' cy='50' r='42' fill='none' stroke='%23d4a853' stroke-width='1' opacity='0.3'/%3E%3C/svg%3E">'''
 
 # ============================================
 # HTML TEMPLATES
@@ -428,6 +431,44 @@ BASE_STYLES = """
     
     .sidebar.collapsed .sidebar-toggle {
         transform: translateY(-50%) rotate(180deg);
+    }
+    
+    .sidebar-footer {
+        border-top: 1px solid rgba(212, 168, 83, 0.1);
+        padding-top: 16px;
+        margin-top: auto;
+    }
+    
+    .logout-btn {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border-radius: 8px;
+        color: #ef4444;
+        text-decoration: none;
+        transition: all 0.2s;
+        cursor: pointer;
+        width: 100%;
+        border: none;
+        background: none;
+        font-family: inherit;
+        font-size: 14px;
+    }
+    
+    .logout-btn:hover {
+        background: rgba(239, 68, 68, 0.1);
+    }
+    
+    .logout-btn svg {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+    }
+    
+    .sidebar.collapsed .logout-btn span {
+        opacity: 0;
+        width: 0;
     }
     
     /* Main Content */
@@ -807,36 +848,121 @@ BASE_STYLES = """
         to { transform: rotate(360deg); }
     }
     
-    /* Responsive */
-    @media (max-width: 768px) {
-        .sidebar {
-            width: 70px;
-        }
-        
-        .sidebar .logo-text,
-        .sidebar .nav-item span {
-            display: none;
-        }
-        
-        .main-content {
-            margin-left: 70px;
-        }
-        
-        .page-header {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-        
-        .card-header {
-            flex-direction: column;
-            gap: 16px;
-            align-items: flex-start;
-        }
-        
-        .card-stats {
-            width: 100%;
-            justify-content: space-between;
-        }
+    /* Login Styles */
+    .login-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #050508;
+        padding: 20px;
+    }
+    
+    .login-card {
+        background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%);
+        border-radius: 20px;
+        border: 1px solid rgba(212, 168, 83, 0.2);
+        padding: 40px;
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+    }
+    
+    .login-logo {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, #d4a853 0%, #b8942d 100%);
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 24px;
+        font-weight: 700;
+        color: #0a0a0f;
+        font-size: 28px;
+    }
+    
+    .login-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: #ffffff;
+        margin-bottom: 8px;
+    }
+    
+    .login-subtitle {
+        font-size: 14px;
+        color: #64748b;
+        margin-bottom: 32px;
+    }
+    
+    .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .form-group {
+        text-align: left;
+    }
+    
+    .form-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: #94a3b8;
+        margin-bottom: 8px;
+    }
+    
+    .form-input {
+        width: 100%;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(212, 168, 83, 0.2);
+        border-radius: 10px;
+        color: #e2e8f0;
+        font-size: 15px;
+        font-family: inherit;
+        transition: all 0.2s;
+    }
+    
+    .form-input:focus {
+        outline: none;
+        border-color: #d4a853;
+        background: rgba(212, 168, 83, 0.05);
+    }
+    
+    .form-input::placeholder {
+        color: #64748b;
+    }
+    
+    .login-btn {
+        width: 100%;
+        padding: 14px;
+        background: linear-gradient(135deg, #d4a853 0%, #b8942d 100%);
+        border: none;
+        border-radius: 10px;
+        color: #0a0a0f;
+        font-size: 15px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-top: 8px;
+    }
+    
+    .login-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(212, 168, 83, 0.3);
+    }
+    
+    .error-message {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 8px;
+        padding: 12px;
+        color: #ef4444;
+        font-size: 13px;
+        margin-bottom: 16px;
     }
     
     /* Leaderboard Table */
@@ -907,6 +1033,39 @@ BASE_STYLES = """
         height: 32px;
         border-radius: 2px;
     }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .sidebar {
+            width: 70px;
+        }
+        
+        .sidebar .logo-text,
+        .sidebar .nav-item span,
+        .sidebar .logout-btn span {
+            display: none;
+        }
+        
+        .main-content {
+            margin-left: 70px;
+        }
+        
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        .card-header {
+            flex-direction: column;
+            gap: 16px;
+            align-items: flex-start;
+        }
+        
+        .card-stats {
+            width: 100%;
+            justify-content: space-between;
+        }
+    }
 </style>
 """
 
@@ -953,6 +1112,15 @@ SIDEBAR_HTML = """
             <div class="tooltip">Analytics</div>
         </a>
     </div>
+    
+    <div class="sidebar-footer">
+        <a href="/logout" class="logout-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>Logout</span>
+        </a>
+    </div>
 </nav>
 """
 
@@ -963,12 +1131,9 @@ SIDEBAR_SCRIPT = """
         const mainContent = document.getElementById('main-content');
         sidebar.classList.toggle('collapsed');
         mainContent.classList.toggle('expanded');
-        
-        // Save state
         localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
     }
     
-    // Restore state on load
     document.addEventListener('DOMContentLoaded', function() {
         const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
         if (isCollapsed) {
@@ -983,7 +1148,58 @@ SIDEBAR_SCRIPT = """
 # ROUTES
 # ============================================
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if password == ADMIN_PASSWORD:
+            session['logged_in'] = True
+            return redirect(url_for('dashboard'))
+        else:
+            error = 'Invalid password. Please try again.'
+    
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - 3PL Dashboard</title>
+    ''' + FAVICON + '''
+    ''' + BASE_STYLES + '''
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-logo">3P</div>
+            <h1 class="login-title">Welcome Back</h1>
+            <p class="login-subtitle">Enter your password to access the dashboard</p>
+            
+            {% if error %}
+            <div class="error-message">{{ error }}</div>
+            {% endif %}
+            
+            <form class="login-form" method="POST">
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" name="password" class="form-input" placeholder="Enter your password" autofocus required>
+                </div>
+                <button type="submit" class="login-btn">Sign In</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
+    ''', error=error)
+
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
+
 @app.route('/')
+@login_required
 def dashboard():
     return render_template_string('''
 <!DOCTYPE html>
@@ -992,6 +1208,7 @@ def dashboard():
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3PL Dashboard</title>
+    ''' + FAVICON + '''
     ''' + BASE_STYLES + '''
 </head>
 <body>
@@ -1088,7 +1305,6 @@ def dashboard():
                 regionsHtml += '</tr>';
             }
             
-            // Total row
             regionsHtml += '<tr class="total-row">';
             regionsHtml += '<td class="region-col">TOTAL</td>';
             for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
@@ -1173,6 +1389,7 @@ def dashboard():
     ''')
 
 @app.route('/weekly-summary')
+@login_required
 def weekly_summary():
     return render_template_string('''
 <!DOCTYPE html>
@@ -1181,6 +1398,7 @@ def weekly_summary():
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weekly Summary - 3PL Dashboard</title>
+    ''' + FAVICON + '''
     ''' + BASE_STYLES + '''
 </head>
 <body>
@@ -1252,7 +1470,6 @@ def weekly_summary():
                 const response = await fetch('/api/weekly-summary?week_start=' + formatDate(currentWeekStart));
                 const data = await response.json();
                 
-                // Winner card
                 let html = '';
                 if (data.winner) {
                     html += `
@@ -1270,7 +1487,6 @@ def weekly_summary():
                     `;
                 }
                 
-                // Leaderboard
                 html += `
                     <div class="provider-card">
                         <div class="card-header">
@@ -1329,6 +1545,7 @@ def weekly_summary():
     ''')
 
 @app.route('/flight-load')
+@login_required
 def flight_load():
     return render_template_string('''
 <!DOCTYPE html>
@@ -1337,6 +1554,7 @@ def flight_load():
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flight Load - 3PL Dashboard</title>
+    ''' + FAVICON + '''
     ''' + BASE_STYLES + '''
 </head>
 <body>
@@ -1477,6 +1695,7 @@ def flight_load():
     ''')
 
 @app.route('/analytics')
+@login_required
 def analytics():
     return render_template_string('''
 <!DOCTYPE html>
@@ -1485,6 +1704,7 @@ def analytics():
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytics - 3PL Dashboard</title>
+    ''' + FAVICON + '''
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     ''' + BASE_STYLES + '''
 </head>
@@ -1560,7 +1780,6 @@ def analytics():
         
         <!-- Charts -->
         <div class="charts-grid">
-            <!-- Provider Performance Bar Chart -->
             <div class="chart-card">
                 <div class="chart-title">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1573,7 +1792,6 @@ def analytics():
                 </div>
             </div>
             
-            <!-- Weight Distribution Pie Chart -->
             <div class="chart-card">
                 <div class="chart-title">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1587,7 +1805,6 @@ def analytics():
                 </div>
             </div>
             
-            <!-- Daily Trend Line Chart -->
             <div class="chart-card full-width">
                 <div class="chart-title">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1600,7 +1817,6 @@ def analytics():
                 </div>
             </div>
             
-            <!-- Orders vs Boxes Comparison -->
             <div class="chart-card">
                 <div class="chart-title">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1613,7 +1829,6 @@ def analytics():
                 </div>
             </div>
             
-            <!-- Region Distribution Doughnut -->
             <div class="chart-card">
                 <div class="chart-title">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1634,7 +1849,6 @@ def analytics():
         let currentWeekStart = getMonday(new Date());
         let charts = {};
         
-        // Chart.js global config
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.05)';
         Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
@@ -1681,7 +1895,6 @@ def analytics():
                 const response = await fetch('/api/dashboard?week_start=' + formatDate(currentWeekStart));
                 const data = await response.json();
                 
-                // Calculate totals
                 let totalOrders = 0;
                 let totalBoxes = 0;
                 let totalWeight = 0;
@@ -1692,7 +1905,6 @@ def analytics():
                 const providerColors = [];
                 const providerOrders = [];
                 
-                // Daily data
                 const dailyData = {Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0};
                 const regionData = {};
                 
@@ -1707,14 +1919,12 @@ def analytics():
                     providerColors.push(p.color);
                     providerOrders.push(p.total_orders);
                     
-                    // Daily aggregation
                     Object.values(p.regions).forEach(region => {
                         Object.entries(region.days).forEach(([day, d]) => {
                             dailyData[day] += d.orders;
                         });
                     });
                     
-                    // Region aggregation
                     Object.entries(p.regions).forEach(([regionName, regionInfo]) => {
                         if (!regionData[regionName]) regionData[regionName] = 0;
                         Object.values(regionInfo.days).forEach(d => {
@@ -1723,12 +1933,10 @@ def analytics():
                     });
                 });
                 
-                // Update stat cards
                 document.getElementById('total-orders').textContent = totalOrders.toLocaleString();
                 document.getElementById('total-boxes').textContent = totalBoxes.toLocaleString();
                 document.getElementById('total-weight').textContent = totalWeight.toLocaleString(undefined, {maximumFractionDigits: 1});
                 
-                // Provider Bar Chart
                 charts.providerBar = new Chart(document.getElementById('providerBarChart'), {
                     type: 'bar',
                     data: {
@@ -1746,22 +1954,14 @@ def analytics():
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false }
-                        },
+                        plugins: { legend: { display: false } },
                         scales: {
-                            y: {
-                                beginAtZero: true,
-                                grid: { color: 'rgba(255,255,255,0.05)' }
-                            },
-                            x: {
-                                grid: { display: false }
-                            }
+                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                            x: { grid: { display: false } }
                         }
                     }
                 });
                 
-                // Weight Pie Chart
                 charts.weightPie = new Chart(document.getElementById('weightPieChart'), {
                     type: 'pie',
                     data: {
@@ -1779,17 +1979,12 @@ def analytics():
                         plugins: {
                             legend: {
                                 position: 'right',
-                                labels: {
-                                    padding: 15,
-                                    usePointStyle: true,
-                                    pointStyle: 'circle'
-                                }
+                                labels: { padding: 15, usePointStyle: true, pointStyle: 'circle' }
                             }
                         }
                     }
                 });
                 
-                // Daily Line Chart
                 charts.dailyLine = new Chart(document.getElementById('dailyLineChart'), {
                     type: 'line',
                     data: {
@@ -1812,22 +2007,14 @@ def analytics():
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false }
-                        },
+                        plugins: { legend: { display: false } },
                         scales: {
-                            y: {
-                                beginAtZero: true,
-                                grid: { color: 'rgba(255,255,255,0.05)' }
-                            },
-                            x: {
-                                grid: { display: false }
-                            }
+                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                            x: { grid: { display: false } }
                         }
                     }
                 });
                 
-                // Comparison Chart (Orders vs Boxes)
                 charts.comparison = new Chart(document.getElementById('comparisonChart'), {
                     type: 'bar',
                     data: {
@@ -1857,25 +2044,16 @@ def analytics():
                         plugins: {
                             legend: {
                                 position: 'top',
-                                labels: {
-                                    padding: 15,
-                                    usePointStyle: true
-                                }
+                                labels: { padding: 15, usePointStyle: true }
                             }
                         },
                         scales: {
-                            y: {
-                                beginAtZero: true,
-                                grid: { color: 'rgba(255,255,255,0.05)' }
-                            },
-                            x: {
-                                grid: { display: false }
-                            }
+                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                            x: { grid: { display: false } }
                         }
                     }
                 });
                 
-                // Region Doughnut Chart - Top 6 regions
                 const sortedRegions = Object.entries(regionData)
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, 6);
@@ -1900,11 +2078,7 @@ def analytics():
                         plugins: {
                             legend: {
                                 position: 'right',
-                                labels: {
-                                    padding: 12,
-                                    usePointStyle: true,
-                                    pointStyle: 'circle'
-                                }
+                                labels: { padding: 12, usePointStyle: true, pointStyle: 'circle' }
                             }
                         }
                     }
@@ -1937,7 +2111,6 @@ def api_dashboard():
     week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
     week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
     
-    # Get previous week for trend calculation
     prev_week_start = week_start - timedelta(days=7)
     prev_week_end = prev_week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
     
@@ -1984,7 +2157,6 @@ def api_weekly_summary():
             current_data['trend'] = calculate_trend(current_data['total_boxes'], prev_boxes)
             providers_data.append(current_data)
     
-    # Sort by boxes descending
     providers_data.sort(key=lambda x: x['total_boxes'], reverse=True)
     
     winner = providers_data[0] if providers_data else None
@@ -2014,7 +2186,6 @@ def api_flight_load():
         if data:
             providers_data.append(data)
     
-    # Aggregate by flight day
     flights = [
         {'name': 'Tuesday Flight (Mon + Tue)', 'days': ['Mon', 'Tue']},
         {'name': 'Thursday Flight (Wed + Thu)', 'days': ['Wed', 'Thu']},
@@ -2053,7 +2224,6 @@ def api_flight_load():
             flight_info['total_weight'] += provider_flight['weight']
             flight_info['providers'].append(provider_flight)
         
-        # Sort providers by boxes
         flight_info['providers'].sort(key=lambda x: x['boxes'], reverse=True)
         flight_data.append(flight_info)
     
