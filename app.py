@@ -14,20 +14,34 @@ def get_sheet_url(sheet_name):
     encoded_name = sheet_name.replace(" ", "%20").replace("&", "%26")
     return f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}"
 
-# Provider configs - exactly matching your script
+# Provider configs - EXACT from your Google Script (1-based indexing)
 PROVIDERS = [
-    {"name": "GLOBAL EXPRESS (QC)", "sheet": "GE QC Center & Zone", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "type": "qc"},
-    {"name": "GLOBAL EXPRESS (ZONES)", "sheet": "GE QC Center & Zone", "dateCol": 10, "boxCol": 11, "weightCol": 15, "regionCol": 16, "type": "zone"},
-    {"name": "ECL LOGISTICS (QC)", "sheet": "ECL QC Center & Zone", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "type": "qc"},
-    {"name": "ECL LOGISTICS (ZONES)", "sheet": "ECL QC Center & Zone", "dateCol": 10, "boxCol": 11, "weightCol": 14, "regionCol": 16, "type": "zone"},
-    {"name": "KERRY LOGISTICS", "sheet": "Kerry", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 6, "type": "qc"},
-    {"name": "APX EXPRESS", "sheet": "APX", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "type": "qc"},
+    # GE QC (A-H): Date=B(1), Cartons=C(2), Weight=F(5), Region=H(7)
+    {"name": "GLOBAL EXPRESS (QC)", "sheet": "GE QC Center & Zone", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
+    
+    # GE Zone (J-R): Date=K(10), Cartons=L(11), Weight=P(15), Region=R(17)
+    {"name": "GLOBAL EXPRESS (ZONES)", "sheet": "GE QC Center & Zone", "dateCol": 10, "boxCol": 11, "weightCol": 15, "regionCol": 17, "startRow": 2},
+    
+    # ECL QC (A-H): Date=B(1), Cartons=C(2), Weight=F(5), Region=H(7)
+    {"name": "ECL LOGISTICS (QC)", "sheet": "ECL QC Center & Zone", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 3},
+    
+    # ECL Zone (J-S): Date=K(10), Cartons=L(11), Weight=Q(16), Region=S(18)
+    {"name": "ECL LOGISTICS (ZONES)", "sheet": "ECL QC Center & Zone", "dateCol": 10, "boxCol": 11, "weightCol": 16, "regionCol": 18, "startRow": 3},
+    
+    # Kerry (A-H): Date=B(1), Cartons=C(2), Weight=F(5), Region=H(7)
+    {"name": "KERRY LOGISTICS", "sheet": "Kerry", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
+    
+    # APX (A-H): Date=B(1), Cartons=C(2), Weight=F(5), Region=H(7)
+    {"name": "APX EXPRESS", "sheet": "APX", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
+    
+    # UPS (A-H): Date=B(1), Cartons=C(2), Weight=F(5), Region=H(7)
+    {"name": "UPS", "sheet": "UPS", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
 ]
 
 def fetch_sheet_data(sheet_name):
     try:
         url = get_sheet_url(sheet_name)
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, timeout=60)
         response.raise_for_status()
         reader = csv.reader(StringIO(response.text))
         return list(reader)
@@ -38,10 +52,11 @@ def fetch_sheet_data(sheet_name):
 def parse_date(date_str):
     if not date_str or str(date_str).strip() == "":
         return None
-    formats = ["%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y", "%m/%d/%Y"]
+    date_str = str(date_str).strip()
+    formats = ["%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y", "%m/%d/%Y", "%Y/%m/%d"]
     for fmt in formats:
         try:
-            return datetime.strptime(str(date_str).strip(), fmt)
+            return datetime.strptime(date_str, fmt)
         except:
             continue
     return None
@@ -49,11 +64,18 @@ def parse_date(date_str):
 def safe_float(val):
     try:
         clean = str(val).replace(',', '').replace(' ', '').strip()
-        if clean == "" or clean == "-" or clean.upper() == "N/A" or clean == "#N/A":
+        if clean == "" or clean == "-" or clean.upper() in ["N/A", "#N/A", "NA"]:
             return 0
         return float(clean)
     except:
         return 0
+
+def is_valid_region(region):
+    if not region:
+        return False
+    region = str(region).strip().upper()
+    invalid = ["", "N/A", "#N/A", "COUNTRY", "REGION", "NA", "-", "DESTINATION", "ZONE"]
+    return region not in invalid and len(region) > 1
 
 def get_rating(total_boxes):
     if total_boxes >= 1500:
@@ -86,7 +108,6 @@ def flight_load():
 @app.route('/api/dashboard')
 def api_dashboard():
     try:
-        # Get week start from query param or default to current week
         week_start_str = request.args.get('week_start')
         if week_start_str:
             week_start = datetime.strptime(week_start_str, "%Y-%m-%d")
@@ -95,7 +116,9 @@ def api_dashboard():
             week_start = today - timedelta(days=today.weekday())
         
         week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
         prev_week_start = week_start - timedelta(days=7)
+        prev_week_end = week_start - timedelta(seconds=1)
         
         sheet_cache = {}
         results = []
@@ -108,64 +131,75 @@ def api_dashboard():
             
             data = sheet_cache[sheet_name]
             
+            if not data:
+                continue
+            
             # Region-wise data structure
             regions_data = defaultdict(lambda: {
                 "days": [{"orders": 0, "boxes": 0, "weight": 0, "under20": 0, "over20": 0} for _ in range(7)],
                 "total": {"orders": 0, "boxes": 0, "weight": 0, "under20": 0, "over20": 0}
             })
             
-            # Current week totals
             current_total = {"orders": 0, "boxes": 0, "weight": 0}
-            # Previous week totals (for trend)
             prev_total = {"boxes": 0}
             
-            for row in data[1:]:
+            # Skip header rows based on startRow (1-based in config, so subtract 1 for 0-based)
+            start_idx = provider.get("startRow", 2) - 1
+            
+            for row in data[start_idx:]:
                 try:
-                    if provider["dateCol"] >= len(row):
+                    # Check row length
+                    if len(row) <= max(provider["dateCol"], provider["boxCol"], provider["weightCol"], provider["regionCol"]):
                         continue
                     
-                    date_val = row[provider["dateCol"]]
+                    # Get date (1-based index, so subtract 1)
+                    date_val = row[provider["dateCol"] - 1] if provider["dateCol"] - 1 < len(row) else ""
                     row_date = parse_date(date_val)
                     
                     if not row_date:
                         continue
                     
-                    # Get region
-                    region = "Unknown"
-                    if provider["regionCol"] < len(row):
-                        region = str(row[provider["regionCol"]]).strip()
-                        if not region or region.upper() in ["", "N/A", "#N/A", "COUNTRY"]:
-                            continue
+                    # Get region (1-based index)
+                    region_idx = provider["regionCol"] - 1
+                    region = str(row[region_idx]).strip() if region_idx < len(row) else ""
                     
-                    boxes = safe_float(row[provider["boxCol"]]) if provider["boxCol"] < len(row) else 0
-                    weight = safe_float(row[provider["weightCol"]]) if provider["weightCol"] < len(row) else 0
+                    if not is_valid_region(region):
+                        continue
                     
-                    # Determine <20kg or 20kg+
+                    region = region.upper()
+                    
+                    # Get boxes and weight (1-based index)
+                    boxes = safe_float(row[provider["boxCol"] - 1]) if provider["boxCol"] - 1 < len(row) else 0
+                    weight = safe_float(row[provider["weightCol"] - 1]) if provider["weightCol"] - 1 < len(row) else 0
+                    
+                    # Skip if no data
+                    if boxes <= 0 and weight <= 0:
+                        continue
+                    
+                    # Weight category
                     under20 = 1 if weight < 20 else 0
                     over20 = 1 if weight >= 20 else 0
                     
                     # Current week data
-                    day_diff = (row_date - week_start).days
-                    if 0 <= day_diff < 7:
-                        regions_data[region]["days"][day_diff]["orders"] += 1
-                        regions_data[region]["days"][day_diff]["boxes"] += boxes
-                        regions_data[region]["days"][day_diff]["weight"] += weight
-                        regions_data[region]["days"][day_diff]["under20"] += under20
-                        regions_data[region]["days"][day_diff]["over20"] += over20
-                        
-                        regions_data[region]["total"]["orders"] += 1
-                        regions_data[region]["total"]["boxes"] += boxes
-                        regions_data[region]["total"]["weight"] += weight
-                        regions_data[region]["total"]["under20"] += under20
-                        regions_data[region]["total"]["over20"] += over20
-                        
-                        current_total["orders"] += 1
-                        current_total["boxes"] += boxes
-                        current_total["weight"] += weight
+                    if week_start <= row_date <= week_end:
+                        day_diff = (row_date - week_start).days
+                        if 0 <= day_diff < 7:
+                            regions_data[region]["days"][day_diff]["orders"] += 1
+                            regions_data[region]["days"][day_diff]["boxes"] += boxes
+                            regions_data[region]["days"][day_diff]["weight"] += weight
+                            regions_data[region]["days"][day_diff]["under20"] += under20
+                            regions_data[region]["days"][day_diff]["over20"] += over20
+                            
+                            regions_data[region]["total"]["orders"] += 1
+                            regions_data[region]["total"]["boxes"] += boxes
+                            regions_data[region]["total"]["weight"] += weight
+                            
+                            current_total["orders"] += 1
+                            current_total["boxes"] += boxes
+                            current_total["weight"] += weight
                     
                     # Previous week data (for trend)
-                    prev_day_diff = (row_date - prev_week_start).days
-                    if 0 <= prev_day_diff < 7:
+                    if prev_week_start <= row_date <= prev_week_end:
                         prev_total["boxes"] += boxes
                         
                 except Exception as e:
@@ -206,7 +240,8 @@ def api_dashboard():
         })
     
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 @app.route('/api/weekly-summary')
 def api_weekly_summary():
@@ -219,6 +254,7 @@ def api_weekly_summary():
             week_start = today - timedelta(days=today.weekday())
         
         week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
         
         sheet_cache = {}
         results = []
@@ -231,34 +267,40 @@ def api_weekly_summary():
             
             data = sheet_cache[sheet_name]
             
+            if not data:
+                continue
+            
             days_data = [{"orders": 0, "boxes": 0, "weight": 0} for _ in range(7)]
             
-            for row in data[1:]:
+            start_idx = provider.get("startRow", 2) - 1
+            
+            for row in data[start_idx:]:
                 try:
-                    if provider["dateCol"] >= len(row):
+                    if len(row) <= max(provider["dateCol"], provider["boxCol"], provider["weightCol"], provider["regionCol"]):
                         continue
                     
-                    date_val = row[provider["dateCol"]]
+                    date_val = row[provider["dateCol"] - 1] if provider["dateCol"] - 1 < len(row) else ""
                     row_date = parse_date(date_val)
                     
                     if not row_date:
                         continue
                     
-                    region = ""
-                    if provider["regionCol"] < len(row):
-                        region = str(row[provider["regionCol"]]).strip()
-                        if region.upper() in ["", "N/A", "#N/A", "COUNTRY"]:
-                            continue
+                    region_idx = provider["regionCol"] - 1
+                    region = str(row[region_idx]).strip() if region_idx < len(row) else ""
                     
-                    day_diff = (row_date - week_start).days
+                    if not is_valid_region(region):
+                        continue
                     
-                    if 0 <= day_diff < 7:
-                        boxes = safe_float(row[provider["boxCol"]]) if provider["boxCol"] < len(row) else 0
-                        weight = safe_float(row[provider["weightCol"]]) if provider["weightCol"] < len(row) else 0
+                    if week_start <= row_date <= week_end:
+                        day_diff = (row_date - week_start).days
                         
-                        days_data[day_diff]["orders"] += 1
-                        days_data[day_diff]["boxes"] += boxes
-                        days_data[day_diff]["weight"] += weight
+                        if 0 <= day_diff < 7:
+                            boxes = safe_float(row[provider["boxCol"] - 1]) if provider["boxCol"] - 1 < len(row) else 0
+                            weight = safe_float(row[provider["weightCol"] - 1]) if provider["weightCol"] - 1 < len(row) else 0
+                            
+                            days_data[day_diff]["orders"] += 1
+                            days_data[day_diff]["boxes"] += boxes
+                            days_data[day_diff]["weight"] += weight
                 except:
                     continue
             
@@ -300,6 +342,7 @@ def api_flight_load():
             week_start = today - timedelta(days=today.weekday())
         
         week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
         
         sheet_cache = {}
         results = []
@@ -312,34 +355,40 @@ def api_flight_load():
             
             data = sheet_cache[sheet_name]
             
+            if not data:
+                continue
+            
             days_data = [{"orders": 0, "boxes": 0, "weight": 0} for _ in range(7)]
             
-            for row in data[1:]:
+            start_idx = provider.get("startRow", 2) - 1
+            
+            for row in data[start_idx:]:
                 try:
-                    if provider["dateCol"] >= len(row):
+                    if len(row) <= max(provider["dateCol"], provider["boxCol"], provider["weightCol"], provider["regionCol"]):
                         continue
                     
-                    date_val = row[provider["dateCol"]]
+                    date_val = row[provider["dateCol"] - 1] if provider["dateCol"] - 1 < len(row) else ""
                     row_date = parse_date(date_val)
                     
                     if not row_date:
                         continue
                     
-                    region = ""
-                    if provider["regionCol"] < len(row):
-                        region = str(row[provider["regionCol"]]).strip()
-                        if region.upper() in ["", "N/A", "#N/A", "COUNTRY"]:
-                            continue
+                    region_idx = provider["regionCol"] - 1
+                    region = str(row[region_idx]).strip() if region_idx < len(row) else ""
                     
-                    day_diff = (row_date - week_start).days
+                    if not is_valid_region(region):
+                        continue
                     
-                    if 0 <= day_diff < 7:
-                        boxes = safe_float(row[provider["boxCol"]]) if provider["boxCol"] < len(row) else 0
-                        weight = safe_float(row[provider["weightCol"]]) if provider["weightCol"] < len(row) else 0
+                    if week_start <= row_date <= week_end:
+                        day_diff = (row_date - week_start).days
                         
-                        days_data[day_diff]["orders"] += 1
-                        days_data[day_diff]["boxes"] += boxes
-                        days_data[day_diff]["weight"] += weight
+                        if 0 <= day_diff < 7:
+                            boxes = safe_float(row[provider["boxCol"] - 1]) if provider["boxCol"] - 1 < len(row) else 0
+                            weight = safe_float(row[provider["weightCol"] - 1]) if provider["weightCol"] - 1 < len(row) else 0
+                            
+                            days_data[day_diff]["orders"] += 1
+                            days_data[day_diff]["boxes"] += boxes
+                            days_data[day_diff]["weight"] += weight
                 except:
                     continue
             
