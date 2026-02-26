@@ -8,43 +8,68 @@ import time
 
 app = Flask(__name__)
 
-# Google Sheet ID
 SHEET_ID = "1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY"
 
-# Simple cache
 CACHE = {}
-CACHE_DURATION = 300  # 5 minutes
+CACHE_DURATION = 300
 
 def get_sheet_url(sheet_name):
     encoded_name = sheet_name.replace(" ", "%20").replace("&", "%26")
     return f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}"
 
-# ✅ CORRECT - These are already 0-based from Google Script!
-# DO NOT subtract 1 again!
+# ╔═══════════════════════════════════════════════════════════════════════════╗
+# ║  🔒 LOCKED COLUMNS - VERIFIED FROM ACTUAL SCREENSHOTS 27-FEB-2025        ║
+# ║  DO NOT CHANGE! Python 0-based: A=0, B=1, C=2, ... J=9, K=10, etc.       ║
+# ╠═══════════════════════════════════════════════════════════════════════════╣
+# ║  GE QC:    B(1)=Date, C(2)=Cartons, F(5)=CW, H(7)=Region    | startRow=2 ║
+# ║  GE Zone:  K(10)=Date, L(11)=Cartons, P(15)=CW, Q(16)=Region| startRow=2 ║
+# ║  ECL QC:   B(1)=Date, C(2)=Cartons, F(5)=CW, H(7)=Region    | startRow=3 ║
+# ║  ECL Zone: K(10)=Date, L(11)=Cartons, P(15)=CW, Q(16)=Region| startRow=3 ║
+# ║  Kerry:    B(1)=Date, C(2)=Cartons, F(5)=CW, H(7)=Region    | startRow=2 ║
+# ║  APX:      B(1)=Date, C(2)=Cartons, F(5)=CW, H(7)=Region    | startRow=2 ║
+# ╚═══════════════════════════════════════════════════════════════════════════╝
+
 PROVIDERS = [
-    # GE QC: B=1, C=2, F=5, H=7 (0-based)
-    {"name": "GLOBAL EXPRESS (QC)", "sheet": "GE QC Center & Zone", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
-    
-    # GE Zone: K=10, L=11, P=15, R=17 (0-based)
-    {"name": "GLOBAL EXPRESS (ZONES)", "sheet": "GE QC Center & Zone", "dateCol": 10, "boxCol": 11, "weightCol": 15, "regionCol": 17, "startRow": 2},
-    
-    # ECL QC: B=1, C=2, F=5, H=7 (0-based)
-    {"name": "ECL LOGISTICS (QC)", "sheet": "ECL QC Center & Zone", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 3},
-    
-    # ECL Zone: K=10, L=11, Q=16, S=18 (0-based)
-    {"name": "ECL LOGISTICS (ZONES)", "sheet": "ECL QC Center & Zone", "dateCol": 10, "boxCol": 11, "weightCol": 16, "regionCol": 18, "startRow": 3},
-    
-    # Kerry: B=1, C=2, F=5, H=7 (0-based)
-    {"name": "KERRY LOGISTICS", "sheet": "Kerry", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
-    
-    # APX: B=1, C=2, F=5, H=7 (0-based)
-    {"name": "APX EXPRESS", "sheet": "APX", "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, "startRow": 2},
+    {
+        "name": "GLOBAL EXPRESS (QC)", 
+        "sheet": "GE QC Center & Zone", 
+        "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, 
+        "startRow": 2
+    },
+    {
+        "name": "GLOBAL EXPRESS (ZONES)", 
+        "sheet": "GE QC Center & Zone", 
+        "dateCol": 10, "boxCol": 11, "weightCol": 15, "regionCol": 16,  # P=CW, Q=Region
+        "startRow": 2
+    },
+    {
+        "name": "ECL LOGISTICS (QC)", 
+        "sheet": "ECL QC Center & Zone", 
+        "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, 
+        "startRow": 3
+    },
+    {
+        "name": "ECL LOGISTICS (ZONES)", 
+        "sheet": "ECL QC Center & Zone", 
+        "dateCol": 10, "boxCol": 11, "weightCol": 15, "regionCol": 16,  # P=CW, Q=Region
+        "startRow": 3
+    },
+    {
+        "name": "KERRY LOGISTICS", 
+        "sheet": "Kerry", 
+        "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, 
+        "startRow": 2
+    },
+    {
+        "name": "APX EXPRESS", 
+        "sheet": "APX", 
+        "dateCol": 1, "boxCol": 2, "weightCol": 5, "regionCol": 7, 
+        "startRow": 2
+    },
 ]
 
 def fetch_sheet_data(sheet_name):
-    """Fetch with caching"""
     global CACHE
-    
     cache_key = f"sheet_{sheet_name}"
     now = time.time()
     
@@ -92,7 +117,7 @@ def is_valid_region(region):
     if not region:
         return False
     region = str(region).strip().upper()
-    invalid = ["", "N/A", "#N/A", "COUNTRY", "REGION", "NA", "-", "DESTINATION", "ZONE", "ORDER", "ORDER#", "ORDER NO"]
+    invalid = ["", "N/A", "#N/A", "COUNTRY", "REGION", "NA", "-", "DESTINATION", "ZONE", "ORDER", "NOT APPLICABLE"]
     return region not in invalid and len(region) > 1
 
 def get_rating(total_boxes):
@@ -166,10 +191,7 @@ def api_dashboard():
             current_total = {"orders": 0, "boxes": 0, "weight": 0}
             prev_total = {"boxes": 0}
             
-            # startRow is 1-based (row 2 means skip 1 header row)
             start_idx = provider.get("startRow", 2) - 1
-            
-            # Column indexes - ALREADY 0-BASED, use directly!
             date_idx = provider["dateCol"]
             box_idx = provider["boxCol"]
             weight_idx = provider["weightCol"]
@@ -223,7 +245,7 @@ def api_dashboard():
                     if prev_week_start <= row_date <= prev_week_end:
                         prev_total["boxes"] += boxes
                         
-                except Exception as e:
+                except:
                     continue
             
             day_totals = [{"orders": 0, "boxes": 0, "weight": 0, "under20": 0, "over20": 0} for _ in range(7)]
@@ -470,19 +492,19 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         body { font-family: 'Segoe UI', sans-serif; background: #0B1120; color: #fff; min-height: 100vh; display: flex; }
         .sidebar { width: 250px; background: #0F172A; border-right: 1px solid #1E293B; padding: 20px 0; position: fixed; height: 100vh; }
         .sidebar-header { padding: 0 20px 20px; border-bottom: 1px solid #1E293B; margin-bottom: 20px; }
-        .sidebar-header h1 { color: #FBBF24; font-size: 16px; letter-spacing: 1px; }
+        .sidebar-header h1 { color: #FBBF24; font-size: 16px; }
         .sidebar-header p { color: #64748B; font-size: 11px; margin-top: 5px; }
-        .nav-item { display: flex; align-items: center; padding: 12px 20px; color: #94A3B8; text-decoration: none; transition: all 0.2s; border-left: 3px solid transparent; }
+        .nav-item { display: flex; align-items: center; padding: 12px 20px; color: #94A3B8; text-decoration: none; border-left: 3px solid transparent; }
         .nav-item:hover { background: #1E293B; color: #fff; }
         .nav-item.active { background: #1E293B; color: #FBBF24; border-left-color: #FBBF24; }
         .nav-item span { margin-left: 10px; }
         .main-content { margin-left: 250px; flex: 1; min-height: 100vh; }
         .header { background: linear-gradient(135deg, #0B1120, #1E293B); padding: 20px 30px; border-bottom: 2px solid #FBBF24; }
-        .header h1 { color: #FBBF24; font-size: 22px; letter-spacing: 2px; }
+        .header h1 { color: #FBBF24; font-size: 22px; }
         .header p { color: #94A3B8; font-size: 12px; margin-top: 5px; }
         .week-selector { background: #1E293B; padding: 15px 30px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #334155; }
         .week-selector label { color: #94A3B8; font-size: 13px; }
-        .week-selector input { background: #0F172A; border: 1px solid #334155; color: #fff; padding: 8px 12px; border-radius: 5px; cursor: pointer; }
+        .week-selector input { background: #0F172A; border: 1px solid #334155; color: #fff; padding: 8px 12px; border-radius: 5px; }
         .week-info { color: #FBBF24; font-weight: bold; margin-left: auto; }
         .container { padding: 20px 30px; }
         .provider-card { background: #1E293B; border-radius: 10px; margin-bottom: 25px; overflow: hidden; border: 1px solid #334155; }
@@ -498,7 +520,7 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         .stat-badge.highlight { background: #FBBF24; color: #0B1120; font-weight: 700; }
         .table-wrapper { overflow-x: auto; }
         .data-table { width: 100%; border-collapse: collapse; min-width: 1200px; }
-        .data-table th { background: #0F172A; padding: 8px 6px; font-size: 9px; color: #94A3B8; text-transform: uppercase; white-space: nowrap; }
+        .data-table th { background: #0F172A; padding: 8px 6px; font-size: 9px; color: #94A3B8; text-transform: uppercase; }
         .data-table th.flight { background: #1E293B; color: #FBBF24; }
         .data-table th.region-col { text-align: left; padding-left: 15px; min-width: 120px; }
         .data-table td { padding: 6px; text-align: center; font-size: 11px; border-bottom: 1px solid #334155; }
@@ -521,97 +543,48 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         .loading-spinner { width: 40px; height: 40px; border: 3px solid #334155; border-top: 3px solid #FBBF24; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 15px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .error { background: #7F1D1D; color: #FCA5A5; padding: 20px; border-radius: 8px; text-align: center; margin: 20px; }
-        @media (max-width: 900px) {
-            .sidebar { width: 60px; }
-            .sidebar-header h1, .sidebar-header p, .nav-item span { display: none; }
-            .main-content { margin-left: 60px; }
-        }
+        @media (max-width: 900px) { .sidebar { width: 60px; } .sidebar-header h1, .sidebar-header p, .nav-item span { display: none; } .main-content { margin-left: 60px; } }
     </style>
 </head>
 <body>
     <nav class="sidebar">
-        <div class="sidebar-header">
-            <h1>✦ G-OPS 3PL</h1>
-            <p>Executive Portal</p>
-        </div>
-        <a href="/" class="nav-item {{ 'active' if page == 'dashboard' else '' }}">
-            🏠 <span>Dashboard</span>
-        </a>
-        <a href="/weekly-summary" class="nav-item {{ 'active' if page == 'weekly' else '' }}">
-            📊 <span>Weekly Summary</span>
-        </a>
-        <a href="/flight-load" class="nav-item {{ 'active' if page == 'flight' else '' }}">
-            ✈️ <span>Flight Load</span>
-        </a>
+        <div class="sidebar-header"><h1>✦ G-OPS 3PL</h1><p>Executive Portal</p></div>
+        <a href="/" class="nav-item {{ 'active' if page == 'dashboard' else '' }}">🏠 <span>Dashboard</span></a>
+        <a href="/weekly-summary" class="nav-item {{ 'active' if page == 'weekly' else '' }}">📊 <span>Weekly Summary</span></a>
+        <a href="/flight-load" class="nav-item {{ 'active' if page == 'flight' else '' }}">✈️ <span>Flight Load</span></a>
     </nav>
-    
     <div class="main-content">
         {% if page == 'dashboard' %}
-        <div class="header">
-            <h1>✦ GLOBAL LOGISTICS EXECUTIVE PORTAL ✦</h1>
-            <p>3PL Weekly Performance Dashboard - Region Wise Breakdown</p>
-        </div>
-        <div class="week-selector">
-            <label>📅 SELECT WEEK START:</label>
-            <input type="date" id="weekStart" onchange="loadDashboard()">
-            <div class="week-info" id="weekInfo">Loading...</div>
-        </div>
-        <div class="container" id="mainContent">
-            <div class="loading"><div class="loading-spinner"></div><p>Loading data...</p></div>
-        </div>
-        
+        <div class="header"><h1>✦ GLOBAL LOGISTICS EXECUTIVE PORTAL ✦</h1><p>3PL Weekly Performance Dashboard</p></div>
+        <div class="week-selector"><label>📅 SELECT WEEK:</label><input type="date" id="weekStart" onchange="loadDashboard()"><div class="week-info" id="weekInfo">Loading...</div></div>
+        <div class="container" id="mainContent"><div class="loading"><div class="loading-spinner"></div><p>Loading...</p></div></div>
         {% elif page == 'weekly' %}
-        <div class="header">
-            <h1>📊 WEEKLY PERFORMANCE SUMMARY</h1>
-            <p>🏆 Highest Weight Winner</p>
-        </div>
-        <div class="week-selector">
-            <label>📅 SELECT WEEK START:</label>
-            <input type="date" id="weekStart" onchange="loadWeekly()">
-            <div class="week-info" id="weekInfo">Loading...</div>
-        </div>
-        <div class="container" id="mainContent">
-            <div class="loading"><div class="loading-spinner"></div><p>Loading data...</p></div>
-        </div>
-        
+        <div class="header"><h1>📊 WEEKLY PERFORMANCE SUMMARY</h1><p>🏆 Highest Weight Winner</p></div>
+        <div class="week-selector"><label>📅 SELECT WEEK:</label><input type="date" id="weekStart" onchange="loadWeekly()"><div class="week-info" id="weekInfo">Loading...</div></div>
+        <div class="container" id="mainContent"><div class="loading"><div class="loading-spinner"></div><p>Loading...</p></div></div>
         {% elif page == 'flight' %}
-        <div class="header">
-            <h1>✈️ CONSOLIDATED FLIGHT LOAD</h1>
-            <p>Pre-Flight + Flight Day Summary</p>
-        </div>
-        <div class="week-selector">
-            <label>📅 SELECT WEEK START:</label>
-            <input type="date" id="weekStart" onchange="loadFlight()">
-            <div class="week-info" id="weekInfo">Loading...</div>
-        </div>
-        <div class="container" id="mainContent">
-            <div class="loading"><div class="loading-spinner"></div><p>Loading data...</p></div>
-        </div>
+        <div class="header"><h1>✈️ CONSOLIDATED FLIGHT LOAD</h1><p>Pre-Flight + Flight Day Summary</p></div>
+        <div class="week-selector"><label>📅 SELECT WEEK:</label><input type="date" id="weekStart" onchange="loadFlight()"><div class="week-info" id="weekInfo">Loading...</div></div>
+        <div class="container" id="mainContent"><div class="loading"><div class="loading-spinner"></div><p>Loading...</p></div></div>
         {% endif %}
     </div>
-    
     <script>
         const DAYS = ['MON', 'TUE ✈️', 'WED', 'THU ✈️', 'FRI', 'SAT ✈️', 'SUN'];
         const FLIGHT_DAYS = [1, 3, 5];
         const COLS = ['O', 'B', 'W', '<20', '20+'];
-        
         const today = new Date();
         const monday = new Date(today);
         monday.setDate(today.getDate() - today.getDay() + 1);
-        if(document.getElementById('weekStart')) {
-            document.getElementById('weekStart').value = monday.toISOString().split('T')[0];
-        }
+        if(document.getElementById('weekStart')) document.getElementById('weekStart').value = monday.toISOString().split('T')[0];
         
         async function loadDashboard() {
             const weekStart = document.getElementById('weekStart').value;
             const container = document.getElementById('mainContent');
-            container.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Loading data...</p></div>';
-            
+            container.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Loading...</p></div>';
             try {
                 const response = await fetch('/api/dashboard?week_start=' + weekStart);
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
-                
                 document.getElementById('weekInfo').textContent = data.week_start + ' → ' + data.week_end;
                 renderDashboard(data);
             } catch (error) {
@@ -621,46 +594,23 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
         
         function renderDashboard(data) {
             let html = '';
-            
             data.providers.forEach(provider => {
                 const regions = Object.keys(provider.regions).sort();
-                
-                html += '<div class="provider-card">';
-                html += '<div class="provider-header">';
-                html += '<div class="provider-title">';
+                html += '<div class="provider-card"><div class="provider-header"><div class="provider-title">';
                 html += '<span class="provider-name">✦ ' + provider.name + '</span>';
                 html += '<span class="rating">RATING: ' + provider.rating + '</span>';
-                html += '<span class="trend ' + provider.trend.class + '">' + provider.trend.text + '</span>';
-                html += '</div>';
-                html += '<div class="provider-stats">';
-                html += '<span class="stat-badge">Orders: ' + provider.grand_total.orders + '</span>';
+                html += '<span class="trend ' + provider.trend.class + '">' + provider.trend.text + '</span></div>';
+                html += '<div class="provider-stats"><span class="stat-badge">Orders: ' + provider.grand_total.orders + '</span>';
                 html += '<span class="stat-badge">Boxes: ' + provider.grand_total.boxes.toFixed(0) + '</span>';
-                html += '<span class="stat-badge highlight">Weight: ' + provider.grand_total.weight.toFixed(1) + ' kg</span>';
-                html += '</div></div>';
-                
-                html += '<div class="table-wrapper"><table class="data-table">';
-                
-                html += '<thead><tr><th class="region-col" rowspan="2">ACTIVE REGIONS</th>';
-                DAYS.forEach((day, i) => {
-                    const cls = FLIGHT_DAYS.includes(i) ? 'flight' : '';
-                    html += '<th colspan="5" class="' + cls + '">' + day + '</th>';
-                });
-                html += '</tr>';
-                
-                html += '<tr>';
-                DAYS.forEach((day, i) => {
-                    const cls = FLIGHT_DAYS.includes(i) ? 'flight' : '';
-                    COLS.forEach(col => {
-                        html += '<th class="' + cls + '">' + col + '</th>';
-                    });
-                });
-                html += '</tr></thead>';
-                
-                html += '<tbody>';
+                html += '<span class="stat-badge highlight">Weight: ' + provider.grand_total.weight.toFixed(1) + ' kg</span></div></div>';
+                html += '<div class="table-wrapper"><table class="data-table"><thead><tr><th class="region-col" rowspan="2">REGIONS</th>';
+                DAYS.forEach((day, i) => { html += '<th colspan="5" class="' + (FLIGHT_DAYS.includes(i) ? 'flight' : '') + '">' + day + '</th>'; });
+                html += '</tr><tr>';
+                DAYS.forEach((day, i) => { COLS.forEach(col => { html += '<th class="' + (FLIGHT_DAYS.includes(i) ? 'flight' : '') + '">' + col + '</th>'; }); });
+                html += '</tr></thead><tbody>';
                 regions.forEach(region => {
                     const rdata = provider.regions[region];
                     html += '<tr><td class="region-col">' + region + '</td>';
-                    
                     rdata.days.forEach((d, i) => {
                         const cls = FLIGHT_DAYS.includes(i) ? 'flight' : '';
                         html += '<td class="' + cls + '">' + (d.orders || '-') + '</td>';
@@ -671,139 +621,68 @@ HTML_TEMPLATE = '''<!DOCTYPE html>
                     });
                     html += '</tr>';
                 });
-                
-                html += '<tr class="total-row"><td class="region-col">▣ TOTAL SUMMARY</td>';
+                html += '<tr class="total-row"><td class="region-col">▣ TOTAL</td>';
                 provider.day_totals.forEach((d, i) => {
                     const cls = FLIGHT_DAYS.includes(i) ? 'flight' : '';
-                    html += '<td class="' + cls + '">' + d.orders + '</td>';
-                    html += '<td class="' + cls + '">' + d.boxes.toFixed(0) + '</td>';
-                    html += '<td class="' + cls + '">' + d.weight.toFixed(1) + '</td>';
-                    html += '<td class="' + cls + '">' + d.under20 + '</td>';
-                    html += '<td class="' + cls + '">' + d.over20 + '</td>';
+                    html += '<td class="' + cls + '">' + d.orders + '</td><td class="' + cls + '">' + d.boxes.toFixed(0) + '</td><td class="' + cls + '">' + d.weight.toFixed(1) + '</td><td class="' + cls + '">' + d.under20 + '</td><td class="' + cls + '">' + d.over20 + '</td>';
                 });
-                html += '</tr>';
-                
-                html += '</tbody></table></div></div>';
+                html += '</tr></tbody></table></div></div>';
             });
-            
             document.getElementById('mainContent').innerHTML = html;
         }
         
         async function loadWeekly() {
             const weekStart = document.getElementById('weekStart').value;
             const container = document.getElementById('mainContent');
-            container.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Loading data...</p></div>';
-            
+            container.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Loading...</p></div>';
             try {
                 const response = await fetch('/api/weekly-summary?week_start=' + weekStart);
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
-                
                 document.getElementById('weekInfo').textContent = data.week_start + ' → ' + data.week_end;
-                renderWeekly(data);
+                let html = '<div class="summary-section"><div class="summary-header"><h2>📊 WEEKLY SUMMARY (🏆 HIGHEST WEIGHT)</h2></div>';
+                html += '<div class="table-wrapper"><table class="summary-table"><thead><tr><th>PROVIDER</th>';
+                DAYS.forEach((day, i) => { html += '<th colspan="3" class="' + (FLIGHT_DAYS.includes(i) ? 'flight' : '') + '">' + day + '</th>'; });
+                html += '<th colspan="3">TOTAL</th></tr><tr><th></th>';
+                for (let i = 0; i < 8; i++) html += '<th>Ord</th><th>Box</th><th>KG</th>';
+                html += '</tr></thead><tbody>';
+                data.providers.forEach(p => {
+                    html += '<tr class="' + (p.is_winner ? 'winner' : '') + '"><td>' + (p.is_winner ? '🏆 ' : '') + p.name + '</td>';
+                    p.days.forEach(d => { html += '<td>' + (d.orders || '-') + '</td><td>' + (d.boxes ? d.boxes.toFixed(0) : '-') + '</td><td>' + (d.weight ? d.weight.toFixed(1) : '-') + '</td>'; });
+                    html += '<td class="grand-total">' + p.total.orders + '</td><td class="grand-total">' + p.total.boxes.toFixed(0) + '</td><td class="grand-total">' + p.total.weight.toFixed(1) + '</td></tr>';
+                });
+                html += '</tbody></table></div></div>';
+                document.getElementById('mainContent').innerHTML = html;
             } catch (error) {
                 container.innerHTML = '<div class="error"><h3>⚠️ Error</h3><p>' + error.message + '</p></div>';
             }
-        }
-        
-        function renderWeekly(data) {
-            let html = '<div class="summary-section">';
-            html += '<div class="summary-header"><h2>📊 WEEKLY PERFORMANCE SUMMARY (🏆 HIGHEST WEIGHT WINNER)</h2></div>';
-            html += '<div class="table-wrapper"><table class="summary-table">';
-            
-            html += '<thead><tr><th>PROVIDER</th>';
-            DAYS.forEach((day, i) => {
-                const cls = FLIGHT_DAYS.includes(i) ? 'flight' : '';
-                html += '<th colspan="3" class="' + cls + '">' + day + '</th>';
-            });
-            html += '<th colspan="3">GRAND TOTAL</th></tr>';
-            
-            html += '<tr><th></th>';
-            for (let i = 0; i < 8; i++) {
-                html += '<th>Ord</th><th>Box</th><th>KG</th>';
-            }
-            html += '</tr></thead>';
-            
-            html += '<tbody>';
-            data.providers.forEach(p => {
-                const winnerClass = p.is_winner ? 'winner' : '';
-                html += '<tr class="' + winnerClass + '">';
-                html += '<td>' + (p.is_winner ? '🏆 ' : '') + p.name + '</td>';
-                
-                p.days.forEach((d, i) => {
-                    html += '<td>' + (d.orders || '-') + '</td>';
-                    html += '<td>' + (d.boxes ? d.boxes.toFixed(0) : '-') + '</td>';
-                    html += '<td>' + (d.weight ? d.weight.toFixed(1) : '-') + '</td>';
-                });
-                
-                html += '<td class="grand-total">' + p.total.orders + '</td>';
-                html += '<td class="grand-total">' + p.total.boxes.toFixed(0) + '</td>';
-                html += '<td class="grand-total">' + p.total.weight.toFixed(1) + '</td>';
-                html += '</tr>';
-            });
-            html += '</tbody></table></div></div>';
-            
-            document.getElementById('mainContent').innerHTML = html;
         }
         
         async function loadFlight() {
             const weekStart = document.getElementById('weekStart').value;
             const container = document.getElementById('mainContent');
-            container.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Loading data...</p></div>';
-            
+            container.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p>Loading...</p></div>';
             try {
                 const response = await fetch('/api/flight-load?week_start=' + weekStart);
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
-                
                 document.getElementById('weekInfo').textContent = data.week_start + ' → ' + data.week_end;
-                renderFlight(data);
+                let html = '<div class="summary-section"><div class="summary-header"><h2>✈️ FLIGHT LOAD</h2></div>';
+                html += '<div class="table-wrapper"><table class="summary-table"><thead><tr><th>PROVIDER</th>';
+                html += '<th colspan="3" class="flight">✈️ TUE (Mon+Tue)</th><th colspan="3" class="flight">✈️ THU (Wed+Thu)</th><th colspan="3" class="flight">✈️ SAT (Fri+Sat)</th><th colspan="3">TOTAL</th></tr>';
+                html += '<tr><th></th>'; for (let i = 0; i < 4; i++) html += '<th>Ord</th><th>Box</th><th>KG</th>'; html += '</tr></thead><tbody>';
+                data.providers.forEach(p => {
+                    html += '<tr><td>' + p.name + '</td>';
+                    html += '<td>' + (p.tue_flight.orders || '-') + '</td><td>' + (p.tue_flight.boxes ? p.tue_flight.boxes.toFixed(0) : '-') + '</td><td>' + (p.tue_flight.weight ? p.tue_flight.weight.toFixed(1) : '-') + '</td>';
+                    html += '<td>' + (p.thu_flight.orders || '-') + '</td><td>' + (p.thu_flight.boxes ? p.thu_flight.boxes.toFixed(0) : '-') + '</td><td>' + (p.thu_flight.weight ? p.thu_flight.weight.toFixed(1) : '-') + '</td>';
+                    html += '<td>' + (p.sat_flight.orders || '-') + '</td><td>' + (p.sat_flight.boxes ? p.sat_flight.boxes.toFixed(0) : '-') + '</td><td>' + (p.sat_flight.weight ? p.sat_flight.weight.toFixed(1) : '-') + '</td>';
+                    html += '<td class="grand-total">' + p.total.orders + '</td><td class="grand-total">' + p.total.boxes.toFixed(0) + '</td><td class="grand-total">' + p.total.weight.toFixed(1) + '</td></tr>';
+                });
+                html += '</tbody></table></div></div>';
+                document.getElementById('mainContent').innerHTML = html;
             } catch (error) {
                 container.innerHTML = '<div class="error"><h3>⚠️ Error</h3><p>' + error.message + '</p></div>';
             }
-        }
-        
-        function renderFlight(data) {
-            let html = '<div class="summary-section">';
-            html += '<div class="summary-header"><h2>✈️ CONSOLIDATED FLIGHT LOAD (PRE-FLIGHT + FLIGHT DAY)</h2></div>';
-            html += '<div class="table-wrapper"><table class="summary-table">';
-            
-            html += '<thead><tr><th>PROVIDER</th>';
-            html += '<th colspan="3" class="flight">✈️ TUE FLIGHT (Mon+Tue)</th>';
-            html += '<th colspan="3" class="flight">✈️ THU FLIGHT (Wed+Thu)</th>';
-            html += '<th colspan="3" class="flight">✈️ SAT FLIGHT (Fri+Sat)</th>';
-            html += '<th colspan="3">TOTAL FLIGHT LOAD</th></tr>';
-            
-            html += '<tr><th></th>';
-            for (let i = 0; i < 4; i++) {
-                html += '<th>Ord</th><th>Box</th><th>KG</th>';
-            }
-            html += '</tr></thead>';
-            
-            html += '<tbody>';
-            data.providers.forEach(p => {
-                html += '<tr><td>' + p.name + '</td>';
-                
-                html += '<td>' + (p.tue_flight.orders || '-') + '</td>';
-                html += '<td>' + (p.tue_flight.boxes ? p.tue_flight.boxes.toFixed(0) : '-') + '</td>';
-                html += '<td>' + (p.tue_flight.weight ? p.tue_flight.weight.toFixed(1) : '-') + '</td>';
-                
-                html += '<td>' + (p.thu_flight.orders || '-') + '</td>';
-                html += '<td>' + (p.thu_flight.boxes ? p.thu_flight.boxes.toFixed(0) : '-') + '</td>';
-                html += '<td>' + (p.thu_flight.weight ? p.thu_flight.weight.toFixed(1) : '-') + '</td>';
-                
-                html += '<td>' + (p.sat_flight.orders || '-') + '</td>';
-                html += '<td>' + (p.sat_flight.boxes ? p.sat_flight.boxes.toFixed(0) : '-') + '</td>';
-                html += '<td>' + (p.sat_flight.weight ? p.sat_flight.weight.toFixed(1) : '-') + '</td>';
-                
-                html += '<td class="grand-total">' + p.total.orders + '</td>';
-                html += '<td class="grand-total">' + p.total.boxes.toFixed(0) + '</td>';
-                html += '<td class="grand-total">' + p.total.weight.toFixed(1) + '</td>';
-                html += '</tr>';
-            });
-            html += '</tbody></table></div></div>';
-            
-            document.getElementById('mainContent').innerHTML = html;
         }
         
         const page = '{{ page }}';
