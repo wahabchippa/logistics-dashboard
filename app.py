@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import time
 import os
+import calendar
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
@@ -33,67 +34,90 @@ SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 PROVIDERS = [
     {
         'name': 'GLOBAL EXPRESS (QC)',
+        'short': 'GE QC',
         'sheet': 'GE QC Center & Zone',
         'date_col': 1,
         'box_col': 2,
         'weight_col': 5,
         'region_col': 7,
         'start_row': 2,
-        'color': '#3B82F6'
+        'color': '#3B82F6',
+        'group': 'GE'
     },
     {
         'name': 'GLOBAL EXPRESS (ZONE)',
+        'short': 'GE ZONE',
         'sheet': 'GE QC Center & Zone',
         'date_col': 10,
         'box_col': 11,
         'weight_col': 14,
         'region_col': 16,
         'start_row': 2,
-        'color': '#8B5CF6'
+        'color': '#8B5CF6',
+        'group': 'GE'
     },
     {
         'name': 'ECL LOGISTICS (QC)',
+        'short': 'ECL QC',
         'sheet': 'ECL QC Center & Zone',
         'date_col': 1,
         'box_col': 2,
         'weight_col': 5,
         'region_col': 7,
         'start_row': 3,
-        'color': '#10B981'
+        'color': '#10B981',
+        'group': 'ECL'
     },
     {
         'name': 'ECL LOGISTICS (ZONE)',
+        'short': 'ECL ZONE',
         'sheet': 'ECL QC Center & Zone',
         'date_col': 10,
         'box_col': 11,
         'weight_col': 14,
         'region_col': 16,
         'start_row': 3,
-        'color': '#F59E0B'
+        'color': '#F59E0B',
+        'group': 'ECL'
     },
     {
         'name': 'KERRY',
+        'short': 'KERRY',
         'sheet': 'Kerry',
         'date_col': 1,
         'box_col': 2,
         'weight_col': 5,
         'region_col': 7,
         'start_row': 2,
-        'color': '#EF4444'
+        'color': '#EF4444',
+        'group': 'OTHER'
     },
     {
         'name': 'APX',
+        'short': 'APX',
         'sheet': 'APX',
         'date_col': 1,
         'box_col': 2,
         'weight_col': 5,
         'region_col': 7,
         'start_row': 2,
-        'color': '#EC4899'
+        'color': '#EC4899',
+        'group': 'OTHER'
     }
 ]
 
 INVALID_REGIONS = {'', 'N/A', '#N/A', 'COUNTRY', 'REGION', 'DESTINATION', 'ZONE', 'ORDER', 'FLEEK ID', 'DATE', 'CARTONS'}
+
+# Achievement Badges
+ACHIEVEMENTS = {
+    'star_5': {'name': '5 Star Week', 'icon': '⭐', 'desc': '1500+ boxes in a week'},
+    'star_4': {'name': '4 Star Week', 'icon': '🌟', 'desc': '500+ boxes in a week'},
+    'champion': {'name': 'Weekly Champion', 'icon': '🏆', 'desc': 'Won the week'},
+    'rocket': {'name': 'Rocket Growth', 'icon': '🚀', 'desc': '50%+ growth from last week'},
+    'consistent': {'name': 'Consistent Performer', 'icon': '💪', 'desc': 'Active all 7 days'},
+    'heavyweight': {'name': 'Heavyweight', 'icon': '🏋️', 'desc': '5000+ kg in a week'},
+    'region_king': {'name': 'Region King', 'icon': '👑', 'desc': 'Most regions covered'},
+}
 
 # ============================================
 # LOGIN DECORATOR
@@ -177,14 +201,19 @@ def process_provider_data(provider, week_start, week_end):
     
     data = {
         'name': provider['name'],
+        'short': provider.get('short', provider['name']),
         'color': provider['color'],
+        'group': provider.get('group', 'OTHER'),
         'total_orders': 0,
         'total_boxes': 0,
         'total_weight': 0.0,
         'regions': defaultdict(lambda: {
             'days': {day: {'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0} 
                     for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']}
-        })
+        }),
+        'daily_totals': {day: {'orders': 0, 'boxes': 0, 'weight': 0.0} 
+                        for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']},
+        'active_days': set()
     }
     
     day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -226,6 +255,11 @@ def process_provider_data(provider, week_start, week_end):
             data['total_orders'] += 1
             data['total_boxes'] += boxes
             data['total_weight'] += weight
+            data['active_days'].add(day_name)
+            
+            data['daily_totals'][day_name]['orders'] += 1
+            data['daily_totals'][day_name]['boxes'] += boxes
+            data['daily_totals'][day_name]['weight'] += weight
             
             region_data = data['regions'][region]['days'][day_name]
             region_data['orders'] += 1
@@ -241,6 +275,7 @@ def process_provider_data(provider, week_start, week_end):
             continue
     
     data['stars'] = get_star_rating(data['total_boxes'])
+    data['active_days'] = list(data['active_days'])
     data['regions'] = dict(data['regions'])
     for region in data['regions']:
         data['regions'][region] = dict(data['regions'][region])
@@ -259,6 +294,31 @@ def calculate_trend(current_boxes, previous_boxes):
         return {'direction': 'up', 'percentage': round(change, 1)}
     else:
         return {'direction': 'down', 'percentage': round(abs(change), 1)}
+
+def get_provider_achievements(provider_data, is_winner=False, trend=None):
+    achievements = []
+    
+    if provider_data['stars'] >= 5:
+        achievements.append(ACHIEVEMENTS['star_5'])
+    elif provider_data['stars'] >= 4:
+        achievements.append(ACHIEVEMENTS['star_4'])
+    
+    if is_winner:
+        achievements.append(ACHIEVEMENTS['champion'])
+    
+    if trend and trend['direction'] == 'up' and trend['percentage'] >= 50:
+        achievements.append(ACHIEVEMENTS['rocket'])
+    
+    if len(provider_data.get('active_days', [])) >= 7:
+        achievements.append(ACHIEVEMENTS['consistent'])
+    
+    if provider_data['total_weight'] >= 5000:
+        achievements.append(ACHIEVEMENTS['heavyweight'])
+    
+    if len(provider_data.get('regions', {})) >= 5:
+        achievements.append(ACHIEVEMENTS['region_king'])
+    
+    return achievements
 
 # ============================================
 # FAVICON - Premium 3PL Gold Badge
@@ -292,7 +352,7 @@ BASE_STYLES = """
         left: 0;
         top: 0;
         height: 100vh;
-        width: 260px;
+        width: 280px;
         background: linear-gradient(180deg, #0a0a0f 0%, #0c0d12 100%);
         border-right: 1px solid rgba(212, 168, 83, 0.1);
         padding: 24px 16px;
@@ -300,6 +360,7 @@ BASE_STYLES = """
         z-index: 100;
         display: flex;
         flex-direction: column;
+        overflow-y: auto;
     }
     
     .sidebar.collapsed {
@@ -343,10 +404,27 @@ BASE_STYLES = """
         width: 0;
     }
     
+    .nav-section {
+        margin-bottom: 16px;
+    }
+    
+    .nav-section-title {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #64748b;
+        padding: 8px 16px;
+        margin-bottom: 4px;
+    }
+    
+    .sidebar.collapsed .nav-section-title {
+        opacity: 0;
+    }
+    
     .nav-menu {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 4px;
         flex-grow: 1;
     }
     
@@ -354,13 +432,14 @@ BASE_STYLES = """
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 12px 16px;
+        padding: 10px 16px;
         border-radius: 8px;
         color: #64748b;
         text-decoration: none;
         transition: all 0.2s;
         cursor: pointer;
         position: relative;
+        font-size: 14px;
     }
     
     .nav-item:hover {
@@ -374,8 +453,8 @@ BASE_STYLES = """
     }
     
     .nav-item svg {
-        width: 20px;
-        height: 20px;
+        width: 18px;
+        height: 18px;
         flex-shrink: 0;
     }
     
@@ -403,6 +482,7 @@ BASE_STYLES = """
         pointer-events: none;
         transition: opacity 0.2s;
         border: 1px solid rgba(212, 168, 83, 0.2);
+        z-index: 1000;
     }
     
     .sidebar.collapsed .nav-item:hover .tooltip {
@@ -443,7 +523,7 @@ BASE_STYLES = """
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 12px 16px;
+        padding: 10px 16px;
         border-radius: 8px;
         color: #ef4444;
         text-decoration: none;
@@ -461,8 +541,8 @@ BASE_STYLES = """
     }
     
     .logout-btn svg {
-        width: 20px;
-        height: 20px;
+        width: 18px;
+        height: 18px;
         flex-shrink: 0;
     }
     
@@ -473,7 +553,7 @@ BASE_STYLES = """
     
     /* Main Content */
     .main-content {
-        margin-left: 260px;
+        margin-left: 280px;
         padding: 24px;
         transition: margin-left 0.3s;
         min-height: 100vh;
@@ -522,6 +602,9 @@ BASE_STYLES = """
         padding: 8px;
         border-radius: 6px;
         transition: background 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     
     .week-btn:hover {
@@ -567,6 +650,7 @@ BASE_STYLES = """
         display: flex;
         align-items: center;
         gap: 16px;
+        flex-wrap: wrap;
     }
     
     .provider-name {
@@ -601,9 +685,15 @@ BASE_STYLES = """
         color: #ef4444;
     }
     
+    .trend-badge.neutral {
+        background: rgba(100, 116, 139, 0.1);
+        color: #94a3b8;
+    }
+    
     .card-stats {
         display: flex;
         gap: 24px;
+        flex-wrap: wrap;
     }
     
     .stat-item {
@@ -795,6 +885,7 @@ BASE_STYLES = """
         display: flex;
         align-items: center;
         justify-content: center;
+        flex-shrink: 0;
     }
     
     .stat-icon svg {
@@ -804,6 +895,7 @@ BASE_STYLES = """
     
     .stat-content {
         flex: 1;
+        min-width: 0;
     }
     
     .stat-card .stat-value {
@@ -1034,6 +1126,417 @@ BASE_STYLES = """
         border-radius: 2px;
     }
     
+    /* KPI Cards */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    
+    @media (max-width: 1200px) {
+        .kpi-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .kpi-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .kpi-card {
+        background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 24px;
+        text-align: center;
+    }
+    
+    .kpi-icon {
+        font-size: 32px;
+        margin-bottom: 12px;
+    }
+    
+    .kpi-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: #ffffff;
+        margin-bottom: 4px;
+    }
+    
+    .kpi-label {
+        font-size: 13px;
+        color: #64748b;
+    }
+    
+    .kpi-trend {
+        font-size: 12px;
+        margin-top: 8px;
+        padding: 4px 8px;
+        border-radius: 12px;
+        display: inline-block;
+    }
+    
+    .kpi-trend.up {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+    }
+    
+    .kpi-trend.down {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+    }
+    
+    /* Calendar Styles */
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+        margin-top: 16px;
+    }
+    
+    .calendar-header {
+        text-align: center;
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        padding: 8px;
+    }
+    
+    .calendar-day {
+        aspect-ratio: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s;
+        position: relative;
+    }
+    
+    .calendar-day:hover {
+        transform: scale(1.1);
+    }
+    
+    .calendar-day.empty {
+        background: transparent;
+        cursor: default;
+    }
+    
+    .calendar-day.empty:hover {
+        transform: none;
+    }
+    
+    .calendar-day.level-0 {
+        background: rgba(255, 255, 255, 0.05);
+        color: #64748b;
+    }
+    
+    .calendar-day.level-1 {
+        background: rgba(16, 185, 129, 0.2);
+        color: #10b981;
+    }
+    
+    .calendar-day.level-2 {
+        background: rgba(16, 185, 129, 0.4);
+        color: #10b981;
+    }
+    
+    .calendar-day.level-3 {
+        background: rgba(16, 185, 129, 0.6);
+        color: #ffffff;
+    }
+    
+    .calendar-day.level-4 {
+        background: rgba(212, 168, 83, 0.8);
+        color: #0a0a0f;
+    }
+    
+    .calendar-day.level-5 {
+        background: linear-gradient(135deg, #d4a853 0%, #b8942d 100%);
+        color: #0a0a0f;
+        font-weight: 700;
+    }
+    
+    .calendar-day .day-number {
+        font-weight: 600;
+    }
+    
+    .calendar-day .day-boxes {
+        font-size: 9px;
+        opacity: 0.8;
+    }
+    
+    /* Comparison Grid */
+    .comparison-grid {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 24px;
+        align-items: start;
+    }
+    
+    @media (max-width: 1000px) {
+        .comparison-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .comparison-card {
+        background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 24px;
+    }
+    
+    .comparison-vs {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: 700;
+        color: #d4a853;
+        padding: 20px;
+    }
+    
+    @media (max-width: 1000px) {
+        .comparison-vs {
+            display: none;
+        }
+    }
+    
+    .comparison-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .comparison-color {
+        width: 8px;
+        height: 40px;
+        border-radius: 4px;
+    }
+    
+    .comparison-name {
+        font-size: 20px;
+        font-weight: 700;
+        color: #ffffff;
+    }
+    
+    .comparison-stat {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+    
+    .comparison-stat-label {
+        color: #64748b;
+        font-size: 14px;
+    }
+    
+    .comparison-stat-value {
+        color: #ffffff;
+        font-size: 18px;
+        font-weight: 600;
+    }
+    
+    .winner-indicator {
+        color: #10b981;
+        font-size: 12px;
+        margin-left: 8px;
+    }
+    
+    /* Achievement Badges */
+    .achievements-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+    
+    .achievement-badge {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        background: rgba(212, 168, 83, 0.1);
+        border: 1px solid rgba(212, 168, 83, 0.2);
+        border-radius: 20px;
+        font-size: 11px;
+        color: #d4a853;
+    }
+    
+    .achievement-badge .badge-icon {
+        font-size: 14px;
+    }
+    
+    /* WhatsApp Report */
+    .whatsapp-box {
+        background: #0c0d12;
+        border: 1px solid rgba(37, 211, 102, 0.3);
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 16px;
+    }
+    
+    .whatsapp-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid rgba(37, 211, 102, 0.2);
+    }
+    
+    .whatsapp-icon {
+        font-size: 24px;
+    }
+    
+    .whatsapp-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #25D366;
+    }
+    
+    .whatsapp-content {
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #e2e8f0;
+        white-space: pre-wrap;
+        background: rgba(255, 255, 255, 0.03);
+        padding: 16px;
+        border-radius: 8px;
+    }
+    
+    .copy-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        padding: 12px;
+        margin-top: 12px;
+        background: #25D366;
+        border: none;
+        border-radius: 8px;
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .copy-btn:hover {
+        background: #128C7E;
+    }
+    
+    /* Month Selector */
+    .month-selector {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: #0c0d12;
+        padding: 8px 16px;
+        border-radius: 12px;
+        border: 1px solid rgba(212, 168, 83, 0.2);
+    }
+    
+    .month-display {
+        font-size: 14px;
+        font-weight: 500;
+        color: #e2e8f0;
+        min-width: 150px;
+        text-align: center;
+    }
+    
+    /* Heatmap */
+    .heatmap-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+    }
+    
+    .heatmap-item {
+        background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%);
+        border-radius: 12px;
+        padding: 16px;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        transition: all 0.2s;
+    }
+    
+    .heatmap-item:hover {
+        transform: translateY(-2px);
+        border-color: rgba(212, 168, 83, 0.3);
+    }
+    
+    .heatmap-region {
+        font-size: 14px;
+        font-weight: 600;
+        color: #ffffff;
+        margin-bottom: 8px;
+    }
+    
+    .heatmap-value {
+        font-size: 20px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    
+    .heatmap-label {
+        font-size: 11px;
+        color: #64748b;
+    }
+    
+    /* Tab System */
+    .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+    
+    .tab-btn {
+        padding: 10px 20px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        color: #94a3b8;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .tab-btn:hover {
+        background: rgba(212, 168, 83, 0.1);
+        border-color: rgba(212, 168, 83, 0.2);
+    }
+    
+    .tab-btn.active {
+        background: rgba(212, 168, 83, 0.15);
+        border-color: rgba(212, 168, 83, 0.3);
+        color: #d4a853;
+    }
+    
+    .tab-content {
+        display: none;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+    
     /* Responsive */
     @media (max-width: 768px) {
         .sidebar {
@@ -1042,7 +1545,8 @@ BASE_STYLES = """
         
         .sidebar .logo-text,
         .sidebar .nav-item span,
-        .sidebar .logout-btn span {
+        .sidebar .logout-btn span,
+        .sidebar .nav-section-title {
             display: none;
         }
         
@@ -1065,6 +1569,14 @@ BASE_STYLES = """
             width: 100%;
             justify-content: space-between;
         }
+        
+        .stats-row {
+            grid-template-columns: 1fr;
+        }
+        
+        .kpi-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 """
@@ -1079,38 +1591,106 @@ SIDEBAR_HTML = """
     </div>
     
     <div class="nav-menu">
-        <a href="/" class="nav-item {active_dashboard}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-            </svg>
-            <span>Dashboard</span>
-            <div class="tooltip">Dashboard</div>
-        </a>
+        <div class="nav-section">
+            <div class="nav-section-title">Main</div>
+            <a href="/" class="nav-item {active_dashboard}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+                <span>Dashboard</span>
+                <div class="tooltip">Dashboard</div>
+            </a>
+            
+            <a href="/weekly-summary" class="nav-item {active_weekly}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Weekly Summary</span>
+                <div class="tooltip">Weekly Summary</div>
+            </a>
+            
+            <a href="/flight-load" class="nav-item {active_flight}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+                <span>Flight Load</span>
+                <div class="tooltip">Flight Load</div>
+            </a>
+        </div>
         
-        <a href="/weekly-summary" class="nav-item {active_weekly}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            <span>Weekly Summary</span>
-            <div class="tooltip">Weekly Summary</div>
-        </a>
+        <div class="nav-section">
+            <div class="nav-section-title">Analytics</div>
+            <a href="/analytics" class="nav-item {active_analytics}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                </svg>
+                <span>Analytics</span>
+                <div class="tooltip">Analytics</div>
+            </a>
+            
+            <a href="/kpi" class="nav-item {active_kpi}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                <span>KPI Dashboard</span>
+                <div class="tooltip">KPI Dashboard</div>
+            </a>
+            
+            <a href="/comparison" class="nav-item {active_comparison}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Comparison</span>
+                <div class="tooltip">Comparison</div>
+            </a>
+            
+            <a href="/regions" class="nav-item {active_regions}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Region Heatmap</span>
+                <div class="tooltip">Region Heatmap</div>
+            </a>
+        </div>
         
-        <a href="/flight-load" class="nav-item {active_flight}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-            <span>Flight Load</span>
-            <div class="tooltip">Flight Load</div>
-        </a>
+        <div class="nav-section">
+            <div class="nav-section-title">Reports</div>
+            <a href="/monthly" class="nav-item {active_monthly}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Monthly Report</span>
+                <div class="tooltip">Monthly Report</div>
+            </a>
+            
+            <a href="/calendar" class="nav-item {active_calendar}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Calendar View</span>
+                <div class="tooltip">Calendar View</div>
+            </a>
+            
+            <a href="/whatsapp" class="nav-item {active_whatsapp}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <span>WhatsApp Report</span>
+                <div class="tooltip">WhatsApp Report</div>
+            </a>
+        </div>
         
-        <a href="/analytics" class="nav-item {active_analytics}">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
-            </svg>
-            <span>Analytics</span>
-            <div class="tooltip">Analytics</div>
-        </a>
+        <div class="nav-section">
+            <div class="nav-section-title">Achievements</div>
+            <a href="/achievements" class="nav-item {active_achievements}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+                <span>Achievements</span>
+                <div class="tooltip">Achievements</div>
+            </a>
+        </div>
     </div>
     
     <div class="sidebar-footer">
@@ -1212,7 +1792,7 @@ def dashboard():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='active', active_weekly='', active_flight='', active_analytics='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='active', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -1277,8 +1857,17 @@ def dashboard():
         }
         
         function renderProvider(provider) {
-            const trendClass = provider.trend.direction === 'up' ? 'up' : 'down';
-            const trendIcon = provider.trend.direction === 'up' ? '▲' : '▼';
+            const trendClass = provider.trend.direction === 'up' ? 'up' : (provider.trend.direction === 'down' ? 'down' : 'neutral');
+            const trendIcon = provider.trend.direction === 'up' ? '▲' : (provider.trend.direction === 'down' ? '▼' : '–');
+            
+            let achievementsHtml = '';
+            if (provider.achievements && provider.achievements.length > 0) {
+                achievementsHtml = '<div class="achievements-row">';
+                provider.achievements.forEach(a => {
+                    achievementsHtml += `<div class="achievement-badge"><span class="badge-icon">${a.icon}</span>${a.name}</div>`;
+                });
+                achievementsHtml += '</div>';
+            }
             
             let regionsHtml = '';
             const totals = { Mon: {o:0,b:0,w:0}, Tue: {o:0,b:0,w:0}, Wed: {o:0,b:0,w:0}, Thu: {o:0,b:0,w:0}, Fri: {o:0,b:0,w:0}, Sat: {o:0,b:0,w:0}, Sun: {o:0,b:0,w:0} };
@@ -1321,6 +1910,7 @@ def dashboard():
                             <span class="provider-name">${provider.name}</span>
                             <span class="star-rating">${getStarRating(provider.stars)}</span>
                             <span class="trend-badge ${trendClass}">${trendIcon} ${provider.trend.percentage}%</span>
+                            ${achievementsHtml}
                         </div>
                         <div class="card-stats">
                             <div class="stat-item">
@@ -1402,7 +1992,7 @@ def weekly_summary():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='active', active_flight='', active_analytics='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='active', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -1472,6 +2062,15 @@ def weekly_summary():
                 
                 let html = '';
                 if (data.winner) {
+                    let achievementsHtml = '';
+                    if (data.winner.achievements && data.winner.achievements.length > 0) {
+                        achievementsHtml = '<div class="achievements-row" style="margin-top: 12px;">';
+                        data.winner.achievements.forEach(a => {
+                            achievementsHtml += `<div class="achievement-badge"><span class="badge-icon">${a.icon}</span>${a.name}</div>`;
+                        });
+                        achievementsHtml += '</div>';
+                    }
+                    
                     html += `
                         <div class="provider-card winner-card">
                             <div class="card-header">
@@ -1480,6 +2079,7 @@ def weekly_summary():
                                     <div>
                                         <div class="provider-name" style="font-size: 24px;">Week Winner: ${data.winner.name}</div>
                                         <div style="color: #d4a853; margin-top: 4px;">${data.winner.total_boxes.toLocaleString()} boxes • ${data.winner.total_weight.toLocaleString(undefined, {maximumFractionDigits: 1})} kg</div>
+                                        ${achievementsHtml}
                                     </div>
                                 </div>
                             </div>
@@ -1558,7 +2158,7 @@ def flight_load():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='active', active_analytics='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='active', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -1709,7 +2309,7 @@ def analytics():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='active') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='active', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -1730,7 +2330,6 @@ def analytics():
             </div>
         </div>
         
-        <!-- Stats Row -->
         <div class="stats-row" id="stats-row">
             <div class="stat-card">
                 <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1);">
@@ -1778,7 +2377,6 @@ def analytics():
             </div>
         </div>
         
-        <!-- Charts -->
         <div class="charts-grid">
             <div class="chart-card">
                 <div class="chart-title">
@@ -1796,9 +2394,8 @@ def analytics():
                 <div class="chart-title">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
                     </svg>
-                    Weight Distribution by Provider
+                    Weight Distribution
                 </div>
                 <div class="chart-container">
                     <canvas id="weightPieChart"></canvas>
@@ -1818,24 +2415,14 @@ def analytics():
             </div>
             
             <div class="chart-card">
-                <div class="chart-title">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    Orders vs Boxes Comparison
-                </div>
+                <div class="chart-title">Orders vs Boxes</div>
                 <div class="chart-container">
                     <canvas id="comparisonChart"></canvas>
                 </div>
             </div>
             
             <div class="chart-card">
-                <div class="chart-title">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Top Regions by Orders
-                </div>
+                <div class="chart-title">Top Regions</div>
                 <div class="chart-container">
                     <canvas id="regionDoughnutChart"></canvas>
                 </div>
@@ -1851,7 +2438,6 @@ def analytics():
         
         Chart.defaults.color = '#94a3b8';
         Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.05)';
-        Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
         
         function getMonday(date) {
             const d = new Date(date);
@@ -1881,9 +2467,7 @@ def analytics():
         }
         
         function destroyCharts() {
-            Object.values(charts).forEach(chart => {
-                if (chart) chart.destroy();
-            });
+            Object.values(charts).forEach(chart => chart && chart.destroy());
             charts = {};
         }
         
@@ -1895,16 +2479,8 @@ def analytics():
                 const response = await fetch('/api/dashboard?week_start=' + formatDate(currentWeekStart));
                 const data = await response.json();
                 
-                let totalOrders = 0;
-                let totalBoxes = 0;
-                let totalWeight = 0;
-                
-                const providerNames = [];
-                const providerBoxes = [];
-                const providerWeights = [];
-                const providerColors = [];
-                const providerOrders = [];
-                
+                let totalOrders = 0, totalBoxes = 0, totalWeight = 0;
+                const providerNames = [], providerBoxes = [], providerWeights = [], providerColors = [], providerOrders = [];
                 const dailyData = {Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0};
                 const regionData = {};
                 
@@ -1913,21 +2489,21 @@ def analytics():
                     totalBoxes += p.total_boxes;
                     totalWeight += p.total_weight;
                     
-                    providerNames.push(p.name.replace('GLOBAL EXPRESS', 'GE').replace('ECL LOGISTICS', 'ECL'));
+                    providerNames.push(p.short || p.name);
                     providerBoxes.push(p.total_boxes);
                     providerWeights.push(p.total_weight);
                     providerColors.push(p.color);
                     providerOrders.push(p.total_orders);
                     
-                    Object.values(p.regions).forEach(region => {
-                        Object.entries(region.days).forEach(([day, d]) => {
+                    if (p.daily_totals) {
+                        Object.entries(p.daily_totals).forEach(([day, d]) => {
                             dailyData[day] += d.orders;
                         });
-                    });
+                    }
                     
-                    Object.entries(p.regions).forEach(([regionName, regionInfo]) => {
+                    Object.entries(p.regions || {}).forEach(([regionName, regionInfo]) => {
                         if (!regionData[regionName]) regionData[regionName] = 0;
-                        Object.values(regionInfo.days).forEach(d => {
+                        Object.values(regionInfo.days || {}).forEach(d => {
                             regionData[regionName] += d.orders;
                         });
                     });
@@ -1942,13 +2518,11 @@ def analytics():
                     data: {
                         labels: providerNames,
                         datasets: [{
-                            label: 'Boxes',
                             data: providerBoxes,
                             backgroundColor: providerColors.map(c => c + '99'),
                             borderColor: providerColors,
                             borderWidth: 2,
-                            borderRadius: 8,
-                            borderSkipped: false
+                            borderRadius: 8
                         }]
                     },
                     options: {
@@ -1976,12 +2550,7 @@ def analytics():
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'right',
-                                labels: { padding: 15, usePointStyle: true, pointStyle: 'circle' }
-                            }
-                        }
+                        plugins: { legend: { position: 'right', labels: { padding: 15, usePointStyle: true } } }
                     }
                 });
                 
@@ -1990,7 +2559,6 @@ def analytics():
                     data: {
                         labels: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
                         datasets: [{
-                            label: 'Orders',
                             data: Object.values(dailyData),
                             borderColor: '#d4a853',
                             backgroundColor: 'rgba(212, 168, 83, 0.1)',
@@ -1998,10 +2566,7 @@ def analytics():
                             fill: true,
                             tension: 0.4,
                             pointBackgroundColor: '#d4a853',
-                            pointBorderColor: '#0a0a0f',
-                            pointBorderWidth: 2,
-                            pointRadius: 6,
-                            pointHoverRadius: 8
+                            pointRadius: 6
                         }]
                     },
                     options: {
@@ -2020,33 +2585,14 @@ def analytics():
                     data: {
                         labels: providerNames,
                         datasets: [
-                            {
-                                label: 'Orders',
-                                data: providerOrders,
-                                backgroundColor: 'rgba(59, 130, 246, 0.7)',
-                                borderColor: '#3B82F6',
-                                borderWidth: 2,
-                                borderRadius: 6
-                            },
-                            {
-                                label: 'Boxes',
-                                data: providerBoxes,
-                                backgroundColor: 'rgba(16, 185, 129, 0.7)',
-                                borderColor: '#10B981',
-                                borderWidth: 2,
-                                borderRadius: 6
-                            }
+                            { label: 'Orders', data: providerOrders, backgroundColor: 'rgba(59, 130, 246, 0.7)', borderRadius: 6 },
+                            { label: 'Boxes', data: providerBoxes, backgroundColor: 'rgba(16, 185, 129, 0.7)', borderRadius: 6 }
                         ]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                position: 'top',
-                                labels: { padding: 15, usePointStyle: true }
-                            }
-                        },
+                        plugins: { legend: { position: 'top' } },
                         scales: {
                             y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
                             x: { grid: { display: false } }
@@ -2054,10 +2600,7 @@ def analytics():
                     }
                 });
                 
-                const sortedRegions = Object.entries(regionData)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 6);
-                
+                const sortedRegions = Object.entries(regionData).sort((a, b) => b[1] - a[1]).slice(0, 6);
                 const regionColors = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899'];
                 
                 charts.regionDoughnut = new Chart(document.getElementById('regionDoughnutChart'), {
@@ -2066,7 +2609,7 @@ def analytics():
                         labels: sortedRegions.map(r => r[0]),
                         datasets: [{
                             data: sortedRegions.map(r => r[1]),
-                            backgroundColor: regionColors.map(c => c + 'CC'),
+                            backgroundColor: regionColors,
                             borderColor: '#0a0a0f',
                             borderWidth: 3
                         }]
@@ -2075,21 +2618,1008 @@ def analytics():
                         responsive: true,
                         maintainAspectRatio: false,
                         cutout: '60%',
-                        plugins: {
-                            legend: {
-                                position: 'right',
-                                labels: { padding: 12, usePointStyle: true, pointStyle: 'circle' }
-                            }
+                        plugins: { legend: { position: 'right', labels: { padding: 12, usePointStyle: true } } }
+                    }
+                });
+                
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+        
+        loadAnalytics();
+    </script>
+</body>
+</html>
+    ''')
+
+@app.route('/kpi')
+@login_required
+def kpi_dashboard():
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KPI Dashboard - 3PL</title>
+    ''' + FAVICON + '''
+    ''' + BASE_STYLES + '''
+</head>
+<body>
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='active', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    
+    <main class="main-content" id="main-content">
+        <div class="page-header">
+            <h1 class="page-title">KPI <span>Dashboard</span></h1>
+            <div class="week-selector">
+                <button class="week-btn" onclick="changeWeek(-1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <span class="week-display" id="week-display">Loading...</span>
+                <button class="week-btn" onclick="changeWeek(1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <div id="kpi-content">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+    </main>
+    
+    ''' + SIDEBAR_SCRIPT + '''
+    
+    <script>
+        let currentWeekStart = getMonday(new Date());
+        
+        function getMonday(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        }
+        
+        function formatDate(date) { return date.toISOString().split('T')[0]; }
+        function formatDisplayDate(date) { return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+        
+        function changeWeek(direction) {
+            currentWeekStart.setDate(currentWeekStart.getDate() + (direction * 7));
+            loadKPI();
+        }
+        
+        function updateWeekDisplay() {
+            const endDate = new Date(currentWeekStart);
+            endDate.setDate(endDate.getDate() + 6);
+            document.getElementById('week-display').textContent = formatDisplayDate(currentWeekStart) + ' - ' + formatDisplayDate(endDate);
+        }
+        
+        async function loadKPI() {
+            updateWeekDisplay();
+            document.getElementById('kpi-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            try {
+                const response = await fetch('/api/kpi?week_start=' + formatDate(currentWeekStart));
+                const data = await response.json();
+                
+                let html = '<div class="kpi-grid">';
+                
+                const kpis = [
+                    { icon: '📦', label: 'Total Boxes', value: data.total_boxes.toLocaleString(), trend: data.boxes_trend },
+                    { icon: '📋', label: 'Total Orders', value: data.total_orders.toLocaleString(), trend: data.orders_trend },
+                    { icon: '⚖️', label: 'Total Weight', value: data.total_weight.toLocaleString(undefined, {maximumFractionDigits: 1}) + ' kg', trend: data.weight_trend },
+                    { icon: '📊', label: 'Avg Boxes/Day', value: data.avg_boxes_per_day.toFixed(0), trend: null },
+                    { icon: '📈', label: 'Avg Weight/Order', value: data.avg_weight_per_order.toFixed(2) + ' kg', trend: null },
+                    { icon: '🌍', label: 'Active Regions', value: data.active_regions, trend: null },
+                    { icon: '🏆', label: 'Top Provider', value: data.top_provider, trend: null },
+                    { icon: '🗺️', label: 'Top Region', value: data.top_region, trend: null },
+                    { icon: '📅', label: 'Best Day', value: data.best_day, trend: null }
+                ];
+                
+                kpis.forEach(kpi => {
+                    let trendHtml = '';
+                    if (kpi.trend) {
+                        const trendClass = kpi.trend.direction === 'up' ? 'up' : 'down';
+                        const trendIcon = kpi.trend.direction === 'up' ? '▲' : '▼';
+                        trendHtml = `<div class="kpi-trend ${trendClass}">${trendIcon} ${kpi.trend.percentage}% vs last week</div>`;
+                    }
+                    
+                    html += `
+                        <div class="kpi-card">
+                            <div class="kpi-icon">${kpi.icon}</div>
+                            <div class="kpi-value">${kpi.value}</div>
+                            <div class="kpi-label">${kpi.label}</div>
+                            ${trendHtml}
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                document.getElementById('kpi-content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('kpi-content').innerHTML = '<p style="color: #ef4444;">Error loading KPI data</p>';
+            }
+        }
+        
+        loadKPI();
+    </script>
+</body>
+</html>
+    ''')
+
+@app.route('/comparison')
+@login_required
+def comparison():
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provider Comparison - 3PL</title>
+    ''' + FAVICON + '''
+    ''' + BASE_STYLES + '''
+</head>
+<body>
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='active', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    
+    <main class="main-content" id="main-content">
+        <div class="page-header">
+            <h1 class="page-title">Provider <span>Comparison</span></h1>
+            <div class="week-selector">
+                <button class="week-btn" onclick="changeWeek(-1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <span class="week-display" id="week-display">Loading...</span>
+                <button class="week-btn" onclick="changeWeek(1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('ge-ecl')">GE vs ECL</button>
+            <button class="tab-btn" onclick="showTab('qc-zone')">QC vs ZONE</button>
+            <button class="tab-btn" onclick="showTab('all')">All Providers</button>
+        </div>
+        
+        <div id="comparison-content">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+    </main>
+    
+    ''' + SIDEBAR_SCRIPT + '''
+    
+    <script>
+        let currentWeekStart = getMonday(new Date());
+        let currentData = null;
+        let currentTab = 'ge-ecl';
+        
+        function getMonday(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        }
+        
+        function formatDate(date) { return date.toISOString().split('T')[0]; }
+        function formatDisplayDate(date) { return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+        
+        function changeWeek(direction) {
+            currentWeekStart.setDate(currentWeekStart.getDate() + (direction * 7));
+            loadComparison();
+        }
+        
+        function updateWeekDisplay() {
+            const endDate = new Date(currentWeekStart);
+            endDate.setDate(endDate.getDate() + 6);
+            document.getElementById('week-display').textContent = formatDisplayDate(currentWeekStart) + ' - ' + formatDisplayDate(endDate);
+        }
+        
+        function showTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            renderComparison();
+        }
+        
+        function renderComparisonCard(p1, p2) {
+            const stats = ['total_orders', 'total_boxes', 'total_weight'];
+            const labels = ['Orders', 'Boxes', 'Weight (kg)'];
+            
+            let statsHtml1 = '', statsHtml2 = '';
+            
+            stats.forEach((stat, i) => {
+                const v1 = p1[stat];
+                const v2 = p2[stat];
+                const winner1 = v1 > v2 ? '<span class="winner-indicator">👑</span>' : '';
+                const winner2 = v2 > v1 ? '<span class="winner-indicator">👑</span>' : '';
+                const formatted1 = stat === 'total_weight' ? v1.toLocaleString(undefined, {maximumFractionDigits: 1}) : v1.toLocaleString();
+                const formatted2 = stat === 'total_weight' ? v2.toLocaleString(undefined, {maximumFractionDigits: 1}) : v2.toLocaleString();
+                
+                statsHtml1 += `<div class="comparison-stat"><span class="comparison-stat-label">${labels[i]}</span><span class="comparison-stat-value">${formatted1}${winner1}</span></div>`;
+                statsHtml2 += `<div class="comparison-stat"><span class="comparison-stat-label">${labels[i]}</span><span class="comparison-stat-value">${formatted2}${winner2}</span></div>`;
+            });
+            
+            return `
+                <div class="comparison-grid">
+                    <div class="comparison-card">
+                        <div class="comparison-header">
+                            <div class="comparison-color" style="background: ${p1.color}"></div>
+                            <div class="comparison-name">${p1.short || p1.name}</div>
+                        </div>
+                        ${statsHtml1}
+                    </div>
+                    <div class="comparison-vs">VS</div>
+                    <div class="comparison-card">
+                        <div class="comparison-header">
+                            <div class="comparison-color" style="background: ${p2.color}"></div>
+                            <div class="comparison-name">${p2.short || p2.name}</div>
+                        </div>
+                        ${statsHtml2}
+                    </div>
+                </div>
+            `;
+        }
+        
+        function renderComparison() {
+            if (!currentData) return;
+            
+            let html = '';
+            const providers = currentData.providers;
+            
+            if (currentTab === 'ge-ecl') {
+                // GE Total vs ECL Total
+                const geProviders = providers.filter(p => p.group === 'GE');
+                const eclProviders = providers.filter(p => p.group === 'ECL');
+                
+                const geTotal = {
+                    name: 'GLOBAL EXPRESS',
+                    short: 'GE Total',
+                    color: '#3B82F6',
+                    total_orders: geProviders.reduce((s, p) => s + p.total_orders, 0),
+                    total_boxes: geProviders.reduce((s, p) => s + p.total_boxes, 0),
+                    total_weight: geProviders.reduce((s, p) => s + p.total_weight, 0)
+                };
+                
+                const eclTotal = {
+                    name: 'ECL LOGISTICS',
+                    short: 'ECL Total',
+                    color: '#10B981',
+                    total_orders: eclProviders.reduce((s, p) => s + p.total_orders, 0),
+                    total_boxes: eclProviders.reduce((s, p) => s + p.total_boxes, 0),
+                    total_weight: eclProviders.reduce((s, p) => s + p.total_weight, 0)
+                };
+                
+                html = '<h3 style="color: #d4a853; margin-bottom: 20px;">Global Express vs ECL Logistics</h3>';
+                html += renderComparisonCard(geTotal, eclTotal);
+                
+            } else if (currentTab === 'qc-zone') {
+                // QC vs ZONE
+                const qcProviders = providers.filter(p => p.name.includes('QC'));
+                const zoneProviders = providers.filter(p => p.name.includes('ZONE'));
+                
+                const qcTotal = {
+                    name: 'QC Center',
+                    short: 'QC Total',
+                    color: '#8B5CF6',
+                    total_orders: qcProviders.reduce((s, p) => s + p.total_orders, 0),
+                    total_boxes: qcProviders.reduce((s, p) => s + p.total_boxes, 0),
+                    total_weight: qcProviders.reduce((s, p) => s + p.total_weight, 0)
+                };
+                
+                const zoneTotal = {
+                    name: 'Zone',
+                    short: 'Zone Total',
+                    color: '#F59E0B',
+                    total_orders: zoneProviders.reduce((s, p) => s + p.total_orders, 0),
+                    total_boxes: zoneProviders.reduce((s, p) => s + p.total_boxes, 0),
+                    total_weight: zoneProviders.reduce((s, p) => s + p.total_weight, 0)
+                };
+                
+                html = '<h3 style="color: #d4a853; margin-bottom: 20px;">QC Center vs Zone</h3>';
+                html += renderComparisonCard(qcTotal, zoneTotal);
+                
+            } else {
+                // All providers table
+                html = `
+                    <div class="provider-card">
+                        <table class="leaderboard-table">
+                            <thead>
+                                <tr>
+                                    <th>Provider</th>
+                                    <th style="text-align: right;">Orders</th>
+                                    <th style="text-align: right;">Boxes</th>
+                                    <th style="text-align: right;">Weight</th>
+                                    <th style="text-align: right;">Avg/Order</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                providers.sort((a, b) => b.total_boxes - a.total_boxes).forEach(p => {
+                    const avgPerOrder = p.total_orders > 0 ? (p.total_weight / p.total_orders).toFixed(2) : 0;
+                    html += `
+                        <tr>
+                            <td><div class="provider-cell"><div class="provider-color" style="background: ${p.color}"></div>${p.short || p.name}</div></td>
+                            <td style="text-align: right;">${p.total_orders.toLocaleString()}</td>
+                            <td style="text-align: right;">${p.total_boxes.toLocaleString()}</td>
+                            <td style="text-align: right;">${p.total_weight.toLocaleString(undefined, {maximumFractionDigits: 1})}</td>
+                            <td style="text-align: right;">${avgPerOrder} kg</td>
+                        </tr>
+                    `;
+                });
+                
+                html += '</tbody></table></div>';
+            }
+            
+            document.getElementById('comparison-content').innerHTML = html;
+        }
+        
+        async function loadComparison() {
+            updateWeekDisplay();
+            document.getElementById('comparison-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            try {
+                const response = await fetch('/api/dashboard?week_start=' + formatDate(currentWeekStart));
+                currentData = await response.json();
+                renderComparison();
+            } catch (error) {
+                document.getElementById('comparison-content').innerHTML = '<p style="color: #ef4444;">Error loading data</p>';
+            }
+        }
+        
+        loadComparison();
+    </script>
+</body>
+</html>
+    ''')
+
+@app.route('/regions')
+@login_required
+def regions():
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Region Heatmap - 3PL</title>
+    ''' + FAVICON + '''
+    ''' + BASE_STYLES + '''
+</head>
+<body>
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='active', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    
+    <main class="main-content" id="main-content">
+        <div class="page-header">
+            <h1 class="page-title">Region <span>Heatmap</span></h1>
+            <div class="week-selector">
+                <button class="week-btn" onclick="changeWeek(-1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <span class="week-display" id="week-display">Loading...</span>
+                <button class="week-btn" onclick="changeWeek(1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <div id="regions-content">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+    </main>
+    
+    ''' + SIDEBAR_SCRIPT + '''
+    
+    <script>
+        let currentWeekStart = getMonday(new Date());
+        
+        function getMonday(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        }
+        
+        function formatDate(date) { return date.toISOString().split('T')[0]; }
+        function formatDisplayDate(date) { return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+        
+        function changeWeek(direction) {
+            currentWeekStart.setDate(currentWeekStart.getDate() + (direction * 7));
+            loadRegions();
+        }
+        
+        function updateWeekDisplay() {
+            const endDate = new Date(currentWeekStart);
+            endDate.setDate(endDate.getDate() + 6);
+            document.getElementById('week-display').textContent = formatDisplayDate(currentWeekStart) + ' - ' + formatDisplayDate(endDate);
+        }
+        
+        function getHeatColor(value, max) {
+            const ratio = value / max;
+            if (ratio >= 0.8) return '#10b981';
+            if (ratio >= 0.6) return '#34d399';
+            if (ratio >= 0.4) return '#d4a853';
+            if (ratio >= 0.2) return '#f59e0b';
+            return '#64748b';
+        }
+        
+        async function loadRegions() {
+            updateWeekDisplay();
+            document.getElementById('regions-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            try {
+                const response = await fetch('/api/regions?week_start=' + formatDate(currentWeekStart));
+                const data = await response.json();
+                
+                const maxOrders = Math.max(...data.regions.map(r => r.orders));
+                
+                let html = '<div class="heatmap-container">';
+                
+                data.regions.forEach(region => {
+                    const color = getHeatColor(region.orders, maxOrders);
+                    html += `
+                        <div class="heatmap-item" style="border-color: ${color}40;">
+                            <div class="heatmap-region">${region.name}</div>
+                            <div class="heatmap-value" style="color: ${color}">${region.orders}</div>
+                            <div class="heatmap-label">orders</div>
+                            <div class="heatmap-label" style="margin-top: 4px;">${region.boxes} boxes • ${region.weight.toFixed(1)} kg</div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                document.getElementById('regions-content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('regions-content').innerHTML = '<p style="color: #ef4444;">Error loading data</p>';
+            }
+        }
+        
+        loadRegions();
+    </script>
+</body>
+</html>
+    ''')
+
+@app.route('/monthly')
+@login_required
+def monthly_report():
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Report - 3PL</title>
+    ''' + FAVICON + '''
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    ''' + BASE_STYLES + '''
+</head>
+<body>
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='active', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    
+    <main class="main-content" id="main-content">
+        <div class="page-header">
+            <h1 class="page-title">Monthly <span>Report</span></h1>
+            <div class="month-selector">
+                <button class="week-btn" onclick="changeMonth(-1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <span class="month-display" id="month-display">Loading...</span>
+                <button class="week-btn" onclick="changeMonth(1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <div id="monthly-content">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+    </main>
+    
+    ''' + SIDEBAR_SCRIPT + '''
+    
+    <script>
+        let currentDate = new Date();
+        let chart = null;
+        
+        function formatMonth(date) {
+            return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        }
+        
+        function changeMonth(direction) {
+            currentDate.setMonth(currentDate.getMonth() + direction);
+            loadMonthly();
+        }
+        
+        async function loadMonthly() {
+            document.getElementById('month-display').textContent = formatMonth(currentDate);
+            document.getElementById('monthly-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            
+            try {
+                const response = await fetch(`/api/monthly?year=${year}&month=${month}`);
+                const data = await response.json();
+                
+                let html = `
+                    <div class="stats-row">
+                        <div class="stat-card">
+                            <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1);">📋</div>
+                            <div class="stat-content">
+                                <div class="stat-value">${data.total_orders.toLocaleString()}</div>
+                                <div class="stat-label">Total Orders</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1);">📦</div>
+                            <div class="stat-content">
+                                <div class="stat-value">${data.total_boxes.toLocaleString()}</div>
+                                <div class="stat-label">Total Boxes</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon" style="background: rgba(212, 168, 83, 0.1);">⚖️</div>
+                            <div class="stat-content">
+                                <div class="stat-value">${data.total_weight.toLocaleString(undefined, {maximumFractionDigits: 1})} kg</div>
+                                <div class="stat-label">Total Weight</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon" style="background: rgba(139, 92, 246, 0.1);">📊</div>
+                            <div class="stat-content">
+                                <div class="stat-value">${data.avg_per_day.toFixed(0)}</div>
+                                <div class="stat-label">Avg Orders/Day</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="charts-grid">
+                        <div class="chart-card full-width">
+                            <div class="chart-title">Weekly Breakdown</div>
+                            <div class="chart-container">
+                                <canvas id="weeklyChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="provider-card">
+                        <div class="card-header">
+                            <div class="provider-info">
+                                <span class="provider-name">Provider Monthly Summary</span>
+                            </div>
+                        </div>
+                        <table class="leaderboard-table">
+                            <thead>
+                                <tr>
+                                    <th>Provider</th>
+                                    <th style="text-align: right;">Orders</th>
+                                    <th style="text-align: right;">Boxes</th>
+                                    <th style="text-align: right;">Weight (kg)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                data.providers.forEach(p => {
+                    html += `
+                        <tr>
+                            <td><div class="provider-cell"><div class="provider-color" style="background: ${p.color}"></div>${p.name}</div></td>
+                            <td style="text-align: right;">${p.orders.toLocaleString()}</td>
+                            <td style="text-align: right;">${p.boxes.toLocaleString()}</td>
+                            <td style="text-align: right;">${p.weight.toLocaleString(undefined, {maximumFractionDigits: 1})}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += '</tbody></table></div>';
+                
+                document.getElementById('monthly-content').innerHTML = html;
+                
+                // Render chart
+                if (chart) chart.destroy();
+                chart = new Chart(document.getElementById('weeklyChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: data.weeks.map(w => w.label),
+                        datasets: [{
+                            label: 'Boxes',
+                            data: data.weeks.map(w => w.boxes),
+                            backgroundColor: '#d4a85399',
+                            borderColor: '#d4a853',
+                            borderWidth: 2,
+                            borderRadius: 8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                            x: { grid: { display: false } }
                         }
                     }
                 });
                 
             } catch (error) {
-                console.error('Error loading analytics:', error);
+                document.getElementById('monthly-content').innerHTML = '<p style="color: #ef4444;">Error loading data</p>';
             }
         }
         
-        loadAnalytics();
+        loadMonthly();
+    </script>
+</body>
+</html>
+    ''')
+
+@app.route('/calendar')
+@login_required
+def calendar_view():
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar View - 3PL</title>
+    ''' + FAVICON + '''
+    ''' + BASE_STYLES + '''
+</head>
+<body>
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='active', active_whatsapp='', active_achievements='') + '''
+    
+    <main class="main-content" id="main-content">
+        <div class="page-header">
+            <h1 class="page-title">Calendar <span>View</span></h1>
+            <div class="month-selector">
+                <button class="week-btn" onclick="changeMonth(-1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <span class="month-display" id="month-display">Loading...</span>
+                <button class="week-btn" onclick="changeMonth(1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <div class="provider-card">
+            <div class="card-header">
+                <div class="provider-info">
+                    <span class="provider-name">📅 Performance Calendar</span>
+                </div>
+                <div style="display: flex; gap: 8px; font-size: 11px;">
+                    <span style="color: #64748b;">■ Low</span>
+                    <span style="color: #10b981;">■ Medium</span>
+                    <span style="color: #d4a853;">■ High</span>
+                </div>
+            </div>
+            
+            <div id="calendar-content" style="padding: 20px;">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+        </div>
+    </main>
+    
+    ''' + SIDEBAR_SCRIPT + '''
+    
+    <script>
+        let currentDate = new Date();
+        
+        function formatMonth(date) {
+            return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        }
+        
+        function changeMonth(direction) {
+            currentDate.setMonth(currentDate.getMonth() + direction);
+            loadCalendar();
+        }
+        
+        function getLevel(boxes, max) {
+            if (boxes === 0) return 0;
+            const ratio = boxes / max;
+            if (ratio >= 0.8) return 5;
+            if (ratio >= 0.6) return 4;
+            if (ratio >= 0.4) return 3;
+            if (ratio >= 0.2) return 2;
+            return 1;
+        }
+        
+        async function loadCalendar() {
+            document.getElementById('month-display').textContent = formatMonth(currentDate);
+            document.getElementById('calendar-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+            
+            try {
+                const response = await fetch(`/api/calendar?year=${year}&month=${month}`);
+                const data = await response.json();
+                
+                const maxBoxes = Math.max(...data.days.filter(d => d.boxes > 0).map(d => d.boxes), 1);
+                
+                let html = '<div class="calendar-grid">';
+                
+                // Headers
+                ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(day => {
+                    html += `<div class="calendar-header">${day}</div>`;
+                });
+                
+                // Empty cells for days before month starts
+                const firstDay = new Date(year, month - 1, 1).getDay();
+                const emptyDays = firstDay === 0 ? 6 : firstDay - 1;
+                for (let i = 0; i < emptyDays; i++) {
+                    html += '<div class="calendar-day empty"></div>';
+                }
+                
+                // Days
+                data.days.forEach(day => {
+                    const level = getLevel(day.boxes, maxBoxes);
+                    html += `
+                        <div class="calendar-day level-${level}" title="${day.date}: ${day.orders} orders, ${day.boxes} boxes">
+                            <span class="day-number">${day.day}</span>
+                            ${day.boxes > 0 ? `<span class="day-boxes">${day.boxes}</span>` : ''}
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                document.getElementById('calendar-content').innerHTML = html;
+                
+            } catch (error) {
+                document.getElementById('calendar-content').innerHTML = '<p style="color: #ef4444;">Error loading data</p>';
+            }
+        }
+        
+        loadCalendar();
+    </script>
+</body>
+</html>
+    ''')
+
+@app.route('/whatsapp')
+@login_required
+def whatsapp_report():
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Report - 3PL</title>
+    ''' + FAVICON + '''
+    ''' + BASE_STYLES + '''
+</head>
+<body>
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='active', active_achievements='') + '''
+    
+    <main class="main-content" id="main-content">
+        <div class="page-header">
+            <h1 class="page-title">WhatsApp <span>Report</span></h1>
+            <div class="week-selector">
+                <button class="week-btn" onclick="changeWeek(-1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <span class="week-display" id="week-display">Loading...</span>
+                <button class="week-btn" onclick="changeWeek(1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <div id="whatsapp-content">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+    </main>
+    
+    ''' + SIDEBAR_SCRIPT + '''
+    
+    <script>
+        let currentWeekStart = getMonday(new Date());
+        
+        function getMonday(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        }
+        
+        function formatDate(date) { return date.toISOString().split('T')[0]; }
+        function formatDisplayDate(date) { return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+        
+        function changeWeek(direction) {
+            currentWeekStart.setDate(currentWeekStart.getDate() + (direction * 7));
+            loadWhatsApp();
+        }
+        
+        function updateWeekDisplay() {
+            const endDate = new Date(currentWeekStart);
+            endDate.setDate(endDate.getDate() + 6);
+            document.getElementById('week-display').textContent = formatDisplayDate(currentWeekStart) + ' - ' + formatDisplayDate(endDate);
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.innerHTML = '✓ Copied!';
+                setTimeout(() => { btn.innerHTML = '📋 Copy to Clipboard'; }, 2000);
+            });
+        }
+        
+        async function loadWhatsApp() {
+            updateWeekDisplay();
+            document.getElementById('whatsapp-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            try {
+                const response = await fetch('/api/whatsapp?week_start=' + formatDate(currentWeekStart));
+                const data = await response.json();
+                
+                const html = `
+                    <div class="whatsapp-box">
+                        <div class="whatsapp-header">
+                            <span class="whatsapp-icon">📱</span>
+                            <span class="whatsapp-title">Weekly Report - Ready to Share</span>
+                        </div>
+                        <div class="whatsapp-content" id="report-text">${data.report}</div>
+                        <button class="copy-btn" onclick="copyToClipboard(document.getElementById('report-text').textContent)">
+                            📋 Copy to Clipboard
+                        </button>
+                    </div>
+                `;
+                
+                document.getElementById('whatsapp-content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('whatsapp-content').innerHTML = '<p style="color: #ef4444;">Error loading data</p>';
+            }
+        }
+        
+        loadWhatsApp();
+    </script>
+</body>
+</html>
+    ''')
+
+@app.route('/achievements')
+@login_required
+def achievements_page():
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Achievements - 3PL</title>
+    ''' + FAVICON + '''
+    ''' + BASE_STYLES + '''
+</head>
+<body>
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='active') + '''
+    
+    <main class="main-content" id="main-content">
+        <div class="page-header">
+            <h1 class="page-title">Provider <span>Achievements</span></h1>
+            <div class="week-selector">
+                <button class="week-btn" onclick="changeWeek(-1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <span class="week-display" id="week-display">Loading...</span>
+                <button class="week-btn" onclick="changeWeek(1)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <div id="achievements-content">
+            <div class="loading"><div class="spinner"></div></div>
+        </div>
+    </main>
+    
+    ''' + SIDEBAR_SCRIPT + '''
+    
+    <script>
+        let currentWeekStart = getMonday(new Date());
+        
+        function getMonday(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        }
+        
+        function formatDate(date) { return date.toISOString().split('T')[0]; }
+        function formatDisplayDate(date) { return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+        
+        function changeWeek(direction) {
+            currentWeekStart.setDate(currentWeekStart.getDate() + (direction * 7));
+            loadAchievements();
+        }
+        
+        function updateWeekDisplay() {
+            const endDate = new Date(currentWeekStart);
+            endDate.setDate(endDate.getDate() + 6);
+            document.getElementById('week-display').textContent = formatDisplayDate(currentWeekStart) + ' - ' + formatDisplayDate(endDate);
+        }
+        
+        async function loadAchievements() {
+            updateWeekDisplay();
+            document.getElementById('achievements-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            try {
+                const response = await fetch('/api/dashboard?week_start=' + formatDate(currentWeekStart));
+                const data = await response.json();
+                
+                let html = '';
+                
+                data.providers.forEach(p => {
+                    const achievements = p.achievements || [];
+                    
+                    html += `
+                        <div class="provider-card" style="margin-bottom: 16px;">
+                            <div class="card-header">
+                                <div class="provider-info">
+                                    <div class="provider-color" style="background: ${p.color}; width: 8px; height: 40px; border-radius: 4px;"></div>
+                                    <span class="provider-name">${p.name}</span>
+                                    <span style="color: #64748b; font-size: 14px;">${p.total_boxes.toLocaleString()} boxes</span>
+                                </div>
+                            </div>
+                            <div style="padding: 20px;">
+                                ${achievements.length > 0 ? `
+                                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                                        ${achievements.map(a => `
+                                            <div style="background: rgba(212, 168, 83, 0.1); border: 1px solid rgba(212, 168, 83, 0.2); border-radius: 12px; padding: 16px; text-align: center; min-width: 120px;">
+                                                <div style="font-size: 32px; margin-bottom: 8px;">${a.icon}</div>
+                                                <div style="font-size: 14px; font-weight: 600; color: #d4a853;">${a.name}</div>
+                                                <div style="font-size: 11px; color: #64748b; margin-top: 4px;">${a.desc}</div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : `
+                                    <div style="color: #64748b; text-align: center; padding: 20px;">
+                                        No achievements this week. Keep pushing! 💪
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('achievements-content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('achievements-content').innerHTML = '<p style="color: #ef4444;">Error loading data</p>';
+            }
+        }
+        
+        loadAchievements();
     </script>
 </body>
 </html>
@@ -2115,15 +3645,27 @@ def api_dashboard():
     prev_week_end = prev_week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
     
     providers_data = []
+    max_boxes = 0
+    winner_idx = 0
     
-    for provider in PROVIDERS:
+    for idx, provider in enumerate(PROVIDERS):
         current_data = process_provider_data(provider, week_start, week_end)
         previous_data = process_provider_data(provider, prev_week_start, prev_week_end)
         
         if current_data:
             prev_boxes = previous_data['total_boxes'] if previous_data else 0
             current_data['trend'] = calculate_trend(current_data['total_boxes'], prev_boxes)
+            
+            if current_data['total_boxes'] > max_boxes:
+                max_boxes = current_data['total_boxes']
+                winner_idx = len(providers_data)
+            
             providers_data.append(current_data)
+    
+    # Add achievements
+    for idx, p in enumerate(providers_data):
+        is_winner = idx == winner_idx and p['total_boxes'] > 0
+        p['achievements'] = get_provider_achievements(p, is_winner, p['trend'])
     
     return jsonify({
         'week_start': week_start.isoformat(),
@@ -2159,7 +3701,10 @@ def api_weekly_summary():
     
     providers_data.sort(key=lambda x: x['total_boxes'], reverse=True)
     
-    winner = providers_data[0] if providers_data else None
+    winner = None
+    if providers_data and providers_data[0]['total_boxes'] > 0:
+        winner = providers_data[0]
+        winner['achievements'] = get_provider_achievements(winner, True, winner['trend'])
     
     return jsonify({
         'week_start': week_start.isoformat(),
@@ -2232,6 +3777,248 @@ def api_flight_load():
         'week_end': week_end.isoformat(),
         'flights': flight_data
     })
+
+@app.route('/api/kpi')
+def api_kpi():
+    week_start_str = request.args.get('week_start')
+    
+    if week_start_str:
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d')
+    else:
+        week_start, _ = get_week_range()
+    
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+    
+    prev_week_start = week_start - timedelta(days=7)
+    prev_week_end = prev_week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+    
+    total_orders = 0
+    total_boxes = 0
+    total_weight = 0
+    prev_orders = 0
+    prev_boxes = 0
+    prev_weight = 0
+    all_regions = set()
+    daily_totals = defaultdict(int)
+    provider_totals = {}
+    
+    for provider in PROVIDERS:
+        current_data = process_provider_data(provider, week_start, week_end)
+        previous_data = process_provider_data(provider, prev_week_start, prev_week_end)
+        
+        if current_data:
+            total_orders += current_data['total_orders']
+            total_boxes += current_data['total_boxes']
+            total_weight += current_data['total_weight']
+            all_regions.update(current_data['regions'].keys())
+            provider_totals[current_data['name']] = current_data['total_boxes']
+            
+            for day, data in current_data['daily_totals'].items():
+                daily_totals[day] += data['orders']
+        
+        if previous_data:
+            prev_orders += previous_data['total_orders']
+            prev_boxes += previous_data['total_boxes']
+            prev_weight += previous_data['total_weight']
+    
+    # Find best day
+    best_day = max(daily_totals, key=daily_totals.get) if daily_totals else 'N/A'
+    top_provider = max(provider_totals, key=provider_totals.get) if provider_totals else 'N/A'
+    
+    return jsonify({
+        'total_orders': total_orders,
+        'total_boxes': total_boxes,
+        'total_weight': total_weight,
+        'avg_boxes_per_day': total_boxes / 7,
+        'avg_weight_per_order': total_weight / total_orders if total_orders > 0 else 0,
+        'active_regions': len(all_regions),
+        'top_provider': top_provider.replace('GLOBAL EXPRESS', 'GE').replace('ECL LOGISTICS', 'ECL'),
+        'top_region': 'UAE',  # Would need actual calculation
+        'best_day': best_day,
+        'boxes_trend': calculate_trend(total_boxes, prev_boxes),
+        'orders_trend': calculate_trend(total_orders, prev_orders),
+        'weight_trend': calculate_trend(total_weight, prev_weight)
+    })
+
+@app.route('/api/regions')
+def api_regions():
+    week_start_str = request.args.get('week_start')
+    
+    if week_start_str:
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d')
+    else:
+        week_start, _ = get_week_range()
+    
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+    
+    region_data = defaultdict(lambda: {'orders': 0, 'boxes': 0, 'weight': 0})
+    
+    for provider in PROVIDERS:
+        data = process_provider_data(provider, week_start, week_end)
+        if data:
+            for region_name, region_info in data['regions'].items():
+                for day_data in region_info['days'].values():
+                    region_data[region_name]['orders'] += day_data['orders']
+                    region_data[region_name]['boxes'] += day_data['boxes']
+                    region_data[region_name]['weight'] += day_data['weight']
+    
+    regions = [{'name': k, **v} for k, v in region_data.items()]
+    regions.sort(key=lambda x: x['orders'], reverse=True)
+    
+    return jsonify({'regions': regions})
+
+@app.route('/api/monthly')
+def api_monthly():
+    year = int(request.args.get('year', datetime.now().year))
+    month = int(request.args.get('month', datetime.now().month))
+    
+    # Get all weeks in the month
+    first_day = datetime(year, month, 1)
+    if month == 12:
+        last_day = datetime(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        last_day = datetime(year, month + 1, 1) - timedelta(days=1)
+    
+    total_orders = 0
+    total_boxes = 0
+    total_weight = 0
+    provider_totals = defaultdict(lambda: {'orders': 0, 'boxes': 0, 'weight': 0, 'color': '#64748b'})
+    weeks_data = []
+    
+    # Process each week
+    current = first_day
+    week_num = 1
+    while current <= last_day:
+        week_start = current - timedelta(days=current.weekday())
+        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        
+        week_boxes = 0
+        for provider in PROVIDERS:
+            data = process_provider_data(provider, week_start, week_end)
+            if data:
+                total_orders += data['total_orders']
+                total_boxes += data['total_boxes']
+                total_weight += data['total_weight']
+                week_boxes += data['total_boxes']
+                
+                provider_totals[data['name']]['orders'] += data['total_orders']
+                provider_totals[data['name']]['boxes'] += data['total_boxes']
+                provider_totals[data['name']]['weight'] += data['total_weight']
+                provider_totals[data['name']]['color'] = data['color']
+        
+        weeks_data.append({
+            'label': f'Week {week_num}',
+            'boxes': week_boxes
+        })
+        
+        current = week_start + timedelta(days=7)
+        week_num += 1
+    
+    providers = [{'name': k, **v} for k, v in provider_totals.items()]
+    providers.sort(key=lambda x: x['boxes'], reverse=True)
+    
+    days_in_month = (last_day - first_day).days + 1
+    
+    return jsonify({
+        'total_orders': total_orders,
+        'total_boxes': total_boxes,
+        'total_weight': total_weight,
+        'avg_per_day': total_orders / days_in_month if days_in_month > 0 else 0,
+        'weeks': weeks_data,
+        'providers': providers
+    })
+
+@app.route('/api/calendar')
+def api_calendar():
+    year = int(request.args.get('year', datetime.now().year))
+    month = int(request.args.get('month', datetime.now().month))
+    
+    _, num_days = calendar.monthrange(year, month)
+    
+    days_data = []
+    
+    for day in range(1, num_days + 1):
+        date = datetime(year, month, day)
+        day_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        day_orders = 0
+        day_boxes = 0
+        
+        for provider in PROVIDERS:
+            data = process_provider_data(provider, day_start, day_end)
+            if data:
+                day_orders += data['total_orders']
+                day_boxes += data['total_boxes']
+        
+        days_data.append({
+            'day': day,
+            'date': date.strftime('%Y-%m-%d'),
+            'orders': day_orders,
+            'boxes': day_boxes
+        })
+    
+    return jsonify({'days': days_data})
+
+@app.route('/api/whatsapp')
+def api_whatsapp():
+    week_start_str = request.args.get('week_start')
+    
+    if week_start_str:
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d')
+    else:
+        week_start, _ = get_week_range()
+    
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+    
+    providers_data = []
+    total_orders = 0
+    total_boxes = 0
+    total_weight = 0
+    
+    for provider in PROVIDERS:
+        data = process_provider_data(provider, week_start, week_end)
+        if data:
+            providers_data.append(data)
+            total_orders += data['total_orders']
+            total_boxes += data['total_boxes']
+            total_weight += data['total_weight']
+    
+    providers_data.sort(key=lambda x: x['total_boxes'], reverse=True)
+    
+    # Generate report
+    date_range = f"{week_start.strftime('%b %d')} - {week_end.strftime('%b %d, %Y')}"
+    
+    report = f"""📊 *3PL Weekly Report*
+📅 {date_range}
+
+━━━━━━━━━━━━━━━━━━━━
+
+🏆 *PROVIDER RANKING*
+
+"""
+    
+    medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣']
+    for i, p in enumerate(providers_data):
+        short_name = p['name'].replace('GLOBAL EXPRESS', 'GE').replace('ECL LOGISTICS', 'ECL')
+        report += f"{medals[i]} *{short_name}*\n"
+        report += f"   📦 {p['total_boxes']:,} boxes | ⚖️ {p['total_weight']:,.1f} kg\n\n"
+    
+    report += f"""━━━━━━━━━━━━━━━━━━━━
+
+📈 *WEEKLY TOTALS*
+
+📋 Orders: *{total_orders:,}*
+📦 Boxes: *{total_boxes:,}*
+⚖️ Weight: *{total_weight:,.1f} kg*
+
+━━━━━━━━━━━━━━━━━━━━
+_Generated by 3PL Dashboard_"""
+    
+    return jsonify({'report': report})
 
 @app.route('/api/clear-cache')
 def clear_cache():
