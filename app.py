@@ -2877,7 +2877,6 @@ def comparison():
             const providers = currentData.providers;
             
             if (currentTab === 'ge-ecl') {
-                // GE Total vs ECL Total
                 const geProviders = providers.filter(p => p.group === 'GE');
                 const eclProviders = providers.filter(p => p.group === 'ECL');
                 
@@ -2903,7 +2902,6 @@ def comparison():
                 html += renderComparisonCard(geTotal, eclTotal);
                 
             } else if (currentTab === 'qc-zone') {
-                // QC vs ZONE
                 const qcProviders = providers.filter(p => p.name.includes('QC'));
                 const zoneProviders = providers.filter(p => p.name.includes('ZONE'));
                 
@@ -2929,7 +2927,6 @@ def comparison():
                 html += renderComparisonCard(qcTotal, zoneTotal);
                 
             } else {
-                // All providers table
                 html = `
                     <div class="provider-card">
                         <table class="leaderboard-table">
@@ -3234,7 +3231,6 @@ def monthly_report():
                 
                 document.getElementById('monthly-content').innerHTML = html;
                 
-                // Render chart
                 if (chart) chart.destroy();
                 chart = new Chart(document.getElementById('weeklyChart'), {
                     type: 'bar',
@@ -3271,6 +3267,9 @@ def monthly_report():
 </html>
     ''')
 
+# ============================================
+# 📅 UPDATED CALENDAR VIEW - PREMIUM DESIGN WITH ALL INFO
+# ============================================
 @app.route('/calendar')
 @login_required
 def calendar_view():
@@ -3280,9 +3279,466 @@ def calendar_view():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calendar View - 3PL</title>
+    <title>Calendar View - 3PL Dashboard</title>
     ''' + FAVICON + '''
     ''' + BASE_STYLES + '''
+    <style>
+        /* Calendar Premium Styles */
+        .calendar-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+        
+        .cal-tab-btn {
+            padding: 12px 24px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            color: #94a3b8;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .cal-tab-btn:hover {
+            background: rgba(212, 168, 83, 0.1);
+        }
+        
+        .cal-tab-btn.active {
+            background: linear-gradient(135deg, #d4a853, #b8942d);
+            color: #0a0a0f;
+            border-color: #d4a853;
+        }
+        
+        .cal-tab-content {
+            display: none;
+        }
+        
+        .cal-tab-content.active {
+            display: block;
+        }
+        
+        /* Month Stats Bar */
+        .month-stats-bar {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        
+        @media (max-width: 900px) {
+            .month-stats-bar {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .month-stats-bar {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        .month-stat-card {
+            background: linear-gradient(145deg, #0c0d12, #0a0a0f);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        
+        .month-stat-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .month-stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+        }
+        
+        .month-stat-label {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+        
+        .month-stat-card.orders .month-stat-value { color: #3b82f6; }
+        .month-stat-card.boxes .month-stat-value { color: #10b981; }
+        .month-stat-card.weight .month-stat-value { color: #f59e0b; }
+        .month-stat-card.light .month-stat-value { color: #22c55e; }
+        .month-stat-card.heavy .month-stat-value { color: #ef4444; }
+        
+        /* Premium Calendar Grid */
+        .premium-calendar {
+            background: linear-gradient(145deg, #0c0d12, #0a0a0f);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 24px;
+        }
+        
+        .calendar-weekdays {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .weekday-label {
+            text-align: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: #d4a853;
+            padding: 8px;
+            text-transform: uppercase;
+        }
+        
+        .calendar-days-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+        }
+        
+        .cal-cell {
+            min-height: 100px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 12px;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .cal-cell:hover {
+            border-color: rgba(212, 168, 83, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .cal-cell.empty {
+            background: transparent;
+            cursor: default;
+            border: none;
+        }
+        
+        .cal-cell.empty:hover {
+            transform: none;
+        }
+        
+        /* Color intensity levels */
+        .cal-cell.level-0 { background: rgba(100, 116, 139, 0.15); }
+        .cal-cell.level-1 { background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.1)); border-color: rgba(34, 197, 94, 0.2); }
+        .cal-cell.level-2 { background: linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(34, 197, 94, 0.15)); border-color: rgba(34, 197, 94, 0.3); }
+        .cal-cell.level-3 { background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.15)); border-color: rgba(251, 191, 36, 0.3); }
+        .cal-cell.level-4 { background: linear-gradient(135deg, rgba(251, 191, 36, 0.35), rgba(245, 158, 11, 0.25)); border-color: rgba(251, 191, 36, 0.4); }
+        .cal-cell.level-5 { background: linear-gradient(135deg, rgba(251, 191, 36, 0.5), rgba(217, 119, 6, 0.4)); border-color: #d4a853; box-shadow: 0 0 15px rgba(251, 191, 36, 0.2); }
+        
+        .cal-cell-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        
+        .cal-day-num {
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+        }
+        
+        .cal-weekday {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+        
+        .cal-cell-stats {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            font-size: 11px;
+        }
+        
+        .cal-stat-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #94a3b8;
+        }
+        
+        .cal-stat-row span {
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+        
+        .cal-cell-badges {
+            display: flex;
+            gap: 4px;
+            margin-top: 6px;
+        }
+        
+        .cal-badge {
+            flex: 1;
+            padding: 3px 5px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-align: center;
+        }
+        
+        .cal-badge.light {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+        
+        .cal-badge.heavy {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+        
+        /* Legend */
+        .calendar-legend {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        
+        .legend-box {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+        }
+        
+        .legend-box.l0 { background: rgba(100, 116, 139, 0.3); }
+        .legend-box.l1 { background: rgba(34, 197, 94, 0.3); }
+        .legend-box.l2 { background: rgba(34, 197, 94, 0.5); }
+        .legend-box.l3 { background: rgba(251, 191, 36, 0.35); }
+        .legend-box.l4 { background: rgba(251, 191, 36, 0.5); }
+        .legend-box.l5 { background: linear-gradient(135deg, #d4a853, #b8942d); }
+        
+        /* Modal */
+        .cal-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        
+        .cal-modal.active {
+            display: flex;
+        }
+        
+        .cal-modal-box {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border-radius: 20px;
+            max-width: 650px;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+            border: 2px solid rgba(212, 168, 83, 0.3);
+        }
+        
+        .cal-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .cal-modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #d4a853;
+        }
+        
+        .cal-modal-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .cal-modal-close:hover {
+            background: rgba(239, 68, 68, 0.3);
+            transform: rotate(90deg);
+        }
+        
+        .cal-modal-body {
+            padding: 24px;
+        }
+        
+        .modal-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 600px) {
+            .modal-stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        .modal-stat-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+        }
+        
+        .modal-stat-val {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        
+        .modal-stat-lbl {
+            font-size: 10px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+        
+        .modal-stat-item.orders .modal-stat-val { color: #3b82f6; }
+        .modal-stat-item.boxes .modal-stat-val { color: #10b981; }
+        .modal-stat-item.weight .modal-stat-val { color: #f59e0b; }
+        .modal-stat-item.light .modal-stat-val { color: #22c55e; }
+        .modal-stat-item.heavy .modal-stat-val { color: #ef4444; }
+        
+        .modal-region-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        
+        .modal-region-table th {
+            background: rgba(212, 168, 83, 0.1);
+            color: #d4a853;
+            padding: 10px;
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+        
+        .modal-region-table td {
+            padding: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .modal-region-table tr:hover td {
+            background: rgba(255,255,255,0.02);
+        }
+        
+        /* Daily Summary Tab */
+        .daily-controls {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        
+        .date-input {
+            padding: 12px 16px;
+            border-radius: 10px;
+            border: 2px solid rgba(212, 168, 83, 0.3);
+            background: rgba(255,255,255,0.05);
+            color: #f8fafc;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .date-input:focus {
+            outline: none;
+            border-color: #d4a853;
+        }
+        
+        .load-btn {
+            padding: 12px 24px;
+            border-radius: 10px;
+            border: none;
+            background: linear-gradient(135deg, #d4a853, #b8942d);
+            color: #0a0a0f;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .load-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(212, 168, 83, 0.3);
+        }
+        
+        .daily-result {
+            background: linear-gradient(145deg, #0c0d12, #0a0a0f);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 24px;
+        }
+        
+        .daily-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #d4a853;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .no-data-msg {
+            text-align: center;
+            color: #64748b;
+            padding: 40px;
+            font-size: 16px;
+        }
+        
+        .rank-medal {
+            font-size: 16px;
+        }
+        
+        @media (max-width: 768px) {
+            .cal-cell {
+                min-height: 70px;
+                padding: 6px;
+            }
+            
+            .cal-day-num {
+                font-size: 14px;
+            }
+            
+            .cal-cell-stats, .cal-cell-badges {
+                display: none;
+            }
+        }
+    </style>
 </head>
 <body>
     ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='active', active_whatsapp='', active_achievements='') + '''
@@ -3305,28 +3761,77 @@ def calendar_view():
             </div>
         </div>
         
-        <div class="provider-card">
-            <div class="card-header">
-                <div class="provider-info">
-                    <span class="provider-name">📅 Performance Calendar</span>
-                </div>
-                <div style="display: flex; gap: 8px; font-size: 11px;">
-                    <span style="color: #64748b;">■ Low</span>
-                    <span style="color: #10b981;">■ Medium</span>
-                    <span style="color: #d4a853;">■ High</span>
-                </div>
+        <!-- Tabs -->
+        <div class="calendar-tabs">
+            <button class="cal-tab-btn active" onclick="switchCalTab('calendar')">📆 Monthly Calendar</button>
+            <button class="cal-tab-btn" onclick="switchCalTab('daily')">📊 Daily Summary</button>
+        </div>
+        
+        <!-- Tab 1: Calendar -->
+        <div id="tab-calendar" class="cal-tab-content active">
+            <div class="month-stats-bar" id="month-stats">
+                <div class="month-stat-card orders"><div class="month-stat-icon">📦</div><div class="month-stat-value" id="stat-orders">-</div><div class="month-stat-label">Orders</div></div>
+                <div class="month-stat-card boxes"><div class="month-stat-icon">📮</div><div class="month-stat-value" id="stat-boxes">-</div><div class="month-stat-label">Boxes</div></div>
+                <div class="month-stat-card weight"><div class="month-stat-icon">⚖️</div><div class="month-stat-value" id="stat-weight">-</div><div class="month-stat-label">Weight</div></div>
+                <div class="month-stat-card light"><div class="month-stat-icon">🪶</div><div class="month-stat-value" id="stat-light">-</div><div class="month-stat-label">&lt;20 kg</div></div>
+                <div class="month-stat-card heavy"><div class="month-stat-icon">🏋️</div><div class="month-stat-value" id="stat-heavy">-</div><div class="month-stat-label">20+ kg</div></div>
             </div>
             
-            <div id="calendar-content" style="padding: 20px;">
-                <div class="loading"><div class="spinner"></div></div>
+            <div class="premium-calendar">
+                <div class="calendar-weekdays">
+                    <div class="weekday-label">Mon</div>
+                    <div class="weekday-label">Tue</div>
+                    <div class="weekday-label">Wed</div>
+                    <div class="weekday-label">Thu</div>
+                    <div class="weekday-label">Fri</div>
+                    <div class="weekday-label">Sat</div>
+                    <div class="weekday-label">Sun</div>
+                </div>
+                <div class="calendar-days-grid" id="calendar-grid">
+                    <div class="loading"><div class="spinner"></div></div>
+                </div>
+                
+                <div class="calendar-legend">
+                    <div class="legend-item"><div class="legend-box l0"></div> No data</div>
+                    <div class="legend-item"><div class="legend-box l1"></div> Low</div>
+                    <div class="legend-item"><div class="legend-box l2"></div> Medium</div>
+                    <div class="legend-item"><div class="legend-box l3"></div> Good</div>
+                    <div class="legend-item"><div class="legend-box l4"></div> High</div>
+                    <div class="legend-item"><div class="legend-box l5"></div> Peak</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tab 2: Daily Summary -->
+        <div id="tab-daily" class="cal-tab-content">
+            <div class="daily-controls">
+                <input type="date" id="summary-date" class="date-input">
+                <button class="load-btn" onclick="loadDailySummary()">🔍 Load Summary</button>
+            </div>
+            
+            <div class="daily-result" id="daily-result">
+                <div class="no-data-msg">📅 Select a date and click "Load Summary"</div>
             </div>
         </div>
     </main>
+    
+    <!-- Modal -->
+    <div class="cal-modal" id="day-modal" onclick="closeModal(event)">
+        <div class="cal-modal-box" onclick="event.stopPropagation()">
+            <div class="cal-modal-header">
+                <div class="cal-modal-title" id="modal-title">Day Details</div>
+                <button class="cal-modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="cal-modal-body" id="modal-body">
+            </div>
+        </div>
+    </div>
     
     ''' + SIDEBAR_SCRIPT + '''
     
     <script>
         let currentDate = new Date();
+        let calendarData = null;
         
         function formatMonth(date) {
             return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -3337,9 +3842,17 @@ def calendar_view():
             loadCalendar();
         }
         
-        function getLevel(boxes, max) {
+        function switchCalTab(tab) {
+            document.querySelectorAll('.cal-tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.cal-tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tab).classList.add('active');
+        }
+        
+        function getIntensityLevel(boxes, maxBoxes) {
             if (boxes === 0) return 0;
-            const ratio = boxes / max;
+            const ratio = boxes / maxBoxes;
             if (ratio >= 0.8) return 5;
             if (ratio >= 0.6) return 4;
             if (ratio >= 0.4) return 3;
@@ -3347,51 +3860,210 @@ def calendar_view():
             return 1;
         }
         
+        function showDayDetail(dayNum) {
+            if (!calendarData) return;
+            
+            const day = calendarData.days.find(d => d.day === dayNum);
+            if (!day) return;
+            
+            document.getElementById('modal-title').textContent = day.date + ' (' + day.weekday + ')';
+            
+            let html = `
+                <div class="modal-stats-grid">
+                    <div class="modal-stat-item orders"><div class="modal-stat-val">${day.orders.toLocaleString()}</div><div class="modal-stat-lbl">Orders</div></div>
+                    <div class="modal-stat-item boxes"><div class="modal-stat-val">${day.boxes.toLocaleString()}</div><div class="modal-stat-lbl">Boxes</div></div>
+                    <div class="modal-stat-item weight"><div class="modal-stat-val">${day.weight.toFixed(1)}</div><div class="modal-stat-lbl">Weight</div></div>
+                    <div class="modal-stat-item light"><div class="modal-stat-val">${day.under20}</div><div class="modal-stat-lbl">&lt;20 kg</div></div>
+                    <div class="modal-stat-item heavy"><div class="modal-stat-val">${day.over20}</div><div class="modal-stat-lbl">20+ kg</div></div>
+                </div>
+            `;
+            
+            if (day.regions && day.regions.length > 0) {
+                html += `
+                    <table class="modal-region-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Region</th>
+                                <th>Orders</th>
+                                <th>Boxes</th>
+                                <th>Weight</th>
+                                <th>&lt;20</th>
+                                <th>20+</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                const medals = ['🥇', '🥈', '🥉'];
+                day.regions.forEach((r, i) => {
+                    const medal = i < 3 ? medals[i] : (i + 1);
+                    html += `
+                        <tr>
+                            <td><span class="rank-medal">${medal}</span></td>
+                            <td style="font-weight: 600;">${r.name}</td>
+                            <td>${r.orders}</td>
+                            <td>${r.boxes}</td>
+                            <td>${r.weight.toFixed(1)}</td>
+                            <td style="color: #22c55e;">${r.under20}</td>
+                            <td style="color: #ef4444;">${r.over20}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += '</tbody></table>';
+            } else {
+                html += '<div class="no-data-msg">No region data for this day</div>';
+            }
+            
+            document.getElementById('modal-body').innerHTML = html;
+            document.getElementById('day-modal').classList.add('active');
+        }
+        
+        function closeModal(event) {
+            if (!event || event.target === document.getElementById('day-modal')) {
+                document.getElementById('day-modal').classList.remove('active');
+            }
+        }
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeModal();
+        });
+        
         async function loadCalendar() {
             document.getElementById('month-display').textContent = formatMonth(currentDate);
-            document.getElementById('calendar-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            document.getElementById('calendar-grid').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
             
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
             
             try {
                 const response = await fetch(`/api/calendar?year=${year}&month=${month}`);
-                const data = await response.json();
+                calendarData = await response.json();
                 
-                const maxBoxes = Math.max(...data.days.filter(d => d.boxes > 0).map(d => d.boxes), 1);
+                // Update stats
+                document.getElementById('stat-orders').textContent = calendarData.totals.orders.toLocaleString();
+                document.getElementById('stat-boxes').textContent = calendarData.totals.boxes.toLocaleString();
+                document.getElementById('stat-weight').textContent = calendarData.totals.weight.toFixed(1) + ' kg';
+                document.getElementById('stat-light').textContent = calendarData.totals.under20.toLocaleString();
+                document.getElementById('stat-heavy').textContent = calendarData.totals.over20.toLocaleString();
                 
-                let html = '<div class="calendar-grid">';
+                // Render calendar
+                let html = '';
+                const maxBoxes = calendarData.max_boxes || 1;
                 
-                // Headers
-                ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(day => {
-                    html += `<div class="calendar-header">${day}</div>`;
-                });
-                
-                // Empty cells for days before month starts
-                const firstDay = new Date(year, month - 1, 1).getDay();
-                const emptyDays = firstDay === 0 ? 6 : firstDay - 1;
-                for (let i = 0; i < emptyDays; i++) {
-                    html += '<div class="calendar-day empty"></div>';
+                // Empty cells before first day
+                for (let i = 0; i < calendarData.first_weekday; i++) {
+                    html += '<div class="cal-cell empty"></div>';
                 }
                 
-                // Days
-                data.days.forEach(day => {
-                    const level = getLevel(day.boxes, maxBoxes);
+                // Day cells
+                calendarData.days.forEach(day => {
+                    const level = getIntensityLevel(day.boxes, maxBoxes);
+                    
                     html += `
-                        <div class="calendar-day level-${level}" title="${day.date}: ${day.orders} orders, ${day.boxes} boxes">
-                            <span class="day-number">${day.day}</span>
-                            ${day.boxes > 0 ? `<span class="day-boxes">${day.boxes}</span>` : ''}
+                        <div class="cal-cell level-${level}" onclick="showDayDetail(${day.day})">
+                            <div class="cal-cell-header">
+                                <span class="cal-day-num">${day.day}</span>
+                                <span class="cal-weekday">${day.weekday}</span>
+                            </div>
+                            <div class="cal-cell-stats">
+                                <div class="cal-stat-row">📦 <span>${day.orders}</span></div>
+                                <div class="cal-stat-row">📮 <span>${day.boxes}</span></div>
+                                <div class="cal-stat-row">⚖️ <span>${day.weight.toFixed(1)}</span></div>
+                            </div>
+                            <div class="cal-cell-badges">
+                                <div class="cal-badge light">🪶 ${day.under20}</div>
+                                <div class="cal-badge heavy">🏋️ ${day.over20}</div>
+                            </div>
                         </div>
                     `;
                 });
                 
-                html += '</div>';
-                document.getElementById('calendar-content').innerHTML = html;
+                document.getElementById('calendar-grid').innerHTML = html;
                 
             } catch (error) {
-                document.getElementById('calendar-content').innerHTML = '<p style="color: #ef4444;">Error loading data</p>';
+                document.getElementById('calendar-grid').innerHTML = '<div class="no-data-msg">Error loading calendar data</div>';
             }
         }
+        
+        async function loadDailySummary() {
+            const dateInput = document.getElementById('summary-date').value;
+            if (!dateInput) {
+                alert('Please select a date');
+                return;
+            }
+            
+            document.getElementById('daily-result').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            try {
+                const response = await fetch(`/api/daily-summary?date=${dateInput}`);
+                const data = await response.json();
+                
+                if (data.orders === 0) {
+                    document.getElementById('daily-result').innerHTML = '<div class="no-data-msg">📭 No data found for ' + dateInput + '</div>';
+                    return;
+                }
+                
+                let html = `
+                    <div class="daily-title">📊 ${data.date} (${data.weekday})</div>
+                    
+                    <div class="month-stats-bar">
+                        <div class="month-stat-card orders"><div class="month-stat-icon">📦</div><div class="month-stat-value">${data.orders.toLocaleString()}</div><div class="month-stat-label">Orders</div></div>
+                        <div class="month-stat-card boxes"><div class="month-stat-icon">📮</div><div class="month-stat-value">${data.boxes.toLocaleString()}</div><div class="month-stat-label">Boxes</div></div>
+                        <div class="month-stat-card weight"><div class="month-stat-icon">⚖️</div><div class="month-stat-value">${data.weight.toFixed(1)}</div><div class="month-stat-label">Weight</div></div>
+                        <div class="month-stat-card light"><div class="month-stat-icon">🪶</div><div class="month-stat-value">${data.under20}</div><div class="month-stat-label">&lt;20 kg</div></div>
+                        <div class="month-stat-card heavy"><div class="month-stat-icon">🏋️</div><div class="month-stat-value">${data.over20}</div><div class="month-stat-label">20+ kg</div></div>
+                    </div>
+                `;
+                
+                if (data.regions && data.regions.length > 0) {
+                    html += `
+                        <table class="modal-region-table" style="margin-top: 20px;">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Region</th>
+                                    <th>Orders</th>
+                                    <th>Boxes</th>
+                                    <th>Weight</th>
+                                    <th>&lt;20 kg</th>
+                                    <th>20+ kg</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    const medals = ['🥇', '🥈', '🥉'];
+                    data.regions.forEach((r, i) => {
+                        const medal = i < 3 ? medals[i] : (i + 1);
+                        html += `
+                            <tr>
+                                <td><span class="rank-medal">${medal}</span></td>
+                                <td style="font-weight: 600;">${r.name}</td>
+                                <td>${r.orders}</td>
+                                <td>${r.boxes}</td>
+                                <td>${r.weight.toFixed(1)}</td>
+                                <td style="color: #22c55e;">${r.under20}</td>
+                                <td style="color: #ef4444;">${r.over20}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table>';
+                }
+                
+                document.getElementById('daily-result').innerHTML = html;
+                
+            } catch (error) {
+                document.getElementById('daily-result').innerHTML = '<div class="no-data-msg">Error loading data</div>';
+            }
+        }
+        
+        // Set default date
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('summary-date').value = new Date().toISOString().split('T')[0];
+        });
         
         loadCalendar();
     </script>
@@ -3662,7 +4334,6 @@ def api_dashboard():
             
             providers_data.append(current_data)
     
-    # Add achievements
     for idx, p in enumerate(providers_data):
         is_winner = idx == winner_idx and p['total_boxes'] > 0
         p['achievements'] = get_provider_achievements(p, is_winner, p['trend'])
@@ -3822,7 +4493,6 @@ def api_kpi():
             prev_boxes += previous_data['total_boxes']
             prev_weight += previous_data['total_weight']
     
-    # Find best day
     best_day = max(daily_totals, key=daily_totals.get) if daily_totals else 'N/A'
     top_provider = max(provider_totals, key=provider_totals.get) if provider_totals else 'N/A'
     
@@ -3834,7 +4504,7 @@ def api_kpi():
         'avg_weight_per_order': total_weight / total_orders if total_orders > 0 else 0,
         'active_regions': len(all_regions),
         'top_provider': top_provider.replace('GLOBAL EXPRESS', 'GE').replace('ECL LOGISTICS', 'ECL'),
-        'top_region': 'UAE',  # Would need actual calculation
+        'top_region': 'UAE',
         'best_day': best_day,
         'boxes_trend': calculate_trend(total_boxes, prev_boxes),
         'orders_trend': calculate_trend(total_orders, prev_orders),
@@ -3874,7 +4544,6 @@ def api_monthly():
     year = int(request.args.get('year', datetime.now().year))
     month = int(request.args.get('month', datetime.now().month))
     
-    # Get all weeks in the month
     first_day = datetime(year, month, 1)
     if month == 12:
         last_day = datetime(year + 1, 1, 1) - timedelta(days=1)
@@ -3887,7 +4556,6 @@ def api_monthly():
     provider_totals = defaultdict(lambda: {'orders': 0, 'boxes': 0, 'weight': 0, 'color': '#64748b'})
     weeks_data = []
     
-    # Process each week
     current = first_day
     week_num = 1
     while current <= last_day:
@@ -3930,37 +4598,245 @@ def api_monthly():
         'providers': providers
     })
 
+# ============================================
+# 📅 UPDATED CALENDAR API - WITH ALL INFO + REGIONS
+# ============================================
 @app.route('/api/calendar')
 def api_calendar():
     year = int(request.args.get('year', datetime.now().year))
     month = int(request.args.get('month', datetime.now().month))
     
     _, num_days = calendar.monthrange(year, month)
+    first_day = datetime(year, month, 1)
+    first_weekday = first_day.weekday()  # 0=Monday
     
-    days_data = []
+    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     
+    # Initialize days data
+    days_data = {}
     for day in range(1, num_days + 1):
-        date = datetime(year, month, day)
-        day_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
-        day_end = date.replace(hour=23, minute=59, second=59, microsecond=999999)
-        
-        day_orders = 0
-        day_boxes = 0
-        
-        for provider in PROVIDERS:
-            data = process_provider_data(provider, day_start, day_end)
-            if data:
-                day_orders += data['total_orders']
-                day_boxes += data['total_boxes']
-        
-        days_data.append({
+        days_data[day] = {
             'day': day,
-            'date': date.strftime('%Y-%m-%d'),
-            'orders': day_orders,
-            'boxes': day_boxes
-        })
+            'date': f'{year}-{month:02d}-{day:02d}',
+            'weekday': day_names[(first_weekday + day - 1) % 7],
+            'orders': 0,
+            'boxes': 0,
+            'weight': 0.0,
+            'under20': 0,
+            'over20': 0,
+            'regions': {}
+        }
     
-    return jsonify({'days': days_data})
+    # Process all providers for the month
+    month_start = datetime(year, month, 1)
+    month_end = datetime(year, month, num_days, 23, 59, 59)
+    
+    for provider in PROVIDERS:
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows:
+            continue
+        
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1:
+                continue
+            
+            try:
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                    continue
+                
+                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                parsed_date = parse_date(date_val)
+                
+                if not parsed_date:
+                    continue
+                
+                if not (month_start <= parsed_date <= month_end):
+                    continue
+                
+                day = parsed_date.day
+                
+                region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                if region in INVALID_REGIONS or not region:
+                    continue
+                
+                try:
+                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except:
+                    boxes = 0
+                
+                try:
+                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                except:
+                    weight = 0.0
+                
+                # Update day totals
+                days_data[day]['orders'] += 1
+                days_data[day]['boxes'] += boxes
+                days_data[day]['weight'] += weight
+                
+                if weight < 20:
+                    days_data[day]['under20'] += 1
+                else:
+                    days_data[day]['over20'] += 1
+                
+                # Update region data
+                if region not in days_data[day]['regions']:
+                    days_data[day]['regions'][region] = {
+                        'name': region,
+                        'orders': 0,
+                        'boxes': 0,
+                        'weight': 0.0,
+                        'under20': 0,
+                        'over20': 0
+                    }
+                
+                days_data[day]['regions'][region]['orders'] += 1
+                days_data[day]['regions'][region]['boxes'] += boxes
+                days_data[day]['regions'][region]['weight'] += weight
+                
+                if weight < 20:
+                    days_data[day]['regions'][region]['under20'] += 1
+                else:
+                    days_data[day]['regions'][region]['over20'] += 1
+                    
+            except Exception as e:
+                continue
+    
+    # Convert regions dict to sorted list
+    for day in days_data:
+        regions_list = list(days_data[day]['regions'].values())
+        regions_list.sort(key=lambda x: x['boxes'], reverse=True)
+        days_data[day]['regions'] = regions_list
+    
+    # Calculate totals and max
+    total_orders = sum(d['orders'] for d in days_data.values())
+    total_boxes = sum(d['boxes'] for d in days_data.values())
+    total_weight = sum(d['weight'] for d in days_data.values())
+    total_under20 = sum(d['under20'] for d in days_data.values())
+    total_over20 = sum(d['over20'] for d in days_data.values())
+    max_boxes = max((d['boxes'] for d in days_data.values()), default=1)
+    
+    return jsonify({
+        'year': year,
+        'month': month,
+        'month_name': first_day.strftime('%B %Y'),
+        'first_weekday': first_weekday,
+        'total_days': num_days,
+        'totals': {
+            'orders': total_orders,
+            'boxes': total_boxes,
+            'weight': total_weight,
+            'under20': total_under20,
+            'over20': total_over20
+        },
+        'max_boxes': max_boxes,
+        'days': list(days_data.values())
+    })
+
+# ============================================
+# 📊 NEW API: DAILY SUMMARY
+# ============================================
+@app.route('/api/daily-summary')
+def api_daily_summary():
+    date_str = request.args.get('date')
+    
+    if not date_str:
+        return jsonify({'error': 'Date required'}), 400
+    
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d')
+    except:
+        return jsonify({'error': 'Invalid date format'}), 400
+    
+    day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    
+    result = {
+        'date': date_str,
+        'weekday': day_names[target_date.weekday()],
+        'orders': 0,
+        'boxes': 0,
+        'weight': 0.0,
+        'under20': 0,
+        'over20': 0,
+        'regions': {}
+    }
+    
+    for provider in PROVIDERS:
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows:
+            continue
+        
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1:
+                continue
+            
+            try:
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                    continue
+                
+                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                parsed_date = parse_date(date_val)
+                
+                if not parsed_date:
+                    continue
+                
+                if not (day_start <= parsed_date <= day_end):
+                    continue
+                
+                region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                if region in INVALID_REGIONS or not region:
+                    continue
+                
+                try:
+                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except:
+                    boxes = 0
+                
+                try:
+                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                except:
+                    weight = 0.0
+                
+                result['orders'] += 1
+                result['boxes'] += boxes
+                result['weight'] += weight
+                
+                if weight < 20:
+                    result['under20'] += 1
+                else:
+                    result['over20'] += 1
+                
+                if region not in result['regions']:
+                    result['regions'][region] = {
+                        'name': region,
+                        'orders': 0,
+                        'boxes': 0,
+                        'weight': 0.0,
+                        'under20': 0,
+                        'over20': 0
+                    }
+                
+                result['regions'][region]['orders'] += 1
+                result['regions'][region]['boxes'] += boxes
+                result['regions'][region]['weight'] += weight
+                
+                if weight < 20:
+                    result['regions'][region]['under20'] += 1
+                else:
+                    result['regions'][region]['over20'] += 1
+                    
+            except Exception as e:
+                continue
+    
+    # Convert to sorted list
+    regions_list = list(result['regions'].values())
+    regions_list.sort(key=lambda x: x['boxes'], reverse=True)
+    result['regions'] = regions_list
+    
+    return jsonify(result)
 
 @app.route('/api/whatsapp')
 def api_whatsapp():
@@ -3989,7 +4865,6 @@ def api_whatsapp():
     
     providers_data.sort(key=lambda x: x['total_boxes'], reverse=True)
     
-    # Generate report
     date_range = f"{week_start.strftime('%b %d')} - {week_end.strftime('%b %d, %Y')}"
     
     report = f"""📊 *3PL Weekly Report*
