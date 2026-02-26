@@ -12,9 +12,9 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
 # ============================================
-# ADMIN PASSWORD (Set in Vercel Environment Variables)
+# ADMIN PASSWORD - Rocket2024
 # ============================================
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
 
 # ============================================
 # CACHE CONFIGURATION
