@@ -292,7 +292,7 @@ FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Cs
 
 BASE_STYLES = """
 <style>
-    @import url(\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap\");
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
     * {
         margin: 0;
@@ -301,7 +301,7 @@ BASE_STYLES = """
     }
     
     body {
-        font-family: \"Inter\", sans-serif;
+        font-family: 'Inter', sans-serif;
         background: #111317;
         color: #E8E8E8;
         min-height: 100vh;
@@ -309,6 +309,7 @@ BASE_STYLES = """
         line-height: 1.4;
     }
 
+    /* ===== SIDEBAR - Compact ===== */
     .sidebar {
         position: fixed;
         left: 0;
@@ -495,6 +496,7 @@ BASE_STYLES = """
         width: 0;
     }
 
+    /* ===== MAIN CONTENT ===== */
     .main-content {
         margin-left: 240px;
         padding: 20px;
@@ -506,6 +508,7 @@ BASE_STYLES = """
         margin-left: 70px;
     }
 
+    /* ===== PAGE HEADER ===== */
     .page-header {
         display: flex;
         justify-content: space-between;
@@ -525,6 +528,97 @@ BASE_STYLES = """
         color: #B89B5E;
     }
 
+    /* ===== DATE RANGE PICKER ===== */
+    .date-range-picker {
+        background: #1E2128;
+        border-radius: 12px;
+        border: 1px solid rgba(184, 155, 94, 0.15);
+        padding: 14px 18px;
+    }
+    
+    .qbtns-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+    
+    .qbtn {
+        padding: 5px 12px;
+        background: #2A2F38;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        color: #A0A8B8;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .qbtn:hover {
+        border-color: #B89B5E;
+        color: #B89B5E;
+    }
+    
+    .qbtn.active {
+        background: #B89B5E;
+        border-color: #B89B5E;
+        color: #111317;
+    }
+    
+    .date-inputs-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .range-input {
+        padding: 6px 10px;
+        background: #2A2F38;
+        border: 1px solid rgba(184, 155, 94, 0.3);
+        border-radius: 6px;
+        color: #E8E8E8;
+        font-size: 12px;
+    }
+    
+    .range-input:focus {
+        outline: none;
+        border-color: #B89B5E;
+    }
+    
+    .range-sep {
+        color: #A0A8B8;
+        font-size: 13px;
+    }
+    
+    .apply-btn {
+        padding: 6px 14px;
+        background: #B89B5E;
+        border: none;
+        border-radius: 6px;
+        color: #111317;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+    
+    .apply-btn:hover {
+        opacity: 0.9;
+    }
+    
+    .week-badge {
+        font-size: 12px;
+        color: #B89B5E;
+        font-weight: 500;
+        padding: 5px 12px;
+        background: rgba(184, 155, 94, 0.1);
+        border-radius: 6px;
+        border: 1px solid rgba(184, 155, 94, 0.3);
+    }
+
+    /* ===== PROVIDER CARDS ===== */
     .provider-card {
         background: #1E2128;
         border-radius: 14px;
@@ -626,6 +720,7 @@ BASE_STYLES = """
         margin-top: 2px;
     }
 
+    /* ===== DATA TABLE ===== */
     .data-table {
         width: 100%;
         border-collapse: collapse;
@@ -649,12 +744,13 @@ BASE_STYLES = """
         min-width: 120px;
     }
     
-    .data-table td.region-col {
-        text-align: left;
-        padding-left: 16px;
-        font-weight: 500;
-        color: #E8E8E8;
-        background: rgba(0, 0, 0, 0.2);
+    .data-table th.day-col {
+        min-width: 140px;
+    }
+    
+    .data-table th.flight-day {
+        background: #2F3540;
+        color: #B89B5E;
     }
     
     .data-table td {
@@ -662,6 +758,14 @@ BASE_STYLES = """
         text-align: center;
         border-bottom: 1px solid rgba(255, 255, 255, 0.03);
         color: #D0D0D0;
+    }
+    
+    .data-table td.region-col {
+        text-align: left;
+        padding-left: 16px;
+        font-weight: 500;
+        color: #E8E8E8;
+        background: rgba(0, 0, 0, 0.2);
     }
     
     .data-table tr.total-row td {
@@ -672,6 +776,7 @@ BASE_STYLES = """
         font-size: 12px;
     }
 
+    /* ===== CLEAN GRID FOR NUMBERS ===== */
     .day-data { 
         display: flex; 
         justify-content: center; 
@@ -702,6 +807,7 @@ BASE_STYLES = """
         border-right: none;
     }
     
+    /* Soft accent colors */
     .day-data span:nth-child(1),
     .day-data a:nth-child(1) { 
         color: #6794D9; 
@@ -742,6 +848,7 @@ BASE_STYLES = """
         text-align: center;
     }
 
+    /* ===== STATS CARDS ===== */
     .stats-row, .stats-row-5 {
         display: grid;
         gap: 16px;
@@ -778,6 +885,10 @@ BASE_STYLES = """
         background: #2A2F38;
     }
     
+    .stat-content {
+        flex: 1;
+    }
+    
     .stat-card .stat-value {
         font-size: 22px;
         font-weight: 700;
@@ -790,6 +901,7 @@ BASE_STYLES = """
         color: #A0A8B8;
     }
 
+    /* ===== CHARTS ===== */
     .charts-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -808,28 +920,150 @@ BASE_STYLES = """
     .chart-card.full-width {
         grid-column: span 2;
     }
+    
+    .chart-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: #E8E8E8;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
 
-    @media (max-width: 1200px) {
-        .stats-row { grid-template-columns: repeat(2, 1fr); }
-        .stats-row-5 { grid-template-columns: repeat(3, 1fr); }
-        .charts-grid { grid-template-columns: 1fr; }
+    /* ===== LEADERBOARD ===== */
+    .leaderboard-table {
+        width: 100%;
+        border-collapse: collapse;
     }
     
-    @media (max-width: 768px) {
-        .sidebar { width: 70px; }
-        .main-content { margin-left: 70px; padding: 15px; }
-        .stats-row, .stats-row-5 { grid-template-columns: 1fr; }
+    .leaderboard-table th {
+        background: #2A2F38;
+        padding: 14px;
+        text-align: left;
+        font-weight: 600;
+        color: #A0A8B8;
+        font-size: 12px;
+        text-transform: uppercase;
+        border-bottom: 2px solid #B89B5E;
     }
-</style>
-"""
+    
+    .leaderboard-table td {
+        padding: 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .rank-badge {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 13px;
+    }
+    
+    .rank-1 {
+        background: #B89B5E;
+        color: #111317;
+    }
+    
+    .rank-2 {
+        background: #A0A8B8;
+        color: #111317;
+    }
+    
+    .rank-3 {
+        background: #C27E7E;
+        color: #111317;
+    }
+    
+    .rank-other {
+        background: #2A2F38;
+        color: #A0A8B8;
+    }
+    
+    .provider-color {
+        width: 4px;
+        height: 36px;
+        border-radius: 2px;
+    }
 
-/* ===== WHATSAPP REPORT ===== */
+    /* ===== KPI CARDS ===== */
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    
+    .kpi-card {
+        background: #1E2128;
+        border-radius: 14px;
+        border: 1px solid rgba(184, 155, 94, 0.15);
+        padding: 18px;
+        text-align: center;
+    }
+    
+    .kpi-icon {
+        font-size: 28px;
+        margin-bottom: 10px;
+    }
+    
+    .kpi-value {
+        font-size: 26px;
+        font-weight: 700;
+        color: #E8E8E8;
+        margin-bottom: 4px;
+    }
+    
+    .kpi-label {
+        font-size: 12px;
+        color: #A0A8B8;
+    }
+    
+    .kpi-trend {
+        font-size: 12px;
+        margin-top: 8px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        display: inline-block;
+        font-weight: 600;
+    }
+    
+    .kpi-trend.up {
+        background: rgba(109, 166, 141, 0.15);
+        color: #6DA68D;
+        border: 1px solid rgba(109, 166, 141, 0.3);
+    }
+    
+    .kpi-trend.down {
+        background: rgba(194, 126, 126, 0.15);
+        color: #C27E7E;
+        border: 1px solid rgba(194, 126, 126, 0.3);
+    }
+
+    /* ===== WHATSAPP REPORT ===== */
     .whatsapp-box {
-        background: #1A1E26;
+        background: #1E2128;
         border: 2px solid #10B981;
         border-radius: 20px;
         padding: 28px;
         box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+    }
+    
+    .whatsapp-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    
+    .whatsapp-icon {
+        font-size: 24px;
     }
     
     .whatsapp-title {
@@ -840,7 +1074,7 @@ BASE_STYLES = """
     
     .whatsapp-content {
         font-family: 'Courier New', monospace;
-        background: #252B36;
+        background: #2A2F38;
         padding: 20px;
         border-radius: 14px;
         color: #E5E7EB;
@@ -849,15 +1083,16 @@ BASE_STYLES = """
     
     .copy-btn {
         background: #10B981;
-        color: #0F1218;
-        padding: 14px;
+        color: #111317;
+        padding: 12px;
         border: none;
         border-radius: 14px;
         font-weight: 600;
-        font-size: 15px;
+        font-size: 14px;
         cursor: pointer;
         transition: all 0.3s;
         margin-top: 16px;
+        width: 100%;
     }
     
     .copy-btn:hover {
@@ -868,58 +1103,300 @@ BASE_STYLES = """
 
     /* ===== CALENDAR ===== */
     .premium-calendar {
-        background: #1A1E26;
-        border-radius: 24px;
-        border: 1px solid rgba(212, 175, 55, 0.15);
-        padding: 28px;
+        background: #1E2128;
+        border-radius: 16px;
+        border: 1px solid rgba(184, 155, 94, 0.15);
+        padding: 20px;
+    }
+    
+    .calendar-weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+        margin-bottom: 12px;
     }
     
     .weekday-label {
-        color: #D4AF37;
-        font-weight: 600;
-        font-size: 13px;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: #B89B5E;
+        padding: 8px;
+        text-transform: uppercase;
+    }
+    
+    .calendar-days-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
     }
     
     .cal-cell {
-        background: #252B36;
-        border: 2px solid transparent;
+        min-height: 80px;
+        background: #2A2F38;
+        border-radius: 10px;
+        padding: 10px;
+        cursor: pointer;
         transition: all 0.3s;
+        border: 2px solid transparent;
     }
     
     .cal-cell:hover {
-        border-color: #D4AF37;
-        transform: translateY(-4px);
+        border-color: #B89B5E;
+        transform: translateY(-2px);
     }
     
-    .cal-cell.level-5 {
-        background: linear-gradient(145deg, rgba(212, 175, 55, 0.3), rgba(212, 175, 55, 0.1));
-        border: 2px solid #D4AF37;
+    .cal-cell.empty {
+        background: transparent;
+        cursor: default;
+    }
+    
+    .cal-cell.level-0 { background: rgba(42, 47, 56, 0.5); }
+    .cal-cell.level-1 { background: rgba(103, 148, 217, 0.15); }
+    .cal-cell.level-2 { background: rgba(109, 166, 141, 0.15); }
+    .cal-cell.level-3 { background: rgba(224, 164, 107, 0.15); }
+    .cal-cell.level-4 { background: rgba(139, 168, 136, 0.15); }
+    .cal-cell.level-5 { 
+        background: linear-gradient(135deg, rgba(184, 155, 94, 0.3), rgba(184, 155, 94, 0.1));
+        border: 2px solid #B89B5E;
+    }
+    
+    .cal-day-num {
+        font-size: 16px;
+        font-weight: 700;
+        color: #E8E8E8;
+        margin-bottom: 4px;
+    }
+    
+    .cal-stat {
+        font-size: 10px;
+        color: #A0A8B8;
     }
 
     /* ===== DAILY REGION ===== */
     .provider-section {
-        background: #1A1E26;
-        border-radius: 20px;
-        border: 1px solid rgba(212, 175, 55, 0.15);
-        margin-bottom: 24px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        background: #1E2128;
+        border-radius: 14px;
+        border: 1px solid rgba(184, 155, 94, 0.15);
+        margin-bottom: 20px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
     
     .provider-header-dr {
-        padding: 20px 24px;
-        border-bottom: 1px solid rgba(212, 175, 55, 0.15);
+        padding: 16px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
         cursor: pointer;
-        transition: background 0.3s;
+        transition: background 0.2s;
+        border-bottom: 1px solid rgba(184, 155, 94, 0.15);
     }
     
     .provider-header-dr:hover {
-        background: rgba(212, 175, 55, 0.05);
+        background: rgba(184, 155, 94, 0.05);
+    }
+    
+    .provider-header-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .provider-color-bar {
+        width: 4px;
+        height: 36px;
+        border-radius: 2px;
+    }
+    
+    .provider-header-info h3 {
+        font-size: 16px;
+        font-weight: 600;
+        color: #E8E8E8;
+        margin-bottom: 2px;
+    }
+    
+    .provider-header-info span {
+        font-size: 12px;
+        color: #A0A8B8;
+    }
+    
+    .provider-header-stats {
+        display: flex;
+        gap: 20px;
+    }
+    
+    .header-stat {
+        text-align: center;
+    }
+    
+    .header-stat-val {
+        font-size: 16px;
+        font-weight: 700;
+        color: #B89B5E;
+    }
+    
+    .header-stat-lbl {
+        font-size: 10px;
+        color: #A0A8B8;
+        text-transform: uppercase;
+    }
+    
+    .provider-body {
+        padding: 0 20px 20px;
+        display: none;
+    }
+    
+    .provider-body.open {
+        display: block;
+    }
+    
+    .region-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
     }
     
     .region-table th {
-        background: rgba(212, 175, 55, 0.1);
-        color: #9CA3AF;
-        padding: 14px;
+        background: rgba(184, 155, 94, 0.1);
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        color: #A0A8B8;
+        font-size: 11px;
+        text-transform: uppercase;
+    }
+    
+    .region-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+    
+    .region-table tr:hover td {
+        background: rgba(184, 155, 94, 0.03);
+    }
+    
+    .medal {
+        font-size: 16px;
+        margin-right: 6px;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #A0A8B8;
+    }
+    
+    .empty-state-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+    }
+    
+    .toggle-icon {
+        color: #B89B5E;
+        transition: transform 0.3s;
+    }
+    
+    .provider-header-dr.open .toggle-icon {
+        transform: rotate(180deg);
+    }
+
+    /* ===== ACHIEVEMENTS ===== */
+    .achievements-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+    
+    .achievement-badge {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        background: rgba(184, 155, 94, 0.1);
+        border: 1px solid rgba(184, 155, 94, 0.3);
+        border-radius: 20px;
+        font-size: 11px;
+        color: #B89B5E;
+    }
+
+    /* ===== WINNER CARD ===== */
+    .winner-card {
+        background: linear-gradient(135deg, rgba(184, 155, 94, 0.15), rgba(184, 155, 94, 0.05));
+        border: 1px solid rgba(184, 155, 94, 0.4);
+    }
+
+    /* ===== COMPARISON ===== */
+    .comparison-grid {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 24px;
+        align-items: start;
+    }
+    
+    .comparison-card {
+        background: #1E2128;
+        border-radius: 14px;
+        border: 1px solid rgba(184, 155, 94, 0.15);
+        padding: 24px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    
+    .comparison-vs {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: 700;
+        color: #B89B5E;
+        padding: 20px;
+    }
+    
+    .comparison-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(184, 155, 94, 0.15);
+    }
+    
+    .comparison-color {
+        width: 8px;
+        height: 40px;
+        border-radius: 4px;
+    }
+    
+    .comparison-name {
+        font-size: 20px;
+        font-weight: 600;
+        color: #E8E8E8;
+    }
+    
+    .comparison-stat {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    }
+    
+    .comparison-stat-label {
+        color: #A0A8B8;
+        font-size: 14px;
+    }
+    
+    .comparison-stat-value {
+        color: #E8E8E8;
+        font-size: 18px;
+        font-weight: 600;
+    }
+    
+    .winner-indicator {
+        color: #6DA68D;
+        font-size: 12px;
+        margin-left: 8px;
     }
 
     /* ===== RESPONSIVE ===== */
@@ -933,12 +1410,13 @@ BASE_STYLES = """
     }
     
     @media (max-width: 768px) {
-        .sidebar { width: 80px; }
-        .main-content { margin-left: 80px; padding: 20px; }
+        .sidebar { width: 70px; }
+        .main-content { margin-left: 70px; padding: 15px; }
         .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; }
     }
 </style>
 """
+
 SHARED_JS = """
 <script>
 // ===== SHARED DATE UTILITIES =====
@@ -2272,6 +2750,7 @@ def clear_cache():
     global CACHE
     CACHE = {}
     return jsonify({'status': 'success', 'message': 'Cache cleared'})
+
 @app.route('/orders')
 @login_required
 def order_details():
@@ -2402,17 +2881,6 @@ def order_details():
 </body>
 </html>
     ''', orders=orders, provider_short=provider_short, region=region, day=day)
+
 if __name__ == '__main__':
     app.run(debug=True)
-
-
-
-
-
-
-
-
-
-
-
-
