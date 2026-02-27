@@ -207,11 +207,13 @@ def process_provider_data(provider, week_start, week_end):
         'total_orders': 0,
         'total_boxes': 0,
         'total_weight': 0.0,
+        'total_under20': 0,
+        'total_over20': 0,
         'regions': defaultdict(lambda: {
             'days': {day: {'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0} 
                     for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']}
         }),
-        'daily_totals': {day: {'orders': 0, 'boxes': 0, 'weight': 0.0} 
+        'daily_totals': {day: {'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0} 
                         for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']},
         'active_days': set()
     }
@@ -257,9 +259,20 @@ def process_provider_data(provider, week_start, week_end):
             data['total_weight'] += weight
             data['active_days'].add(day_name)
             
+            # Track weight categories at provider level
+            if weight < 20:
+                data['total_under20'] += 1
+            else:
+                data['total_over20'] += 1
+            
             data['daily_totals'][day_name]['orders'] += 1
             data['daily_totals'][day_name]['boxes'] += boxes
             data['daily_totals'][day_name]['weight'] += weight
+            
+            if weight < 20:
+                data['daily_totals'][day_name]['under20'] += 1
+            else:
+                data['daily_totals'][day_name]['over20'] += 1
             
             region_data = data['regions'][region]['days'][day_name]
             region_data['orders'] += 1
@@ -1537,6 +1550,57 @@ BASE_STYLES = """
         display: block;
     }
     
+    /* View Selector for Analytics */
+    .view-selector {
+        display: flex;
+        gap: 8px;
+        background: #0c0d12;
+        padding: 6px;
+        border-radius: 12px;
+        border: 1px solid rgba(212, 168, 83, 0.2);
+    }
+    
+    .view-btn {
+        padding: 10px 20px;
+        background: transparent;
+        border: none;
+        border-radius: 8px;
+        color: #64748b;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .view-btn:hover {
+        color: #d4a853;
+    }
+    
+    .view-btn.active {
+        background: linear-gradient(135deg, #d4a853 0%, #b8942d 100%);
+        color: #0a0a0f;
+    }
+    
+    /* Stats Row 5 columns */
+    .stats-row-5 {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    
+    @media (max-width: 1200px) {
+        .stats-row-5 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .stats-row-5 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    
     /* Responsive */
     @media (max-width: 768px) {
         .sidebar {
@@ -1581,6 +1645,9 @@ BASE_STYLES = """
 </style>
 """
 
+# ============================================
+# UPDATED SIDEBAR HTML - WITH DAILY REGION TAB
+# ============================================
 SIDEBAR_HTML = """
 <nav class="sidebar" id="sidebar">
     <div class="sidebar-toggle" onclick="toggleSidebar()">«</div>
@@ -1607,6 +1674,14 @@ SIDEBAR_HTML = """
                 </svg>
                 <span>Weekly Summary</span>
                 <div class="tooltip">Weekly Summary</div>
+            </a>
+            
+            <a href="/daily-region" class="nav-item {active_daily_region}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Daily Region</span>
+                <div class="tooltip">Daily Region Summary</div>
             </a>
             
             <a href="/flight-load" class="nav-item {active_flight}">
@@ -1792,7 +1867,7 @@ def dashboard():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='active', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='active', active_weekly='', active_daily_region='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -1992,7 +2067,7 @@ def weekly_summary():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='active', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='active', active_daily_region='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -2144,6 +2219,395 @@ def weekly_summary():
 </html>
     ''')
 
+# ============================================
+# 🆕 NEW ROUTE: DAILY REGION SUMMARY
+# ============================================
+@app.route('/daily-region')
+@login_required
+def daily_region():
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Region Summary - 3PL Dashboard</title>
+    ''' + FAVICON + '''
+    ''' + BASE_STYLES + '''
+    <style>
+        .date-picker-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #0c0d12;
+            padding: 8px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(212, 168, 83, 0.2);
+        }
+        
+        .date-input {
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid rgba(212, 168, 83, 0.3);
+            background: rgba(255,255,255,0.05);
+            color: #f8fafc;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .date-input:focus {
+            outline: none;
+            border-color: #d4a853;
+        }
+        
+        .load-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(135deg, #d4a853, #b8942d);
+            color: #0a0a0f;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .load-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(212, 168, 83, 0.3);
+        }
+        
+        .provider-section {
+            background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .provider-header {
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .provider-header:hover {
+            background: rgba(255,255,255,0.02);
+        }
+        
+        .provider-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .provider-color-bar {
+            width: 4px;
+            height: 36px;
+            border-radius: 2px;
+        }
+        
+        .provider-header-info h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 2px;
+        }
+        
+        .provider-header-info span {
+            font-size: 12px;
+            color: #64748b;
+        }
+        
+        .provider-header-stats {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .header-stat {
+            text-align: center;
+        }
+        
+        .header-stat-val {
+            font-size: 16px;
+            font-weight: 700;
+            color: #d4a853;
+        }
+        
+        .header-stat-lbl {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+        
+        .provider-body {
+            padding: 0 20px 20px;
+            display: none;
+        }
+        
+        .provider-body.open {
+            display: block;
+        }
+        
+        .region-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        
+        .region-table th {
+            background: rgba(212, 168, 83, 0.08);
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #94a3b8;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+        
+        .region-table th:not(:first-child) {
+            text-align: right;
+        }
+        
+        .region-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        
+        .region-table td:not(:first-child) {
+            text-align: right;
+        }
+        
+        .region-table tr:hover td {
+            background: rgba(212, 168, 83, 0.03);
+        }
+        
+        .medal {
+            font-size: 16px;
+            margin-right: 6px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #64748b;
+        }
+        
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        
+        .toggle-icon {
+            color: #d4a853;
+            transition: transform 0.3s;
+        }
+        
+        .provider-header.open .toggle-icon {
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body>
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_daily_region='active', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    
+    <main class="main-content" id="main-content">
+        <div class="page-header">
+            <h1 class="page-title">Daily <span>Region Summary</span></h1>
+            
+            <div class="date-picker-container">
+                <input type="date" id="date-picker" class="date-input">
+                <button class="load-btn" onclick="loadData()">🔍 Load Data</button>
+            </div>
+        </div>
+        
+        <!-- Summary Cards -->
+        <div class="stats-row-5" id="summary-cards">
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1); font-size: 24px;">📦</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="total-orders">-</div>
+                    <div class="stat-label">Total Orders</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); font-size: 24px;">📮</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="total-boxes">-</div>
+                    <div class="stat-label">Total Boxes</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); font-size: 24px;">⚖️</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="total-weight">-</div>
+                    <div class="stat-label">Total Weight</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1); font-size: 24px;">🪶</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="total-under20">-</div>
+                    <div class="stat-label">&lt;20 kg</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); font-size: 24px;">🏋️</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="total-over20">-</div>
+                    <div class="stat-label">20+ kg</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="content">
+            <div class="empty-state">
+                <div class="empty-state-icon">📅</div>
+                <h3>Select a Date</h3>
+                <p>Choose a date and click "Load Data" to see region-wise breakdown by provider</p>
+            </div>
+        </div>
+    </main>
+    
+    ''' + SIDEBAR_SCRIPT + '''
+    
+    <script>
+        // Set today's date as default
+        document.getElementById('date-picker').value = new Date().toISOString().split('T')[0];
+        
+        function toggleProvider(id) {
+            const header = document.getElementById('header-' + id);
+            const body = document.getElementById('body-' + id);
+            header.classList.toggle('open');
+            body.classList.toggle('open');
+        }
+        
+        async function loadData() {
+            const date = document.getElementById('date-picker').value;
+            if (!date) {
+                alert('Please select a date');
+                return;
+            }
+            
+            document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+            
+            try {
+                const response = await fetch('/api/daily-region-summary?date=' + date);
+                const data = await response.json();
+                
+                // Update summary cards
+                document.getElementById('total-orders').textContent = data.totals.orders.toLocaleString();
+                document.getElementById('total-boxes').textContent = data.totals.boxes.toLocaleString();
+                document.getElementById('total-weight').textContent = data.totals.weight.toFixed(1) + ' kg';
+                document.getElementById('total-under20').textContent = data.totals.under20.toLocaleString();
+                document.getElementById('total-over20').textContent = data.totals.over20.toLocaleString();
+                
+                if (data.totals.orders === 0) {
+                    document.getElementById('content').innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📭</div>
+                            <h3>No Data Found</h3>
+                            <p>No shipments recorded for ${data.date_display}</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let html = '<h3 style="color: #d4a853; margin-bottom: 16px;">📊 ' + data.date_display + '</h3>';
+                
+                const medals = ['🥇', '🥈', '🥉'];
+                
+                data.providers.forEach((provider, idx) => {
+                    html += `
+                        <div class="provider-section">
+                            <div class="provider-header" id="header-${idx}" onclick="toggleProvider(${idx})">
+                                <div class="provider-header-left">
+                                    <div class="provider-color-bar" style="background: ${provider.color}"></div>
+                                    <div class="provider-header-info">
+                                        <h3>${provider.name}</h3>
+                                        <span>${provider.regions.length} regions</span>
+                                    </div>
+                                </div>
+                                <div class="provider-header-stats">
+                                    <div class="header-stat">
+                                        <div class="header-stat-val">${provider.orders}</div>
+                                        <div class="header-stat-lbl">Orders</div>
+                                    </div>
+                                    <div class="header-stat">
+                                        <div class="header-stat-val">${provider.boxes}</div>
+                                        <div class="header-stat-lbl">Boxes</div>
+                                    </div>
+                                    <div class="header-stat">
+                                        <div class="header-stat-val">${provider.weight.toFixed(1)}</div>
+                                        <div class="header-stat-lbl">Weight</div>
+                                    </div>
+                                    <span class="toggle-icon">▼</span>
+                                </div>
+                            </div>
+                            <div class="provider-body" id="body-${idx}">
+                    `;
+                    
+                    if (provider.regions.length > 0) {
+                        html += `
+                            <table class="region-table">
+                                <thead>
+                                    <tr>
+                                        <th>Region</th>
+                                        <th>Orders</th>
+                                        <th>Boxes</th>
+                                        <th>Weight</th>
+                                        <th>&lt;20 kg</th>
+                                        <th>20+ kg</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        provider.regions.forEach((r, i) => {
+                            const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
+                            html += `
+                                <tr>
+                                    <td>${medal}${r.name}</td>
+                                    <td>${r.orders}</td>
+                                    <td>${r.boxes}</td>
+                                    <td>${r.weight.toFixed(1)}</td>
+                                    <td style="color: #22c55e;">${r.under20}</td>
+                                    <td style="color: #ef4444;">${r.over20}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p style="color: #64748b; text-align: center; padding: 20px;">No data for this provider</p>';
+                    }
+                    
+                    html += '</div></div>';
+                });
+                
+                document.getElementById('content').innerHTML = html;
+                
+                // Auto-expand first provider
+                if (data.providers.length > 0) {
+                    toggleProvider(0);
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><h3>Error</h3><p>Failed to load data</p></div>';
+            }
+        }
+        
+        // Load data for today on page load
+        loadData();
+    </script>
+</body>
+</html>
+    ''')
+
 @app.route('/flight-load')
 @login_required
 def flight_load():
@@ -2158,7 +2622,7 @@ def flight_load():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='active', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_daily_region='', active_flight='active', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -2294,6 +2758,9 @@ def flight_load():
 </html>
     ''')
 
+# ============================================
+# 🆕 UPDATED ANALYTICS PAGE - WITH VIEW SELECTOR + WEIGHT CHARTS
+# ============================================
 @app.route('/analytics')
 @login_required
 def analytics():
@@ -2309,122 +2776,115 @@ def analytics():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='active', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_daily_region='', active_flight='', active_analytics='active', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
             <h1 class="page-title">Analytics & <span>Insights</span></h1>
             
-            <div class="week-selector">
-                <button class="week-btn" onclick="changeWeek(-1)">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                    </svg>
-                </button>
-                <span class="week-display" id="week-display">Loading...</span>
-                <button class="week-btn" onclick="changeWeek(1)">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                    </svg>
-                </button>
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                <!-- View Selector -->
+                <div class="view-selector">
+                    <button class="view-btn active" id="btn-daily" onclick="changeView('daily')">📅 Daily</button>
+                    <button class="view-btn" id="btn-weekly" onclick="changeView('weekly')">📊 Weekly</button>
+                    <button class="view-btn" id="btn-monthly" onclick="changeView('monthly')">📈 Monthly</button>
+                </div>
+                
+                <!-- Period Navigator -->
+                <div class="week-selector">
+                    <button class="week-btn" onclick="changePeriod(-1)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </button>
+                    <span class="week-display" id="period-display">Loading...</span>
+                    <button class="week-btn" onclick="changePeriod(1)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
         
-        <div class="stats-row" id="stats-row">
+        <!-- 5 Stats Cards -->
+        <div class="stats-row-5" id="stats-row">
             <div class="stat-card">
-                <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1);">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#3B82F6">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                </div>
+                <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1); font-size: 24px;">📋</div>
                 <div class="stat-content">
                     <div class="stat-value" id="total-orders">0</div>
                     <div class="stat-label">Total Orders</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1);">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#10B981">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                </div>
+                <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); font-size: 24px;">📦</div>
                 <div class="stat-content">
                     <div class="stat-value" id="total-boxes">0</div>
                     <div class="stat-label">Total Boxes</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: rgba(212, 168, 83, 0.1);">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#d4a853">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                    </svg>
-                </div>
+                <div class="stat-icon" style="background: rgba(212, 168, 83, 0.1); font-size: 24px;">⚖️</div>
                 <div class="stat-content">
                     <div class="stat-value" id="total-weight">0</div>
                     <div class="stat-label">Total Weight (kg)</div>
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon" style="background: rgba(139, 92, 246, 0.1);">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#8B5CF6">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                </div>
+                <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1); font-size: 24px;">🪶</div>
                 <div class="stat-content">
-                    <div class="stat-value" id="total-providers">6</div>
-                    <div class="stat-label">Active Providers</div>
+                    <div class="stat-value" id="total-under20">0</div>
+                    <div class="stat-label">Light (&lt;20 kg)</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); font-size: 24px;">🏋️</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="total-over20">0</div>
+                    <div class="stat-label">Heavy (20+ kg)</div>
                 </div>
             </div>
         </div>
         
+        <!-- Charts Grid -->
         <div class="charts-grid">
-            <div class="chart-card">
-                <div class="chart-title">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    Provider Performance (Boxes)
-                </div>
-                <div class="chart-container">
-                    <canvas id="providerBarChart"></canvas>
-                </div>
-            </div>
-            
-            <div class="chart-card">
-                <div class="chart-title">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-                    </svg>
-                    Weight Distribution
-                </div>
-                <div class="chart-container">
-                    <canvas id="weightPieChart"></canvas>
-                </div>
-            </div>
-            
+            <!-- Trend Chart - Full Width -->
             <div class="chart-card full-width">
-                <div class="chart-title">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-                    </svg>
-                    Daily Orders Trend
-                </div>
+                <div class="chart-title">📈 Orders & Boxes Trend</div>
                 <div class="chart-container">
-                    <canvas id="dailyLineChart"></canvas>
+                    <canvas id="trendChart"></canvas>
                 </div>
             </div>
             
+            <!-- Provider Performance -->
             <div class="chart-card">
-                <div class="chart-title">Orders vs Boxes</div>
+                <div class="chart-title">🏆 Provider Performance</div>
                 <div class="chart-container">
-                    <canvas id="comparisonChart"></canvas>
+                    <canvas id="providerChart"></canvas>
                 </div>
             </div>
             
+            <!-- Top Regions -->
             <div class="chart-card">
-                <div class="chart-title">Top Regions</div>
+                <div class="chart-title">🌍 Top Regions</div>
                 <div class="chart-container">
-                    <canvas id="regionDoughnutChart"></canvas>
+                    <canvas id="regionChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Weight by Region - NEW -->
+            <div class="chart-card">
+                <div class="chart-title">📊 Weight Categories by Region</div>
+                <div class="chart-container">
+                    <canvas id="weightRegionChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Weight by Provider - NEW -->
+            <div class="chart-card">
+                <div class="chart-title">📊 Weight Categories by 3PL</div>
+                <div class="chart-container">
+                    <canvas id="weightProviderChart"></canvas>
                 </div>
             </div>
         </div>
@@ -2433,7 +2893,8 @@ def analytics():
     ''' + SIDEBAR_SCRIPT + '''
     
     <script>
-        let currentWeekStart = getMonday(new Date());
+        let currentView = 'daily';
+        let periodOffset = 0;
         let charts = {};
         
         Chart.defaults.color = '#94a3b8';
@@ -2446,24 +2907,42 @@ def analytics():
             return new Date(d.setDate(diff));
         }
         
-        function formatDate(date) {
-            return date.toISOString().split('T')[0];
-        }
-        
-        function formatDisplayDate(date) {
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        }
-        
-        function changeWeek(direction) {
-            currentWeekStart.setDate(currentWeekStart.getDate() + (direction * 7));
+        function changeView(view) {
+            currentView = view;
+            periodOffset = 0;
+            
+            document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('btn-' + view).classList.add('active');
+            
             loadAnalytics();
         }
         
-        function updateWeekDisplay() {
-            const endDate = new Date(currentWeekStart);
-            endDate.setDate(endDate.getDate() + 6);
-            document.getElementById('week-display').textContent = 
-                formatDisplayDate(currentWeekStart) + ' - ' + formatDisplayDate(endDate);
+        function changePeriod(direction) {
+            periodOffset += direction;
+            loadAnalytics();
+        }
+        
+        function updatePeriodDisplay() {
+            const now = new Date();
+            let display = '';
+            
+            if (currentView === 'daily') {
+                const date = new Date(now);
+                date.setDate(date.getDate() + periodOffset);
+                display = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+            } else if (currentView === 'weekly') {
+                const monday = getMonday(now);
+                monday.setDate(monday.getDate() + (periodOffset * 7));
+                const sunday = new Date(monday);
+                sunday.setDate(sunday.getDate() + 6);
+                display = monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' - ' + 
+                         sunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            } else {
+                const date = new Date(now.getFullYear(), now.getMonth() + periodOffset, 1);
+                display = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            }
+            
+            document.getElementById('period-display').textContent = display;
         }
         
         function destroyCharts() {
@@ -2472,121 +2951,44 @@ def analytics():
         }
         
         async function loadAnalytics() {
-            updateWeekDisplay();
+            updatePeriodDisplay();
             destroyCharts();
             
             try {
-                const response = await fetch('/api/dashboard?week_start=' + formatDate(currentWeekStart));
+                const response = await fetch(`/api/analytics-data?view=${currentView}&offset=${periodOffset}`);
                 const data = await response.json();
                 
-                let totalOrders = 0, totalBoxes = 0, totalWeight = 0;
-                const providerNames = [], providerBoxes = [], providerWeights = [], providerColors = [], providerOrders = [];
-                const dailyData = {Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0};
-                const regionData = {};
+                // Update stats
+                document.getElementById('total-orders').textContent = data.totals.orders.toLocaleString();
+                document.getElementById('total-boxes').textContent = data.totals.boxes.toLocaleString();
+                document.getElementById('total-weight').textContent = data.totals.weight.toLocaleString(undefined, {maximumFractionDigits: 1});
+                document.getElementById('total-under20').textContent = data.totals.under20.toLocaleString();
+                document.getElementById('total-over20').textContent = data.totals.over20.toLocaleString();
                 
-                data.providers.forEach(p => {
-                    totalOrders += p.total_orders;
-                    totalBoxes += p.total_boxes;
-                    totalWeight += p.total_weight;
-                    
-                    providerNames.push(p.short || p.name);
-                    providerBoxes.push(p.total_boxes);
-                    providerWeights.push(p.total_weight);
-                    providerColors.push(p.color);
-                    providerOrders.push(p.total_orders);
-                    
-                    if (p.daily_totals) {
-                        Object.entries(p.daily_totals).forEach(([day, d]) => {
-                            dailyData[day] += d.orders;
-                        });
-                    }
-                    
-                    Object.entries(p.regions || {}).forEach(([regionName, regionInfo]) => {
-                        if (!regionData[regionName]) regionData[regionName] = 0;
-                        Object.values(regionInfo.days || {}).forEach(d => {
-                            regionData[regionName] += d.orders;
-                        });
-                    });
-                });
-                
-                document.getElementById('total-orders').textContent = totalOrders.toLocaleString();
-                document.getElementById('total-boxes').textContent = totalBoxes.toLocaleString();
-                document.getElementById('total-weight').textContent = totalWeight.toLocaleString(undefined, {maximumFractionDigits: 1});
-                
-                charts.providerBar = new Chart(document.getElementById('providerBarChart'), {
-                    type: 'bar',
-                    data: {
-                        labels: providerNames,
-                        datasets: [{
-                            data: providerBoxes,
-                            backgroundColor: providerColors.map(c => c + '99'),
-                            borderColor: providerColors,
-                            borderWidth: 2,
-                            borderRadius: 8
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
-                            x: { grid: { display: false } }
-                        }
-                    }
-                });
-                
-                charts.weightPie = new Chart(document.getElementById('weightPieChart'), {
-                    type: 'pie',
-                    data: {
-                        labels: providerNames,
-                        datasets: [{
-                            data: providerWeights,
-                            backgroundColor: providerColors.map(c => c + 'CC'),
-                            borderColor: '#0a0a0f',
-                            borderWidth: 3
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { position: 'right', labels: { padding: 15, usePointStyle: true } } }
-                    }
-                });
-                
-                charts.dailyLine = new Chart(document.getElementById('dailyLineChart'), {
+                // Trend Chart
+                charts.trend = new Chart(document.getElementById('trendChart'), {
                     type: 'line',
                     data: {
-                        labels: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-                        datasets: [{
-                            data: Object.values(dailyData),
-                            borderColor: '#d4a853',
-                            backgroundColor: 'rgba(212, 168, 83, 0.1)',
-                            borderWidth: 3,
-                            fill: true,
-                            tension: 0.4,
-                            pointBackgroundColor: '#d4a853',
-                            pointRadius: 6
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
-                            x: { grid: { display: false } }
-                        }
-                    }
-                });
-                
-                charts.comparison = new Chart(document.getElementById('comparisonChart'), {
-                    type: 'bar',
-                    data: {
-                        labels: providerNames,
+                        labels: data.trend.labels,
                         datasets: [
-                            { label: 'Orders', data: providerOrders, backgroundColor: 'rgba(59, 130, 246, 0.7)', borderRadius: 6 },
-                            { label: 'Boxes', data: providerBoxes, backgroundColor: 'rgba(16, 185, 129, 0.7)', borderRadius: 6 }
+                            {
+                                label: 'Orders',
+                                data: data.trend.orders,
+                                borderColor: '#3b82f6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                fill: true,
+                                tension: 0.4,
+                                pointRadius: 4
+                            },
+                            {
+                                label: 'Boxes',
+                                data: data.trend.boxes,
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                fill: true,
+                                tension: 0.4,
+                                pointRadius: 4
+                            }
                         ]
                     },
                     options: {
@@ -2600,16 +3002,14 @@ def analytics():
                     }
                 });
                 
-                const sortedRegions = Object.entries(regionData).sort((a, b) => b[1] - a[1]).slice(0, 6);
-                const regionColors = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899'];
-                
-                charts.regionDoughnut = new Chart(document.getElementById('regionDoughnutChart'), {
+                // Provider Chart
+                charts.provider = new Chart(document.getElementById('providerChart'), {
                     type: 'doughnut',
                     data: {
-                        labels: sortedRegions.map(r => r[0]),
+                        labels: data.providers.map(p => p.name),
                         datasets: [{
-                            data: sortedRegions.map(r => r[1]),
-                            backgroundColor: regionColors,
+                            data: data.providers.map(p => p.boxes),
+                            backgroundColor: data.providers.map(p => p.color + 'CC'),
                             borderColor: '#0a0a0f',
                             borderWidth: 3
                         }]
@@ -2619,6 +3019,104 @@ def analytics():
                         maintainAspectRatio: false,
                         cutout: '60%',
                         plugins: { legend: { position: 'right', labels: { padding: 12, usePointStyle: true } } }
+                    }
+                });
+                
+                // Region Chart
+                const topRegions = data.regions.slice(0, 8);
+                charts.region = new Chart(document.getElementById('regionChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: topRegions.map(r => r.name),
+                        datasets: [{
+                            label: 'Boxes',
+                            data: topRegions.map(r => r.boxes),
+                            backgroundColor: '#d4a85399',
+                            borderColor: '#d4a853',
+                            borderWidth: 2,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } },
+                            y: { grid: { display: false } }
+                        }
+                    }
+                });
+                
+                // Weight by Region Chart - NEW
+                const weightRegions = data.regions.slice(0, 6);
+                charts.weightRegion = new Chart(document.getElementById('weightRegionChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: weightRegions.map(r => r.name),
+                        datasets: [
+                            {
+                                label: '<20 kg',
+                                data: weightRegions.map(r => r.under20),
+                                backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                                borderColor: '#22c55e',
+                                borderWidth: 1,
+                                borderRadius: 4
+                            },
+                            {
+                                label: '20+ kg',
+                                data: weightRegions.map(r => r.over20),
+                                backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                                borderColor: '#ef4444',
+                                borderWidth: 1,
+                                borderRadius: 4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top' } },
+                        scales: {
+                            x: { stacked: true, grid: { display: false } },
+                            y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } }
+                        }
+                    }
+                });
+                
+                // Weight by Provider Chart - NEW
+                charts.weightProvider = new Chart(document.getElementById('weightProviderChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: data.providers.map(p => p.name),
+                        datasets: [
+                            {
+                                label: '<20 kg',
+                                data: data.providers.map(p => p.under20),
+                                backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                                borderColor: '#22c55e',
+                                borderWidth: 1,
+                                borderRadius: 4
+                            },
+                            {
+                                label: '20+ kg',
+                                data: data.providers.map(p => p.over20),
+                                backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                                borderColor: '#ef4444',
+                                borderWidth: 1,
+                                borderRadius: 4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top' } },
+                        scales: {
+                            x: { grid: { display: false } },
+                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' } }
+                        }
                     }
                 });
                 
@@ -2647,7 +3145,7 @@ def kpi_dashboard():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='active', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_daily_region='', active_flight='', active_analytics='', active_kpi='active', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -2765,7 +3263,7 @@ def comparison():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='active', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_daily_region='', active_flight='', active_analytics='', active_kpi='', active_comparison='active', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -2994,7 +3492,7 @@ def regions():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='active', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_daily_region='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='active', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -3106,7 +3604,7 @@ def monthly_report():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='active', active_calendar='', active_whatsapp='', active_achievements='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_daily_region='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='active', active_calendar='', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -3267,9 +3765,6 @@ def monthly_report():
 </html>
     ''')
 
-# ============================================
-# 📅 UPDATED CALENDAR VIEW - PREMIUM DESIGN WITH ALL INFO
-# ============================================
 @app.route('/calendar')
 @login_required
 def calendar_view():
@@ -3283,96 +3778,6 @@ def calendar_view():
     ''' + FAVICON + '''
     ''' + BASE_STYLES + '''
     <style>
-        /* Calendar Premium Styles */
-        .calendar-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 24px;
-        }
-        
-        .cal-tab-btn {
-            padding: 12px 24px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 10px;
-            color: #94a3b8;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .cal-tab-btn:hover {
-            background: rgba(212, 168, 83, 0.1);
-        }
-        
-        .cal-tab-btn.active {
-            background: linear-gradient(135deg, #d4a853, #b8942d);
-            color: #0a0a0f;
-            border-color: #d4a853;
-        }
-        
-        .cal-tab-content {
-            display: none;
-        }
-        
-        .cal-tab-content.active {
-            display: block;
-        }
-        
-        /* Month Stats Bar */
-        .month-stats-bar {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 12px;
-            margin-bottom: 24px;
-        }
-        
-        @media (max-width: 900px) {
-            .month-stats-bar {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-        
-        @media (max-width: 600px) {
-            .month-stats-bar {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-        
-        .month-stat-card {
-            background: linear-gradient(145deg, #0c0d12, #0a0a0f);
-            border: 1px solid rgba(255,255,255,0.05);
-            border-radius: 12px;
-            padding: 16px;
-            text-align: center;
-        }
-        
-        .month-stat-icon {
-            font-size: 24px;
-            margin-bottom: 8px;
-        }
-        
-        .month-stat-value {
-            font-size: 20px;
-            font-weight: 700;
-            color: #fff;
-        }
-        
-        .month-stat-label {
-            font-size: 11px;
-            color: #64748b;
-            text-transform: uppercase;
-            margin-top: 4px;
-        }
-        
-        .month-stat-card.orders .month-stat-value { color: #3b82f6; }
-        .month-stat-card.boxes .month-stat-value { color: #10b981; }
-        .month-stat-card.weight .month-stat-value { color: #f59e0b; }
-        .month-stat-card.light .month-stat-value { color: #22c55e; }
-        .month-stat-card.heavy .month-stat-value { color: #ef4444; }
-        
-        /* Premium Calendar Grid */
         .premium-calendar {
             background: linear-gradient(145deg, #0c0d12, #0a0a0f);
             border-radius: 16px;
@@ -3403,15 +3808,13 @@ def calendar_view():
         }
         
         .cal-cell {
-            min-height: 100px;
+            min-height: 80px;
             background: rgba(255,255,255,0.02);
             border-radius: 12px;
             padding: 10px;
             cursor: pointer;
             transition: all 0.3s;
             border: 2px solid transparent;
-            display: flex;
-            flex-direction: column;
         }
         
         .cal-cell:hover {
@@ -3425,323 +3828,28 @@ def calendar_view():
             border: none;
         }
         
-        .cal-cell.empty:hover {
-            transform: none;
-        }
-        
-        /* Color intensity levels */
         .cal-cell.level-0 { background: rgba(100, 116, 139, 0.15); }
-        .cal-cell.level-1 { background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.1)); border-color: rgba(34, 197, 94, 0.2); }
-        .cal-cell.level-2 { background: linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(34, 197, 94, 0.15)); border-color: rgba(34, 197, 94, 0.3); }
-        .cal-cell.level-3 { background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.15)); border-color: rgba(251, 191, 36, 0.3); }
-        .cal-cell.level-4 { background: linear-gradient(135deg, rgba(251, 191, 36, 0.35), rgba(245, 158, 11, 0.25)); border-color: rgba(251, 191, 36, 0.4); }
-        .cal-cell.level-5 { background: linear-gradient(135deg, rgba(251, 191, 36, 0.5), rgba(217, 119, 6, 0.4)); border-color: #d4a853; box-shadow: 0 0 15px rgba(251, 191, 36, 0.2); }
-        
-        .cal-cell-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 8px;
-        }
+        .cal-cell.level-1 { background: rgba(34, 197, 94, 0.15); }
+        .cal-cell.level-2 { background: rgba(34, 197, 94, 0.25); }
+        .cal-cell.level-3 { background: rgba(251, 191, 36, 0.2); }
+        .cal-cell.level-4 { background: rgba(251, 191, 36, 0.35); }
+        .cal-cell.level-5 { background: linear-gradient(135deg, rgba(251, 191, 36, 0.5), rgba(217, 119, 6, 0.4)); border-color: #d4a853; }
         
         .cal-day-num {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 700;
             color: #fff;
+            margin-bottom: 4px;
         }
         
-        .cal-weekday {
+        .cal-stat {
             font-size: 10px;
-            color: #64748b;
-            text-transform: uppercase;
-        }
-        
-        .cal-cell-stats {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-            font-size: 11px;
-        }
-        
-        .cal-stat-row {
-            display: flex;
-            align-items: center;
-            gap: 4px;
             color: #94a3b8;
-        }
-        
-        .cal-stat-row span {
-            font-weight: 600;
-            color: #e2e8f0;
-        }
-        
-        .cal-cell-badges {
-            display: flex;
-            gap: 4px;
-            margin-top: 6px;
-        }
-        
-        .cal-badge {
-            flex: 1;
-            padding: 3px 5px;
-            border-radius: 4px;
-            font-size: 9px;
-            font-weight: 700;
-            text-align: center;
-        }
-        
-        .cal-badge.light {
-            background: rgba(34, 197, 94, 0.2);
-            color: #22c55e;
-        }
-        
-        .cal-badge.heavy {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-        
-        /* Legend */
-        .calendar-legend {
-            display: flex;
-            justify-content: center;
-            gap: 16px;
-            margin-top: 20px;
-            flex-wrap: wrap;
-        }
-        
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            color: #94a3b8;
-        }
-        
-        .legend-box {
-            width: 16px;
-            height: 16px;
-            border-radius: 4px;
-        }
-        
-        .legend-box.l0 { background: rgba(100, 116, 139, 0.3); }
-        .legend-box.l1 { background: rgba(34, 197, 94, 0.3); }
-        .legend-box.l2 { background: rgba(34, 197, 94, 0.5); }
-        .legend-box.l3 { background: rgba(251, 191, 36, 0.35); }
-        .legend-box.l4 { background: rgba(251, 191, 36, 0.5); }
-        .legend-box.l5 { background: linear-gradient(135deg, #d4a853, #b8942d); }
-        
-        /* Modal */
-        .cal-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.85);
-            backdrop-filter: blur(8px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 20px;
-        }
-        
-        .cal-modal.active {
-            display: flex;
-        }
-        
-        .cal-modal-box {
-            background: linear-gradient(145deg, #1e293b, #0f172a);
-            border-radius: 20px;
-            max-width: 650px;
-            width: 100%;
-            max-height: 85vh;
-            overflow-y: auto;
-            border: 2px solid rgba(212, 168, 83, 0.3);
-        }
-        
-        .cal-modal-header {
-            padding: 20px 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .cal-modal-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: #d4a853;
-        }
-        
-        .cal-modal-close {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-            font-size: 18px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .cal-modal-close:hover {
-            background: rgba(239, 68, 68, 0.3);
-            transform: rotate(90deg);
-        }
-        
-        .cal-modal-body {
-            padding: 24px;
-        }
-        
-        .modal-stats-grid {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        
-        @media (max-width: 600px) {
-            .modal-stats-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-        
-        .modal-stat-item {
-            background: rgba(255,255,255,0.05);
-            border-radius: 10px;
-            padding: 12px;
-            text-align: center;
-        }
-        
-        .modal-stat-val {
-            font-size: 18px;
-            font-weight: 700;
-        }
-        
-        .modal-stat-lbl {
-            font-size: 10px;
-            color: #64748b;
-            margin-top: 4px;
-        }
-        
-        .modal-stat-item.orders .modal-stat-val { color: #3b82f6; }
-        .modal-stat-item.boxes .modal-stat-val { color: #10b981; }
-        .modal-stat-item.weight .modal-stat-val { color: #f59e0b; }
-        .modal-stat-item.light .modal-stat-val { color: #22c55e; }
-        .modal-stat-item.heavy .modal-stat-val { color: #ef4444; }
-        
-        .modal-region-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-        
-        .modal-region-table th {
-            background: rgba(212, 168, 83, 0.1);
-            color: #d4a853;
-            padding: 10px;
-            text-align: left;
-            font-size: 11px;
-            text-transform: uppercase;
-        }
-        
-        .modal-region-table td {
-            padding: 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        
-        .modal-region-table tr:hover td {
-            background: rgba(255,255,255,0.02);
-        }
-        
-        /* Daily Summary Tab */
-        .daily-controls {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            margin-bottom: 24px;
-            flex-wrap: wrap;
-        }
-        
-        .date-input {
-            padding: 12px 16px;
-            border-radius: 10px;
-            border: 2px solid rgba(212, 168, 83, 0.3);
-            background: rgba(255,255,255,0.05);
-            color: #f8fafc;
-            font-size: 14px;
-            font-family: inherit;
-        }
-        
-        .date-input:focus {
-            outline: none;
-            border-color: #d4a853;
-        }
-        
-        .load-btn {
-            padding: 12px 24px;
-            border-radius: 10px;
-            border: none;
-            background: linear-gradient(135deg, #d4a853, #b8942d);
-            color: #0a0a0f;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .load-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(212, 168, 83, 0.3);
-        }
-        
-        .daily-result {
-            background: linear-gradient(145deg, #0c0d12, #0a0a0f);
-            border-radius: 16px;
-            border: 1px solid rgba(255,255,255,0.05);
-            padding: 24px;
-        }
-        
-        .daily-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: #d4a853;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        .no-data-msg {
-            text-align: center;
-            color: #64748b;
-            padding: 40px;
-            font-size: 16px;
-        }
-        
-        .rank-medal {
-            font-size: 16px;
-        }
-        
-        @media (max-width: 768px) {
-            .cal-cell {
-                min-height: 70px;
-                padding: 6px;
-            }
-            
-            .cal-day-num {
-                font-size: 14px;
-            }
-            
-            .cal-cell-stats, .cal-cell-badges {
-                display: none;
-            }
         }
     </style>
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='active', active_whatsapp='', active_achievements='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_daily_region='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='active', active_whatsapp='', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -3761,77 +3869,64 @@ def calendar_view():
             </div>
         </div>
         
-        <!-- Tabs -->
-        <div class="calendar-tabs">
-            <button class="cal-tab-btn active" onclick="switchCalTab('calendar')">📆 Monthly Calendar</button>
-            <button class="cal-tab-btn" onclick="switchCalTab('daily')">📊 Daily Summary</button>
-        </div>
-        
-        <!-- Tab 1: Calendar -->
-        <div id="tab-calendar" class="cal-tab-content active">
-            <div class="month-stats-bar" id="month-stats">
-                <div class="month-stat-card orders"><div class="month-stat-icon">📦</div><div class="month-stat-value" id="stat-orders">-</div><div class="month-stat-label">Orders</div></div>
-                <div class="month-stat-card boxes"><div class="month-stat-icon">📮</div><div class="month-stat-value" id="stat-boxes">-</div><div class="month-stat-label">Boxes</div></div>
-                <div class="month-stat-card weight"><div class="month-stat-icon">⚖️</div><div class="month-stat-value" id="stat-weight">-</div><div class="month-stat-label">Weight</div></div>
-                <div class="month-stat-card light"><div class="month-stat-icon">🪶</div><div class="month-stat-value" id="stat-light">-</div><div class="month-stat-label">&lt;20 kg</div></div>
-                <div class="month-stat-card heavy"><div class="month-stat-icon">🏋️</div><div class="month-stat-value" id="stat-heavy">-</div><div class="month-stat-label">20+ kg</div></div>
+        <div class="stats-row-5" id="month-stats">
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1); font-size: 24px;">📦</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="stat-orders">-</div>
+                    <div class="stat-label">Orders</div>
+                </div>
             </div>
-            
-            <div class="premium-calendar">
-                <div class="calendar-weekdays">
-                    <div class="weekday-label">Mon</div>
-                    <div class="weekday-label">Tue</div>
-                    <div class="weekday-label">Wed</div>
-                    <div class="weekday-label">Thu</div>
-                    <div class="weekday-label">Fri</div>
-                    <div class="weekday-label">Sat</div>
-                    <div class="weekday-label">Sun</div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); font-size: 24px;">📮</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="stat-boxes">-</div>
+                    <div class="stat-label">Boxes</div>
                 </div>
-                <div class="calendar-days-grid" id="calendar-grid">
-                    <div class="loading"><div class="spinner"></div></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); font-size: 24px;">⚖️</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="stat-weight">-</div>
+                    <div class="stat-label">Weight</div>
                 </div>
-                
-                <div class="calendar-legend">
-                    <div class="legend-item"><div class="legend-box l0"></div> No data</div>
-                    <div class="legend-item"><div class="legend-box l1"></div> Low</div>
-                    <div class="legend-item"><div class="legend-box l2"></div> Medium</div>
-                    <div class="legend-item"><div class="legend-box l3"></div> Good</div>
-                    <div class="legend-item"><div class="legend-box l4"></div> High</div>
-                    <div class="legend-item"><div class="legend-box l5"></div> Peak</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1); font-size: 24px;">🪶</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="stat-light">-</div>
+                    <div class="stat-label">&lt;20 kg</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); font-size: 24px;">🏋️</div>
+                <div class="stat-content">
+                    <div class="stat-value" id="stat-heavy">-</div>
+                    <div class="stat-label">20+ kg</div>
                 </div>
             </div>
         </div>
         
-        <!-- Tab 2: Daily Summary -->
-        <div id="tab-daily" class="cal-tab-content">
-            <div class="daily-controls">
-                <input type="date" id="summary-date" class="date-input">
-                <button class="load-btn" onclick="loadDailySummary()">🔍 Load Summary</button>
+        <div class="premium-calendar">
+            <div class="calendar-weekdays">
+                <div class="weekday-label">Mon</div>
+                <div class="weekday-label">Tue</div>
+                <div class="weekday-label">Wed</div>
+                <div class="weekday-label">Thu</div>
+                <div class="weekday-label">Fri</div>
+                <div class="weekday-label">Sat</div>
+                <div class="weekday-label">Sun</div>
             </div>
-            
-            <div class="daily-result" id="daily-result">
-                <div class="no-data-msg">📅 Select a date and click "Load Summary"</div>
+            <div class="calendar-days-grid" id="calendar-grid">
+                <div class="loading"><div class="spinner"></div></div>
             </div>
         </div>
     </main>
-    
-    <!-- Modal -->
-    <div class="cal-modal" id="day-modal" onclick="closeModal(event)">
-        <div class="cal-modal-box" onclick="event.stopPropagation()">
-            <div class="cal-modal-header">
-                <div class="cal-modal-title" id="modal-title">Day Details</div>
-                <button class="cal-modal-close" onclick="closeModal()">&times;</button>
-            </div>
-            <div class="cal-modal-body" id="modal-body">
-            </div>
-        </div>
-    </div>
     
     ''' + SIDEBAR_SCRIPT + '''
     
     <script>
         let currentDate = new Date();
-        let calendarData = null;
         
         function formatMonth(date) {
             return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -3842,93 +3937,15 @@ def calendar_view():
             loadCalendar();
         }
         
-        function switchCalTab(tab) {
-            document.querySelectorAll('.cal-tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.cal-tab-content').forEach(content => content.classList.remove('active'));
-            
-            event.target.classList.add('active');
-            document.getElementById('tab-' + tab).classList.add('active');
-        }
-        
-        function getIntensityLevel(boxes, maxBoxes) {
+        function getLevel(boxes, max) {
             if (boxes === 0) return 0;
-            const ratio = boxes / maxBoxes;
+            const ratio = boxes / max;
             if (ratio >= 0.8) return 5;
             if (ratio >= 0.6) return 4;
             if (ratio >= 0.4) return 3;
             if (ratio >= 0.2) return 2;
             return 1;
         }
-        
-        function showDayDetail(dayNum) {
-            if (!calendarData) return;
-            
-            const day = calendarData.days.find(d => d.day === dayNum);
-            if (!day) return;
-            
-            document.getElementById('modal-title').textContent = day.date + ' (' + day.weekday + ')';
-            
-            let html = `
-                <div class="modal-stats-grid">
-                    <div class="modal-stat-item orders"><div class="modal-stat-val">${day.orders.toLocaleString()}</div><div class="modal-stat-lbl">Orders</div></div>
-                    <div class="modal-stat-item boxes"><div class="modal-stat-val">${day.boxes.toLocaleString()}</div><div class="modal-stat-lbl">Boxes</div></div>
-                    <div class="modal-stat-item weight"><div class="modal-stat-val">${day.weight.toFixed(1)}</div><div class="modal-stat-lbl">Weight</div></div>
-                    <div class="modal-stat-item light"><div class="modal-stat-val">${day.under20}</div><div class="modal-stat-lbl">&lt;20 kg</div></div>
-                    <div class="modal-stat-item heavy"><div class="modal-stat-val">${day.over20}</div><div class="modal-stat-lbl">20+ kg</div></div>
-                </div>
-            `;
-            
-            if (day.regions && day.regions.length > 0) {
-                html += `
-                    <table class="modal-region-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Region</th>
-                                <th>Orders</th>
-                                <th>Boxes</th>
-                                <th>Weight</th>
-                                <th>&lt;20</th>
-                                <th>20+</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                `;
-                
-                const medals = ['🥇', '🥈', '🥉'];
-                day.regions.forEach((r, i) => {
-                    const medal = i < 3 ? medals[i] : (i + 1);
-                    html += `
-                        <tr>
-                            <td><span class="rank-medal">${medal}</span></td>
-                            <td style="font-weight: 600;">${r.name}</td>
-                            <td>${r.orders}</td>
-                            <td>${r.boxes}</td>
-                            <td>${r.weight.toFixed(1)}</td>
-                            <td style="color: #22c55e;">${r.under20}</td>
-                            <td style="color: #ef4444;">${r.over20}</td>
-                        </tr>
-                    `;
-                });
-                
-                html += '</tbody></table>';
-            } else {
-                html += '<div class="no-data-msg">No region data for this day</div>';
-            }
-            
-            document.getElementById('modal-body').innerHTML = html;
-            document.getElementById('day-modal').classList.add('active');
-        }
-        
-        function closeModal(event) {
-            if (!event || event.target === document.getElementById('day-modal')) {
-                document.getElementById('day-modal').classList.remove('active');
-            }
-        }
-        
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeModal();
-        });
         
         async function loadCalendar() {
             document.getElementById('month-display').textContent = formatMonth(currentDate);
@@ -3939,43 +3956,27 @@ def calendar_view():
             
             try {
                 const response = await fetch(`/api/calendar?year=${year}&month=${month}`);
-                calendarData = await response.json();
+                const data = await response.json();
                 
-                // Update stats
-                document.getElementById('stat-orders').textContent = calendarData.totals.orders.toLocaleString();
-                document.getElementById('stat-boxes').textContent = calendarData.totals.boxes.toLocaleString();
-                document.getElementById('stat-weight').textContent = calendarData.totals.weight.toFixed(1) + ' kg';
-                document.getElementById('stat-light').textContent = calendarData.totals.under20.toLocaleString();
-                document.getElementById('stat-heavy').textContent = calendarData.totals.over20.toLocaleString();
+                document.getElementById('stat-orders').textContent = data.totals.orders.toLocaleString();
+                document.getElementById('stat-boxes').textContent = data.totals.boxes.toLocaleString();
+                document.getElementById('stat-weight').textContent = data.totals.weight.toFixed(1) + ' kg';
+                document.getElementById('stat-light').textContent = data.totals.under20.toLocaleString();
+                document.getElementById('stat-heavy').textContent = data.totals.over20.toLocaleString();
                 
-                // Render calendar
                 let html = '';
-                const maxBoxes = calendarData.max_boxes || 1;
+                const maxBoxes = data.max_boxes || 1;
                 
-                // Empty cells before first day
-                for (let i = 0; i < calendarData.first_weekday; i++) {
+                for (let i = 0; i < data.first_weekday; i++) {
                     html += '<div class="cal-cell empty"></div>';
                 }
                 
-                // Day cells
-                calendarData.days.forEach(day => {
-                    const level = getIntensityLevel(day.boxes, maxBoxes);
-                    
+                data.days.forEach(day => {
+                    const level = getLevel(day.boxes, maxBoxes);
                     html += `
-                        <div class="cal-cell level-${level}" onclick="showDayDetail(${day.day})">
-                            <div class="cal-cell-header">
-                                <span class="cal-day-num">${day.day}</span>
-                                <span class="cal-weekday">${day.weekday}</span>
-                            </div>
-                            <div class="cal-cell-stats">
-                                <div class="cal-stat-row">📦 <span>${day.orders}</span></div>
-                                <div class="cal-stat-row">📮 <span>${day.boxes}</span></div>
-                                <div class="cal-stat-row">⚖️ <span>${day.weight.toFixed(1)}</span></div>
-                            </div>
-                            <div class="cal-cell-badges">
-                                <div class="cal-badge light">🪶 ${day.under20}</div>
-                                <div class="cal-badge heavy">🏋️ ${day.over20}</div>
-                            </div>
+                        <div class="cal-cell level-${level}">
+                            <div class="cal-day-num">${day.day}</div>
+                            <div class="cal-stat">📦 ${day.orders} | 📮 ${day.boxes}</div>
                         </div>
                     `;
                 });
@@ -3983,87 +3984,9 @@ def calendar_view():
                 document.getElementById('calendar-grid').innerHTML = html;
                 
             } catch (error) {
-                document.getElementById('calendar-grid').innerHTML = '<div class="no-data-msg">Error loading calendar data</div>';
+                document.getElementById('calendar-grid').innerHTML = '<p style="color: #ef4444;">Error loading calendar</p>';
             }
         }
-        
-        async function loadDailySummary() {
-            const dateInput = document.getElementById('summary-date').value;
-            if (!dateInput) {
-                alert('Please select a date');
-                return;
-            }
-            
-            document.getElementById('daily-result').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-            
-            try {
-                const response = await fetch(`/api/daily-summary?date=${dateInput}`);
-                const data = await response.json();
-                
-                if (data.orders === 0) {
-                    document.getElementById('daily-result').innerHTML = '<div class="no-data-msg">📭 No data found for ' + dateInput + '</div>';
-                    return;
-                }
-                
-                let html = `
-                    <div class="daily-title">📊 ${data.date} (${data.weekday})</div>
-                    
-                    <div class="month-stats-bar">
-                        <div class="month-stat-card orders"><div class="month-stat-icon">📦</div><div class="month-stat-value">${data.orders.toLocaleString()}</div><div class="month-stat-label">Orders</div></div>
-                        <div class="month-stat-card boxes"><div class="month-stat-icon">📮</div><div class="month-stat-value">${data.boxes.toLocaleString()}</div><div class="month-stat-label">Boxes</div></div>
-                        <div class="month-stat-card weight"><div class="month-stat-icon">⚖️</div><div class="month-stat-value">${data.weight.toFixed(1)}</div><div class="month-stat-label">Weight</div></div>
-                        <div class="month-stat-card light"><div class="month-stat-icon">🪶</div><div class="month-stat-value">${data.under20}</div><div class="month-stat-label">&lt;20 kg</div></div>
-                        <div class="month-stat-card heavy"><div class="month-stat-icon">🏋️</div><div class="month-stat-value">${data.over20}</div><div class="month-stat-label">20+ kg</div></div>
-                    </div>
-                `;
-                
-                if (data.regions && data.regions.length > 0) {
-                    html += `
-                        <table class="modal-region-table" style="margin-top: 20px;">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Region</th>
-                                    <th>Orders</th>
-                                    <th>Boxes</th>
-                                    <th>Weight</th>
-                                    <th>&lt;20 kg</th>
-                                    <th>20+ kg</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                    `;
-                    
-                    const medals = ['🥇', '🥈', '🥉'];
-                    data.regions.forEach((r, i) => {
-                        const medal = i < 3 ? medals[i] : (i + 1);
-                        html += `
-                            <tr>
-                                <td><span class="rank-medal">${medal}</span></td>
-                                <td style="font-weight: 600;">${r.name}</td>
-                                <td>${r.orders}</td>
-                                <td>${r.boxes}</td>
-                                <td>${r.weight.toFixed(1)}</td>
-                                <td style="color: #22c55e;">${r.under20}</td>
-                                <td style="color: #ef4444;">${r.over20}</td>
-                            </tr>
-                        `;
-                    });
-                    
-                    html += '</tbody></table>';
-                }
-                
-                document.getElementById('daily-result').innerHTML = html;
-                
-            } catch (error) {
-                document.getElementById('daily-result').innerHTML = '<div class="no-data-msg">Error loading data</div>';
-            }
-        }
-        
-        // Set default date
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('summary-date').value = new Date().toISOString().split('T')[0];
-        });
         
         loadCalendar();
     </script>
@@ -4085,7 +4008,7 @@ def whatsapp_report():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='active', active_achievements='') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_daily_region='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='active', active_achievements='') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -4191,7 +4114,7 @@ def achievements_page():
     ''' + BASE_STYLES + '''
 </head>
 <body>
-    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='active') + '''
+    ''' + SIDEBAR_HTML.format(active_dashboard='', active_weekly='', active_daily_region='', active_flight='', active_analytics='', active_kpi='', active_comparison='', active_regions='', active_monthly='', active_calendar='', active_whatsapp='', active_achievements='active') + '''
     
     <main class="main-content" id="main-content">
         <div class="page-header">
@@ -4449,6 +4372,331 @@ def api_flight_load():
         'flights': flight_data
     })
 
+# ============================================
+# 🆕 NEW API: DAILY REGION SUMMARY
+# ============================================
+@app.route('/api/daily-region-summary')
+def api_daily_region_summary():
+    date_str = request.args.get('date')
+    
+    if not date_str:
+        date_str = datetime.now().strftime('%Y-%m-%d')
+    
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d')
+    except:
+        return jsonify({'error': 'Invalid date format'}), 400
+    
+    day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    result = {
+        'date': date_str,
+        'date_display': target_date.strftime('%d %b %Y'),
+        'totals': {
+            'orders': 0,
+            'boxes': 0,
+            'weight': 0.0,
+            'under20': 0,
+            'over20': 0
+        },
+        'providers': []
+    }
+    
+    for provider in PROVIDERS:
+        provider_data = {
+            'name': provider['short'],
+            'color': provider['color'],
+            'orders': 0,
+            'boxes': 0,
+            'weight': 0.0,
+            'under20': 0,
+            'over20': 0,
+            'regions': {}
+        }
+        
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows:
+            result['providers'].append(provider_data)
+            continue
+        
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1:
+                continue
+            
+            try:
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                    continue
+                
+                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                parsed_date = parse_date(date_val)
+                
+                if not parsed_date:
+                    continue
+                
+                if not (day_start <= parsed_date <= day_end):
+                    continue
+                
+                region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                if region in INVALID_REGIONS or not region:
+                    continue
+                
+                try:
+                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except:
+                    boxes = 0
+                
+                try:
+                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                except:
+                    weight = 0.0
+                
+                # Update provider totals
+                provider_data['orders'] += 1
+                provider_data['boxes'] += boxes
+                provider_data['weight'] += weight
+                
+                if weight < 20:
+                    provider_data['under20'] += 1
+                else:
+                    provider_data['over20'] += 1
+                
+                # Update region data
+                if region not in provider_data['regions']:
+                    provider_data['regions'][region] = {
+                        'name': region,
+                        'orders': 0,
+                        'boxes': 0,
+                        'weight': 0.0,
+                        'under20': 0,
+                        'over20': 0
+                    }
+                
+                provider_data['regions'][region]['orders'] += 1
+                provider_data['regions'][region]['boxes'] += boxes
+                provider_data['regions'][region]['weight'] += weight
+                
+                if weight < 20:
+                    provider_data['regions'][region]['under20'] += 1
+                else:
+                    provider_data['regions'][region]['over20'] += 1
+                    
+            except Exception as e:
+                continue
+        
+        # Convert regions to sorted list
+        regions_list = list(provider_data['regions'].values())
+        regions_list.sort(key=lambda x: x['boxes'], reverse=True)
+        provider_data['regions'] = regions_list
+        
+        # Update totals
+        result['totals']['orders'] += provider_data['orders']
+        result['totals']['boxes'] += provider_data['boxes']
+        result['totals']['weight'] += provider_data['weight']
+        result['totals']['under20'] += provider_data['under20']
+        result['totals']['over20'] += provider_data['over20']
+        
+        result['providers'].append(provider_data)
+    
+    # Sort providers by boxes
+    result['providers'].sort(key=lambda x: x['boxes'], reverse=True)
+    
+    return jsonify(result)
+
+# ============================================
+# 🆕 NEW API: ANALYTICS DATA (DAILY/WEEKLY/MONTHLY)
+# ============================================
+@app.route('/api/analytics-data')
+def api_analytics_data():
+    view = request.args.get('view', 'daily')
+    offset = int(request.args.get('offset', 0))
+    
+    now = datetime.now()
+    
+    # Calculate date range based on view
+    if view == 'daily':
+        target_date = now + timedelta(days=offset)
+        start_date = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        # For trend, get last 7 days
+        trend_start = start_date - timedelta(days=6)
+        trend_dates = [(trend_start + timedelta(days=i)) for i in range(7)]
+    elif view == 'weekly':
+        monday = now - timedelta(days=now.weekday())
+        monday = monday + timedelta(weeks=offset)
+        start_date = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = start_date + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        trend_dates = None  # Will use day names
+    else:  # monthly
+        year = now.year
+        month = now.month + offset
+        while month < 1:
+            month += 12
+            year -= 1
+        while month > 12:
+            month -= 12
+            year += 1
+        start_date = datetime(year, month, 1)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1) - timedelta(seconds=1)
+        else:
+            end_date = datetime(year, month + 1, 1) - timedelta(seconds=1)
+        trend_dates = None  # Will use week numbers
+    
+    # Initialize result
+    result = {
+        'totals': {
+            'orders': 0,
+            'boxes': 0,
+            'weight': 0.0,
+            'under20': 0,
+            'over20': 0
+        },
+        'trend': {
+            'labels': [],
+            'orders': [],
+            'boxes': []
+        },
+        'providers': [],
+        'regions': []
+    }
+    
+    # Aggregate data
+    provider_data = {}
+    region_data = {}
+    trend_data = defaultdict(lambda: {'orders': 0, 'boxes': 0})
+    
+    for provider in PROVIDERS:
+        pkey = provider['short']
+        provider_data[pkey] = {
+            'name': provider['short'],
+            'color': provider['color'],
+            'orders': 0,
+            'boxes': 0,
+            'weight': 0.0,
+            'under20': 0,
+            'over20': 0
+        }
+        
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows:
+            continue
+        
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1:
+                continue
+            
+            try:
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                    continue
+                
+                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                parsed_date = parse_date(date_val)
+                
+                if not parsed_date:
+                    continue
+                
+                if not (start_date <= parsed_date <= end_date):
+                    # Check if in trend range for daily view
+                    if view == 'daily' and trend_dates:
+                        trend_start_check = trend_dates[0].replace(hour=0, minute=0, second=0)
+                        trend_end_check = trend_dates[-1].replace(hour=23, minute=59, second=59)
+                        if not (trend_start_check <= parsed_date <= trend_end_check):
+                            continue
+                    else:
+                        continue
+                
+                region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                if region in INVALID_REGIONS or not region:
+                    continue
+                
+                try:
+                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except:
+                    boxes = 0
+                
+                try:
+                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                except:
+                    weight = 0.0
+                
+                # Only count in totals if within main date range
+                if start_date <= parsed_date <= end_date:
+                    result['totals']['orders'] += 1
+                    result['totals']['boxes'] += boxes
+                    result['totals']['weight'] += weight
+                    
+                    if weight < 20:
+                        result['totals']['under20'] += 1
+                    else:
+                        result['totals']['over20'] += 1
+                    
+                    provider_data[pkey]['orders'] += 1
+                    provider_data[pkey]['boxes'] += boxes
+                    provider_data[pkey]['weight'] += weight
+                    
+                    if weight < 20:
+                        provider_data[pkey]['under20'] += 1
+                    else:
+                        provider_data[pkey]['over20'] += 1
+                    
+                    if region not in region_data:
+                        region_data[region] = {
+                            'name': region,
+                            'orders': 0,
+                            'boxes': 0,
+                            'weight': 0.0,
+                            'under20': 0,
+                            'over20': 0
+                        }
+                    
+                    region_data[region]['orders'] += 1
+                    region_data[region]['boxes'] += boxes
+                    region_data[region]['weight'] += weight
+                    
+                    if weight < 20:
+                        region_data[region]['under20'] += 1
+                    else:
+                        region_data[region]['over20'] += 1
+                
+                # Trend data
+                if view == 'daily':
+                    date_key = parsed_date.strftime('%b %d')
+                elif view == 'weekly':
+                    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                    date_key = day_names[parsed_date.weekday()]
+                else:
+                    week_num = (parsed_date.day - 1) // 7 + 1
+                    date_key = f'Week {week_num}'
+                
+                trend_data[date_key]['orders'] += 1
+                trend_data[date_key]['boxes'] += boxes
+                    
+            except Exception as e:
+                continue
+    
+    # Build trend labels based on view
+    if view == 'daily':
+        result['trend']['labels'] = [(trend_start + timedelta(days=i)).strftime('%b %d') for i in range(7)]
+    elif view == 'weekly':
+        result['trend']['labels'] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    else:
+        weeks_in_month = ((end_date.day - 1) // 7) + 1
+        result['trend']['labels'] = [f'Week {i+1}' for i in range(weeks_in_month)]
+    
+    for label in result['trend']['labels']:
+        result['trend']['orders'].append(trend_data[label]['orders'])
+        result['trend']['boxes'].append(trend_data[label]['boxes'])
+    
+    # Convert to lists and sort
+    result['providers'] = list(provider_data.values())
+    result['providers'].sort(key=lambda x: x['boxes'], reverse=True)
+    
+    result['regions'] = list(region_data.values())
+    result['regions'].sort(key=lambda x: x['boxes'], reverse=True)
+    
+    return jsonify(result)
+
 @app.route('/api/kpi')
 def api_kpi():
     week_start_str = request.args.get('week_start')
@@ -4598,9 +4846,6 @@ def api_monthly():
         'providers': providers
     })
 
-# ============================================
-# 📅 UPDATED CALENDAR API - WITH ALL INFO + REGIONS
-# ============================================
 @app.route('/api/calendar')
 def api_calendar():
     year = int(request.args.get('year', datetime.now().year))
@@ -4608,11 +4853,10 @@ def api_calendar():
     
     _, num_days = calendar.monthrange(year, month)
     first_day = datetime(year, month, 1)
-    first_weekday = first_day.weekday()  # 0=Monday
+    first_weekday = first_day.weekday()
     
     day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     
-    # Initialize days data
     days_data = {}
     for day in range(1, num_days + 1):
         days_data[day] = {
@@ -4623,11 +4867,9 @@ def api_calendar():
             'boxes': 0,
             'weight': 0.0,
             'under20': 0,
-            'over20': 0,
-            'regions': {}
+            'over20': 0
         }
     
-    # Process all providers for the month
     month_start = datetime(year, month, 1)
     month_end = datetime(year, month, num_days, 23, 59, 59)
     
@@ -4669,7 +4911,6 @@ def api_calendar():
                 except:
                     weight = 0.0
                 
-                # Update day totals
                 days_data[day]['orders'] += 1
                 days_data[day]['boxes'] += boxes
                 days_data[day]['weight'] += weight
@@ -4678,37 +4919,10 @@ def api_calendar():
                     days_data[day]['under20'] += 1
                 else:
                     days_data[day]['over20'] += 1
-                
-                # Update region data
-                if region not in days_data[day]['regions']:
-                    days_data[day]['regions'][region] = {
-                        'name': region,
-                        'orders': 0,
-                        'boxes': 0,
-                        'weight': 0.0,
-                        'under20': 0,
-                        'over20': 0
-                    }
-                
-                days_data[day]['regions'][region]['orders'] += 1
-                days_data[day]['regions'][region]['boxes'] += boxes
-                days_data[day]['regions'][region]['weight'] += weight
-                
-                if weight < 20:
-                    days_data[day]['regions'][region]['under20'] += 1
-                else:
-                    days_data[day]['regions'][region]['over20'] += 1
                     
             except Exception as e:
                 continue
     
-    # Convert regions dict to sorted list
-    for day in days_data:
-        regions_list = list(days_data[day]['regions'].values())
-        regions_list.sort(key=lambda x: x['boxes'], reverse=True)
-        days_data[day]['regions'] = regions_list
-    
-    # Calculate totals and max
     total_orders = sum(d['orders'] for d in days_data.values())
     total_boxes = sum(d['boxes'] for d in days_data.values())
     total_weight = sum(d['weight'] for d in days_data.values())
@@ -4733,9 +4947,6 @@ def api_calendar():
         'days': list(days_data.values())
     })
 
-# ============================================
-# 📊 NEW API: DAILY SUMMARY
-# ============================================
 @app.route('/api/daily-summary')
 def api_daily_summary():
     date_str = request.args.get('date')
@@ -4831,7 +5042,6 @@ def api_daily_summary():
             except Exception as e:
                 continue
     
-    # Convert to sorted list
     regions_list = list(result['regions'].values())
     regions_list.sort(key=lambda x: x['boxes'], reverse=True)
     result['regions'] = regions_list
