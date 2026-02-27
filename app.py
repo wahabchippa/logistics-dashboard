@@ -289,7 +289,8 @@ def get_provider_achievements(provider_data, is_winner=False, trend=None):
         achievements.append(ACHIEVEMENTS['region_king'])
     return achievements
 
-FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='gold' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%23f4d03f'/%3E%3Cstop offset='50%25' style='stop-color:%23d4a853'/%3E%3Cstop offset='100%25' style='stop-color:%23b8942d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='46' fill='%230a0a0f' stroke='url(%23gold)' stroke-width='4'/%3E%3Ctext x='50' y='42' text-anchor='middle' font-family='Arial Black' font-size='24' font-weight='bold' fill='url(%23gold)'%3E3P%3C/text%3E%3Ctext x='50' y='68' text-anchor='middle' font-family='Arial' font-size='16' font-weight='bold' fill='%23d4a853'%3ELOGISTICS%3C/text%3E%3Ccircle cx='50' cy='50' r='42' fill='none' stroke='%23d4a853' stroke-width='1' opacity='0.3'/%3E%3C/svg%3E">'''
+# New premium favicon
+FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">'''
 
 BASE_STYLES = """
 <style>
@@ -306,57 +307,57 @@ BASE_STYLES = """
         background: #f8fafc;
         color: #1e293b;
         min-height: 100vh;
-        font-size: 14px;
-        line-height: 1.5;
+        font-size: 13px;
+        line-height: 1.4;
     }
 
-    /* ===== SIDEBAR - Premium Light ===== */
+    /* ===== SIDEBAR - Compact, no border ===== */
     .sidebar {
         position: fixed;
         left: 0;
         top: 0;
         height: 100vh;
-        width: 260px;
+        width: 240px;
         background: #ffffff;
-        border-right: 1px solid #e2e8f0;
-        padding: 24px 18px;
+        border-right: none;
+        padding: 20px 16px;
         transition: all 0.2s ease;
         z-index: 100;
         display: flex;
         flex-direction: column;
         overflow-y: auto;
-        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.02);
+        box-shadow: 2px 0 10px rgba(0,0,0,0.02);
     }
     
     .sidebar.collapsed {
-        width: 75px;
+        width: 70px;
     }
     
     .sidebar-header {
         display: flex;
         align-items: center;
-        gap: 14px;
-        padding-bottom: 24px;
+        gap: 12px;
+        padding-bottom: 20px;
         border-bottom: 1px solid #e2e8f0;
-        margin-bottom: 24px;
+        margin-bottom: 20px;
     }
     
     .logo-icon {
-        width: 44px;
-        height: 44px;
-        background: linear-gradient(145deg, #6366f1, #8b5cf6);
-        border-radius: 14px;
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(145deg, #4f46e5, #8b5cf6);
+        border-radius: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 700;
         color: #ffffff;
-        font-size: 22px;
-        box-shadow: 0 8px 16px rgba(99, 102, 241, 0.2);
+        font-size: 20px;
+        box-shadow: 0 4px 10px rgba(79,70,229,0.2);
     }
     
     .logo-text {
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 600;
         color: #1e293b;
         white-space: nowrap;
@@ -370,16 +371,16 @@ BASE_STYLES = """
     }
     
     .nav-section {
-        margin-bottom: 20px;
+        margin-bottom: 16px;
     }
     
     .nav-section-title {
-        font-size: 11px;
+        font-size: 10px;
         text-transform: uppercase;
         letter-spacing: 1px;
         color: #94a3b8;
-        padding: 8px 12px;
-        margin-bottom: 6px;
+        padding: 6px 12px;
+        margin-bottom: 4px;
         font-weight: 600;
     }
     
@@ -397,15 +398,15 @@ BASE_STYLES = """
     .nav-item {
         display: flex;
         align-items: center;
-        gap: 14px;
-        padding: 10px 14px;
-        border-radius: 12px;
+        gap: 12px;
+        padding: 8px 12px;
+        border-radius: 10px;
         color: #64748b;
         text-decoration: none;
         transition: all 0.2s;
         cursor: pointer;
         position: relative;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 500;
     }
     
@@ -421,8 +422,8 @@ BASE_STYLES = """
     }
     
     .nav-item svg {
-        width: 20px;
-        height: 20px;
+        width: 18px;
+        height: 18px;
         flex-shrink: 0;
         color: #64748b;
     }
@@ -456,7 +457,7 @@ BASE_STYLES = """
         transition: opacity 0.2s;
         border: 1px solid #334155;
         z-index: 1000;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
     
     .sidebar.collapsed .nav-item:hover .tooltip {
@@ -465,11 +466,11 @@ BASE_STYLES = """
     
     .sidebar-toggle {
         position: absolute;
-        right: -12px;
+        right: -15px;
         top: 50%;
         transform: translateY(-50%);
-        width: 26px;
-        height: 26px;
+        width: 32px;
+        height: 32px;
         background: #4f46e5;
         border-radius: 50%;
         display: flex;
@@ -478,10 +479,10 @@ BASE_STYLES = """
         cursor: pointer;
         border: 3px solid #ffffff;
         color: #ffffff;
-        font-size: 12px;
+        font-size: 14px;
         font-weight: bold;
         transition: transform 0.2s, background 0.2s;
-        box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+        box-shadow: 0 2px 8px rgba(79,70,229,0.4);
         z-index: 101;
     }
     
@@ -500,12 +501,50 @@ BASE_STYLES = """
         margin-top: auto;
     }
     
+    .admin-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        background: #f1f5f9;
+        border-radius: 12px;
+        margin-bottom: 10px;
+    }
+    
+    .admin-avatar {
+        width: 36px;
+        height: 36px;
+        background: #4f46e5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 16px;
+    }
+    
+    .admin-details {
+        flex: 1;
+    }
+    
+    .admin-name {
+        font-weight: 600;
+        color: #1e293b;
+        font-size: 14px;
+    }
+    
+    .admin-role {
+        font-size: 11px;
+        color: #64748b;
+    }
+    
     .logout-btn {
         display: flex;
         align-items: center;
-        gap: 14px;
-        padding: 10px 14px;
-        border-radius: 12px;
+        gap: 12px;
+        padding: 8px 12px;
+        border-radius: 10px;
         color: #ef4444;
         text-decoration: none;
         transition: all 0.2s;
@@ -514,7 +553,7 @@ BASE_STYLES = """
         border: none;
         background: none;
         font-family: inherit;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 500;
     }
     
@@ -524,28 +563,30 @@ BASE_STYLES = """
     }
     
     .logout-btn svg {
-        width: 20px;
-        height: 20px;
+        width: 18px;
+        height: 18px;
         flex-shrink: 0;
         color: #ef4444;
     }
     
-    .sidebar.collapsed .logout-btn span {
+    .sidebar.collapsed .logout-btn span,
+    .sidebar.collapsed .admin-info {
         opacity: 0;
         width: 0;
+        display: none;
     }
 
-    /* ===== MAIN CONTENT ===== */
+    /* ===== MAIN CONTENT - Compact ===== */
     .main-content {
-        margin-left: 260px;
-        padding: 30px 32px;
+        margin-left: 240px;
+        padding: 20px;
         transition: margin-left 0.2s;
         min-height: 100vh;
         background: #f8fafc;
     }
     
     .main-content.expanded {
-        margin-left: 75px;
+        margin-left: 70px;
     }
 
     /* ===== PAGE HEADER ===== */
@@ -553,13 +594,13 @@ BASE_STYLES = """
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 28px;
+        margin-bottom: 20px;
         flex-wrap: wrap;
-        gap: 16px;
+        gap: 12px;
     }
     
     .page-title {
-        font-size: 30px;
+        font-size: 26px;
         font-weight: 700;
         color: #1e293b;
     }
@@ -572,26 +613,26 @@ BASE_STYLES = """
     /* ===== DATE RANGE PICKER ===== */
     .date-range-picker {
         background: #ffffff;
-        border-radius: 18px;
+        border-radius: 16px;
         border: 1px solid #e2e8f0;
-        padding: 16px 22px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+        padding: 14px 18px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
     }
     
     .qbtns-row {
         display: flex;
-        gap: 8px;
+        gap: 6px;
         flex-wrap: wrap;
-        margin-bottom: 14px;
+        margin-bottom: 12px;
     }
     
     .qbtn {
-        padding: 6px 16px;
+        padding: 5px 14px;
         background: #f1f5f9;
         border: 1px solid #e2e8f0;
         border-radius: 30px;
         color: #475569;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 500;
         cursor: pointer;
         transition: all 0.2s;
@@ -599,7 +640,6 @@ BASE_STYLES = """
     
     .qbtn:hover {
         background: #e2e8f0;
-        border-color: #cbd5e1;
     }
     
     .qbtn.active {
@@ -607,80 +647,79 @@ BASE_STYLES = """
         border-color: #4f46e5;
         color: #ffffff;
         font-weight: 600;
-        box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+        box-shadow: 0 2px 8px rgba(79,70,229,0.2);
     }
     
     .date-inputs-row {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         flex-wrap: wrap;
     }
     
     .range-input {
-        padding: 8px 14px;
+        padding: 6px 12px;
         background: #f1f5f9;
         border: 1px solid #cbd5e1;
         border-radius: 30px;
         color: #1e293b;
-        font-size: 13px;
+        font-size: 12px;
     }
     
     .range-input:focus {
         outline: none;
         border-color: #4f46e5;
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
     }
     
     .range-sep {
         color: #94a3b8;
-        font-size: 14px;
-        font-weight: 500;
+        font-size: 13px;
     }
     
     .apply-btn {
-        padding: 8px 20px;
+        padding: 6px 18px;
         background: #4f46e5;
         border: none;
         border-radius: 30px;
         color: #ffffff;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s;
-        box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+        box-shadow: 0 2px 8px rgba(79,70,229,0.2);
     }
     
     .apply-btn:hover {
         background: #6366f1;
         transform: translateY(-1px);
-        box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
+        box-shadow: 0 4px 12px rgba(79,70,229,0.3);
     }
     
     .week-badge {
-        font-size: 13px;
+        font-size: 12px;
         color: #4f46e5;
         font-weight: 500;
-        padding: 6px 16px;
+        padding: 5px 14px;
         background: #eef2ff;
         border-radius: 30px;
         border: 1px solid #c7d2fe;
     }
 
-    /* ===== PROVIDER CARDS ===== */
+    /* ===== PROVIDER CARDS - Compact ===== */
     .provider-card {
         background: #ffffff;
-        border-radius: 24px;
+        border-radius: 20px;
         border: 1px solid #e2e8f0;
-        margin-bottom: 28px;
+        margin-bottom: 20px;
         overflow: hidden;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
         transition: transform 0.2s, box-shadow 0.2s;
     }
     
     .provider-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 16px 32px rgba(0, 0, 0, 0.06);
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(79,70,229,0.08);
         border-color: #cbd5e1;
     }
     
@@ -688,7 +727,7 @@ BASE_STYLES = """
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 22px 26px;
+        padding: 16px 20px;
         border-bottom: 1px solid #e2e8f0;
         position: relative;
         background: linear-gradient(90deg, #faf9ff, #ffffff);
@@ -700,37 +739,37 @@ BASE_STYLES = """
         left: 0;
         top: 0;
         bottom: 0;
-        width: 6px;
+        width: 4px;
         background: linear-gradient(180deg, #4f46e5, #8b5cf6);
-        border-radius: 0 4px 4px 0;
+        border-radius: 0 2px 2px 0;
     }
     
     .provider-info {
         display: flex;
         align-items: center;
-        gap: 24px;
+        gap: 16px;
         flex-wrap: wrap;
     }
     
     .provider-name {
-        font-size: 22px;
+        font-size: 20px;
         font-weight: 600;
         color: #1e293b;
     }
     
     .star-rating {
         color: #fbbf24;
-        font-size: 16px;
-        letter-spacing: 3px;
+        font-size: 14px;
+        letter-spacing: 2px;
     }
     
     .trend-badge {
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 6px 16px;
+        gap: 4px;
+        padding: 4px 12px;
         border-radius: 30px;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
     }
     
@@ -754,25 +793,25 @@ BASE_STYLES = """
     
     .card-stats {
         display: flex;
-        gap: 28px;
+        gap: 20px;
     }
     
     .stat-item {
         text-align: center;
-        padding: 8px 20px;
+        padding: 6px 16px;
         background: #f8fafc;
-        border-radius: 16px;
+        border-radius: 14px;
         border: 1px solid #e2e8f0;
     }
     
     .stat-value {
-        font-size: 22px;
+        font-size: 20px;
         font-weight: 700;
         color: #1e293b;
     }
     
     .stat-label {
-        font-size: 11px;
+        font-size: 10px;
         color: #64748b;
         text-transform: uppercase;
         letter-spacing: 0.5px;
@@ -783,28 +822,28 @@ BASE_STYLES = """
     .data-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 13px;
+        font-size: 12px;
     }
     
     .data-table th {
         background: #f8fafc;
-        padding: 14px 8px;
+        padding: 10px 6px;
         text-align: center;
         font-weight: 600;
         color: #475569;
-        font-size: 12px;
+        font-size: 11px;
         text-transform: uppercase;
         border-bottom: 2px solid #4f46e5;
     }
     
     .data-table th.region-col {
         text-align: left;
-        padding-left: 22px;
-        min-width: 130px;
+        padding-left: 16px;
+        min-width: 120px;
     }
     
     .data-table th.day-col {
-        min-width: 150px;
+        min-width: 140px;
     }
     
     .data-table th.flight-day {
@@ -813,7 +852,7 @@ BASE_STYLES = """
     }
     
     .data-table td {
-        padding: 12px 8px;
+        padding: 8px 6px;
         text-align: center;
         border-bottom: 1px solid #e2e8f0;
         color: #334155;
@@ -821,7 +860,7 @@ BASE_STYLES = """
     
     .data-table td.region-col {
         text-align: left;
-        padding-left: 22px;
+        padding-left: 16px;
         font-weight: 500;
         color: #1e293b;
         background: #fafafa;
@@ -832,7 +871,7 @@ BASE_STYLES = """
         font-weight: 600;
         color: #4f46e5;
         border-top: 2px solid #4f46e5;
-        font-size: 13px;
+        font-size: 12px;
     }
 
     /* ===== CLEAN GRID FOR NUMBERS ===== */
@@ -840,20 +879,20 @@ BASE_STYLES = """
         display: flex; 
         justify-content: center; 
         gap: 2px; 
-        font-size: 12px;
+        font-size: 11px;
         border: 1px solid #e2e8f0;
-        border-radius: 8px;
+        border-radius: 6px;
         overflow: hidden;
         background: #f8fafc;
         margin: 2px 0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
     }
     
     .day-data span,
     .day-data a {
         flex: 1;
-        min-width: 36px;
-        padding: 5px 2px;
+        min-width: 32px;
+        padding: 4px 1px;
         text-align: center;
         font-weight: 500;
         border-right: 1px solid #e2e8f0;
@@ -898,17 +937,17 @@ BASE_STYLES = """
         background: #e2e8f0;
         transform: scale(1.05);
         z-index: 2;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        border-radius: 3px;
     }
     
     .day-data-empty { 
         color: #94a3b8; 
-        font-size: 13px; 
-        padding: 5px;
+        font-size: 12px; 
+        padding: 4px;
         text-align: center;
         background: #f1f5f9;
-        border-radius: 6px;
+        border-radius: 4px;
     }
 
     /* ===== LINK STYLES ===== */
@@ -924,11 +963,25 @@ BASE_STYLES = """
         border-bottom-color: #4f46e5;
     }
 
+    /* ===== SUB-HEADER with more spacing ===== */
+    .sub-header {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        font-size: 9px;
+        color: #64748b;
+    }
+    .sub-header span {
+        min-width: 32px;
+        text-align: center;
+        padding: 2px 0;
+    }
+
     /* ===== STATS CARDS ===== */
     .stats-row, .stats-row-5 {
         display: grid;
-        gap: 20px;
-        margin-bottom: 28px;
+        gap: 16px;
+        margin-bottom: 20px;
     }
     
     .stats-row {
@@ -941,30 +994,30 @@ BASE_STYLES = """
     
     .stat-card {
         background: #ffffff;
-        border-radius: 20px;
+        border-radius: 18px;
         border: 1px solid #e2e8f0;
-        padding: 22px;
+        padding: 16px;
         display: flex;
         align-items: center;
-        gap: 18px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+        gap: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
         transition: transform 0.2s, box-shadow 0.2s;
     }
     
     .stat-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 24px rgba(79, 70, 229, 0.1);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(79,70,229,0.1);
         border-color: #c7d2fe;
     }
     
     .stat-icon {
-        width: 58px;
-        height: 58px;
-        border-radius: 18px;
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 28px;
+        font-size: 24px;
         background: #f1f5f9;
         border: 1px solid #e2e8f0;
     }
@@ -974,14 +1027,14 @@ BASE_STYLES = """
     }
     
     .stat-card .stat-value {
-        font-size: 28px;
+        font-size: 24px;
         font-weight: 700;
         color: #1e293b;
-        margin-bottom: 4px;
+        margin-bottom: 2px;
     }
     
     .stat-card .stat-label {
-        font-size: 14px;
+        font-size: 13px;
         color: #64748b;
     }
 
@@ -989,16 +1042,16 @@ BASE_STYLES = """
     .charts-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
-        gap: 28px;
-        margin-bottom: 28px;
+        gap: 20px;
+        margin-bottom: 20px;
     }
     
     .chart-card {
         background: #ffffff;
-        border-radius: 24px;
+        border-radius: 20px;
         border: 1px solid #e2e8f0;
-        padding: 24px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+        padding: 18px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
     }
     
     .chart-card.full-width {
@@ -1006,13 +1059,13 @@ BASE_STYLES = """
     }
     
     .chart-title {
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 600;
         color: #1e293b;
-        margin-bottom: 20px;
+        margin-bottom: 16px;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
     }
     
     .chart-title svg {
@@ -1027,17 +1080,17 @@ BASE_STYLES = """
     
     .leaderboard-table th {
         background: #f8fafc;
-        padding: 16px;
+        padding: 12px;
         text-align: left;
         font-weight: 600;
         color: #475569;
-        font-size: 13px;
+        font-size: 12px;
         text-transform: uppercase;
         border-bottom: 2px solid #4f46e5;
     }
     
     .leaderboard-table td {
-        padding: 16px;
+        padding: 12px;
         border-bottom: 1px solid #e2e8f0;
     }
     
@@ -1046,20 +1099,20 @@ BASE_STYLES = """
     }
     
     .rank-badge {
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 700;
-        font-size: 14px;
+        font-size: 13px;
     }
     
     .rank-1 {
         background: #fbbf24;
         color: #1e293b;
-        box-shadow: 0 0 12px #fbbf24;
+        box-shadow: 0 0 10px #fbbf24;
     }
     
     .rank-2 {
@@ -1079,7 +1132,7 @@ BASE_STYLES = """
     
     .provider-color {
         width: 4px;
-        height: 36px;
+        height: 32px;
         border-radius: 2px;
     }
 
@@ -1087,46 +1140,46 @@ BASE_STYLES = """
     .kpi-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 22px;
-        margin-bottom: 28px;
+        gap: 16px;
+        margin-bottom: 20px;
     }
     
     .kpi-card {
         background: #ffffff;
-        border-radius: 24px;
+        border-radius: 20px;
         border: 1px solid #e2e8f0;
-        padding: 26px;
+        padding: 20px;
         text-align: center;
         transition: transform 0.2s;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
     }
     
     .kpi-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 16px 32px rgba(79, 70, 229, 0.1);
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(79,70,229,0.1);
     }
     
     .kpi-icon {
-        font-size: 38px;
-        margin-bottom: 16px;
+        font-size: 32px;
+        margin-bottom: 12px;
     }
     
     .kpi-value {
-        font-size: 34px;
+        font-size: 28px;
         font-weight: 700;
         color: #1e293b;
-        margin-bottom: 6px;
+        margin-bottom: 4px;
     }
     
     .kpi-label {
-        font-size: 14px;
+        font-size: 13px;
         color: #64748b;
     }
     
     .kpi-trend {
-        font-size: 13px;
-        margin-top: 12px;
-        padding: 6px 16px;
+        font-size: 12px;
+        margin-top: 10px;
+        padding: 4px 12px;
         border-radius: 30px;
         display: inline-block;
         font-weight: 600;
@@ -1148,24 +1201,24 @@ BASE_STYLES = """
     .winner-card {
         background: #fef9e7;
         border: 2px solid #fbbf24;
-        box-shadow: 0 20px 40px rgba(251, 191, 36, 0.1);
+        box-shadow: 0 16px 32px rgba(251,191,36,0.1);
     }
 
     /* ===== COMPARISON TABS ===== */
     .tabs {
         display: flex;
-        gap: 10px;
-        margin-bottom: 24px;
+        gap: 8px;
+        margin-bottom: 20px;
         flex-wrap: wrap;
     }
     
     .tab-btn {
-        padding: 8px 20px;
+        padding: 6px 18px;
         background: #f1f5f9;
         border: 1px solid #e2e8f0;
         border-radius: 40px;
         color: #475569;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.2s;
@@ -1179,30 +1232,30 @@ BASE_STYLES = """
         background: #4f46e5;
         border-color: #4f46e5;
         color: #ffffff;
-        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+        box-shadow: 0 2px 8px rgba(79,70,229,0.3);
     }
 
     /* ===== COMPARISON CARDS ===== */
     .comparison-grid {
         display: grid;
         grid-template-columns: 1fr auto 1fr;
-        gap: 30px;
+        gap: 24px;
         align-items: start;
     }
     
     .comparison-card {
         background: #ffffff;
-        border-radius: 24px;
+        border-radius: 20px;
         border: 1px solid #e2e8f0;
-        padding: 26px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+        padding: 22px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
     }
     
     .comparison-vs {
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 28px;
+        font-size: 24px;
         font-weight: 700;
         color: #4f46e5;
     }
@@ -1210,20 +1263,20 @@ BASE_STYLES = """
     .comparison-header {
         display: flex;
         align-items: center;
-        gap: 14px;
-        margin-bottom: 20px;
-        padding-bottom: 16px;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
         border-bottom: 1px solid #e2e8f0;
     }
     
     .comparison-color {
-        width: 8px;
-        height: 44px;
+        width: 6px;
+        height: 40px;
         border-radius: 4px;
     }
     
     .comparison-name {
-        font-size: 22px;
+        font-size: 20px;
         font-weight: 600;
         color: #1e293b;
     }
@@ -1232,87 +1285,87 @@ BASE_STYLES = """
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 12px 0;
+        padding: 10px 0;
         border-bottom: 1px solid #f1f5f9;
     }
     
     .comparison-stat-label {
         color: #64748b;
-        font-size: 14px;
+        font-size: 13px;
     }
     
     .comparison-stat-value {
         color: #1e293b;
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 600;
     }
     
     .winner-indicator {
         color: #10b981;
         font-size: 12px;
-        margin-left: 8px;
+        margin-left: 6px;
     }
 
     /* ===== HEATMAP CARDS ===== */
     .heatmap-container {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-        gap: 20px;
-        margin-top: 20px;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
     }
     
     .heatmap-item {
         background: #ffffff;
-        border-radius: 20px;
-        padding: 20px;
+        border-radius: 18px;
+        padding: 16px;
         text-align: center;
         border: 1px solid #e2e8f0;
         transition: all 0.2s;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
     }
     
     .heatmap-item:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 16px 32px rgba(79, 70, 229, 0.1);
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(79,70,229,0.1);
         border-color: #c7d2fe;
     }
     
     .heatmap-region {
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 600;
         color: #1e293b;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }
     
     .heatmap-value {
-        font-size: 28px;
+        font-size: 24px;
         font-weight: 700;
         color: #4f46e5;
         margin-bottom: 4px;
     }
     
     .heatmap-label {
-        font-size: 12px;
+        font-size: 11px;
         color: #64748b;
     }
 
     /* ===== ACHIEVEMENTS ===== */
     .achievements-row {
         display: flex;
-        gap: 8px;
+        gap: 6px;
         flex-wrap: wrap;
-        margin-top: 12px;
+        margin-top: 10px;
     }
     
     .achievement-badge {
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 6px 16px;
+        gap: 4px;
+        padding: 4px 12px;
         background: #f1f5f9;
         border: 1px solid #e2e8f0;
         border-radius: 30px;
-        font-size: 12px;
+        font-size: 11px;
         color: #475569;
         font-weight: 500;
     }
@@ -1321,26 +1374,26 @@ BASE_STYLES = """
     .whatsapp-box {
         background: #ffffff;
         border: 2px solid #10b981;
-        border-radius: 24px;
-        padding: 28px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+        border-radius: 20px;
+        padding: 24px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
     }
     
     .whatsapp-header {
         display: flex;
         align-items: center;
-        gap: 14px;
-        margin-bottom: 18px;
-        padding-bottom: 14px;
+        gap: 12px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
         border-bottom: 1px solid #e2e8f0;
     }
     
     .whatsapp-icon {
-        font-size: 28px;
+        font-size: 26px;
     }
     
     .whatsapp-title {
-        font-size: 20px;
+        font-size: 18px;
         font-weight: 700;
         color: #10b981;
     }
@@ -1348,8 +1401,8 @@ BASE_STYLES = """
     .whatsapp-content {
         font-family: 'Courier New', monospace;
         background: #f1f5f9;
-        padding: 22px;
-        border-radius: 16px;
+        padding: 18px;
+        border-radius: 14px;
         color: #1e293b;
         border: 1px solid #e2e8f0;
     }
@@ -1357,60 +1410,60 @@ BASE_STYLES = """
     .copy-btn {
         background: #10b981;
         color: #ffffff;
-        padding: 14px;
+        padding: 12px;
         border: none;
         border-radius: 40px;
-        font-weight: 700;
-        font-size: 15px;
+        font-weight: 600;
+        font-size: 14px;
         cursor: pointer;
         transition: all 0.2s;
-        margin-top: 18px;
+        margin-top: 16px;
         width: 100%;
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+        box-shadow: 0 2px 8px rgba(16,185,129,0.2);
     }
     
     .copy-btn:hover {
         background: #059669;
         transform: translateY(-2px);
-        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+        box-shadow: 0 6px 16px rgba(16,185,129,0.3);
     }
 
     /* ===== CALENDAR ===== */
     .premium-calendar {
         background: #ffffff;
-        border-radius: 24px;
+        border-radius: 20px;
         border: 1px solid #e2e8f0;
-        padding: 24px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+        padding: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
     }
     
     .calendar-weekdays {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
-        gap: 8px;
-        margin-bottom: 14px;
+        gap: 6px;
+        margin-bottom: 12px;
     }
     
     .weekday-label {
         text-align: center;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 700;
         color: #4f46e5;
-        padding: 8px;
+        padding: 6px;
         text-transform: uppercase;
     }
     
     .calendar-days-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
-        gap: 8px;
+        gap: 6px;
     }
     
     .cal-cell {
-        min-height: 90px;
+        min-height: 80px;
         background: #f8fafc;
-        border-radius: 14px;
-        padding: 12px;
+        border-radius: 12px;
+        padding: 10px;
         cursor: pointer;
         transition: all 0.2s;
         border: 2px solid transparent;
@@ -1420,7 +1473,7 @@ BASE_STYLES = """
         border-color: #4f46e5;
         transform: translateY(-2px);
         background: #ffffff;
-        box-shadow: 0 8px 16px rgba(79, 70, 229, 0.1);
+        box-shadow: 0 6px 12px rgba(79,70,229,0.1);
     }
     
     .cal-cell.empty {
@@ -1442,29 +1495,29 @@ BASE_STYLES = """
     .cal-cell.level-5 .cal-stat { color: #e0e7ff; }
     
     .cal-day-num {
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 700;
         color: #1e293b;
-        margin-bottom: 4px;
+        margin-bottom: 2px;
     }
     
     .cal-stat {
-        font-size: 11px;
+        font-size: 10px;
         color: #64748b;
     }
 
     /* ===== DAILY REGION ===== */
     .provider-section {
         background: #ffffff;
-        border-radius: 20px;
+        border-radius: 18px;
         border: 1px solid #e2e8f0;
-        margin-bottom: 22px;
+        margin-bottom: 16px;
         overflow: hidden;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
     }
     
     .provider-header-dr {
-        padding: 18px 22px;
+        padding: 14px 18px;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -1480,30 +1533,30 @@ BASE_STYLES = """
     .provider-header-left {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 12px;
     }
     
     .provider-color-bar {
-        width: 5px;
-        height: 40px;
+        width: 4px;
+        height: 36px;
         border-radius: 3px;
     }
     
     .provider-header-info h3 {
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 600;
         color: #1e293b;
         margin-bottom: 2px;
     }
     
     .provider-header-info span {
-        font-size: 13px;
+        font-size: 12px;
         color: #64748b;
     }
     
     .provider-header-stats {
         display: flex;
-        gap: 22px;
+        gap: 16px;
     }
     
     .header-stat {
@@ -1511,19 +1564,19 @@ BASE_STYLES = """
     }
     
     .header-stat-val {
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 700;
         color: #4f46e5;
     }
     
     .header-stat-lbl {
-        font-size: 11px;
+        font-size: 10px;
         color: #64748b;
         text-transform: uppercase;
     }
     
     .provider-body {
-        padding: 0 22px 22px;
+        padding: 0 18px 18px;
         display: none;
     }
     
@@ -1534,21 +1587,21 @@ BASE_STYLES = """
     .region-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 13px;
+        font-size: 12px;
     }
     
     .region-table th {
         background: #f1f5f9;
-        padding: 14px;
+        padding: 10px;
         text-align: left;
         font-weight: 600;
         color: #475569;
-        font-size: 12px;
+        font-size: 11px;
         text-transform: uppercase;
     }
     
     .region-table td {
-        padding: 12px 14px;
+        padding: 8px 10px;
         border-bottom: 1px solid #e2e8f0;
     }
     
@@ -1557,19 +1610,19 @@ BASE_STYLES = """
     }
     
     .medal {
-        font-size: 16px;
-        margin-right: 6px;
+        font-size: 14px;
+        margin-right: 4px;
     }
     
     .empty-state {
         text-align: center;
-        padding: 60px 20px;
+        padding: 40px 20px;
         color: #94a3b8;
     }
     
     .empty-state-icon {
-        font-size: 48px;
-        margin-bottom: 16px;
+        font-size: 40px;
+        margin-bottom: 12px;
     }
     
     .toggle-icon {
@@ -1593,46 +1646,46 @@ BASE_STYLES = """
     
     .login-card {
         background: #ffffff;
-        border-radius: 28px;
+        border-radius: 24px;
         border: 1px solid #e2e8f0;
-        padding: 48px;
+        padding: 40px;
         width: 100%;
-        max-width: 420px;
+        max-width: 400px;
         text-align: center;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.04);
+        box-shadow: 0 16px 32px rgba(0,0,0,0.02);
     }
     
     .login-logo {
-        width: 80px;
-        height: 80px;
+        width: 72px;
+        height: 72px;
         background: linear-gradient(145deg, #4f46e5, #8b5cf6);
-        border-radius: 24px;
+        border-radius: 20px;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin: 0 auto 24px;
+        margin: 0 auto 20px;
         font-weight: 700;
         color: #ffffff;
-        font-size: 32px;
+        font-size: 28px;
     }
     
     .login-title {
-        font-size: 28px;
+        font-size: 26px;
         font-weight: 700;
         color: #1e293b;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
     }
     
     .login-subtitle {
-        font-size: 15px;
+        font-size: 14px;
         color: #64748b;
-        margin-bottom: 32px;
+        margin-bottom: 28px;
     }
     
     .login-form {
         display: flex;
         flex-direction: column;
-        gap: 16px;
+        gap: 14px;
     }
     
     .form-group {
@@ -1641,20 +1694,20 @@ BASE_STYLES = """
     
     .form-label {
         display: block;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         color: #475569;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
     }
     
     .form-input {
         width: 100%;
-        padding: 14px 16px;
+        padding: 12px 14px;
         background: #f1f5f9;
         border: 1px solid #cbd5e1;
-        border-radius: 14px;
+        border-radius: 12px;
         color: #1e293b;
-        font-size: 15px;
+        font-size: 14px;
         font-family: inherit;
         transition: all 0.2s;
     }
@@ -1662,44 +1715,43 @@ BASE_STYLES = """
     .form-input:focus {
         outline: none;
         border-color: #4f46e5;
-        box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+        box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
     }
     
     .login-btn {
         width: 100%;
-        padding: 14px;
+        padding: 12px;
         background: #4f46e5;
         border: none;
-        border-radius: 14px;
+        border-radius: 12px;
         color: #ffffff;
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 600;
         font-family: inherit;
         cursor: pointer;
         transition: all 0.2s;
         margin-top: 8px;
-        box-shadow: 0 8px 16px rgba(79, 70, 229, 0.2);
+        box-shadow: 0 4px 12px rgba(79,70,229,0.2);
     }
     
     .login-btn:hover {
         background: #6366f1;
         transform: translateY(-2px);
-        box-shadow: 0 12px 24px rgba(79, 70, 229, 0.3);
+        box-shadow: 0 8px 20px rgba(79,70,229,0.3);
     }
     
     .error-message {
         background: #fee2e2;
         border: 1px solid #fecaca;
-        border-radius: 12px;
-        padding: 12px;
+        border-radius: 10px;
+        padding: 10px;
         color: #dc2626;
-        font-size: 13px;
-        margin-bottom: 16px;
+        font-size: 12px;
+        margin-bottom: 14px;
     }
 
     /* ===== RESPONSIVE ===== */
     @media (max-width: 1200px) {
-        .charts-grid { grid-template-columns: 1fr; }
         .stats-row { grid-template-columns: repeat(2, 1fr); }
         .stats-row-5 { grid-template-columns: repeat(3, 1fr); }
         .kpi-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1708,14 +1760,14 @@ BASE_STYLES = """
     }
     
     @media (max-width: 768px) {
-        .sidebar { width: 75px; }
-        .main-content { margin-left: 75px; padding: 20px; }
-        .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; }
+        .sidebar { width: 70px; }
+        .main-content { margin-left: 70px; padding: 15px; }
         .sidebar-toggle {
-            width: 22px;
-            height: 22px;
-            right: -10px;
+            width: 28px;
+            height: 28px;
+            right: -12px;
         }
+        .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; }
     }
 </style>
 """
@@ -1737,7 +1789,12 @@ function formatWeight(w) {
     return r % 1 === 0 ? Math.round(r).toString() : r.toFixed(1);
 }
 
-function fmtIso(date) { return date.toISOString().split('T')[0]; }
+function fmtLocal(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
 
 function fmtDisp(date, includeYear) {
     if (includeYear === false) return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -1768,8 +1825,8 @@ function dpInit(defaultPeriod) {
         dpStart = new Date(today.getFullYear(), today.getMonth(), 1);
         dpEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     }
-    document.getElementById('dpStart').value = fmtIso(dpStart);
-    document.getElementById('dpEnd').value = fmtIso(dpEnd);
+    document.getElementById('dpStart').value = fmtLocal(dpStart);
+    document.getElementById('dpEnd').value = fmtLocal(dpEnd);
     document.querySelectorAll('.qbtn').forEach(b => {
         b.classList.toggle('active', b.dataset.period === defaultPeriod);
     });
@@ -1788,8 +1845,8 @@ function dpSetQuick(btn, period) {
         case 'week': dpStart = getMonday(today); dpEnd = new Date(dpStart); dpEnd.setDate(dpEnd.getDate() + 6); break;
         case 'month': dpStart = new Date(today.getFullYear(), today.getMonth(), 1); dpEnd = new Date(today.getFullYear(), today.getMonth()+1, 0); break;
     }
-    document.getElementById('dpStart').value = fmtIso(dpStart);
-    document.getElementById('dpEnd').value = fmtIso(dpEnd);
+    document.getElementById('dpStart').value = fmtLocal(dpStart);
+    document.getElementById('dpEnd').value = fmtLocal(dpEnd);
     dpUpdateBadge();
     loadData();
 }
@@ -1824,7 +1881,7 @@ function dpUpdateBadge() {
 }
 
 function dpParams() {
-    return 'start_date=' + fmtIso(dpStart) + '&end_date=' + fmtIso(dpEnd);
+    return 'start_date=' + fmtLocal(dpStart) + '&end_date=' + fmtLocal(dpEnd);
 }
 
 function getStarRating(stars) { return '★'.repeat(stars) + '☆'.repeat(5 - stars); }
@@ -1922,6 +1979,13 @@ SIDEBAR_HTML = """
         </div>
     </div>
     <div class="sidebar-footer">
+        <div class="admin-info">
+            <div class="admin-avatar">AW</div>
+            <div class="admin-details">
+                <div class="admin-name">Admin Wahab</div>
+                <div class="admin-role">Administrator</div>
+            </div>
+        </div>
         <a href="/logout" class="logout-btn">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
             <span>Logout</span>
@@ -2038,7 +2102,7 @@ function renderProvider(provider) {
                 const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(day);
                 const dayDate = new Date(dpStart);
                 dayDate.setDate(dayDate.getDate() + dayIndex);
-                const dateStr = fmtIso(dayDate);
+                const dateStr = fmtLocal(dayDate);
 
                 rowsHtml += `<td class="day-cell"${fc}>
                     <div class="day-data">
@@ -2061,11 +2125,11 @@ function renderProvider(provider) {
         const fc = flightDays.includes(i) ? ' style="background:#f1f5f9"' : '';
         rowsHtml += `<td class="day-cell"${fc}>
             <div class="day-data">
-                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link">${t.o}</a>
-                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link">${t.b}</a>
-                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
-                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="under20-link">${t.u}</a>
-                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="over20-link">${t.v}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a>
             </div>
         </td>`;
     });
@@ -2138,9 +2202,9 @@ ${achHtml}</div></div></div></div>`;
             const ti = p.trend.direction === 'up' ? '▲' : '▼';
             html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
                 <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
-                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
-                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
-                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
                 <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
         });
         html += '</tbody></table></div>';
@@ -2163,9 +2227,9 @@ def daily_region():
     ''' + DATE_PICKER_HTML('today') + '''
 </div>
 <div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">-</div></a><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">-</div></a><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">-</div></a><div class="stat-label">Total Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">-</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">-</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">-</div></a><div class="stat-label">Total Weight</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">-</div><div class="stat-label">&lt;20 kg</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">-</div><div class="stat-label">20+ kg</div></div></div>
 </div>
@@ -2214,9 +2278,9 @@ async function loadData() {
                 provider.regions.forEach((rg,i) => {
                     const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
                     html += `<tr><td>${medal}${rg.name}</td>
-                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders}</a></td>
-                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes}</a></td>
-                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
                         <td style="color:#10b981">${rg.under20}</td>
                         <td style="color:#ef4444">${rg.over20}</td></tr>`;
                 });
@@ -2265,9 +2329,9 @@ async function loadData() {
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
             for (const p of flight.providers) {
                 html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
             }
             html += '</tbody></table></div>';
         }
@@ -2290,9 +2354,9 @@ def analytics():
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">0</div></a><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">0</div></a><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">0</div></a><div class="stat-label">Total Weight (kg)</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">0</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">0</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">0</div></a><div class="stat-label">Total Weight (kg)</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">0</div><div class="stat-label">Light (&lt;20 kg)</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">0</div><div class="stat-label">Heavy (20+ kg)</div></div></div>
 </div>
@@ -2444,9 +2508,9 @@ function renderComparison() {
         ps.sort((a,b)=>b.total_boxes-a.total_boxes).forEach(p => {
             const avg = p.total_orders>0 ? (p.total_weight/p.total_orders).toFixed(1) : 0;
             html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
                 <td style="text-align:right">${avg} kg</td></tr>`;
         });
         html += '</tbody></table></div>';
@@ -2526,9 +2590,9 @@ async function loadData() {
         const r = await fetch('/api/monthly?' + dpParams());
         const data = await r.json();
         let html = `<div class="stats-row">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value">${data.total_orders.toLocaleString()}</div></a><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value">${data.total_boxes.toLocaleString()}</div></a><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value">${formatWeight(data.total_weight)} kg</div></a><div class="stat-label">Total Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value">${data.total_orders.toLocaleString()}</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value">${data.total_boxes.toLocaleString()}</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value">${formatWeight(data.total_weight)} kg</div></a><div class="stat-label">Total Weight</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(139,92,246,0.1)">📊</div><div class="stat-content"><div class="stat-value">${Math.round(data.avg_per_day)}</div><div class="stat-label">Avg Orders/Day</div></div></div>
 </div>
 <div class="charts-grid"><div class="chart-card full-width"><div class="chart-title">Weekly Breakdown</div><div class="chart-container"><canvas id="weeklyChart"></canvas></div></div></div>
@@ -2536,9 +2600,9 @@ async function loadData() {
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
         data.providers.forEach(p => {
             html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
@@ -2562,9 +2626,9 @@ def calendar_view():
     ''' + DATE_PICKER_HTML('month') + '''
 </div>
 <div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1);font-size:24px">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="s-orders">-</div></a><div class="stat-label">Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1);font-size:24px">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="s-boxes">-</div></a><div class="stat-label">Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1);font-size:24px">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="s-weight">-</div></a><div class="stat-label">Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1);font-size:24px">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="s-orders">-</div></a><div class="stat-label">Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1);font-size:24px">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="s-boxes">-</div></a><div class="stat-label">Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1);font-size:24px">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="s-weight">-</div></a><div class="stat-label">Weight</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1);font-size:24px">🪶</div><div class="stat-content"><div class="stat-value" id="s-light">-</div><div class="stat-label">&lt;20 kg</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1);font-size:24px">🏋️</div><div class="stat-content"><div class="stat-value" id="s-heavy">-</div><div class="stat-label">20+ kg</div></div></div>
 </div>
