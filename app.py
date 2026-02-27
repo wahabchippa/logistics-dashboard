@@ -9,6 +9,7 @@ import time
 import os
 import calendar
 from flask import Response
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
@@ -23,7 +24,7 @@ PROVIDERS = [
     {
         'name': 'GLOBAL EXPRESS (QC)',
         'short': 'GE QC',
-        'sheet': 'GE QC Center & Zone',        
+        'sheet': 'GE QC Center & Zone',
         'date_col': 1,
         'box_col': 2,
         'weight_col': 5,
@@ -34,18 +35,18 @@ PROVIDERS = [
         'group': 'GE'
     },
     {
-    'name': 'GLOBAL EXPRESS (ZONE)',
-    'short': 'GE ZONE',
-    'sheet': 'GE QC Center & Zone',
-    'date_col': 10,       # Column K (index 10)
-    'box_col': 11,        # Column L (index 11)
-    'weight_col': 15,     # Column P (index 15)
-    'region_col': 16,     # Column Q (index 16)
-    'order_col': 9,       # Column J (index 9)
-    'start_row': 2,
-    'color': '#8B5CF6',
-    'group': 'GE'
-},
+        'name': 'GLOBAL EXPRESS (ZONE)',
+        'short': 'GE ZONE',
+        'sheet': 'GE QC Center & Zone',
+        'date_col': 10,
+        'box_col': 11,
+        'weight_col': 15,
+        'region_col': 16,
+        'order_col': 9,
+        'start_row': 2,
+        'color': '#8B5CF6',
+        'group': 'GE'
+    },
     {
         'name': 'ECL LOGISTICS (QC)',
         'short': 'ECL QC',
@@ -917,6 +918,19 @@ BASE_STYLES = """
         border-radius: 6px;
     }
 
+    /* ===== LINK STYLES ===== */
+    .orders-link, .boxes-link, .weight-link, .under20-link, .over20-link {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px dashed currentColor;
+        cursor: pointer;
+    }
+    .orders-link:hover, .boxes-link:hover, .weight-link:hover,
+    .under20-link:hover, .over20-link:hover {
+        color: #9f7aea;
+        border-bottom-color: #9f7aea;
+    }
+
     /* ===== STATS CARDS ===== */
     .stats-row, .stats-row-5 {
         display: grid;
@@ -1518,6 +1532,117 @@ BASE_STYLES = """
 </style>
 """
 
+SHARED_JS = """
+<script>
+// ===== SHARED DATE UTILITIES =====
+function getISOWeek(date) {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function formatWeight(w) {
+    if (w === undefined || w === null || w === 0) return '-';
+    const r = Math.round(w * 10) / 10;
+    return r % 1 === 0 ? Math.round(r).toString() : r.toFixed(1);
+}
+
+function fmtIso(date) { return date.toISOString().split('T')[0]; }
+
+function fmtDisp(date, includeYear) {
+    if (includeYear === false) return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function getMonday(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+}
+
+// ===== DATE RANGE PICKER STATE =====
+let dpStart = null;
+let dpEnd = null;
+
+function dpInit(defaultPeriod) {
+    defaultPeriod = defaultPeriod || 'week';
+    const today = new Date(); today.setHours(0,0,0,0);
+    if (defaultPeriod === 'today') {
+        dpStart = new Date(today); dpEnd = new Date(today);
+    } else if (defaultPeriod === '7d') {
+        dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 6);
+    } else if (defaultPeriod === 'week') {
+        dpStart = getMonday(today); dpEnd = new Date(dpStart); dpEnd.setDate(dpEnd.getDate() + 6);
+    } else if (defaultPeriod === 'month') {
+        dpStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        dpEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    }
+    document.getElementById('dpStart').value = fmtIso(dpStart);
+    document.getElementById('dpEnd').value = fmtIso(dpEnd);
+    document.querySelectorAll('.qbtn').forEach(b => {
+        b.classList.toggle('active', b.dataset.period === defaultPeriod);
+    });
+    dpUpdateBadge();
+}
+
+function dpSetQuick(btn, period) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    document.querySelectorAll('.qbtn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    switch(period) {
+        case 'today': dpStart = new Date(today); dpEnd = new Date(today); break;
+        case '7d': dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 6); break;
+        case '15d': dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 14); break;
+        case '30d': dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 29); break;
+        case 'week': dpStart = getMonday(today); dpEnd = new Date(dpStart); dpEnd.setDate(dpEnd.getDate() + 6); break;
+        case 'month': dpStart = new Date(today.getFullYear(), today.getMonth(), 1); dpEnd = new Date(today.getFullYear(), today.getMonth()+1, 0); break;
+    }
+    document.getElementById('dpStart').value = fmtIso(dpStart);
+    document.getElementById('dpEnd').value = fmtIso(dpEnd);
+    dpUpdateBadge();
+    loadData();
+}
+
+function dpApply() {
+    const sv = document.getElementById('dpStart').value;
+    const ev = document.getElementById('dpEnd').value;
+    if (!sv || !ev) { alert('Please select both dates'); return; }
+    dpStart = new Date(sv + 'T00:00:00');
+    dpEnd = new Date(ev + 'T00:00:00');
+    if (dpStart > dpEnd) { alert('Start date must be before end date'); return; }
+    document.querySelectorAll('.qbtn').forEach(b => b.classList.remove('active'));
+    dpUpdateBadge();
+    loadData();
+}
+
+function dpUpdateBadge() {
+    const badge = document.getElementById('dpBadge');
+    if (!badge || !dpStart || !dpEnd) return;
+    const wk = getISOWeek(dpStart);
+    const days = Math.round((dpEnd - dpStart) / 86400000) + 1;
+    let txt = 'Week ' + wk + ' • ';
+    if (days === 1) {
+        txt += fmtDisp(dpStart, true);
+    } else if (days <= 31 && dpStart.getFullYear() === dpEnd.getFullYear()) {
+        txt += fmtDisp(dpStart, false) + ' – ' + fmtDisp(dpEnd, true);
+        if (days !== 7) txt += ' (' + days + 'd)';
+    } else {
+        txt += fmtDisp(dpStart, true) + ' – ' + fmtDisp(dpEnd, true);
+    }
+    badge.textContent = txt;
+}
+
+function dpParams() {
+    return 'start_date=' + fmtIso(dpStart) + '&end_date=' + fmtIso(dpEnd);
+}
+
+function getStarRating(stars) { return '★'.repeat(stars) + '☆'.repeat(5 - stars); }
+</script>
+"""
+
 def DATE_PICKER_HTML(default_period='week'):
     return f"""
 <div class="date-range-picker">
@@ -1722,21 +1847,21 @@ function renderProvider(provider) {
             totals[day].u += d.under20; totals[day].v += d.over20;
             const fc = flightDays.includes(i) ? ' style="background:rgba(212,168,83,0.03)"' : '';
             if (d.orders > 0) {
-                // Har day ke liye exact date nikaalo (dpStart se)
-const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(day);
-const dayDate = new Date(dpStart);
-dayDate.setDate(dayDate.getDate() + dayIndex);
-const dateStr = fmtIso(dayDate);
+                const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(day);
+                const dayDate = new Date(dpStart);
+                dayDate.setDate(dayDate.getDate() + dayIndex);
+                const dateStr = fmtIso(dayDate);
 
-rowsHtml += `<td class="day-cell"${fc}>
-    <div class="day-data">
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders">${d.orders}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes">${d.boxes}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight">${formatWeight(d.weight)}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20">${d.under20}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20">${d.over20}</a>
-    </div>
-</td>`;            } else {
+                rowsHtml += `<td class="day-cell"${fc}>
+                    <div class="day-data">
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
+                    </div>
+                </td>`;
+            } else {
                 rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`;
             }
         });
@@ -1747,14 +1872,14 @@ rowsHtml += `<td class="day-cell"${fc}>
         const t = totals[day];
         const fc = flightDays.includes(i) ? ' style="background:rgba(212,168,83,0.15)"' : '';
         rowsHtml += `<td class="day-cell"${fc}>
-    <div class="day-data">
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders">${t.o}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes">${t.b}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight">${formatWeight(t.w)}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="under20">${t.u}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="over20">${t.v}</a>
-    </div>
-</td>`;
+            <div class="day-data">
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link">${t.o}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link">${t.b}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="under20-link">${t.u}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="over20-link">${t.v}</a>
+            </div>
+        </td>`;
     });
     rowsHtml += '</tr>';
     const subHdr = days.map((_,i) => `<th${flightDays.includes(i)?' style="background:rgba(212,168,83,0.06)"':''}><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>`).join('');
@@ -1823,14 +1948,12 @@ ${achHtml}</div></div></div></div>`;
             const rc = i < 3 ? 'rank-'+(i+1) : 'rank-other';
             const tc = p.trend.direction === 'up' ? 'up' : 'down';
             const ti = p.trend.direction === 'up' ? '▲' : '▼';
-            const startParam = fmtIso(dpStart);
-const endParam = fmtIso(dpEnd);
-html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
-    <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
-    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${startParam}&end=${endParam}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
-    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${startParam}&end=${endParam}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
-    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${startParam}&end=${endParam}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
-    <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
+            html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
+                <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
@@ -1902,7 +2025,12 @@ async function loadData() {
                 html += '<table class="region-table"><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight</th><th>&lt;20 kg</th><th>20+ kg</th></tr></thead><tbody>';
                 provider.regions.forEach((rg,i) => {
                     const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
-                    html += `<tr><td>${medal}${rg.name}</td><td>${rg.orders}</td><td>${rg.boxes}</td><td>${formatWeight(rg.weight)}</td><td style="color:#22c55e">${rg.under20}</td><td style="color:#ef4444">${rg.over20}</td></tr>`;
+                    html += `<tr><td>${medal}${rg.name}</td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
+                        <td style="color:#22c55e">${rg.under20}</td>
+                        <td style="color:#ef4444">${rg.over20}</td></tr>`;
                 });
                 html += '</tbody></table>';
             } else {
@@ -1948,7 +2076,10 @@ async function loadData() {
 </div></div>
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
             for (const p of flight.providers) {
-                html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td><td style="text-align:right">${p.orders.toLocaleString()}</td><td style="text-align:right">${p.boxes.toLocaleString()}</td><td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
+                html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
             }
             html += '</tbody></table></div>';
         }
@@ -2124,7 +2255,11 @@ function renderComparison() {
         html = '<div class="provider-card"><table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th style="text-align:right">Avg/Order</th></tr></thead><tbody>';
         ps.sort((a,b)=>b.total_boxes-a.total_boxes).forEach(p => {
             const avg = p.total_orders>0 ? (p.total_weight/p.total_orders).toFixed(1) : 0;
-            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td><td style="text-align:right">${p.total_orders.toLocaleString()}</td><td style="text-align:right">${p.total_boxes.toLocaleString()}</td><td style="text-align:right">${formatWeight(p.total_weight)}</td><td style="text-align:right">${avg} kg</td></tr>`;
+            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right">${avg} kg</td></tr>`;
         });
         html += '</tbody></table></div>';
     }
@@ -2212,7 +2347,10 @@ async function loadData() {
 <div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Monthly Summary</span></div></div>
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
         data.providers.forEach(p => {
-            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td><td style="text-align:right">${p.orders.toLocaleString()}</td><td style="text-align:right">${p.boxes.toLocaleString()}</td><td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
+            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
@@ -2830,15 +2968,15 @@ def order_details():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     ''' + FAVICON + '''
     <style>
-        body { background: #050508; color: #e2e8f0; font-family: 'Plus Jakarta Sans', sans-serif; padding: 20px; }
-        h1 { color: #d4a853; }
+        body { background: #0f1622; color: #e2e8f0; font-family: 'Plus Jakarta Sans', sans-serif; padding: 20px; }
+        h1 { color: #9f7aea; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th { background: #0f1015; color: #94a3b8; padding: 10px; text-align: left; }
-        td { padding: 8px 10px; border-bottom: 1px solid #1e1e2a; }
-        tr:hover { background: #1a1b23; }
-        .back-btn { display: inline-block; margin-bottom: 20px; padding: 8px 16px; background: #d4a853; color: #0a0a0f; text-decoration: none; border-radius: 6px; }
+        th { background: #1a2332; color: #b0b9d9; padding: 10px; text-align: left; }
+        td { padding: 8px 10px; border-bottom: 1px solid rgba(159, 122, 234, 0.2); }
+        tr:hover { background: rgba(159, 122, 234, 0.1); }
+        .back-btn { display: inline-block; margin-bottom: 20px; padding: 8px 16px; background: #9f7aea; color: #0b0f1a; text-decoration: none; border-radius: 6px; }
         .stats { display: flex; gap: 20px; margin-bottom: 20px; }
-        .stat-box { background: #0c0d12; padding: 15px; border-radius: 8px; border-left: 4px solid #d4a853; }
+        .stat-box { background: #1a2332; padding: 15px; border-radius: 8px; border-left: 4px solid #9f7aea; }
     </style>
 </head>
 <body>
