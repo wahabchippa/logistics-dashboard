@@ -8,7 +8,7 @@ from collections import defaultdict
 import time
 import os
 import calendar
-
+from flask import Response
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
@@ -23,11 +23,12 @@ PROVIDERS = [
     {
         'name': 'GLOBAL EXPRESS (QC)',
         'short': 'GE QC',
-        'sheet': 'GE QC Center & Zone',
+        'sheet': 'GE QC Center & Zone',        
         'date_col': 1,
         'box_col': 2,
         'weight_col': 5,
         'region_col': 7,
+        'order_col': 0,
         'start_row': 2,
         'color': '#3B82F6',
         'group': 'GE'
@@ -40,6 +41,7 @@ PROVIDERS = [
         'box_col': 11,
         'weight_col': 14,
         'region_col': 16,
+        'order_col': 0,
         'start_row': 2,
         'color': '#8B5CF6',
         'group': 'GE'
@@ -52,6 +54,7 @@ PROVIDERS = [
         'box_col': 2,
         'weight_col': 5,
         'region_col': 7,
+        'order_col': 0,
         'start_row': 3,
         'color': '#10B981',
         'group': 'ECL'
@@ -64,6 +67,7 @@ PROVIDERS = [
         'box_col': 11,
         'weight_col': 14,
         'region_col': 16,
+        'order_col': 0,
         'start_row': 3,
         'color': '#F59E0B',
         'group': 'ECL'
@@ -76,6 +80,7 @@ PROVIDERS = [
         'box_col': 2,
         'weight_col': 5,
         'region_col': 7,
+        'order_col': 0,
         'start_row': 2,
         'color': '#EF4444',
         'group': 'OTHER'
@@ -88,6 +93,7 @@ PROVIDERS = [
         'box_col': 2,
         'weight_col': 5,
         'region_col': 7,
+        'order_col': 0,
         'start_row': 2,
         'color': '#EC4899',
         'group': 'OTHER'
@@ -969,7 +975,21 @@ function renderProvider(provider) {
             totals[day].u += d.under20; totals[day].v += d.over20;
             const fc = flightDays.includes(i) ? ' style="background:rgba(212,168,83,0.03)"' : '';
             if (d.orders > 0) {
-                rowsHtml += `<td class="day-cell"${fc}><div class="day-data"><span>${d.orders}</span><span>${d.boxes}</span><span>${formatWeight(d.weight)}</span><span>${d.under20}</span><span>${d.over20}</span></div></td>`;
+                // Har day ke liye exact date nikaalo (dpStart se)
+const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(day);
+const dayDate = new Date(dpStart);
+dayDate.setDate(dayDate.getDate() + dayIndex);
+const dateStr = formatDate(dayDate);
+
+rowsHtml += `<td class="day-cell"${fc}>
+    <div class="day-data">
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" style="color:#60a5fa; text-decoration:none;">${d.orders}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" style="color:#34d399; text-decoration:none;">${d.boxes}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" style="color:#fbbf24; text-decoration:none;">${formatWeight(d.weight)}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" style="color:#4ade80; text-decoration:none;">${d.under20}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" style="color:#f87171; text-decoration:none;">${d.over20}</a>
+    </div>
+</td>`;
             } else {
                 rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`;
             }
@@ -980,7 +1000,15 @@ function renderProvider(provider) {
     days.forEach((day,i) => {
         const t = totals[day];
         const fc = flightDays.includes(i) ? ' style="background:rgba(212,168,83,0.15)"' : '';
-        rowsHtml += `<td class="day-cell"${fc}><div class="day-data"><span>${t.o}</span><span>${t.b}</span><span>${formatWeight(t.w)}</span><span>${t.u}</span><span>${t.v}</span></div></td>`;
+        rowsHtml += `<td class="day-cell"${fc}>
+    <div class="day-data">
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${formatDate(dpStart)}&end=${formatDate(dpEnd)}" style="color:#60a5fa; text-decoration:none;">${t.o}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${formatDate(dpStart)}&end=${formatDate(dpEnd)}" style="color:#34d399; text-decoration:none;">${t.b}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${formatDate(dpStart)}&end=${formatDate(dpEnd)}" style="color:#fbbf24; text-decoration:none;">${formatWeight(t.w)}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${formatDate(dpStart)}&end=${formatDate(dpEnd)}" style="color:#4ade80; text-decoration:none;">${t.u}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${formatDate(dpStart)}&end=${formatDate(dpEnd)}" style="color:#f87171; text-decoration:none;">${t.v}</a>
+    </div>
+</td>`;
     });
     rowsHtml += '</tr>';
     const subHdr = days.map((_,i) => `<th${flightDays.includes(i)?' style="background:rgba(212,168,83,0.06)"':''}><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>`).join('');
