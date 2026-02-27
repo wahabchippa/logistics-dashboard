@@ -34,18 +34,18 @@ PROVIDERS = [
         'group': 'GE'
     },
     {
-        'name': 'GLOBAL EXPRESS (ZONE)',
-        'short': 'GE ZONE',
-        'sheet': 'GE QC Center & Zone',
-        'date_col': 10,
-        'box_col': 11,
-        'weight_col': 14,
-        'region_col': 16,
-        'order_col': 0,
-        'start_row': 2,
-        'color': '#8B5CF6',
-        'group': 'GE'
-    },
+    'name': 'GLOBAL EXPRESS (ZONE)',
+    'short': 'GE ZONE',
+    'sheet': 'GE QC Center & Zone',
+    'date_col': 10,       # Column K (index 10)
+    'box_col': 11,        # Column L (index 11)
+    'weight_col': 15,     # Column P (index 15)
+    'region_col': 16,     # Column Q (index 16)
+    'order_col': 9,       # Column J (index 9)
+    'start_row': 2,
+    'color': '#8B5CF6',
+    'group': 'GE'
+},
     {
         'name': 'ECL LOGISTICS (QC)',
         'short': 'ECL QC',
@@ -474,7 +474,20 @@ BASE_STYLES = """
     .day-data span:nth-child(4) { color: #4ade80; background: rgba(74,222,128,0.08); }
     .day-data span:nth-child(5) { color: #f87171; background: rgba(248,113,113,0.08); }
     .day-data-empty { color: #2d3748; font-size: 14px; }
-
+.day-data a {
+    display: inline-block;
+    min-width: 26px;
+    text-align: center;
+    padding: 3px 2px;
+    border-radius: 3px;
+    text-decoration: none;
+}
+.day-data a.orders { color: #60a5fa; background: rgba(96,165,250,0.08); }
+.day-data a.boxes { color: #34d399; background: rgba(52,211,153,0.08); }
+.day-data a.weight { color: #fbbf24; background: rgba(251,191,36,0.08); }
+.day-data a.under20 { color: #4ade80; background: rgba(74,222,128,0.08); }
+.day-data a.over20 { color: #f87171; background: rgba(248,113,113,0.08); }
+.day-data a:hover { opacity: 0.8; background: rgba(255,255,255,0.1); }
     /* ===== STATS CARDS ===== */
     .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
     .stats-row-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
@@ -983,14 +996,13 @@ const dateStr = fmtIso(dayDate);
 
 rowsHtml += `<td class="day-cell"${fc}>
     <div class="day-data">
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" style="color:#60a5fa; text-decoration:none;">${d.orders}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" style="color:#34d399; text-decoration:none;">${d.boxes}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" style="color:#fbbf24; text-decoration:none;">${formatWeight(d.weight)}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" style="color:#4ade80; text-decoration:none;">${d.under20}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" style="color:#f87171; text-decoration:none;">${d.over20}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders">${d.orders}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes">${d.boxes}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight">${formatWeight(d.weight)}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20">${d.under20}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20">${d.over20}</a>
     </div>
-</td>`;
-            } else {
+</td>`;            } else {
                 rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`;
             }
         });
@@ -1002,11 +1014,11 @@ rowsHtml += `<td class="day-cell"${fc}>
         const fc = flightDays.includes(i) ? ' style="background:rgba(212,168,83,0.15)"' : '';
         rowsHtml += `<td class="day-cell"${fc}>
     <div class="day-data">
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" style="color:#60a5fa; text-decoration:none;">${t.o}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" style="color:#34d399; text-decoration:none;">${t.b}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" style="color:#fbbf24; text-decoration:none;">${formatWeight(t.w)}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" style="color:#4ade80; text-decoration:none;">${t.u}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" style="color:#f87171; text-decoration:none;">${t.v}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="orders">${t.o}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="boxes">${t.b}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="weight">${formatWeight(t.w)}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="under20">${t.u}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" class="over20">${t.v}</a>
     </div>
 </td>`;
     });
