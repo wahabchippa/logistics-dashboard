@@ -466,28 +466,66 @@ BASE_STYLES = """
     }
     .sub-header { display: flex; justify-content: center; gap: 2px; font-size: 9px; color: #64748b; }
     .sub-header span { min-width: 26px; text-align: center; padding: 2px 0; }
-    .day-data { display: flex; justify-content: center; gap: 2px; font-size: 11px; }
-    .day-data span { min-width: 26px; text-align: center; padding: 3px 2px; border-radius: 3px; }
-    .day-data span:nth-child(1) { color: #60a5fa; background: rgba(96,165,250,0.08); }
-    .day-data span:nth-child(2) { color: #34d399; background: rgba(52,211,153,0.08); }
-    .day-data span:nth-child(3) { color: #fbbf24; background: rgba(251,191,36,0.08); }
-    .day-data span:nth-child(4) { color: #4ade80; background: rgba(74,222,128,0.08); }
-    .day-data span:nth-child(5) { color: #f87171; background: rgba(248,113,113,0.08); }
-    .day-data-empty { color: #2d3748; font-size: 14px; }
-.day-data a {
-    display: inline-block;
-    min-width: 26px;
-    text-align: center;
-    padding: 3px 2px;
-    border-radius: 3px;
-    text-decoration: none;
-}
-.day-data a.orders { color: #60a5fa; background: rgba(96,165,250,0.08); }
-.day-data a.boxes { color: #34d399; background: rgba(52,211,153,0.08); }
-.day-data a.weight { color: #fbbf24; background: rgba(251,191,36,0.08); }
-.day-data a.under20 { color: #4ade80; background: rgba(74,222,128,0.08); }
-.day-data a.over20 { color: #f87171; background: rgba(248,113,113,0.08); }
-.day-data a:hover { opacity: 0.8; background: rgba(255,255,255,0.1); }
+        .sub-header { display: flex; justify-content: center; gap: 2px; font-size: 9px; color: #64748b; }
+    .sub-header span { min-width: 26px; text-align: center; padding: 2px 0; }
+    
+    /* ===== CLEAN GRID FOR NUMBERS ===== */
+    .day-data { 
+        display: flex; 
+        justify-content: center; 
+        gap: 2px; 
+        font-size: 11px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 6px;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.2);
+        margin: 2px 0;
+    }
+    .day-data span,
+    .day-data a {
+        flex: 1;
+        min-width: 32px;
+        padding: 4px 2px;
+        text-align: center;
+        font-weight: 500;
+        border-right: 1px solid rgba(255, 255, 255, 0.15);
+        transition: all 0.2s ease;
+        display: inline-block;
+        text-decoration: none;
+    }
+    .day-data span:last-child,
+    .day-data a:last-child {
+        border-right: none;
+    }
+    
+    /* Colors for each position */
+    .day-data span:nth-child(1),
+    .day-data a:nth-child(1) { color: #60a5fa; background: rgba(96,165,250,0.12); }
+    .day-data span:nth-child(2),
+    .day-data a:nth-child(2) { color: #34d399; background: rgba(52,211,153,0.12); }
+    .day-data span:nth-child(3),
+    .day-data a:nth-child(3) { color: #fbbf24; background: rgba(251,191,36,0.12); }
+    .day-data span:nth-child(4),
+    .day-data a:nth-child(4) { color: #4ade80; background: rgba(74,222,128,0.12); }
+    .day-data span:nth-child(5),
+    .day-data a:nth-child(5) { color: #f87171; background: rgba(248,113,113,0.12); }
+    
+    /* Hover effect for links */
+    .day-data a:hover {
+        background: rgba(212, 168, 83, 0.25);
+        transform: scale(1.05);
+        z-index: 2;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    
+    .day-data-empty { 
+        color: #4a5568; 
+        font-size: 14px; 
+        padding: 4px;
+        text-align: center;
+        background: rgba(255,255,255,0.02);
+        border-radius: 4px;
+    }
     /* ===== STATS CARDS ===== */
     .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
     .stats-row-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
