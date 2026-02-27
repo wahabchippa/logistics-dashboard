@@ -1823,7 +1823,14 @@ ${achHtml}</div></div></div></div>`;
             const rc = i < 3 ? 'rank-'+(i+1) : 'rank-other';
             const tc = p.trend.direction === 'up' ? 'up' : 'down';
             const ti = p.trend.direction === 'up' ? '▲' : '▼';
-            html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td><td style="text-align:right;font-weight:600">${p.total_orders.toLocaleString()}</td><td style="text-align:right;font-weight:600">${p.total_boxes.toLocaleString()}</td><td style="text-align:right;font-weight:600">${formatWeight(p.total_weight)}</td><td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
+            const startParam = fmtIso(dpStart);
+const endParam = fmtIso(dpEnd);
+html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
+    <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${startParam}&end=${endParam}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${startParam}&end=${endParam}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${startParam}&end=${endParam}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+    <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
