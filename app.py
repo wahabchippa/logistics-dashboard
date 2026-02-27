@@ -729,82 +729,170 @@ BASE_STYLES = """
         letter-spacing: 0.5px;
     }
     
-    /* Data Table */
+    /* ============================================
+       🔥 FIXED DATA TABLE STYLES - CLEAN & READABLE
+       ============================================ */
     .data-table {
         width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-size: 12px;
     }
     
     .data-table th {
-        background: rgba(212, 168, 83, 0.05);
-        padding: 12px 8px;
+        background: #0f1015;
+        padding: 12px 6px;
         text-align: center;
         font-weight: 600;
         color: #94a3b8;
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        border-bottom: 2px solid #d4a853;
+        position: sticky;
+        top: 0;
     }
     
     .data-table th.region-col {
         text-align: left;
-        padding-left: 24px;
-        min-width: 120px;
+        padding-left: 16px;
+        min-width: 130px;
+        border-right: 2px solid rgba(212, 168, 83, 0.3);
+    }
+    
+    .data-table th.day-col {
+        min-width: 140px;
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
     
     .data-table th.flight-day {
-        background: rgba(212, 168, 83, 0.1);
+        background: linear-gradient(180deg, #1a1510 0%, #0f1015 100%);
         color: #d4a853;
+        border-bottom: 2px solid #d4a853;
     }
     
     .data-table td {
-        padding: 10px 8px;
+        padding: 10px 6px;
         text-align: center;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-        color: #94a3b8;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        color: #cbd5e1;
+        vertical-align: middle;
     }
     
     .data-table td.region-col {
         text-align: left;
-        padding-left: 24px;
-        font-weight: 500;
-        color: #e2e8f0;
+        padding-left: 16px;
+        font-weight: 600;
+        color: #f1f5f9;
+        background: rgba(255, 255, 255, 0.02);
+        border-right: 2px solid rgba(212, 168, 83, 0.3);
+    }
+    
+    .data-table td.day-cell {
+        border-left: 1px solid rgba(255, 255, 255, 0.06);
+        border-right: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 8px 4px;
+    }
+    
+    .data-table tr:nth-child(even) td {
+        background: rgba(255, 255, 255, 0.015);
+    }
+    
+    .data-table tr:nth-child(even) td.region-col {
+        background: rgba(255, 255, 255, 0.035);
     }
     
     .data-table tr:hover td {
-        background: rgba(212, 168, 83, 0.03);
+        background: rgba(212, 168, 83, 0.05);
+    }
+    
+    .data-table tr:hover td.region-col {
+        background: rgba(212, 168, 83, 0.08);
     }
     
     .data-table tr.total-row td {
-        background: rgba(212, 168, 83, 0.08);
-        font-weight: 600;
+        background: linear-gradient(180deg, rgba(212, 168, 83, 0.15) 0%, rgba(212, 168, 83, 0.08) 100%);
+        font-weight: 700;
         color: #d4a853;
-        border-top: 2px solid rgba(212, 168, 83, 0.2);
+        border-top: 2px solid #d4a853;
+        border-bottom: none;
+        font-size: 13px;
+    }
+    
+    .data-table tr.total-row td.region-col {
+        background: linear-gradient(180deg, rgba(212, 168, 83, 0.2) 0%, rgba(212, 168, 83, 0.1) 100%);
+    }
+    
+    /* Sub-header row for O B W columns */
+    .data-table .sub-header-row th {
+        background: #080a0d;
+        padding: 6px 4px;
+        font-size: 9px;
+        font-weight: 500;
+        color: #64748b;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        letter-spacing: 0;
     }
     
     .sub-header {
-        font-size: 9px;
-        color: #64748b;
         display: flex;
         justify-content: center;
-        gap: 4px;
+        gap: 2px;
+        font-size: 9px;
+        color: #64748b;
     }
     
     .sub-header span {
-        min-width: 24px;
+        min-width: 26px;
+        text-align: center;
+        padding: 2px 0;
     }
     
+    /* Day data cells with clear separation */
     .day-data {
         display: flex;
         justify-content: center;
-        gap: 4px;
-        font-size: 12px;
+        gap: 2px;
+        font-size: 11px;
     }
     
     .day-data span {
-        min-width: 24px;
+        min-width: 26px;
+        text-align: center;
+        padding: 3px 2px;
+        border-radius: 3px;
+    }
+    
+    .day-data span:nth-child(1) {
+        color: #60a5fa;
+        background: rgba(96, 165, 250, 0.1);
+    }
+    
+    .day-data span:nth-child(2) {
+        color: #34d399;
+        background: rgba(52, 211, 153, 0.1);
+    }
+    
+    .day-data span:nth-child(3) {
+        color: #fbbf24;
+        background: rgba(251, 191, 36, 0.1);
+    }
+    
+    .day-data span:nth-child(4) {
+        color: #4ade80;
+        background: rgba(74, 222, 128, 0.1);
+    }
+    
+    .day-data span:nth-child(5) {
+        color: #f87171;
+        background: rgba(248, 113, 113, 0.1);
+    }
+    
+    /* Empty cell styling */
+    .day-data-empty {
+        color: #374151;
+        font-size: 14px;
     }
     
     /* Chart Styles */
@@ -1945,7 +2033,7 @@ def dashboard():
             }
             
             let regionsHtml = '';
-            const totals = { Mon: {o:0,b:0,w:0}, Tue: {o:0,b:0,w:0}, Wed: {o:0,b:0,w:0}, Thu: {o:0,b:0,w:0}, Fri: {o:0,b:0,w:0}, Sat: {o:0,b:0,w:0}, Sun: {o:0,b:0,w:0} };
+            const totals = { Mon: {o:0,b:0,w:0,u:0,v:0}, Tue: {o:0,b:0,w:0,u:0,v:0}, Wed: {o:0,b:0,w:0,u:0,v:0}, Thu: {o:0,b:0,w:0,u:0,v:0}, Fri: {o:0,b:0,w:0,u:0,v:0}, Sat: {o:0,b:0,w:0,u:0,v:0}, Sun: {o:0,b:0,w:0,u:0,v:0} };
             
             const sortedRegions = Object.keys(provider.regions).sort();
             
@@ -1959,11 +2047,13 @@ def dashboard():
                     totals[day].o += d.orders;
                     totals[day].b += d.boxes;
                     totals[day].w += d.weight;
+                    totals[day].u += d.under20;
+                    totals[day].v += d.over20;
                     
                     if (d.orders > 0) {
-                        regionsHtml += '<td><div class="day-data"><span>' + d.orders + '</span><span>' + d.boxes + '</span><span>' + d.weight.toFixed(1) + '</span><span>' + d.under20 + '</span><span>' + d.over20 + '</span></div></td>';
+                        regionsHtml += `<td class="day-cell"><div class="day-data"><span>${d.orders}</span><span>${d.boxes}</span><span>${d.weight.toFixed(1)}</span><span>${d.under20}</span><span>${d.over20}</span></div></td>`;
                     } else {
-                        regionsHtml += '<td>-</td>';
+                        regionsHtml += '<td class="day-cell"><span class="day-data-empty">-</span></td>';
                     }
                 }
                 regionsHtml += '</tr>';
@@ -1973,7 +2063,7 @@ def dashboard():
             regionsHtml += '<td class="region-col">TOTAL</td>';
             for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
                 const t = totals[day];
-                regionsHtml += '<td><div class="day-data"><span>' + t.o + '</span><span>' + t.b + '</span><span>' + t.w.toFixed(1) + '</span><span>-</span><span>-</span></div></td>';
+                regionsHtml += `<td class="day-cell"><div class="day-data"><span>${t.o}</span><span>${t.b}</span><span>${t.w.toFixed(1)}</span><span>${t.u}</span><span>${t.v}</span></div></td>`;
             }
             regionsHtml += '</tr>';
             
@@ -2003,27 +2093,28 @@ def dashboard():
                         </div>
                     </div>
                     
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th class="region-col">Region</th>
-                                <th>MON</th>
-                                <th class="flight-day">TUE ✈️</th>
-                                <th>WED</th>
-                                <th class="flight-day">THU ✈️</th>
-                                <th>FRI</th>
-                                <th class="flight-day">SAT ✈️</th>
-                                <th>SUN</th>
-                            </tr>
-                            <tr>
-                                <th></th>
-                                ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(() => '<th><div class="sub-header"><span>O</span><span>B</span><span>W</span><span><20</span><span>20+</span></div></th>').join('')}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${regionsHtml}
-                        </tbody>
-                    </table>
+                    <div style="overflow-x: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th class="region-col" rowspan="2">Region</th>
+                                    <th class="day-col">MON</th>
+                                    <th class="day-col flight-day">TUE ✈️</th>
+                                    <th class="day-col">WED</th>
+                                    <th class="day-col flight-day">THU ✈️</th>
+                                    <th class="day-col">FRI</th>
+                                    <th class="day-col flight-day">SAT ✈️</th>
+                                    <th class="day-col">SUN</th>
+                                </tr>
+                                <tr class="sub-header-row">
+                                    ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(() => '<th><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>').join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${regionsHtml}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             `;
         }
@@ -4697,6 +4788,9 @@ def api_analytics_data():
     
     return jsonify(result)
 
+# ============================================
+# 🔧 FIXED KPI API - TOP REGION NOW CALCULATED FROM DATA
+# ============================================
 @app.route('/api/kpi')
 def api_kpi():
     week_start_str = request.args.get('week_start')
@@ -4721,6 +4815,7 @@ def api_kpi():
     all_regions = set()
     daily_totals = defaultdict(int)
     provider_totals = {}
+    region_totals = defaultdict(int)  # 🔧 NEW: Track region totals
     
     for provider in PROVIDERS:
         current_data = process_provider_data(provider, week_start, week_end)
@@ -4731,10 +4826,15 @@ def api_kpi():
             total_boxes += current_data['total_boxes']
             total_weight += current_data['total_weight']
             all_regions.update(current_data['regions'].keys())
-            provider_totals[current_data['name']] = current_data['total_boxes']
+            provider_totals[current_data['short']] = current_data['total_boxes']
             
             for day, data in current_data['daily_totals'].items():
                 daily_totals[day] += data['orders']
+            
+            # 🔧 NEW: Aggregate region boxes
+            for region_name, region_info in current_data['regions'].items():
+                for day_data in region_info['days'].values():
+                    region_totals[region_name] += day_data['boxes']
         
         if previous_data:
             prev_orders += previous_data['total_orders']
@@ -4744,6 +4844,9 @@ def api_kpi():
     best_day = max(daily_totals, key=daily_totals.get) if daily_totals else 'N/A'
     top_provider = max(provider_totals, key=provider_totals.get) if provider_totals else 'N/A'
     
+    # 🔧 FIXED: Calculate top region from actual data
+    top_region = max(region_totals, key=region_totals.get) if region_totals else 'N/A'
+    
     return jsonify({
         'total_orders': total_orders,
         'total_boxes': total_boxes,
@@ -4751,8 +4854,8 @@ def api_kpi():
         'avg_boxes_per_day': total_boxes / 7,
         'avg_weight_per_order': total_weight / total_orders if total_orders > 0 else 0,
         'active_regions': len(all_regions),
-        'top_provider': top_provider.replace('GLOBAL EXPRESS', 'GE').replace('ECL LOGISTICS', 'ECL'),
-        'top_region': 'UAE',
+        'top_provider': top_provider,
+        'top_region': top_region,  # 🔧 FIXED: Now calculated from data
         'best_day': best_day,
         'boxes_trend': calculate_trend(total_boxes, prev_boxes),
         'orders_trend': calculate_trend(total_orders, prev_orders),
@@ -5088,7 +5191,7 @@ def api_whatsapp():
     
     medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣']
     for i, p in enumerate(providers_data):
-        short_name = p['name'].replace('GLOBAL EXPRESS', 'GE').replace('ECL LOGISTICS', 'ECL')
+        short_name = p['short']
         report += f"{medals[i]} *{short_name}*\n"
         report += f"   📦 {p['total_boxes']:,} boxes | ⚖️ {p['total_weight']:,.1f} kg\n\n"
     
