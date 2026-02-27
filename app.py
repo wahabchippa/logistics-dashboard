@@ -12,6 +12,29 @@ import calendar
 from io import StringIO
 from flask import Flask, render_template_string, jsonify, request, session, redirect, url_for, Response, make_response
 from flask import send_file
+# ===== USER ROLES =====
+ROLES = {
+    'admin': {'can_edit': True, 'can_view_orders': True, 'can_see_logs': True},
+    'guest': {'can_edit': False, 'can_view_orders': False, 'can_see_logs': False}
+}
+
+def get_user_role():
+    if session.get('logged_in'):
+        return 'admin'
+    elif session.get('guest'):
+        return 'guest'
+    return None
+
+def role_required(allowed_roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            role = get_user_role()
+            if not role or role not in allowed_roles:
+                return redirect(url_for('login'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 # ===== LOGGING SETUP =====
 logging.basicConfig(filename='activity.log', level=logging.INFO,
@@ -125,7 +148,13 @@ ACHIEVEMENTS = {
     'heavyweight': {'name': 'Heavyweight', 'icon': '🏋️', 'desc': '5000+ kg in a week'},
     'region_king': {'name': 'Region King', 'icon': '👑', 'desc': 'Most regions covered'},
 }
+import logging
+logging.basicConfig(filename='activity.log', level=logging.INFO,
+                    format='%(asctime)s - %(message)s')
 
+def log_activity(user, action, details=''):
+    logging.info(f"{user} - {action} - {details}")
+  
 # ===== LANGUAGE DICTIONARY =====
 LANG = {
     'en': {
@@ -2470,11 +2499,10 @@ def login():
 <input type="password" name="password" class="form-input" placeholder="Enter your password" autofocus required></div>
 <button type="submit" class="login-btn">Sign In</button>
 </form>
+
 <div class="guest-link">
     <a href="/guest-login">View as Guest</a> (read-only, no order details)
 </div>
-</div></div></body></html>''', error=error)
-
 @app.route('/guest-login')
 def guest_login():
     session['guest'] = True
