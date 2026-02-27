@@ -979,7 +979,7 @@ function renderProvider(provider) {
 const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(day);
 const dayDate = new Date(dpStart);
 dayDate.setDate(dayDate.getDate() + dayIndex);
-const dateStr = formatDate(dayDate);
+const dateStr = fmtIso(dayDate);
 
 rowsHtml += `<td class="day-cell"${fc}>
     <div class="day-data">
@@ -1002,11 +1002,11 @@ rowsHtml += `<td class="day-cell"${fc}>
         const fc = flightDays.includes(i) ? ' style="background:rgba(212,168,83,0.15)"' : '';
         rowsHtml += `<td class="day-cell"${fc}>
     <div class="day-data">
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${formatDate(dpStart)}&end=${formatDate(dpEnd)}" style="color:#60a5fa; text-decoration:none;">${t.o}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${formatDate(dpStart)}&end=${formatDate(dpEnd)}" style="color:#34d399; text-decoration:none;">${t.b}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${formatDate(dpStart)}&end=${formatDate(dpEnd)}" style="color:#fbbf24; text-decoration:none;">${formatWeight(t.w)}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${formatDate(dpStart)}&end=${formatDate(dpEnd)}" style="color:#4ade80; text-decoration:none;">${t.u}</a>
-        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${formatDate(dpStart)}&end=${formatDate(dpEnd)}" style="color:#f87171; text-decoration:none;">${t.v}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" style="color:#60a5fa; text-decoration:none;">${t.o}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" style="color:#34d399; text-decoration:none;">${t.b}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" style="color:#fbbf24; text-decoration:none;">${formatWeight(t.w)}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" style="color:#4ade80; text-decoration:none;">${t.u}</a>
+        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtIso(dpStart)}&end=${fmtIso(dpEnd)}" style="color:#f87171; text-decoration:none;">${t.v}</a>
     </div>
 </td>`;
     });
@@ -1994,7 +1994,136 @@ def clear_cache():
     global CACHE
     CACHE = {}
     return jsonify({'status': 'success', 'message': 'Cache cleared'})
-
+@app.route('/orders')
+@login_required
+def order_details():
+    provider_short = request.args.get('provider')
+    start_str = request.args.get('start')
+    end_str = request.args.get('end')
+    region = request.args.get('region', '').strip()
+    day = request.args.get('day')
+    
+    if not provider_short or not start_str or not end_str:
+        return "Missing parameters", 400
+    
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+    except:
+        return "Invalid date", 400
+    
+    provider = next((p for p in PROVIDERS if p['short'] == provider_short), None)
+    if not provider:
+        return "Provider not found", 404
+    
+    rows = fetch_sheet_data(provider['sheet'])
+    if not rows:
+        return "No data", 404
+    
+    orders = []
+    for row_idx, row in enumerate(rows):
+        if row_idx < provider['start_row'] - 1:
+            continue
+        try:
+            if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
+                continue
+            
+            date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+            parsed_date = parse_date(date_val)
+            if not parsed_date:
+                continue
+            if not (start_date <= parsed_date <= end_date):
+                continue
+            
+            row_region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+            if region and row_region != region:
+                continue
+            
+            if day:
+                day_date = datetime.strptime(day, '%Y-%m-%d')
+                if parsed_date.date() != day_date.date():
+                    continue
+            
+            order_id = row[provider.get('order_col', 0)].strip() if provider.get('order_col', 0) < len(row) else 'N/A'
+            
+            try:
+                boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+            except:
+                boxes = 0
+            try:
+                weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+            except:
+                weight = 0.0
+            
+            orders.append({
+                'order_id': order_id,
+                'date': parsed_date.strftime('%Y-%m-%d'),
+                'region': row_region,
+                'boxes': boxes,
+                'weight': weight
+            })
+        except Exception as e:
+            continue
+    
+    orders.sort(key=lambda x: x['date'])
+    
+    return render_template_string('''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Order Details - {{ provider_short }}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    ''' + FAVICON + '''
+    <style>
+        body { background: #050508; color: #e2e8f0; font-family: 'Plus Jakarta Sans', sans-serif; padding: 20px; }
+        h1 { color: #d4a853; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #0f1015; color: #94a3b8; padding: 10px; text-align: left; }
+        td { padding: 8px 10px; border-bottom: 1px solid #1e1e2a; }
+        tr:hover { background: #1a1b23; }
+        .back-btn { display: inline-block; margin-bottom: 20px; padding: 8px 16px; background: #d4a853; color: #0a0a0f; text-decoration: none; border-radius: 6px; }
+        .stats { display: flex; gap: 20px; margin-bottom: 20px; }
+        .stat-box { background: #0c0d12; padding: 15px; border-radius: 8px; border-left: 4px solid #d4a853; }
+    </style>
+</head>
+<body>
+    <a href="javascript:history.back()" class="back-btn">← Back</a>
+    <h1>Orders - {{ provider_short }}</h1>
+    <div class="stats">
+        <div class="stat-box">Total Orders: {{ orders|length }}</div>
+        <div class="stat-box">Total Boxes: {{ orders|sum(attribute='boxes') }}</div>
+        <div class="stat-box">Total Weight: {{ "%.1f"|format(orders|sum(attribute='weight')) }} kg</div>
+    </div>
+    {% if region %}<p><strong>Region:</strong> {{ region }}</p>{% endif %}
+    {% if day %}<p><strong>Date:</strong> {{ day }}</p>{% endif %}
+    <table>
+        <thead>
+            <tr>
+                <th>Order ID</th>
+                <th>Date</th>
+                <th>Region</th>
+                <th>Boxes</th>
+                <th>Weight (kg)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr>
+                <td>{{ order.order_id }}</td>
+                <td>{{ order.date }}</td>
+                <td>{{ order.region }}</td>
+                <td>{{ order.boxes }}</td>
+                <td>{{ "%.1f"|format(order.weight) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center;">No orders found</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
+    ''', orders=orders, provider_short=provider_short, region=region, day=day)
 if __name__ == '__main__':
     app.run(debug=True)
 
