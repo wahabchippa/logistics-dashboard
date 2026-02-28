@@ -9,6 +9,10 @@ import time
 import os
 import calendar
 from flask import Response
+import logging
+
+# ===== LOGGING SETUP (Console only) =====
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
@@ -19,6 +23,33 @@ CACHE = {}
 CACHE_DURATION = 300
 
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
+
+# ===== USER ROLES =====
+ROLES = {
+    'admin': {'can_edit': True, 'can_view_orders': True, 'can_see_logs': True},
+    'guest': {'can_edit': False, 'can_view_orders': False, 'can_see_logs': False}
+}
+
+def get_user_role():
+    if session.get('logged_in'):
+        return 'admin'
+    elif session.get('guest'):
+        return 'guest'
+    return None
+
+def role_required(allowed_roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            role = get_user_role()
+            if not role or role not in allowed_roles:
+                return redirect(url_for('login'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def log_activity(user, action, details=''):
+    logging.info(f"{user} - {action} - {details}")
 
 PROVIDERS = [
     {
@@ -116,7 +147,7 @@ ACHIEVEMENTS = {
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get('logged_in'):
+        if not session.get('logged_in') and not session.get('guest'):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -288,6 +319,11 @@ def get_provider_achievements(provider_data, is_winner=False, trend=None):
     if len(provider_data.get('regions', {})) >= 5:
         achievements.append(ACHIEVEMENTS['region_king'])
     return achievements
+
+# ===== FORECASTING (Dummy - No extra dependencies) =====
+def dummy_forecast():
+    import random
+    return [random.randint(50, 150) for _ in range(7)]
 
 # New premium favicon
 FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">'''
@@ -608,6 +644,64 @@ BASE_STYLES = """
     .page-title span {
         color: #4f46e5;
         font-weight: 700;
+    }
+
+    /* ===== THEME TOGGLE ===== */
+    .theme-toggle {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 30px;
+        padding: 4px;
+        display: flex;
+        gap: 4px;
+    }
+    
+    .theme-btn {
+        padding: 6px 14px;
+        border-radius: 30px;
+        background: transparent;
+        border: none;
+        color: #64748b;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    
+    .theme-btn.active {
+        background: #4f46e5;
+        color: white;
+    }
+    
+    body.dark .theme-btn.active {
+        background: #818cf8;
+    }
+
+    /* ===== LANGUAGE TOGGLE ===== */
+    .lang-toggle {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 30px;
+        padding: 4px;
+        display: flex;
+        gap: 4px;
+    }
+    
+    .lang-btn {
+        padding: 6px 14px;
+        border-radius: 30px;
+        background: transparent;
+        border: none;
+        color: #64748b;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    
+    .lang-btn.active {
+        background: #4f46e5;
+        color: white;
     }
 
     /* ===== DATE RANGE PICKER ===== */
@@ -1740,6 +1834,18 @@ BASE_STYLES = """
         box-shadow: 0 8px 20px rgba(79,70,229,0.3);
     }
     
+    .guest-link {
+        margin-top: 16px;
+        font-size: 13px;
+        color: #64748b;
+    }
+    
+    .guest-link a {
+        color: #4f46e5;
+        text-decoration: none;
+        font-weight: 600;
+    }
+    
     .error-message {
         background: #fee2e2;
         border: 1px solid #fecaca;
@@ -1749,6 +1855,116 @@ BASE_STYLES = """
         font-size: 12px;
         margin-bottom: 14px;
     }
+
+    /* ===== LOGS PAGE ===== */
+    .logs-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #ffffff;
+        border-radius: 16px;
+        overflow: hidden;
+    }
+    
+    .logs-table th {
+        background: #f8fafc;
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        color: #475569;
+        font-size: 12px;
+        border-bottom: 2px solid #4f46e5;
+    }
+    
+    .logs-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e2e8f0;
+        color: #1e293b;
+        font-size: 13px;
+    }
+
+    /* ===== FORECAST PAGE ===== */
+    .forecast-card {
+        background: #ffffff;
+        border-radius: 20px;
+        border: 1px solid #e2e8f0;
+        padding: 24px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+    }
+    
+    .forecast-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 16px;
+    }
+    
+    .forecast-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+    }
+    
+    .forecast-day {
+        background: #f1f5f9;
+        border-radius: 12px;
+        padding: 16px;
+        text-align: center;
+    }
+    
+    .forecast-day .day-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 8px;
+    }
+    
+    .forecast-day .prediction {
+        font-size: 24px;
+        font-weight: 700;
+        color: #4f46e5;
+    }
+
+    /* ===== DARK MODE VARIABLES ===== */
+    body.dark {
+        background: #0f172a;
+        color: #e2e8f0;
+    }
+    body.dark .sidebar { background: #1e293b; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
+    body.dark .sidebar-header { border-bottom-color: #334155; }
+    body.dark .logo-text { color: #f1f5f9; }
+    body.dark .nav-item { color: #94a3b8; }
+    body.dark .nav-item:hover { background: #334155; color: #f1f5f9; }
+    body.dark .nav-item.active { background: #1e1b4b; color: #a5b4fc; }
+    body.dark .admin-info { background: #0f172a; }
+    body.dark .admin-name { color: #f1f5f9; }
+    body.dark .date-range-picker { background: #1e293b; border-color: #334155; }
+    body.dark .qbtn { background: #0f172a; border-color: #334155; color: #94a3b8; }
+    body.dark .qbtn.active { background: #4f46e5; color: white; }
+    body.dark .range-input { background: #0f172a; border-color: #334155; color: #f1f5f9; }
+    body.dark .apply-btn { background: #4f46e5; }
+    body.dark .week-badge { background: #1e1b4b; color: #a5b4fc; border-color: #4f46e5; }
+    body.dark .provider-card { background: #1e293b; border-color: #334155; }
+    body.dark .card-header { background: linear-gradient(90deg, #1e1b4b, #1e293b); }
+    body.dark .provider-name { color: #f1f5f9; }
+    body.dark .stat-item { background: #0f172a; }
+    body.dark .stat-value { color: #f1f5f9; }
+    body.dark .data-table th { background: #0f172a; color: #94a3b8; border-bottom-color: #4f46e5; }
+    body.dark .data-table td { color: #cbd5e1; }
+    body.dark .data-table tr.total-row td { background: #1e1b4b; }
+    body.dark .day-data { background: #0f172a; border-color: #334155; }
+    body.dark .day-data span, .day-data a { border-right-color: #334155; }
+    body.dark .leaderboard-table th { background: #0f172a; }
+    body.dark .leaderboard-table td { border-bottom-color: #334155; }
+    body.dark .kpi-card { background: #1e293b; }
+    body.dark .chart-card { background: #1e293b; }
+    body.dark .heatmap-item { background: #1e293b; }
+    body.dark .provider-section { background: #1e293b; }
+    body.dark .region-table th { background: #0f172a; }
+    body.dark .premium-calendar { background: #1e293b; }
+    body.dark .cal-cell { background: #0f172a; }
+    body.dark .cal-cell:hover { background: #1e293b; }
 
     /* ===== RESPONSIVE ===== */
     @media (max-width: 1200px) {
@@ -1885,6 +2101,67 @@ function dpParams() {
 }
 
 function getStarRating(stars) { return '★'.repeat(stars) + '☆'.repeat(5 - stars); }
+
+// ===== THEME TOGGLE =====
+function setTheme(theme) {
+    if (theme === 'dark') {
+        document.body.classList.add('dark');
+    } else {
+        document.body.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+}
+
+// ===== LANGUAGE TOGGLE (stub) =====
+let currentLang = localStorage.getItem('lang') || 'en';
+function setLang(lang) {
+    currentLang = lang;
+    localStorage.setItem('lang', lang);
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.lang === lang);
+    });
+    // In a full implementation, you'd update all text with data-i18n attributes
+}
+
+// ===== KEYBOARD SHORTCUTS =====
+document.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'd' || e.key === 'D') {
+        window.location.href = '/';
+    } else if (e.key === 'w' || e.key === 'W') {
+        window.location.href = '/weekly-summary';
+    } else if (e.key === 'r' || e.key === 'R') {
+        window.location.href = '/regions';
+    } else if (e.key === 'Escape') {
+        window.history.back();
+    }
+});
+
+// ===== NOTIFICATION POLLING =====
+function checkNotifications() {
+    fetch('/api/notifications')
+        .then(res => res.json())
+        .then(data => {
+            if (data.message && Notification.permission === 'granted') {
+                new Notification('3PL Alert', { body: data.message });
+            }
+        });
+}
+setInterval(checkNotifications, 30000);
+if (Notification && Notification.permission === 'default') {
+    Notification.requestPermission();
+}
+
+// ===== APPLY THEME ON LOAD =====
+document.addEventListener('DOMContentLoaded', function() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    setTheme(savedTheme);
+    const savedLang = localStorage.getItem('lang') || 'en';
+    setLang(savedLang);
+});
 </script>
 """
 
@@ -1977,13 +2254,26 @@ SIDEBAR_HTML = """
                 <span>Achievements</span><div class="tooltip">Achievements</div>
             </a>
         </div>
+        <div class="nav-section">
+            <div class="nav-section-title">Tools</div>
+            <a href="/forecast" class="nav-item {active_forecast}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <span>Forecast</span><div class="tooltip">Forecast</div>
+            </a>
+            {% if role == 'admin' %}
+            <a href="/logs" class="nav-item {active_logs}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>Activity Logs</span><div class="tooltip">Activity Logs</div>
+            </a>
+            {% endif %}
+        </div>
     </div>
     <div class="sidebar-footer">
         <div class="admin-info">
             <div class="admin-avatar">AW</div>
             <div class="admin-details">
                 <div class="admin-name">Admin Wahab</div>
-                <div class="admin-role">Administrator</div>
+                <div class="admin-role">{% if role == 'admin' %}Administrator{% else %}Guest{% endif %}</div>
             </div>
         </div>
         <a href="/logout" class="logout-btn">
@@ -2013,10 +2303,11 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 """
 
-def sidebar(active):
-    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','calendar','whatsapp','achievements']
+def sidebar(active, role='guest'):
+    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','calendar','whatsapp','achievements','forecast','logs']
     kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
-    return SIDEBAR_HTML.format(**kwargs)
+    # Render with role
+    return SIDEBAR_HTML.format(**kwargs, role=role)
 
 # ===== ROUTES =====
 
@@ -2027,13 +2318,15 @@ def login():
         password = request.form.get('password', '')
         if password == ADMIN_PASSWORD:
             session['logged_in'] = True
+            session.pop('guest', None)
+            log_activity('admin', 'login', 'Admin logged in')
             return redirect(url_for('dashboard'))
         else:
             error = 'Invalid password. Please try again.'
     return render_template_string('''
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Login - 3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body>
+<title>Login - 3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
 <div class="login-container"><div class="login-card">
 <div class="login-logo">3P</div>
 <h1 class="login-title">Welcome Back</h1>
@@ -2043,24 +2336,51 @@ def login():
 <div class="form-group"><label class="form-label">Password</label>
 <input type="password" name="password" class="form-input" placeholder="Enter your password" autofocus required></div>
 <button type="submit" class="login-btn">Sign In</button>
-</form></div></div></body></html>''', error=error)
+</form>
+<div class="guest-link">
+    <a href="/guest-login">View as Guest</a> (read-only, no order details)
+</div>
+</div></div></body></html>''', error=error, favicon=FAVICON)
+
+@app.route('/guest-login')
+def guest_login():
+    session['guest'] = True
+    session.pop('logged_in', None)
+    log_activity('guest', 'login', 'Guest logged in')
+    return redirect(url_for('dashboard'))
 
 @app.route('/logout')
 def logout():
+    role = get_user_role()
+    if role:
+        log_activity(role, 'logout', f'{role} logged out')
     session.pop('logged_in', None)
+    session.pop('guest', None)
     return redirect(url_for('login'))
 
 @app.route('/')
 @login_required
 def dashboard():
+    role = get_user_role()
+    log_activity(role, 'view', 'Dashboard')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('dashboard') + '''
+<title>3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('dashboard', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Provider <span>Dashboard</span></h1>
-    ''' + DATE_PICKER_HTML('week') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('week') + '''
+    </div>
 </div>
 <div id="dashboard-content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -2078,6 +2398,8 @@ async function loadData() {
 }
 
 function renderProvider(provider) {
+    const role = '{{ role }}';
+    const canClick = role === 'admin';
     const trendClass = provider.trend.direction === 'up' ? 'up' : (provider.trend.direction === 'down' ? 'down' : 'neutral');
     const trendIcon = provider.trend.direction === 'up' ? '▲' : (provider.trend.direction === 'down' ? '▼' : '–');
     let achHtml = '';
@@ -2103,16 +2425,27 @@ function renderProvider(provider) {
                 const dayDate = new Date(dpStart);
                 dayDate.setDate(dayDate.getDate() + dayIndex);
                 const dateStr = fmtLocal(dayDate);
-
-                rowsHtml += `<td class="day-cell"${fc}>
-                    <div class="day-data">
-                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
-                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
-                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
-                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
-                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
-                    </div>
-                </td>`;
+                if (canClick) {
+                    rowsHtml += `<td class="day-cell"${fc}>
+                        <div class="day-data">
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
+                        </div>
+                    </td>`;
+                } else {
+                    rowsHtml += `<td class="day-cell"${fc}>
+                        <div class="day-data">
+                            <span class="orders">${d.orders}</span>
+                            <span class="boxes">${d.boxes}</span>
+                            <span class="weight">${formatWeight(d.weight)}</span>
+                            <span class="under20">${d.under20}</span>
+                            <span class="over20">${d.over20}</span>
+                        </div>
+                    </td>`;
+                }
             } else {
                 rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`;
             }
@@ -2123,15 +2456,27 @@ function renderProvider(provider) {
     days.forEach((day,i) => {
         const t = totals[day];
         const fc = flightDays.includes(i) ? ' style="background:#f1f5f9"' : '';
-        rowsHtml += `<td class="day-cell"${fc}>
-            <div class="day-data">
-                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a>
-                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a>
-                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
-                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a>
-                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a>
-            </div>
-        </td>`;
+        if (canClick) {
+            rowsHtml += `<td class="day-cell"${fc}>
+                <div class="day-data">
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a>
+                </div>
+            </td>`;
+        } else {
+            rowsHtml += `<td class="day-cell"${fc}>
+                <div class="day-data">
+                    <span class="orders">${t.o}</span>
+                    <span class="boxes">${t.b}</span>
+                    <span class="weight">${formatWeight(t.w)}</span>
+                    <span class="under20">${t.u}</span>
+                    <span class="over20">${t.v}</span>
+                </div>
+            </td>`;
+        }
     });
     rowsHtml += '</tr>';
     const subHdr = days.map((_,i) => `<th${flightDays.includes(i)?' style="background:#f1f5f9"':''}><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>`).join('');
@@ -2159,19 +2504,31 @@ ${achHtml}
 
 dpInit('week');
 loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/weekly-summary')
 @login_required
 def weekly_summary():
+    role = get_user_role()
+    log_activity(role, 'view', 'Weekly Summary')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Weekly Summary - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('weekly') + '''
+<title>Weekly Summary - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('weekly', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Weekly <span>Summary</span></h1>
-    ''' + DATE_PICKER_HTML('week') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('week') + '''
+    </div>
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -2183,6 +2540,8 @@ async function loadData() {
         const r = await fetch('/api/weekly-summary?' + dpParams());
         const data = await r.json();
         let html = '';
+        const role = '{{ role }}';
+        const canClick = role === 'admin';
         if (data.winner) {
             let achHtml = '';
             if (data.winner.achievements && data.winner.achievements.length > 0) {
@@ -2200,31 +2559,52 @@ ${achHtml}</div></div></div></div>`;
             const rc = i < 3 ? 'rank-'+(i+1) : 'rank-other';
             const tc = p.trend.direction === 'up' ? 'up' : 'down';
             const ti = p.trend.direction === 'up' ? '▲' : '▼';
-            html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
-                <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
-                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
-                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
-                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
-                <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
+            if (canClick) {
+                html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
+                    <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                    <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
+            } else {
+                html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
+                    <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                    <td style="text-align:right;font-weight:600">${p.total_orders.toLocaleString()}</td>
+                    <td style="text-align:right;font-weight:600">${p.total_boxes.toLocaleString()}</td>
+                    <td style="text-align:right;font-weight:600">${formatWeight(p.total_weight)}</td>
+                    <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
+            }
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/daily-region')
 @login_required
 def daily_region():
+    role = get_user_role()
+    log_activity(role, 'view', 'Daily Region')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Daily Region - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('daily_region') + '''
+<title>Daily Region - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('daily_region', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Daily <span>Region Summary</span></h1>
-    ''' + DATE_PICKER_HTML('today') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('today') + '''
+    </div>
 </div>
 <div class="stats-row-5">
 <div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">-</div></a><div class="stat-label">Total Orders</div></div></div>
@@ -2257,6 +2637,8 @@ async function loadData() {
             document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No Data</h3><p>No shipments for selected period</p></div>';
             return;
         }
+        const role = '{{ role }}';
+        const canClick = role === 'admin';
         const medals = ['🥇','🥈','🥉'];
         let html = '';
         data.providers.forEach((provider, idx) => {
@@ -2277,12 +2659,21 @@ async function loadData() {
                 html += '<table class="region-table"><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight</th><th>&lt;20 kg</th><th>20+ kg</th></tr></thead><tbody>';
                 provider.regions.forEach((rg,i) => {
                     const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
-                    html += `<tr><td>${medal}${rg.name}</td>
-                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders}</a></td>
-                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes}</a></td>
-                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
-                        <td style="color:#10b981">${rg.under20}</td>
-                        <td style="color:#ef4444">${rg.over20}</td></tr>`;
+                    if (canClick) {
+                        html += `<tr><td>${medal}${rg.name}</td>
+                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders}</a></td>
+                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes}</a></td>
+                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
+                            <td style="color:#10b981">${rg.under20}</td>
+                            <td style="color:#ef4444">${rg.over20}</td></tr>`;
+                    } else {
+                        html += `<tr><td>${medal}${rg.name}</td>
+                            <td>${rg.orders}</td>
+                            <td>${rg.boxes}</td>
+                            <td>${formatWeight(rg.weight)}</td>
+                            <td style="color:#10b981">${rg.under20}</td>
+                            <td style="color:#ef4444">${rg.over20}</td></tr>`;
+                    }
                 });
                 html += '</tbody></table>';
             } else {
@@ -2295,19 +2686,31 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><h3>Error</h3><p>'+e.message+'</p></div>'; }
 }
 dpInit('today'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/flight-load')
 @login_required
 def flight_load():
+    role = get_user_role()
+    log_activity(role, 'view', 'Flight Load')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Flight Load - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('flight') + '''
+<title>Flight Load - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('flight', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Flight <span>Load</span></h1>
-    ''' + DATE_PICKER_HTML('week') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('week') + '''
+    </div>
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -2319,6 +2722,8 @@ async function loadData() {
         const r = await fetch('/api/flight-load?' + dpParams());
         const data = await r.json();
         let html = '';
+        const role = '{{ role }}';
+        const canClick = role === 'admin';
         for (const flight of data.flights) {
             html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span style="font-size:24px;margin-right:12px">✈️</span><span class="provider-name">${flight.name}</span></div>
 <div class="card-stats">
@@ -2328,10 +2733,17 @@ async function loadData() {
 </div></div>
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
             for (const p of flight.providers) {
-                html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
+                if (canClick) {
+                    html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
+                } else {
+                    html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                        <td style="text-align:right">${p.orders.toLocaleString()}</td>
+                        <td style="text-align:right">${p.boxes.toLocaleString()}</td>
+                        <td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
+                }
             }
             html += '</tbody></table></div>';
         }
@@ -2339,19 +2751,31 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/analytics')
 @login_required
 def analytics():
+    role = get_user_role()
+    log_activity(role, 'view', 'Analytics')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Analytics - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body>
-''' + sidebar('analytics') + '''
+<title>Analytics - 3PL</title>{{ favicon|safe }}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body>
+''' + sidebar('analytics', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Analytics & <span>Insights</span></h1>
-    ''' + DATE_PICKER_HTML('week') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('week') + '''
+    </div>
 </div>
 <div class="stats-row-5">
 <div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">0</div></a><div class="stat-label">Total Orders</div></div></div>
@@ -2396,19 +2820,31 @@ async function loadData() {
     } catch(e) { console.error(e); }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/kpi')
 @login_required
 def kpi_dashboard():
+    role = get_user_role()
+    log_activity(role, 'view', 'KPI Dashboard')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KPI Dashboard - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('kpi') + '''
+<title>KPI Dashboard - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('kpi', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">KPI <span>Dashboard</span></h1>
-    ''' + DATE_PICKER_HTML('week') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('week') + '''
+    </div>
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -2445,19 +2881,31 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/comparison')
 @login_required
 def comparison():
+    role = get_user_role()
+    log_activity(role, 'view', 'Comparison')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Comparison - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('comparison') + '''
+<title>Comparison - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('comparison', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Provider <span>Comparison</span></h1>
-    ''' + DATE_PICKER_HTML('week') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('week') + '''
+    </div>
 </div>
 <div class="tabs">
 <button class="tab-btn active" onclick="showTab(this,'ge-ecl')">GE vs ECL</button>
@@ -2493,6 +2941,8 @@ function renderCard(p1, p2) {
 function renderComparison() {
     if (!curData) return;
     const ps = curData.providers; let html = '';
+    const role = '{{ role }}';
+    const canClick = role === 'admin';
     if (curTab === 'ge-ecl') {
         const ge = ps.filter(p=>p.group==='GE'); const ecl = ps.filter(p=>p.group==='ECL');
         const geT = {name:'GE Total',short:'GE Total',color:'#3B82F6',total_orders:ge.reduce((s,p)=>s+p.total_orders,0),total_boxes:ge.reduce((s,p)=>s+p.total_boxes,0),total_weight:ge.reduce((s,p)=>s+p.total_weight,0)};
@@ -2507,11 +2957,19 @@ function renderComparison() {
         html = '<div class="provider-card"><table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th style="text-align:right">Avg/Order</th></tr></thead><tbody>';
         ps.sort((a,b)=>b.total_boxes-a.total_boxes).forEach(p => {
             const avg = p.total_orders>0 ? (p.total_weight/p.total_orders).toFixed(1) : 0;
-            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
-                <td style="text-align:right">${avg} kg</td></tr>`;
+            if (canClick) {
+                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                    <td style="text-align:right">${avg} kg</td></tr>`;
+            } else {
+                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
+                    <td style="text-align:right">${p.total_orders.toLocaleString()}</td>
+                    <td style="text-align:right">${p.total_boxes.toLocaleString()}</td>
+                    <td style="text-align:right">${formatWeight(p.total_weight)}</td>
+                    <td style="text-align:right">${avg} kg</td></tr>`;
+            }
         });
         html += '</tbody></table></div>';
     }
@@ -2526,19 +2984,31 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/regions')
 @login_required
 def regions():
+    role = get_user_role()
+    log_activity(role, 'view', 'Region Heatmap')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Region Heatmap - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('regions') + '''
+<title>Region Heatmap - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('regions', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Region <span>Heatmap</span></h1>
-    ''' + DATE_PICKER_HTML('week') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('week') + '''
+    </div>
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -2565,19 +3035,31 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/monthly')
 @login_required
 def monthly_report():
+    role = get_user_role()
+    log_activity(role, 'view', 'Monthly Report')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monthly Report - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body>
-''' + sidebar('monthly') + '''
+<title>Monthly Report - 3PL</title>{{ favicon|safe }}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body>
+''' + sidebar('monthly', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Monthly <span>Report</span></h1>
-    ''' + DATE_PICKER_HTML('month') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('month') + '''
+    </div>
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -2589,6 +3071,8 @@ async function loadData() {
     try {
         const r = await fetch('/api/monthly?' + dpParams());
         const data = await r.json();
+        const role = '{{ role }}';
+        const canClick = role === 'admin';
         let html = `<div class="stats-row">
 <div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value">${data.total_orders.toLocaleString()}</div></a><div class="stat-label">Total Orders</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value">${data.total_boxes.toLocaleString()}</div></a><div class="stat-label">Total Boxes</div></div></div>
@@ -2599,10 +3083,17 @@ async function loadData() {
 <div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Monthly Summary</span></div></div>
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
         data.providers.forEach(p => {
-            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
+            if (canClick) {
+                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
+            } else {
+                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
+                    <td style="text-align:right">${p.orders.toLocaleString()}</td>
+                    <td style="text-align:right">${p.boxes.toLocaleString()}</td>
+                    <td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
+            }
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
@@ -2611,19 +3102,31 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('month'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/calendar')
 @login_required
 def calendar_view():
+    role = get_user_role()
+    log_activity(role, 'view', 'Calendar View')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Calendar View - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('calendar') + '''
+<title>Calendar View - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('calendar', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Calendar <span>View</span></h1>
-    ''' + DATE_PICKER_HTML('month') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('month') + '''
+    </div>
 </div>
 <div class="stats-row-5">
 <div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1);font-size:24px">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="s-orders">-</div></a><div class="stat-label">Orders</div></div></div>
@@ -2660,19 +3163,31 @@ async function loadData() {
     } catch(e) { document.getElementById('cal-grid').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('month'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/whatsapp')
 @login_required
 def whatsapp_report():
+    role = get_user_role()
+    log_activity(role, 'view', 'WhatsApp Report')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WhatsApp Report - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('whatsapp') + '''
+<title>WhatsApp Report - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('whatsapp', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">WhatsApp <span>Report</span></h1>
-    ''' + DATE_PICKER_HTML('week') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('week') + '''
+    </div>
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -2693,19 +3208,31 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/achievements')
 @login_required
 def achievements_page():
+    role = get_user_role()
+    log_activity(role, 'view', 'Achievements')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Achievements - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('achievements') + '''
+<title>Achievements - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('achievements', role) + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Provider <span>Achievements</span></h1>
-    ''' + DATE_PICKER_HTML('week') + '''
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+        ''' + DATE_PICKER_HTML('week') + '''
+    </div>
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -2726,9 +3253,94 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
-# ===== API ENDPOINTS =====
+@app.route('/forecast')
+@login_required
+def forecast():
+    role = get_user_role()
+    log_activity(role, 'view', 'Forecast')
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forecast - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('forecast', role) + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Forecast <span>Predictions</span></h1>
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+    </div>
+</div>
+<div id="forecast-content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+async function loadForecast() {
+    document.getElementById('forecast-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/forecast?' + dpParams());
+        const data = await r.json();
+        let html = '<div class="forecast-card"><div class="forecast-title">Next Week Prediction</div>';
+        html += '<div class="forecast-grid">';
+        data.forEach((item, i) => {
+            html += `<div class="forecast-day"><div class="day-name">${item.day}</div><div class="prediction">${item.prediction}</div></div>`;
+        });
+        html += '</div></div>';
+        document.getElementById('forecast-content').innerHTML = html;
+    } catch(e) { document.getElementById('forecast-content').innerHTML = '<p style="color:#ef4444">Error loading forecast</p>'; }
+}
+loadForecast();
+</script></body></html>''', role=role, favicon=FAVICON)
+
+@app.route('/logs')
+@role_required(['admin'])
+def view_logs():
+    log_activity('admin', 'view', 'Activity Logs')
+    # Since we are logging to console, we don't have a file to read. We'll just show a placeholder.
+    logs = ['Logging is now sent to console. Check Vercel logs for details.']
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Logs - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('logs', 'admin') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Activity <span>Logs</span></h1>
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div class="theme-toggle">
+            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+        </div>
+        <div class="lang-toggle">
+            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
+        </div>
+    </div>
+</div>
+<div style="background: var(--bg-secondary); border-radius: 16px; padding: 20px;">
+    <table class="logs-table">
+        <thead><tr><th>Log Entry</th></tr></thead>
+        <tbody>
+        {% for log in logs %}
+            <tr><td>{{ log }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + ''', logs=logs, favicon=FAVICON)
+
+# ===== API ENDPOINTS (unchanged from original) =====
+# All the API routes remain exactly as they were in the original working code.
+# I'll include them here for completeness, but they are identical to the ones in the original.
 
 @app.route('/api/dashboard')
 def api_dashboard():
@@ -3138,8 +3750,29 @@ def clear_cache():
     CACHE = {}
     return jsonify({'status': 'success', 'message': 'Cache cleared'})
 
+# ===== FORECAST API =====
+@app.route('/api/forecast')
+def api_forecast():
+    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    preds = dummy_forecast()
+    return jsonify([{'day': d, 'prediction': preds[i]} for i, d in enumerate(days)])
+
+# ===== NOTIFICATIONS API =====
+notifications = []
+
+@app.route('/api/notifications')
+def api_notifications():
+    global notifications
+    if notifications:
+        msg = notifications.pop(0)
+        return jsonify({'message': msg})
+    return jsonify({'message': None})
+
+def add_notification(msg):
+    notifications.append(msg)
+
 @app.route('/orders')
-@login_required
+@role_required(['admin'])
 def order_details():
     provider_short = request.args.get('provider')
     start_str = request.args.get('start')
@@ -3264,7 +3897,7 @@ def order_details():
     <title>Order Details - {{ provider_short }}</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    ''' + FAVICON + '''
+    {{ favicon|safe }}
     <style>
         body { background: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; padding: 20px; }
         h1 { color: #4f46e5; }
@@ -3313,7 +3946,7 @@ def order_details():
     </table>
 </body>
 </html>
-    ''', orders=orders, provider_short=provider_short_display, region=region, day=day)
+    ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 
 if __name__ == '__main__':
     app.run(debug=True)
