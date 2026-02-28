@@ -16,7 +16,7 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
 
 # ========== CACHE ==========
 CACHE = {}
-CACHE_DURATION = 600  # 1 گھنٹہ (پہلے 300 تھا)
+CACHE_DURATION = 900  # 15 منٹ
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
 # ========== PROVIDERS ==========
