@@ -3599,6 +3599,468 @@ def order_details():
 </body>
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
+# ==============================================================================
+# 🛰️ NEXUS CONTROL TOWER & PENDING RADAR (ULTIMATE MASTER EDITION)
+# ==============================================================================
+import urllib.request
+import csv
+import re
+import json
+import os
+import time
+from flask import jsonify, request, session, render_template_string
 
+# 1. DATA SOURCES
+NEXUS_SOURCES = {
+    "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+    "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+    "GE QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=710036753&single=true&output=csv",
+    "GE Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+    "APX": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRDEzAMUwnFZ7aoThGoMERtxxsll2kfEaSpa9ksXIx6sqbdMncts6Go2d5mKKabepbNXDSoeaUlk-mP/pub?gid=0&single=true&output=csv",
+    "Kerry": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=0&single=true&output=csv"
+}
+NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
+NEXUS_CACHE = {}
+
+# 2. INJECT FLOATING BUTTON FOR ADMIN
+@app.after_request
+def inject_nexus_button(response):
+    if response.content_type and response.content_type.startswith('text/html'):
+        if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
+            html = response.get_data(as_text=True)
+            fab = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg,#0ea5e9,#2563eb); color:white; padding:14px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:'Inter',sans-serif; font-size:14px; box-shadow:0 10px 25px rgba(14,165,233,0.4); z-index:9999; display:flex; align-items:center; gap:10px; transition:0.3s; border:1px solid rgba(255,255,255,0.2);"><span style="font-size:20px;">🛰️</span><span>Nexus Control Tower</span></a>"""
+            if '</body>' in html: response.set_data(html.replace('</body>', fab + '</body>'))
+    return response
+
+# 3. HELPER FUNCTIONS
+def fetch_nexus_csv(url):
+    now = time.time()
+    if url in NEXUS_CACHE and now - NEXUS_CACHE[url]['time'] < 300: return NEXUS_CACHE[url]['data']
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=15) as res:
+            data = list(csv.reader(res.read().decode('utf-8').splitlines()))
+            if not data: return []
+            headers = [str(h).lower().strip() for h in data[0]]
+            dict_data = [dict(zip(headers, row)) for row in data[1:]]
+            NEXUS_CACHE[url] = {'time': now, 'data': dict_data}
+            return dict_data
+    except: return []
+
+def get_alias_val(row, aliases):
+    for k, v in row.items():
+        for a in aliases:
+            if a in k and str(v).strip() and str(v).strip().lower() not in ['n/a','nan','none','-']: return str(v).strip()
+    return "N/A"
+
+# 4. API: TRACKING SEARCH (Ship24 Matrix)
+@app.route('/api/nexus/search', methods=['POST'])
+@login_required
+def api_nexus_search():
+    order_ids = [x.strip() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
+    results = []
+    aliases = {'order': ['fleek id','order num','_order','order'], 'boxes': ['box','boxes','box_count'], 'weight': ['weight','chargeable'], 'vendor': ['vendor','seller'], 'customer': ['consignee','customer','name'], 'country': ['destination','country','city'], 'zip': ['zip','postal'], 'tid': ['tracking','courier_tracking','trackingid'], 'mawb': ['awb','mawb','master']}
+    kerry_data = fetch_nexus_csv(NEXUS_KERRY_STATUS_URL)
+    
+    for order_id in order_ids:
+        kerry_status = next((str(r.get('latest_status', 'N/A')).strip() for r in kerry_data if str(r.get('fleek_id','')).strip().lower() == order_id.lower()), "N/A")
+        order_found = False
+        for src, url in NEXUS_SOURCES.items():
+            for row in fetch_nexus_csv(url):
+                if order_id.lower() in get_alias_val(row, aliases['order']).lower():
+                    raw_tid = get_alias_val(row, aliases['tid'])
+                    results.append({
+                        "order_id": order_id.upper(), "source": src, "status": kerry_status,
+                        "boxes": get_alias_val(row, aliases['boxes']), "weight": get_alias_val(row, aliases['weight']),
+                        "vendor": get_alias_val(row, aliases['vendor']), "customer": get_alias_val(row, aliases['customer']),
+                        "country": get_alias_val(row, aliases['country']), "zip": get_alias_val(row, aliases['zip']),
+                        "tids": [t.strip() for t in re.split(r'[\n,]+', raw_tid) if t.strip() and t.strip()!='N/A'],
+                        "mawb": get_alias_val(row, aliases['mawb'])
+                    })
+                    order_found = True; break
+            if order_found: break
+    return jsonify(results)
+
+# 5. API: SHIP24 SYNC
+@app.route('/api/nexus/ship24', methods=['POST'])
+@login_required
+def api_nexus_ship24():
+    tids = request.json.get('tids', [])
+    ship24_key = os.environ.get('SHIP24_API_KEY', 'MOCK')
+    responses = []
+    for tid in tids:
+        if ship24_key == 'MOCK':
+            import random
+            s = random.choice([("Delivered", "#10b981", 100), ("In Transit", "#3b82f6", 50), ("Exception", "#ef4444", 20)])
+            responses.append({"tid": tid, "success": True, "courier": "Global Courier", "current_status": s[0], "progress": s[2], "eta": "Arrived" if s[2]==100 else "Tomorrow, 2:00 PM", "events": [{"status": s[0], "time": "Just Now", "location": "Hub", "color": s[1]}]})
+        else:
+            try:
+                req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
+                with urllib.request.urlopen(req) as res:
+                    evs = json.loads(res.read().decode()).get('data',{}).get('trackings',[{}])[0].get('events',[])
+                    stat = evs[0].get('statusMilestone','Transit') if evs else 'Unknown'
+                    prog = 100 if stat=='Delivered' else 50
+                    responses.append({"tid": tid, "success": True, "courier": "Ship24", "current_status": stat, "progress": prog, "eta": "Calculating...", "events": [{"status": e.get('statusMilestone',''), "time": e.get('datetime',''), "location": e.get('location',''), "color": "#3b82f6"} for e in evs[:2]]})
+            except: responses.append({"tid": tid, "success": False})
+    return jsonify(responses)
+
+# 6. API: PENDING RADAR AUTO-FETCH (Categorized)
+@app.route('/api/nexus/radar_data', methods=['GET'])
+@login_required
+def api_nexus_radar_data():
+    buckets = { "missing_tid": {s: [] for s in NEXUS_SOURCES}, "handed_over": {s: [] for s in NEXUS_SOURCES}, "processing": {s: [] for s in NEXUS_SOURCES}, "qc_approved": {s: [] for s in NEXUS_SOURCES} }
+    
+    kerry_data = fetch_nexus_csv(NEXUS_KERRY_STATUS_URL)
+    status_map = {str(r.get('fleek_id', '')).strip().lower(): str(r.get('latest_status', 'N/A')).strip().upper() for r in kerry_data}
+    
+    aliases = {'order': ['fleek id','order num','_order','order'], 'date': ['date', 'handover'], 'boxes': ['box','boxes','box_count'], 'weight': ['weight','chargeable'], 'vendor': ['vendor','seller'], 'customer': ['consignee','customer','name'], 'tid': ['tracking','courier_tracking','trackingid']}
+    
+    for src, url in NEXUS_SOURCES.items():
+        for row in fetch_nexus_csv(url):
+            order_id = get_alias_val(row, aliases['order'])
+            if order_id == 'N/A': continue
+            
+            status = status_map.get(order_id.lower(), "PENDING")
+            tid = get_alias_val(row, aliases['tid'])
+            
+            # Smart TID Validation
+            has_tid = False
+            if tid != 'N/A' and len(tid) > 2:
+                if any(c.isdigit() for c in tid) or tid.lower() not in ['pending','hold','wait','none','n/a','null']: has_tid = True
+            
+            r_dict = { "Order": order_id.upper(), "Date": get_alias_val(row, aliases['date']), "Vendor": get_alias_val(row, aliases['vendor']), "Customer": get_alias_val(row, aliases['customer']), "Boxes": get_alias_val(row, aliases['boxes']), "Weight": get_alias_val(row, aliases['weight']), "TID": tid if has_tid else "MISSING / PENDING", "Live_Status": status }
+            
+            if not has_tid: buckets["missing_tid"][src].append(r_dict)
+            elif status == "HANDED OVER TO LOGISTICS PARTNER": buckets["handed_over"][src].append(r_dict)
+            elif status in ["ACCEPTED", "CREATED", "PICKUP READY", "PICKUP SUCCESSFUL", "PICKUP SUCCESSFULL", "QC PENDING", "QC HOLD", "CANCELLED"]: buckets["processing"][src].append(r_dict)
+            elif status == "QC APPROVED": buckets["qc_approved"][src].append(r_dict)
+            
+    return jsonify(buckets)
+
+# 7. FRONTEND DASHBOARD (UI)
+@app.route('/nexus')
+@login_required
+def nexus_dashboard():
+    if session.get('role') != 'admin': return "Access Denied.", 403
+    return render_template_string('''
+    <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Nexus Control Tower</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        :root { --bg:#05050a; --card:#0f1015; --border:#1e1e2e; --text:#f8fafc; --muted:#94a3b8; --brand:#0ea5e9; }
+        body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); margin:0; padding:0; min-height:100vh; }
+        .navbar { background:var(--card); border-bottom:1px solid var(--border); padding:15px 30px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:100; }
+        .navbar a { color:white; text-decoration:none; font-weight:800; font-size:18px;}
+        .container { max-width:1200px; margin:30px auto; padding:0 20px; }
+        
+        .master-nav { display:flex; gap:15px; margin-bottom:30px; background:#0a0a0f; padding:10px; border-radius:12px; border:1px solid var(--border); overflow-x:auto;}
+        .nav-btn { background:transparent; color:var(--muted); border:none; padding:12px 24px; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer; white-space:nowrap; transition:0.3s;}
+        .nav-btn.active { background:rgba(14,165,233,0.1); color:var(--brand); box-shadow:inset 0 -3px 0 var(--brand);}
+        .view-section { display:none; }
+        .view-section.active { display:block; }
+        
+        /* TRACKING ENGINE */
+        .search-box { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px; margin-bottom:20px; }
+        textarea { width:100%; background:#0a0a0f; border:1px solid var(--border); border-radius:12px; padding:15px; color:white; font-family:monospace; resize:vertical; min-height:80px; box-sizing:border-box; outline:none; margin-bottom:15px; }
+        .btn { background:var(--brand); color:white; border:none; padding:12px 24px; border-radius:10px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:8px; transition:0.2s;}
+        .btn:hover { background:#0284c7; transform:translateY(-2px); }
+        .btn-bulk { background:linear-gradient(135deg, #8b5cf6, #6d28d9); width:100%; justify-content:center; margin-bottom:20px; display:none; font-size:16px; padding:16px;}
+        
+        .summary-bar { display:none; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:15px; margin-bottom:20px; justify-content:space-between; align-items:center;}
+        .pills { display:flex; gap:10px; flex-wrap:wrap;}
+        .pill { background:#1e1e2e; color:var(--muted); padding:6px 14px; border-radius:20px; font-size:12px; font-weight:700; cursor:pointer; border:1px solid transparent;}
+        .pill.active { background:rgba(14,165,233,0.1); color:var(--brand); border-color:var(--brand); }
+        
+        .card { background:var(--card); border:1px solid var(--border); border-radius:16px; margin-bottom:20px; transition:0.3s; overflow:hidden;}
+        .glow-green { box-shadow:0 0 20px rgba(16,185,129,0.2); border-color:#10b981; }
+        .glow-yellow { box-shadow:0 0 20px rgba(59,130,246,0.2); border-color:#3b82f6; }
+        .glow-red { box-shadow:0 0 20px rgba(239,68,104,0.2); border-color:#ef4444; }
+        
+        .card-header { padding:12px 20px; background:#0b0c10; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
+        .route-flags { font-size:14px; font-weight:700; letter-spacing:1px; color:#cbd5e1; display:flex; align-items:center; gap:8px;}
+        .card-body { padding:20px; display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:15px; }
+        .grid-item { display:flex; flex-direction:column; gap:4px; }
+        .grid-label { font-size:10px; color:var(--muted); text-transform:uppercase; font-weight:700; }
+        .grid-val { font-size:13px; font-weight:600; background:#15161e; padding:8px; border-radius:6px; border:1px solid var(--border); word-break:break-all;}
+        
+        .track-area { padding:20px; background:#0a0a0f; border-top:1px solid var(--border); }
+        .progress-bg { height:6px; background:#1e1e2e; border-radius:10px; margin:15px 0; overflow:hidden; position:relative;}
+        .progress-fill { height:100%; background:var(--brand); width:0%; transition:1s ease-in-out; }
+        .eta-badge { float:right; font-size:12px; font-weight:700; color:#34d399; background:rgba(52,211,153,0.1); padding:4px 10px; border-radius:6px; }
+        .partial-alert { display:none; background:rgba(245,158,11,0.1); color:#f59e0b; padding:8px 15px; border-radius:8px; font-size:12px; font-weight:700; margin-bottom:15px; border:1px solid rgba(245,158,11,0.3);}
+        .wa-btn { background:#25D366; color:white; border:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer; margin-top:10px; display:inline-flex; align-items:center; gap:5px;}
+        
+        /* PENDING RADAR */
+        .tpl-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:15px; margin-bottom:25px; }
+        .tpl-card { background:var(--card); border:1px solid var(--border); padding:20px; border-radius:12px; text-align:center; cursor:pointer; transition:0.2s; position:relative; overflow:hidden;}
+        .tpl-card:hover { border-color:var(--brand); transform:translateY(-3px); box-shadow:0 10px 20px rgba(0,0,0,0.4);}
+        .tpl-title { font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:800; letter-spacing:1px; margin-bottom:10px;}
+        .tpl-count { font-size:32px; font-weight:900; color:white; }
+        
+        .detail-area { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; display:none; margin-top:20px; box-shadow:0 20px 40px rgba(0,0,0,0.5);}
+        .table-wrap { overflow-x:auto; margin-top:15px; border-radius:8px; border:1px solid var(--border);}
+        table { width:100%; border-collapse:collapse; text-align:left; background:#0b0c10;}
+        th { background:#15161e; padding:14px 12px; font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:800; border-bottom:1px solid var(--border); white-space:nowrap;}
+        td { padding:14px 12px; font-size:13px; border-bottom:1px solid var(--border); color:#cbd5e1; white-space:nowrap;}
+        tr:hover { background:rgba(255,255,255,0.02); }
+        .dl-btn { background:#10b981; color:white; border:none; padding:10px 20px; border-radius:8px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:8px; font-size:13px; transition:0.2s;}
+        .dl-btn:hover { background:#059669; }
+        
+        .spinner { border:3px solid rgba(255,255,255,0.1); border-top:3px solid var(--brand); border-radius:50%; width:24px; height:24px; animation:spin 1s linear infinite; margin:auto;}
+        @keyframes spin { 100% { transform:rotate(360deg); } }
+    </style>
+    </head>
+    <body>
+    <nav class="navbar"><a href="#">🛰️ NEXUS CONTROL TOWER</a><a href="/" style="font-size:13px; background:#1e1e2e; padding:8px 16px; border-radius:8px;">Exit to Dash</a></nav>
+    
+    <div class="container">
+        <div class="master-nav">
+            <button class="nav-btn active" onclick="switchMainView('view-track')">🚀 Ship24 Track & Sync</button>
+            <button class="nav-btn" onclick="switchMainView('view-ho')">📦 Handed Over</button>
+            <button class="nav-btn" onclick="switchMainView('view-miss')">⚠️ Missing TIDs</button>
+            <button class="nav-btn" onclick="switchMainView('view-proc')">⏳ Processing/Hold</button>
+            <button class="nav-btn" onclick="switchMainView('view-qc')">✅ QC Approved</button>
+        </div>
+
+        <div id="view-track" class="view-section active">
+            <div class="search-box">
+                <textarea id="searchInput" placeholder="Paste Multiple Order IDs..."></textarea>
+                <button class="btn" onclick="searchOrders()">🔍 Initiate Scan Matrix</button>
+            </div>
+            <button id="bulkBtn" class="btn btn-bulk" onclick="syncAllTIDs()">⚡ MULTI-TRACK ALL SHIPMENTS (BULK SYNC)</button>
+            <div class="summary-bar" id="summaryBar">
+                <div style="font-weight:800; font-size:18px;">📊 Live Status</div>
+                <div class="pills">
+                    <div class="pill active" onclick="filterCards('all')">All (<span id="cnt-all">0</span>)</div>
+                    <div class="pill" onclick="filterCards('del')">🟢 Delivered (<span id="cnt-del">0</span>)</div>
+                    <div class="pill" onclick="filterCards('trn')">🔵 Transit (<span id="cnt-trn">0</span>)</div>
+                    <div class="pill" onclick="filterCards('err')">🔴 Exceptions (<span id="cnt-err">0</span>)</div>
+                </div>
+            </div>
+            <div id="tracking-results"></div>
+        </div>
+
+        <div id="radar-loader" style="padding:50px; text-align:center; display:none;"><div class="spinner"></div><br><span style="color:var(--muted); font-size:13px; display:block; margin-top:10px;">Auto-fetching live data from 7 sheets...</span></div>
+        
+        <div id="view-ho" class="view-section radar-view"><h2 style="margin-top:0;">📦 Handed Over (TID Updated)</h2><div class="tpl-grid" id="grid-ho"></div><div class="detail-area" id="detail-ho"></div></div>
+        <div id="view-miss" class="view-section radar-view"><h2 style="margin-top:0;">⚠️ Missing or Invalid Tracking IDs</h2><div class="tpl-grid" id="grid-miss"></div><div class="detail-area" id="detail-miss"></div></div>
+        <div id="view-proc" class="view-section radar-view"><h2 style="margin-top:0;">⏳ Processing, Exceptions & Hold</h2><div class="tpl-grid" id="grid-proc"></div><div class="detail-area" id="detail-proc"></div></div>
+        <div id="view-qc" class="view-section radar-view"><h2 style="margin-top:0;">✅ QC Approved (Pending Handover)</h2><div class="tpl-grid" id="grid-qc"></div><div class="detail-area" id="detail-qc"></div></div>
+    </div>
+
+    <script>
+        // --- MASTER NAVIGATION ---
+        let radarDataLoaded = false;
+        
+        async function switchMainView(viewId) {
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.view-section').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(viewId).classList.add('active');
+            
+            if(viewId !== 'view-track' && !radarDataLoaded) {
+                document.querySelectorAll('.radar-view').forEach(v => v.style.display = 'none');
+                document.getElementById('radar-loader').style.display = 'block';
+                
+                try {
+                    const r = await fetch('/api/nexus/radar_data');
+                    radarData = await r.json();
+                    document.getElementById('radar-loader').style.display = 'none';
+                    document.querySelectorAll('.radar-view').forEach(v => v.style.display = 'block');
+                    renderRadarGrids();
+                    radarDataLoaded = true;
+                } catch(e) {
+                    document.getElementById('radar-loader').innerHTML = '<span style="color:#ef4444;">Error fetching data. Please refresh.</span>';
+                }
+            }
+        }
+
+        // --- MODULE 1: TRACKING ENGINE LOGIC ---
+        let allCardsData = [];
+        function getFlag(c) { c=String(c).toLowerCase(); return c.includes('pk')?'🇵🇰':c.includes('cn')?'🇨🇳':c.includes('ae')?'🇦🇪':c.includes('uk')?'🇬🇧':c.includes('us')?'🇺🇸':'🏳️'; }
+
+        async function searchOrders() {
+            const q = document.getElementById('searchInput').value;
+            if(!q.trim()) return;
+            document.getElementById('tracking-results').innerHTML = '<div style="padding:40px;"><div class="spinner"></div></div>';
+            
+            try {
+                const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
+                allCardsData = await r.json();
+                
+                if(allCardsData.length > 0) {
+                    document.getElementById('bulkBtn').style.display = 'flex';
+                    document.getElementById('summaryBar').style.display = 'flex';
+                    document.getElementById('cnt-all').innerText = allCardsData.length;
+                    renderCards();
+                } else {
+                    document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; padding:30px; color:var(--muted);">No orders found.</div>';
+                }
+            } catch(e) {
+                document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:#ef4444;">Search failed.</div>';
+            }
+        }
+
+        function renderCards() {
+            let html = '';
+            allCardsData.forEach((item, idx) => {
+                const flagOrigin = item.source.includes('ECL') ? '🇨🇳' : '🇵🇰';
+                const flagDest = getFlag(item.country);
+                const tidsStr = item.tids.join(',');
+                html += `
+                <div class="card" id="card-${idx}" data-status="pending">
+                    <div class="card-header"><div class="route-flags">[${flagOrigin} Origin] ➔ ✈️ ➔ [${flagDest} Dest]</div><div style="background:#1e1e2e; padding:4px 10px; border-radius:6px; font-size:11px; font-weight:700;">${item.source} | Kerry: ${item.status}</div></div>
+                    <div class="card-body">
+                        <div class="grid-item"><span class="grid-label">Order</span><span class="grid-val" style="color:var(--brand);">${item.order_id}</span></div>
+                        <div class="grid-item"><span class="grid-label">MAWB</span><span class="grid-val">${item.mawb}</span></div>
+                        <div class="grid-item"><span class="grid-label">Boxes / Wt</span><span class="grid-val">${item.boxes} Boxes / ${item.weight}kg</span></div>
+                        <div class="grid-item"><span class="grid-label">Customer</span><span class="grid-val">${item.customer}</span></div>
+                    </div>
+                    <div class="track-area">
+                        <div class="partial-alert" id="partial-${idx}">⚠️ PARTIAL DELIVERY DETECTED</div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-family:monospace; color:var(--brand); font-size:12px;">TIDs: ${tidsStr || 'None'}</span><span class="eta-badge" id="eta-${idx}">⏳ ETA: Pending Scan</span>
+                        </div>
+                        <div class="progress-bg"><div class="progress-fill" id="prog-${idx}"></div></div>
+                        <div id="log-${idx}" style="font-size:12px; color:var(--muted); margin-bottom:10px;">Awaiting Ship24 Sync...</div>
+                        <button class="btn" style="padding:8px 16px; font-size:12px;" onclick="syncShip24(${idx}, '${tidsStr}')">Track Local Courier</button>
+                        <button class="wa-btn" onclick="shareWA(${idx})">💬 WhatsApp Status</button>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('tracking-results').innerHTML = html;
+        }
+
+        async function syncAllTIDs() {
+            const btn = document.getElementById('bulkBtn');
+            btn.innerHTML = '<div class="spinner" style="width:16px; height:16px; border-width:2px; margin-right:10px;"></div> SYNCING ALL...';
+            btn.style.pointerEvents = 'none';
+            for(let i=0; i<allCardsData.length; i++) { if(allCardsData[i].tids.length > 0) await syncShip24(i, allCardsData[i].tids.join(',')); }
+            btn.innerHTML = '⚡ MULTI-TRACK COMPLETED';
+            btn.style.pointerEvents = 'auto';
+        }
+
+        async function syncShip24(idx, tidsStr) {
+            if(!tidsStr) return;
+            const log = document.getElementById(`log-${idx}`);
+            const card = document.getElementById(`card-${idx}`);
+            log.innerHTML = 'Connecting to Ship24...';
+            
+            try {
+                const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids: tidsStr.split(',')})});
+                const data = await r.json();
+                
+                let totalProg = 0, delCount = 0; let combinedLogs = '';
+                data.forEach(d => {
+                    if(d.success) {
+                        totalProg += d.progress; if(d.progress === 100) delCount++;
+                        combinedLogs += `<b>${d.tid}:</b> ${d.current_status} <br>`;
+                        document.getElementById(`eta-${idx}`).innerText = `🎯 ETA: ${d.eta}`;
+                    }
+                });
+                
+                const avgProg = totalProg / data.length;
+                document.getElementById(`prog-${idx}`).style.width = avgProg + '%';
+                log.innerHTML = combinedLogs || 'No active events found.';
+                
+                if(delCount > 0 && delCount < data.length) {
+                    document.getElementById(`partial-${idx}`).style.display = 'block';
+                    document.getElementById(`partial-${idx}`).innerText = `⚠️ PARTIAL DELIVERY (${delCount}/${data.length} Boxes Arrived)`;
+                }
+                
+                card.classList.remove('glow-green', 'glow-yellow', 'glow-red');
+                if(avgProg === 100) { card.classList.add('glow-green'); card.dataset.status = 'del'; }
+                else if(avgProg > 0) { card.classList.add('glow-yellow'); card.dataset.status = 'trn'; }
+                else { card.classList.add('glow-red'); card.dataset.status = 'err'; }
+                updateStats();
+            } catch(e) {
+                log.innerHTML = '<span style="color:#ef4444;">API Error.</span>';
+            }
+        }
+
+        function updateStats() {
+            let d=0, t=0, e=0;
+            document.querySelectorAll('.card').forEach(c => {
+                if(c.dataset.status === 'del') d++; if(c.dataset.status === 'trn') t++; if(c.dataset.status === 'err') e++;
+            });
+            document.getElementById('cnt-del').innerText = d; document.getElementById('cnt-trn').innerText = t; document.getElementById('cnt-err').innerText = e;
+        }
+
+        function filterCards(type) {
+            document.querySelectorAll('.pill').forEach(p => p.classList.remove('active')); event.target.classList.add('active');
+            document.querySelectorAll('.card').forEach(c => { c.style.display = (type === 'all' || c.dataset.status === type) ? 'block' : 'none'; });
+        }
+
+        function shareWA(idx) {
+            const item = allCardsData[idx]; const tids = item.tids.join(', '); const eta = document.getElementById(`eta-${idx}`).innerText;
+            const text = `*Hello ${item.customer}!* 👋\nHere is the live update for your order:\n\n📦 *Order ID:* ${item.order_id}\n✈️ *Master AWB:* ${item.mawb}\n🚚 *Courier TIDs:* ${tids}\n${eta}\n\nTrack online at Ship24.com.`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        }
+
+        // --- MODULE 2: PENDING RADAR LOGIC ---
+        let radarData = null;
+        const bucketMap = {'view-ho': 'handed_over', 'view-miss': 'missing_tid', 'view-proc': 'processing', 'view-qc': 'qc_approved'};
+
+        function renderRadarGrids() {
+            Object.keys(bucketMap).forEach(viewId => {
+                const bucketName = bucketMap[viewId];
+                const suffix = viewId.split('-')[1];
+                let gridHtml = '';
+                
+                Object.keys(radarData[bucketName]).forEach(tplName => {
+                    const count = radarData[bucketName][tplName].length;
+                    const color = viewId==='view-miss'?'#ef4444':viewId==='view-ho'?'#f59e0b':viewId==='view-proc'?'#8b5cf6':'#10b981';
+                    gridHtml += `<div class="tpl-card" onclick="openDetails('${viewId}', '${tplName}')"><div class="tpl-title">${tplName}</div><div class="tpl-count" style="color:${color}">${count}</div></div>`;
+                });
+                document.getElementById(`grid-${suffix}`).innerHTML = gridHtml;
+            });
+        }
+
+        function openDetails(viewId, tplName) {
+            const suffix = viewId.split('-')[1];
+            const bucketName = bucketMap[viewId];
+            const data = radarData[bucketName][tplName];
+            const detailArea = document.getElementById(`detail-${suffix}`);
+            
+            document.querySelectorAll('.detail-area').forEach(d => d.style.display = 'none');
+            
+            if(data.length === 0) {
+                detailArea.innerHTML = `<div style="text-align:center; color:var(--muted); padding:20px;">No orders found in ${tplName} for this category.</div>`;
+            } else {
+                let thead = '<tr>'; Object.keys(data[0]).forEach(k => thead += `<th>${k}</th>`); thead += '</tr>';
+                let tbody = '';
+                data.forEach(row => {
+                    tbody += '<tr>'; Object.values(row).forEach(v => tbody += `<td>${v}</td>`); tbody += '</tr>';
+                });
+                
+                detailArea.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <h3 style="margin:0; color:white;">📋 ${tplName} Details</h3>
+                        <button class="dl-btn" onclick="downloadCSV('${viewId}', '${tplName}')">📥 Download CSV Report</button>
+                    </div>
+                    <div class="table-wrap"><table>${thead}${tbody}</table></div>
+                `;
+            }
+            detailArea.style.display = 'block';
+            detailArea.scrollIntoView({behavior: "smooth", block: "start"});
+        }
+
+        function downloadCSV(viewId, tplName) {
+            const data = radarData[bucketMap[viewId]][tplName];
+            if(data.length===0) return;
+            const headers = Object.keys(data[0]).join(',');
+            const rows = data.map(obj => Object.values(obj).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\\n');
+            const csv = headers + '\\n' + rows;
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url); a.setAttribute('download', `${tplName}_${bucketMap[viewId]}.csv`); a.click();
+        }
+    </script>
+    </body>
+    </html>
+    ''')
+# ==============================================================================
+# END OF CODE
+# ==============================================================================
 if __name__ == '__main__':
     app.run(debug=True)
