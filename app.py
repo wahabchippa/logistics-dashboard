@@ -2383,9 +2383,10 @@ def logout():
 def dashboard():
     role = get_user_role()
     log_activity(role, 'view', 'Dashboard')
+    
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body>
+<title>3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
 ''' + sidebar('dashboard') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
@@ -2404,6 +2405,127 @@ def dashboard():
 </div>
 <div id="dashboard-content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+async function loadData() {
+    document.getElementById('dashboard-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const response = await fetch('/api/dashboard?' + dpParams());
+        const data = await response.json();
+        let html = '';
+        for (const provider of data.providers) { html += renderProvider(provider); }
+        document.getElementById('dashboard-content').innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No data for selected period</h3></div>';
+    } catch(e) { document.getElementById('dashboard-content').innerHTML = '<p style="color:#ef4444;padding:20px">Error loading data: '+e.message+'</p>'; }
+}
+
+function renderProvider(provider) {
+    const role = '{{ role }}';
+    const canClick = role === 'admin';
+    const trendClass = provider.trend.direction === 'up' ? 'up' : (provider.trend.direction === 'down' ? 'down' : 'neutral');
+    const trendIcon = provider.trend.direction === 'up' ? '▲' : (provider.trend.direction === 'down' ? '▼' : '–');
+    let achHtml = '';
+    if (provider.achievements && provider.achievements.length > 0) {
+        achHtml = '<div class="achievements-row">' + provider.achievements.map(a => `<div class="achievement-badge"><span class="badge-icon">${a.icon}</span>${a.name}</div>`).join('') + '</div>';
+    }
+    const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const flightDays = [1,3,5];
+    const totals = {};
+    days.forEach(d => totals[d] = {o:0,b:0,w:0,u:0,v:0});
+    const sortedRegions = Object.keys(provider.regions).sort();
+    let rowsHtml = '';
+    for (const region of sortedRegions) {
+        const rd = provider.regions[region].days;
+        rowsHtml += '<tr><td class="region-col">' + region + '</td>';
+        days.forEach((day, i) => {
+            const d = rd[day];
+            totals[day].o += d.orders; totals[day].b += d.boxes; totals[day].w += d.weight;
+            totals[day].u += d.under20; totals[day].v += d.over20;
+            const fc = flightDays.includes(i) ? ' style="background:#f1f5f9"' : '';
+            if (d.orders > 0) {
+                const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(day);
+                const dayDate = new Date(dpStart);
+                dayDate.setDate(dayDate.getDate() + dayIndex);
+                const dateStr = fmtLocal(dayDate);
+                if (canClick) {
+                    rowsHtml += `<td class="day-cell"${fc}>
+                        <div class="day-data">
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
+                        </div>
+                    </td>`;
+                } else {
+                    rowsHtml += `<td class="day-cell"${fc}>
+                        <div class="day-data">
+                            <span class="orders">${d.orders}</span>
+                            <span class="boxes">${d.boxes}</span>
+                            <span class="weight">${formatWeight(d.weight)}</span>
+                            <span class="under20">${d.under20}</span>
+                            <span class="over20">${d.over20}</span>
+                        </div>
+                    </td>`;
+                }
+            } else {
+                rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`;
+            }
+        });
+        rowsHtml += '</tr>';
+    }
+    rowsHtml += '<tr class="total-row"><td class="region-col">TOTAL</td>';
+    days.forEach((day,i) => {
+        const t = totals[day];
+        const fc = flightDays.includes(i) ? ' style="background:#f1f5f9"' : '';
+        if (canClick) {
+            rowsHtml += `<td class="day-cell"${fc}>
+                <div class="day-data">
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a>
+                </div>
+            </td>`;
+        } else {
+            rowsHtml += `<td class="day-cell"${fc}>
+                <div class="day-data">
+                    <span class="orders">${t.o}</span>
+                    <span class="boxes">${t.b}</span>
+                    <span class="weight">${formatWeight(t.w)}</span>
+                    <span class="under20">${t.u}</span>
+                    <span class="over20">${t.v}</span>
+                </div>
+            </td>`;
+        }
+    });
+    rowsHtml += '</tr>';
+    const subHdr = days.map((_,i) => `<th${flightDays.includes(i)?' style="background:#f1f5f9"':''}><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>`).join('');
+    const dayHdrs = days.map((d,i) => `<th class="day-col${flightDays.includes(i)?' flight-day':''}">${d}${flightDays.includes(i)?' ✈️':''}</th>`).join('');
+    return `<div class="provider-card">
+<div class="card-header" style="--pc:${provider.color}">
+<style>.provider-card .card-header::before{background:${provider.color}}</style>
+<div class="provider-info">
+<span class="provider-name">${provider.name}</span>
+<span class="star-rating">${getStarRating(provider.stars)}</span>
+<span class="trend-badge ${trendClass}">${trendIcon} ${provider.trend.percentage}%</span>
+${achHtml}
+</div>
+<div class="card-stats">
+<div class="stat-item"><div class="stat-value">${provider.total_orders.toLocaleString()}</div><div class="stat-label">Orders</div></div>
+<div class="stat-item"><div class="stat-value">${provider.total_boxes.toLocaleString()}</div><div class="stat-label">Boxes</div></div>
+<div class="stat-item"><div class="stat-value">${formatWeight(provider.total_weight)} kg</div><div class="stat-label">Weight</div></div>
+</div>
+</div>
+<div style="overflow-x:auto"><table class="data-table"><thead>
+<tr><th class="region-col" rowspan="2">Region</th>${dayHdrs}</tr>
+<tr class="sub-header-row">${subHdr}</tr>
+</thead><tbody>${rowsHtml}</tbody></table></div></div>`;
+}
+
+dpInit('week');
+loadData();
+</script></body></html>''', role=role, favicon=FAVICON)
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
