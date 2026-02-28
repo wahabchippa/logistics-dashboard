@@ -8,44 +8,29 @@ from collections import defaultdict
 import time
 import os
 import calendar
-import logging
-import random
-
-# ===== LOGGING SETUP (Console only) =====
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
+# ============================================
+# ADMIN PASSWORD - Rocket2024
+# ============================================
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
 
+# ============================================
+# CACHE CONFIGURATION
+# ============================================
 CACHE = {}
-CACHE_DURATION = 300
+CACHE_DURATION = 300  # 5 minutes
 
+# ============================================
+# GOOGLE SHEET CONFIGURATION
+# ============================================
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
-# ===== USER ROLES =====
-def get_user_role():
-    if session.get('logged_in'):
-        return 'admin'
-    elif session.get('guest'):
-        return 'guest'
-    return None
-
-def role_required(allowed_roles):
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            role = get_user_role()
-            if not role or role not in allowed_roles:
-                return redirect(url_for('login'))
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
-
-def log_activity(user, action, details=''):
-    logging.info(f"{user} - {action} - {details}")
-
+# ============================================
+# 🔒 LOCKED COLUMN MAPPINGS
+# ============================================
 PROVIDERS = [
     {'name': 'GLOBAL EXPRESS (QC)', 'short': 'GE QC', 'sheet': 'GE QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#3B82F6', 'group': 'GE'},
     {'name': 'GLOBAL EXPRESS (ZONE)', 'short': 'GE ZONE', 'sheet': 'GE QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 15, 'region_col': 16, 'order_col': 9, 'start_row': 2, 'color': '#8B5CF6', 'group': 'GE'},
@@ -70,7 +55,7 @@ ACHIEVEMENTS = {
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get('logged_in') and not session.get('guest'):
+        if not session.get('logged_in'):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -243,20 +228,28 @@ def get_provider_achievements(provider_data, is_winner=False, trend=None):
         achievements.append(ACHIEVEMENTS['region_king'])
     return achievements
 
-# ===== FORECASTING (Dummy) =====
-def dummy_forecast():
-    return [random.randint(50, 150) for _ in range(7)]
-
-# ===== FAVICON (Fixed) =====
 FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">'''
 
 BASE_STYLES = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', sans-serif; background: #f8fafc; color: #1e293b; min-height: 100vh; font-size: 13px; line-height: 1.4; }
+    
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    
+    body {
+        font-family: 'Inter', sans-serif;
+        background: #f8fafc;
+        color: #1e293b;
+        min-height: 100vh;
+        font-size: 13px;
+        line-height: 1.4;
+    }
 
-    /* 🚫 GUEST MODE RESTRICTIONS */
+    /* 🚫 GUEST MODE RESTRICTIONS (DISABLES DEEP DIVE CLICKING) */
     body.guest-mode .day-data a,
     body.guest-mode .orders-link,
     body.guest-mode .boxes-link,
@@ -268,149 +261,789 @@ BASE_STYLES = """
         cursor: default !important;
     }
 
-    /* ===== SIDEBAR ===== */
-    .sidebar { position: fixed; left: 0; top: 0; height: 100vh; width: 240px; background: #ffffff; border-right: none; padding: 20px 16px; transition: all 0.2s ease; z-index: 100; display: flex; flex-direction: column; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.02); }
-    .sidebar.collapsed { width: 70px; }
-    .sidebar-header { display: flex; align-items: center; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; margin-bottom: 20px; }
-    .logo-icon { width: 40px; height: 40px; background: linear-gradient(145deg, #4f46e5, #8b5cf6); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #ffffff; font-size: 20px; box-shadow: 0 4px 10px rgba(79,70,229,0.2); }
-    .logo-text { font-size: 18px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; transition: opacity 0.2s; }
-    .sidebar.collapsed .logo-text { opacity: 0; width: 0; }
-    .nav-section { margin-bottom: 16px; }
-    .nav-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; padding: 6px 12px; margin-bottom: 4px; font-weight: 600; }
-    .sidebar.collapsed .nav-section-title { opacity: 0; }
-    .nav-menu { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }
-    .nav-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; color: #64748b; text-decoration: none; transition: all 0.2s; cursor: pointer; position: relative; font-size: 13px; font-weight: 500; }
-    .nav-item:hover { background: #f1f5f9; color: #1e293b; }
-    .nav-item.active { background: #eef2ff; color: #4f46e5; border-left: 4px solid #4f46e5; }
-    .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; color: #64748b; }
-    .nav-item.active svg { color: #4f46e5; }
-    .nav-item span { white-space: nowrap; overflow: hidden; transition: opacity 0.2s; }
-    .sidebar.collapsed .nav-item span { opacity: 0; width: 0; }
-    .nav-item .tooltip { position: absolute; left: 70px; background: #1e293b; color: #ffffff; padding: 6px 12px; border-radius: 6px; font-size: 12px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.2s; border: 1px solid #334155; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .sidebar.collapsed .nav-item:hover .tooltip { opacity: 1; }
-    .sidebar-toggle { position: absolute; right: -15px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; background: #4f46e5; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 3px solid #ffffff; color: #ffffff; font-size: 14px; font-weight: bold; transition: transform 0.2s, background 0.2s; box-shadow: 0 2px 8px rgba(79,70,229,0.4); z-index: 101; }
-    .sidebar-toggle:hover { background: #6366f1; transform: translateY(-50%) scale(1.1); }
-    .sidebar.collapsed .sidebar-toggle { transform: translateY(-50%) rotate(180deg); }
-    .sidebar-footer { border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: auto; }
-    .admin-info { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #f1f5f9; border-radius: 12px; margin-bottom: 10px; }
-    .admin-avatar { width: 36px; height: 36px; background: #4f46e5; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 16px; }
-    .admin-details { flex: 1; }
-    .admin-name { font-weight: 600; color: #1e293b; font-size: 14px; }
-    .admin-role { font-size: 11px; color: #64748b; }
-    .logout-btn { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; color: #ef4444; text-decoration: none; transition: all 0.2s; cursor: pointer; width: 100%; border: none; background: none; font-family: inherit; font-size: 13px; font-weight: 500; }
-    .logout-btn:hover { background: #fee2e2; color: #dc2626; }
-    .logout-btn svg { width: 18px; height: 18px; flex-shrink: 0; color: #ef4444; }
-    .sidebar.collapsed .logout-btn span, .sidebar.collapsed .admin-info { opacity: 0; width: 0; display: none; }
+    /* ===== SIDEBAR - Compact, no border ===== */
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100vh;
+        width: 240px;
+        background: #ffffff;
+        border-right: none;
+        padding: 20px 16px;
+        transition: all 0.2s ease;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.02);
+    }
+    
+    .sidebar.collapsed {
+        width: 70px;
+    }
+    
+    .sidebar-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid #e2e8f0;
+        margin-bottom: 20px;
+    }
+    
+    .logo-icon {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(145deg, #4f46e5, #8b5cf6);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        color: #ffffff;
+        font-size: 20px;
+        box-shadow: 0 4px 10px rgba(79,70,229,0.2);
+    }
+    
+    .logo-text {
+        font-size: 18px;
+        font-weight: 600;
+        color: #1e293b;
+        white-space: nowrap;
+        overflow: hidden;
+        transition: opacity 0.2s;
+    }
+    
+    .sidebar.collapsed .logo-text {
+        opacity: 0;
+        width: 0;
+    }
+    
+    .nav-section {
+        margin-bottom: 16px;
+    }
+    
+    .nav-section-title {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #94a3b8;
+        padding: 6px 12px;
+        margin-bottom: 4px;
+        font-weight: 600;
+    }
+    
+    .sidebar.collapsed .nav-section-title {
+        opacity: 0;
+    }
+    
+    .nav-menu {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex-grow: 1;
+    }
+    
+    .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        color: #64748b;
+        text-decoration: none;
+        transition: all 0.2s;
+        cursor: pointer;
+        position: relative;
+        font-size: 13px;
+        font-weight: 500;
+    }
+    
+    .nav-item:hover {
+        background: #f1f5f9;
+        color: #1e293b;
+    }
+    
+    .nav-item.active {
+        background: #eef2ff;
+        color: #4f46e5;
+        border-left: 4px solid #4f46e5;
+    }
+    
+    .nav-item svg {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        color: #64748b;
+    }
+    
+    .nav-item.active svg {
+        color: #4f46e5;
+    }
+    
+    .nav-item span {
+        white-space: nowrap;
+        overflow: hidden;
+        transition: opacity 0.2s;
+    }
+    
+    .sidebar.collapsed .nav-item span {
+        opacity: 0;
+        width: 0;
+    }
+    
+    .nav-item .tooltip {
+        position: absolute;
+        left: 70px;
+        background: #1e293b;
+        color: #ffffff;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+        border: 1px solid #334155;
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .sidebar.collapsed .nav-item:hover .tooltip {
+        opacity: 1;
+    }
+    
+    .sidebar-toggle {
+        position: absolute;
+        right: -15px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 32px;
+        height: 32px;
+        background: #4f46e5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border: 3px solid #ffffff;
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: bold;
+        transition: transform 0.2s, background 0.2s;
+        box-shadow: 0 2px 8px rgba(79,70,229,0.4);
+        z-index: 101;
+    }
+    
+    .sidebar-toggle:hover {
+        background: #6366f1;
+        transform: translateY(-50%) scale(1.1);
+    }
+    
+    .sidebar.collapsed .sidebar-toggle {
+        transform: translateY(-50%) rotate(180deg);
+    }
+    
+    .sidebar-footer {
+        border-top: 1px solid #e2e8f0;
+        padding-top: 16px;
+        margin-top: auto;
+    }
+    
+    .admin-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        background: #f1f5f9;
+        border-radius: 12px;
+        margin-bottom: 10px;
+    }
+    
+    .admin-avatar {
+        width: 36px;
+        height: 36px;
+        background: #4f46e5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 16px;
+    }
+    
+    .admin-details {
+        flex: 1;
+    }
+    
+    .admin-name {
+        font-weight: 600;
+        color: #1e293b;
+        font-size: 14px;
+    }
+    
+    .admin-role {
+        font-size: 11px;
+        color: #64748b;
+    }
+    
+    .logout-btn {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        color: #ef4444;
+        text-decoration: none;
+        transition: all 0.2s;
+        cursor: pointer;
+        width: 100%;
+        border: none;
+        background: none;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 500;
+    }
+    
+    .logout-btn:hover {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+    
+    .logout-btn svg {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        color: #ef4444;
+    }
+    
+    .sidebar.collapsed .logout-btn span,
+    .sidebar.collapsed .admin-info {
+        opacity: 0;
+        width: 0;
+        display: none;
+    }
 
-    /* ===== MAIN CONTENT ===== */
-    .main-content { margin-left: 240px; padding: 20px; transition: margin-left 0.2s; min-height: 100vh; background: #f8fafc; }
-    .main-content.expanded { margin-left: 70px; }
+    /* ===== MAIN CONTENT - Compact ===== */
+    .main-content {
+        margin-left: 240px;
+        padding: 20px;
+        transition: margin-left 0.2s;
+        min-height: 100vh;
+        background: #f8fafc;
+    }
+    
+    .main-content.expanded {
+        margin-left: 70px;
+    }
 
     /* ===== PAGE HEADER ===== */
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-    .page-title { font-size: 26px; font-weight: 700; color: #1e293b; }
-    .page-title span { color: #4f46e5; font-weight: 700; }
-
-    /* ===== THEME TOGGLE ===== */
-    .theme-toggle { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 30px; padding: 4px; display: flex; gap: 4px; }
-    .theme-btn { padding: 6px 14px; border-radius: 30px; background: transparent; border: none; color: #64748b; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; }
-    .theme-btn.active { background: #4f46e5; color: white; }
-    body.dark .theme-btn.active { background: #818cf8; }
-
-    /* ===== LANGUAGE TOGGLE ===== */
-    .lang-toggle { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 30px; padding: 4px; display: flex; gap: 4px; }
-    .lang-btn { padding: 6px 14px; border-radius: 30px; background: transparent; border: none; color: #64748b; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; }
-    .lang-btn.active { background: #4f46e5; color: white; }
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    
+    .page-title {
+        font-size: 26px;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    
+    .page-title span {
+        color: #4f46e5;
+        font-weight: 700;
+    }
 
     /* ===== DATE RANGE PICKER ===== */
-    .date-range-picker { background: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; padding: 14px 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
-    .qbtns-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-    .qbtn { padding: 5px 14px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 30px; color: #475569; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    .qbtn:hover { background: #e2e8f0; }
-    .qbtn.active { background: #4f46e5; border-color: #4f46e5; color: #ffffff; font-weight: 600; box-shadow: 0 2px 8px rgba(79,70,229,0.2); }
-    .date-inputs-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .range-input { padding: 6px 12px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 30px; color: #1e293b; font-size: 12px; }
-    .range-input:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
-    .range-sep { color: #94a3b8; font-size: 13px; }
-    .apply-btn { padding: 6px 18px; background: #4f46e5; border: none; border-radius: 30px; color: #ffffff; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(79,70,229,0.2); }
-    .apply-btn:hover { background: #6366f1; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79,70,229,0.3); }
-    .week-badge { font-size: 12px; color: #4f46e5; font-weight: 500; padding: 5px 14px; background: #eef2ff; border-radius: 30px; border: 1px solid #c7d2fe; }
+    .date-range-picker {
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+        padding: 14px 18px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+    }
+    
+    .qbtns-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+    
+    .qbtn {
+        padding: 5px 14px;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        border-radius: 30px;
+        color: #475569;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .qbtn:hover {
+        background: #e2e8f0;
+    }
+    
+    .qbtn.active {
+        background: #4f46e5;
+        border-color: #4f46e5;
+        color: #ffffff;
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(79,70,229,0.2);
+    }
+    
+    .date-inputs-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .range-input {
+        padding: 6px 12px;
+        background: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        border-radius: 30px;
+        color: #1e293b;
+        font-size: 12px;
+    }
+    
+    .range-input:focus {
+        outline: none;
+        border-color: #4f46e5;
+        box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+    }
+    
+    .range-sep {
+        color: #94a3b8;
+        font-size: 13px;
+    }
+    
+    .apply-btn {
+        padding: 6px 18px;
+        background: #4f46e5;
+        border: none;
+        border-radius: 30px;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 2px 8px rgba(79,70,229,0.2);
+    }
+    
+    .apply-btn:hover {
+        background: #6366f1;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(79,70,229,0.3);
+    }
+    
+    .week-badge {
+        font-size: 12px;
+        color: #4f46e5;
+        font-weight: 500;
+        padding: 5px 14px;
+        background: #eef2ff;
+        border-radius: 30px;
+        border: 1px solid #c7d2fe;
+    }
 
-    /* ===== PROVIDER CARDS ===== */
-    .provider-card { background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; margin-bottom: 20px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.02); transition: transform 0.2s, box-shadow 0.2s; }
-    .provider-card:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(79,70,229,0.08); border-color: #cbd5e1; }
-    .card-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; position: relative; background: linear-gradient(90deg, #faf9ff, #ffffff); }
-    .card-header::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: linear-gradient(180deg, #4f46e5, #8b5cf6); border-radius: 0 2px 2px 0; }
-    .provider-info { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-    .provider-name { font-size: 20px; font-weight: 600; color: #1e293b; }
-    .star-rating { color: #fbbf24; font-size: 14px; letter-spacing: 2px; }
-    .trend-badge { display: flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 30px; font-size: 12px; font-weight: 600; }
-    .trend-badge.up { background: #e6f7e6; color: #10b981; border: 1px solid #a7f3d0; }
-    .trend-badge.down { background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; }
-    .trend-badge.neutral { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
-    .card-stats { display: flex; gap: 20px; }
-    .stat-item { text-align: center; padding: 6px 16px; background: #f8fafc; border-radius: 14px; border: 1px solid #e2e8f0; }
-    .stat-value { font-size: 20px; font-weight: 700; color: #1e293b; }
-    .stat-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+    /* ===== PROVIDER CARDS - Compact ===== */
+    .provider-card {
+        background: #ffffff;
+        border-radius: 20px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 20px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .provider-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(79,70,229,0.08);
+        border-color: #cbd5e1;
+    }
+    
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        border-bottom: 1px solid #e2e8f0;
+        position: relative;
+        background: linear-gradient(90deg, #faf9ff, #ffffff);
+    }
+    
+    .card-header::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: linear-gradient(180deg, #4f46e5, #8b5cf6);
+        border-radius: 0 2px 2px 0;
+    }
+    
+    .provider-info {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+    
+    .provider-name {
+        font-size: 20px;
+        font-weight: 600;
+        color: #1e293b;
+    }
+    
+    .star-rating {
+        color: #fbbf24;
+        font-size: 14px;
+        letter-spacing: 2px;
+    }
+    
+    .trend-badge {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 12px;
+        border-radius: 30px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    
+    .trend-badge.up {
+        background: #e6f7e6;
+        color: #10b981;
+        border: 1px solid #a7f3d0;
+    }
+    
+    .trend-badge.down {
+        background: #fee2e2;
+        color: #ef4444;
+        border: 1px solid #fecaca;
+    }
+    
+    .trend-badge.neutral {
+        background: #f1f5f9;
+        color: #64748b;
+        border: 1px solid #cbd5e1;
+    }
+    
+    .card-stats {
+        display: flex;
+        gap: 20px;
+    }
+    
+    .stat-item {
+        text-align: center;
+        padding: 6px 16px;
+        background: #f8fafc;
+        border-radius: 14px;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .stat-value {
+        font-size: 20px;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    
+    .stat-label {
+        font-size: 10px;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 2px;
+    }
 
     /* ===== DATA TABLE ===== */
-    .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .data-table th { background: #f8fafc; padding: 10px 6px; text-align: center; font-weight: 600; color: #475569; font-size: 11px; text-transform: uppercase; border-bottom: 2px solid #4f46e5; }
-    .data-table th.region-col { text-align: left; padding-left: 16px; min-width: 120px; }
-    .data-table th.day-col { min-width: 140px; }
-    .data-table th.flight-day { background: #eef2ff; color: #4f46e5; }
-    .data-table td { padding: 8px 6px; text-align: center; border-bottom: 1px solid #e2e8f0; color: #334155; }
-    .data-table td.region-col { text-align: left; padding-left: 16px; font-weight: 500; color: #1e293b; background: #fafafa; }
-    .data-table tr.total-row td { background: #eef2ff; font-weight: 600; color: #4f46e5; border-top: 2px solid #4f46e5; font-size: 12px; }
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+    
+    .data-table th {
+        background: #f8fafc;
+        padding: 10px 6px;
+        text-align: center;
+        font-weight: 600;
+        color: #475569;
+        font-size: 11px;
+        text-transform: uppercase;
+        border-bottom: 2px solid #4f46e5;
+    }
+    
+    .data-table th.region-col {
+        text-align: left;
+        padding-left: 16px;
+        min-width: 120px;
+    }
+    
+    .data-table th.day-col {
+        min-width: 140px;
+    }
+    
+    .data-table th.flight-day {
+        background: #eef2ff;
+        color: #4f46e5;
+    }
+    
+    .data-table td {
+        padding: 8px 6px;
+        text-align: center;
+        border-bottom: 1px solid #e2e8f0;
+        color: #334155;
+    }
+    
+    .data-table td.region-col {
+        text-align: left;
+        padding-left: 16px;
+        font-weight: 500;
+        color: #1e293b;
+        background: #fafafa;
+    }
+    
+    .data-table tr.total-row td {
+        background: #eef2ff;
+        font-weight: 600;
+        color: #4f46e5;
+        border-top: 2px solid #4f46e5;
+        font-size: 12px;
+    }
 
-    /* ===== DAY DATA GRID ===== */
-    .day-data { display: flex; justify-content: center; gap: 2px; font-size: 11px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; background: #f8fafc; margin: 2px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-    .day-data span, .day-data a { flex: 1; min-width: 32px; padding: 4px 1px; text-align: center; font-weight: 500; border-right: 1px solid #e2e8f0; transition: all 0.2s; display: inline-block; text-decoration: none; color: inherit; }
-    .day-data span:last-child, .day-data a:last-child { border-right: none; }
-    .day-data span:nth-child(1), .day-data a:nth-child(1) { color: #3b82f6; background: #eff6ff; }
-    .day-data span:nth-child(2), .day-data a:nth-child(2) { color: #10b981; background: #e6f7e6; }
-    .day-data span:nth-child(3), .day-data a:nth-child(3) { color: #f59e0b; background: #fef3c7; }
-    .day-data span:nth-child(4), .day-data a:nth-child(4) { color: #8b5cf6; background: #ede9fe; }
-    .day-data span:nth-child(5), .day-data a:nth-child(5) { color: #ec4899; background: #fce7f3; }
-    .day-data a:hover { background: #e2e8f0; transform: scale(1.05); z-index: 2; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border-radius: 3px; }
-    .day-data-empty { color: #94a3b8; font-size: 12px; padding: 4px; text-align: center; background: #f1f5f9; border-radius: 4px; }
+    /* ===== CLEAN GRID FOR NUMBERS ===== */
+    .day-data { 
+        display: flex; 
+        justify-content: center; 
+        gap: 2px; 
+        font-size: 11px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #f8fafc;
+        margin: 2px 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+    
+    .day-data span,
+    .day-data a {
+        flex: 1;
+        min-width: 32px;
+        padding: 4px 1px;
+        text-align: center;
+        font-weight: 500;
+        border-right: 1px solid #e2e8f0;
+        transition: all 0.2s;
+        display: inline-block;
+        text-decoration: none;
+        color: inherit;
+    }
+    
+    .day-data span:last-child,
+    .day-data a:last-child {
+        border-right: none;
+    }
+    
+    .day-data span:nth-child(1),
+    .day-data a:nth-child(1) { color: #3b82f6; background: #eff6ff; }
+    .day-data span:nth-child(2),
+    .day-data a:nth-child(2) { color: #10b981; background: #e6f7e6; }
+    .day-data span:nth-child(3),
+    .day-data a:nth-child(3) { color: #f59e0b; background: #fef3c7; }
+    .day-data span:nth-child(4),
+    .day-data a:nth-child(4) { color: #8b5cf6; background: #ede9fe; }
+    .day-data span:nth-child(5),
+    .day-data a:nth-child(5) { color: #ec4899; background: #fce7f3; }
+    
+    .day-data a:hover {
+        background: #e2e8f0;
+        transform: scale(1.05);
+        z-index: 2;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        border-radius: 3px;
+    }
+    
+    .day-data-empty { 
+        color: #94a3b8; 
+        font-size: 12px; 
+        padding: 4px;
+        text-align: center;
+        background: #f1f5f9;
+        border-radius: 4px;
+    }
 
     /* ===== LINK STYLES ===== */
-    .orders-link, .boxes-link, .weight-link, .under20-link, .over20-link { color: inherit; text-decoration: none; border-bottom: 1px dashed currentColor; cursor: pointer; }
-    .orders-link:hover, .boxes-link:hover, .weight-link:hover, .under20-link:hover, .over20-link:hover { color: #4f46e5; border-bottom-color: #4f46e5; }
+    .orders-link, .boxes-link, .weight-link, .under20-link, .over20-link {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px dashed currentColor;
+        cursor: pointer;
+    }
+    .orders-link:hover, .boxes-link:hover, .weight-link:hover,
+    .under20-link:hover, .over20-link:hover {
+        color: #4f46e5;
+        border-bottom-color: #4f46e5;
+    }
 
-    /* ===== SUB-HEADER ===== */
-    .sub-header { display: flex; justify-content: center; gap: 4px; font-size: 9px; color: #64748b; }
-    .sub-header span { min-width: 32px; text-align: center; padding: 2px 0; }
+    /* ===== SUB-HEADER with more spacing ===== */
+    .sub-header {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        font-size: 9px;
+        color: #64748b;
+    }
+    .sub-header span {
+        min-width: 32px;
+        text-align: center;
+        padding: 2px 0;
+    }
 
     /* ===== STATS CARDS ===== */
-    .stats-row, .stats-row-5 { display: grid; gap: 16px; margin-bottom: 20px; }
+    .stats-row, .stats-row-5 {
+        display: grid;
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    
     .stats-row { grid-template-columns: repeat(4, 1fr); }
     .stats-row-5 { grid-template-columns: repeat(5, 1fr); }
-    .stat-card { background: #ffffff; border-radius: 18px; border: 1px solid #e2e8f0; padding: 16px; display: flex; align-items: center; gap: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); transition: transform 0.2s, box-shadow 0.2s; }
-    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(79,70,229,0.1); border-color: #c7d2fe; }
-    .stat-icon { width: 48px; height: 48px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; background: #f1f5f9; border: 1px solid #e2e8f0; }
-    .stat-content { flex: 1; }
-    .stat-card .stat-value { font-size: 24px; font-weight: 700; color: #1e293b; margin-bottom: 2px; }
-    .stat-card .stat-label { font-size: 13px; color: #64748b; }
+    
+    .stat-card {
+        background: #ffffff;
+        border-radius: 18px;
+        border: 1px solid #e2e8f0;
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(79,70,229,0.1);
+        border-color: #c7d2fe;
+    }
+    
+    .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .stat-content {
+        flex: 1;
+    }
+    
+    .stat-card .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 2px;
+    }
+    
+    .stat-card .stat-label {
+        font-size: 13px;
+        color: #64748b;
+    }
 
     /* ===== CHARTS ===== */
-    .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; }
-    .chart-card { background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; padding: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
-    .chart-card.full-width { grid-column: span 2; }
-    .chart-title { font-size: 16px; font-weight: 600; color: #1e293b; margin-bottom: 16px; display: flex; align-items: center; gap: 6px; }
-    .chart-title svg { color: #4f46e5; }
+    .charts-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .chart-card {
+        background: #ffffff;
+        border-radius: 20px;
+        border: 1px solid #e2e8f0;
+        padding: 18px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+    }
+    
+    .chart-card.full-width {
+        grid-column: span 2;
+    }
+    
+    .chart-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .chart-title svg {
+        color: #4f46e5;
+    }
 
     /* ===== LEADERBOARD ===== */
-    .leaderboard-table { width: 100%; border-collapse: collapse; }
-    .leaderboard-table th { background: #f8fafc; padding: 12px; text-align: left; font-weight: 600; color: #475569; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #4f46e5; }
-    .leaderboard-table td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
-    .leaderboard-table tr:hover td { background: #faf9ff; }
-    .rank-badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+    .leaderboard-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .leaderboard-table th {
+        background: #f8fafc;
+        padding: 12px;
+        text-align: left;
+        font-weight: 600;
+        color: #475569;
+        font-size: 12px;
+        text-transform: uppercase;
+        border-bottom: 2px solid #4f46e5;
+    }
+    
+    .leaderboard-table td {
+        padding: 12px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .leaderboard-table tr:hover td {
+        background: #faf9ff;
+    }
+    
+    .rank-badge {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 13px;
+    }
+    
     .rank-1 { background: #fbbf24; color: #1e293b; box-shadow: 0 0 10px #fbbf24; }
     .rank-2 { background: #94a3b8; color: #ffffff; }
     .rank-3 { background: #f9a8d4; color: #1e293b; }
     .rank-other { background: #f1f5f9; color: #64748b; }
+    
     .provider-cell { display: flex; align-items: center; gap: 12px; }
     .provider-color { width: 4px; height: 32px; border-radius: 2px; }
 
@@ -454,19 +1087,6 @@ BASE_STYLES = """
     .heatmap-value { font-size: 24px; font-weight: 700; color: #4f46e5; margin-bottom: 4px; }
     .heatmap-label { font-size: 11px; color: #64748b; }
 
-    /* ===== ACHIEVEMENTS ===== */
-    .achievements-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-    .achievement-badge { display: flex; align-items: center; gap: 4px; padding: 4px 12px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 30px; font-size: 11px; color: #475569; font-weight: 500; }
-
-    /* ===== WHATSAPP REPORT ===== */
-    .whatsapp-box { background: #ffffff; border: 2px solid #10b981; border-radius: 20px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
-    .whatsapp-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
-    .whatsapp-icon { font-size: 26px; }
-    .whatsapp-title { font-size: 18px; font-weight: 700; color: #10b981; }
-    .whatsapp-content { font-family: 'Courier New', monospace; background: #f1f5f9; padding: 18px; border-radius: 14px; color: #1e293b; border: 1px solid #e2e8f0; }
-    .copy-btn { background: #10b981; color: #ffffff; padding: 12px; border: none; border-radius: 40px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; margin-top: 16px; width: 100%; box-shadow: 0 2px 8px rgba(16,185,129,0.2); }
-    .copy-btn:hover { background: #059669; transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16,185,129,0.3); }
-
     /* ===== CALENDAR ===== */
     .premium-calendar { background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
     .calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 12px; }
@@ -486,6 +1106,15 @@ BASE_STYLES = """
     .cal-day-num { font-size: 16px; font-weight: 700; color: #1e293b; margin-bottom: 2px; }
     .cal-stat { font-size: 10px; color: #64748b; }
 
+    /* ===== WHATSAPP REPORT ===== */
+    .whatsapp-box { background: #ffffff; border: 2px solid #10b981; border-radius: 20px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
+    .whatsapp-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+    .whatsapp-icon { font-size: 26px; }
+    .whatsapp-title { font-size: 18px; font-weight: 700; color: #10b981; }
+    .whatsapp-content { font-family: 'Courier New', monospace; background: #f1f5f9; padding: 18px; border-radius: 14px; color: #1e293b; border: 1px solid #e2e8f0; }
+    .copy-btn { background: #10b981; color: #ffffff; padding: 12px; border: none; border-radius: 40px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; margin-top: 16px; width: 100%; box-shadow: 0 2px 8px rgba(16,185,129,0.2); }
+    .copy-btn:hover { background: #059669; transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16,185,129,0.3); }
+
     /* ===== LOGIN ===== */
     .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f1f5f9; padding: 20px; }
     .login-card { background: #ffffff; border-radius: 24px; border: 1px solid #e2e8f0; padding: 40px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 16px 32px rgba(0,0,0,0.02); }
@@ -499,59 +1128,12 @@ BASE_STYLES = """
     .form-input:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
     .login-btn { width: 100%; padding: 12px; background: #4f46e5; border: none; border-radius: 12px; color: #ffffff; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s; margin-top: 8px; box-shadow: 0 4px 12px rgba(79,70,229,0.2); }
     .login-btn:hover { background: #6366f1; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(79,70,229,0.3); }
-    .guest-link { margin-top: 16px; font-size: 13px; color: #64748b; }
-    .guest-link a { color: #4f46e5; text-decoration: none; font-weight: 600; }
     .error-message { background: #fee2e2; border: 1px solid #fecaca; border-radius: 10px; padding: 10px; color: #dc2626; font-size: 12px; margin-bottom: 14px; }
 
-    /* ===== FORECAST PAGE ===== */
-    .forecast-card { background: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; padding: 24px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
-    .forecast-title { font-size: 20px; font-weight: 700; color: #1e293b; margin-bottom: 16px; }
-    .forecast-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-top: 16px; }
-    .forecast-day { background: #f1f5f9; border-radius: 12px; padding: 16px; text-align: center; }
-    .forecast-day .day-name { font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 8px; }
-    .forecast-day .prediction { font-size: 24px; font-weight: 700; color: #4f46e5; }
-
-    /* ===== LOADING ===== */
+    /* Loading */
     .loading { display: flex; justify-content: center; align-items: center; height: 200px; color: #4f46e5; }
     .spinner { width: 40px; height: 40px; border: 3px solid rgba(79, 70, 229, 0.1); border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ===== DARK MODE ===== */
-    body.dark { background: #0f172a; color: #e2e8f0; }
-    body.dark .sidebar { background: #1e293b; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
-    body.dark .sidebar-header { border-bottom-color: #334155; }
-    body.dark .logo-text { color: #f1f5f9; }
-    body.dark .nav-item { color: #94a3b8; }
-    body.dark .nav-item:hover { background: #334155; color: #f1f5f9; }
-    body.dark .nav-item.active { background: #1e1b4b; color: #a5b4fc; }
-    body.dark .admin-info { background: #0f172a; }
-    body.dark .admin-name { color: #f1f5f9; }
-    body.dark .date-range-picker { background: #1e293b; border-color: #334155; }
-    body.dark .qbtn { background: #0f172a; border-color: #334155; color: #94a3b8; }
-    body.dark .qbtn.active { background: #4f46e5; color: white; }
-    body.dark .range-input { background: #0f172a; border-color: #334155; color: #f1f5f9; }
-    body.dark .apply-btn { background: #4f46e5; }
-    body.dark .week-badge { background: #1e1b4b; color: #a5b4fc; border-color: #4f46e5; }
-    body.dark .provider-card { background: #1e293b; border-color: #334155; }
-    body.dark .card-header { background: linear-gradient(90deg, #1e1b4b, #1e293b); }
-    body.dark .provider-name { color: #f1f5f9; }
-    body.dark .stat-item { background: #0f172a; }
-    body.dark .stat-value { color: #f1f5f9; }
-    body.dark .data-table th { background: #0f172a; color: #94a3b8; border-bottom-color: #4f46e5; }
-    body.dark .data-table td { color: #cbd5e1; }
-    body.dark .data-table tr.total-row td { background: #1e1b4b; }
-    body.dark .day-data { background: #0f172a; border-color: #334155; }
-    body.dark .day-data span, .day-data a { border-right-color: #334155; }
-    body.dark .leaderboard-table th { background: #0f172a; }
-    body.dark .leaderboard-table td { border-bottom-color: #334155; }
-    body.dark .kpi-card { background: #1e293b; }
-    body.dark .chart-card { background: #1e293b; }
-    body.dark .heatmap-item { background: #1e293b; }
-    body.dark .provider-section { background: #1e293b; }
-    body.dark .region-table th { background: #0f172a; }
-    body.dark .premium-calendar { background: #1e293b; }
-    body.dark .cal-cell { background: #0f172a; }
-    body.dark .cal-cell:hover { background: #1e293b; }
 
     @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5 { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
     @media (max-width: 768px) { .sidebar { width: 70px; } .main-content { margin-left: 70px; padding: 15px; } .sidebar-toggle { width: 28px; height: 28px; right: -12px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
@@ -617,49 +1199,6 @@ function dpUpdateBadge() {
 
 function dpParams() { return 'start_date=' + fmtLocal(dpStart) + '&end_date=' + fmtLocal(dpEnd); }
 function getStarRating(stars) { return '★'.repeat(stars) + '☆'.repeat(5 - stars); }
-
-// ===== THEME TOGGLE =====
-function setTheme(theme) {
-    if (theme === 'dark') { document.body.classList.add('dark'); } else { document.body.classList.remove('dark'); }
-    localStorage.setItem('theme', theme);
-    document.querySelectorAll('.theme-btn').forEach(btn => { btn.classList.toggle('active', btn.dataset.theme === theme); });
-}
-
-// ===== LANGUAGE TOGGLE =====
-let currentLang = localStorage.getItem('lang') || 'en';
-function setLang(lang) {
-    currentLang = lang;
-    localStorage.setItem('lang', lang);
-    document.querySelectorAll('.lang-btn').forEach(btn => { btn.classList.toggle('active', btn.dataset.lang === lang); });
-}
-
-// ===== KEYBOARD SHORTCUTS =====
-document.addEventListener('keydown', function(e) {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    if (e.key === 'd' || e.key === 'D') { window.location.href = '/'; }
-    else if (e.key === 'w' || e.key === 'W') { window.location.href = '/weekly-summary'; }
-    else if (e.key === 'r' || e.key === 'R') { window.location.href = '/regions'; }
-    else if (e.key === 'Escape') { window.history.back(); }
-});
-
-// ===== NOTIFICATION POLLING =====
-function checkNotifications() {
-    fetch('/api/notifications').then(res => res.json()).then(data => {
-        if (data.message && Notification.permission === 'granted') {
-            new Notification('3PL Alert', { body: data.message });
-        }
-    });
-}
-setInterval(checkNotifications, 30000);
-if (Notification && Notification.permission === 'default') { Notification.requestPermission(); }
-
-// ===== APPLY THEME ON LOAD =====
-document.addEventListener('DOMContentLoaded', function() {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
-    const savedLang = localStorage.getItem('lang') || 'en';
-    setLang(savedLang);
-});
 </script>
 """
 
@@ -722,7 +1261,7 @@ SIDEBAR_HTML = """
                 <span>KPI Dashboard</span><div class="tooltip">KPI Dashboard</div>
             </a>
             <a href="/comparison" class="nav-item {active_comparison}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                 <span>Comparison</span><div class="tooltip">Comparison</div>
             </a>
             <a href="/regions" class="nav-item {active_regions}">
@@ -752,26 +1291,13 @@ SIDEBAR_HTML = """
                 <span>Achievements</span><div class="tooltip">Achievements</div>
             </a>
         </div>
-        <div class="nav-section">
-            <div class="nav-section-title">Tools</div>
-            <a href="/forecast" class="nav-item {active_forecast}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                <span>Forecast</span><div class="tooltip">Forecast</div>
-            </a>
-            {% if role == 'admin' %}
-            <a href="/logs" class="nav-item {active_logs}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <span>Activity Logs</span><div class="tooltip">Activity Logs</div>
-            </a>
-            {% endif %}
-        </div>
     </div>
     <div class="sidebar-footer">
         <div class="admin-info">
-            <div class="admin-avatar">{{ user_initial }}</div>
+            <div class="admin-avatar">{user_initial}</div>
             <div class="admin-details">
-                <div class="admin-name">{{ user_name }}</div>
-                <div class="admin-role">{{ user_role }}</div>
+                <div class="admin-name">{user_name}</div>
+                <div class="admin-role">{user_role}</div>
             </div>
         </div>
         <a href="/logout" class="logout-btn">
@@ -801,17 +1327,20 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 """
 
-def sidebar(active, role='guest'):
-    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','calendar','whatsapp','achievements','forecast','logs']
+def sidebar(active):
+    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','calendar','whatsapp','achievements']
     kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
+    
+    role = session.get('role', 'guest')
     if role == 'admin':
         kwargs['user_initial'] = 'A'
-        kwargs['user_name'] = 'Admin'
-        kwargs['user_role'] = 'Administrator'
+        kwargs['user_name'] = 'Admin User'
+        kwargs['user_role'] = 'Full Access'
     else:
         kwargs['user_initial'] = 'G'
-        kwargs['user_name'] = 'Guest'
-        kwargs['user_role'] = 'Guest'
+        kwargs['user_name'] = 'Guest User'
+        kwargs['user_role'] = 'View Only'
+        
     return SIDEBAR_HTML.format(**kwargs)
 
 # ===== ROUTES =====
@@ -822,23 +1351,21 @@ def login():
     if request.method == 'POST':
         action = request.form.get('action')
         if action == 'guest':
-            session['guest'] = True
-            session.pop('logged_in', None)
-            log_activity('guest', 'login', 'Guest logged in')
+            session['logged_in'] = True
+            session['role'] = 'guest'
             return redirect(url_for('dashboard'))
         else:
-            password = request.form.get('password', '')
-            if password == ADMIN_PASSWORD:
+            if request.form.get('password') == ADMIN_PASSWORD:
                 session['logged_in'] = True
-                session.pop('guest', None)
-                log_activity('admin', 'login', 'Admin logged in')
+                session['role'] = 'admin'
                 return redirect(url_for('dashboard'))
             else:
                 error = 'Invalid admin password. Please try again.'
+                
     return render_template_string('''
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Login - 3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+<title>Login - 3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body>
 <div class="login-container"><div class="login-card">
 <div class="login-logo">3P</div>
 <h1 class="login-title">Welcome Back</h1>
@@ -856,48 +1383,26 @@ def login():
     </div>
     
     <button type="submit" name="action" value="guest" class="login-btn" style="background: #f1f5f9; color: #475569; box-shadow: none; border: 1px solid #cbd5e1;">Continue as Guest (View Only)</button>
-</form></div></div></body></html>''', error=error, favicon=FAVICON)
-
-@app.route('/guest-login')
-def guest_login():
-    session['guest'] = True
-    session.pop('logged_in', None)
-    log_activity('guest', 'login', 'Guest logged in')
-    return redirect(url_for('dashboard'))
+</form></div></div></body></html>''', error=error)
 
 @app.route('/logout')
 def logout():
-    role = get_user_role()
-    if role:
-        log_activity(role, 'logout', f'{role} logged out')
     session.pop('logged_in', None)
-    session.pop('guest', None)
+    session.pop('role', None)
     return redirect(url_for('login'))
 
 @app.route('/')
 @login_required
 def dashboard():
-    role = get_user_role()
-    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
-    log_activity(role, 'view', 'Dashboard')
+    mode_class = 'guest-mode' if session.get('role') == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
-''' + sidebar('dashboard', role) + '''
+<title>3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('dashboard') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Provider <span>Dashboard</span></h1>
-    <div style="display:flex; gap:10px; align-items:center;">
-        <div class="theme-toggle">
-            <button class="theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
-            <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
-        </div>
-        <div class="lang-toggle">
-            <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
-            <button class="lang-btn" data-lang="ur" onclick="setLang('ur')">اردو</button>
-        </div>
-        ''' + DATE_PICKER_HTML('week') + '''
-    </div>
+    ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="dashboard-content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -915,8 +1420,6 @@ async function loadData() {
 }
 
 function renderProvider(provider) {
-    const role = '{{ role }}';
-    const canClick = role === 'admin';
     const trendClass = provider.trend.direction === 'up' ? 'up' : (provider.trend.direction === 'down' ? 'down' : 'neutral');
     const trendIcon = provider.trend.direction === 'up' ? '▲' : (provider.trend.direction === 'down' ? '▼' : '–');
     let achHtml = '';
@@ -942,27 +1445,16 @@ function renderProvider(provider) {
                 const dayDate = new Date(dpStart);
                 dayDate.setDate(dayDate.getDate() + dayIndex);
                 const dateStr = fmtLocal(dayDate);
-                if (canClick) {
-                    rowsHtml += `<td class="day-cell"${fc}>
-                        <div class="day-data">
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
-                        </div>
-                    </td>`;
-                } else {
-                    rowsHtml += `<td class="day-cell"${fc}>
-                        <div class="day-data">
-                            <span class="orders">${d.orders}</span>
-                            <span class="boxes">${d.boxes}</span>
-                            <span class="weight">${formatWeight(d.weight)}</span>
-                            <span class="under20">${d.under20}</span>
-                            <span class="over20">${d.over20}</span>
-                        </div>
-                    </td>`;
-                }
+
+                rowsHtml += `<td class="day-cell"${fc}>
+                    <div class="day-data">
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
+                    </div>
+                </td>`;
             } else {
                 rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`;
             }
@@ -973,27 +1465,15 @@ function renderProvider(provider) {
     days.forEach((day,i) => {
         const t = totals[day];
         const fc = flightDays.includes(i) ? ' style="background:#f1f5f9"' : '';
-        if (canClick) {
-            rowsHtml += `<td class="day-cell"${fc}>
-                <div class="day-data">
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a>
-                </div>
-            </td>`;
-        } else {
-            rowsHtml += `<td class="day-cell"${fc}>
-                <div class="day-data">
-                    <span class="orders">${t.o}</span>
-                    <span class="boxes">${t.b}</span>
-                    <span class="weight">${formatWeight(t.w)}</span>
-                    <span class="under20">${t.u}</span>
-                    <span class="over20">${t.v}</span>
-                </div>
-            </td>`;
-        }
+        rowsHtml += `<td class="day-cell"${fc}>
+            <div class="day-data">
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a>
+            </div>
+        </td>`;
     });
     rowsHtml += '</tr>';
     const subHdr = days.map((_,i) => `<th${flightDays.includes(i)?' style="background:#f1f5f9"':''}><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>`).join('');
@@ -1021,39 +1501,991 @@ ${achHtml}
 
 dpInit('week');
 loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+</script></body></html>''')
 
-# ... (other routes: weekly-summary, daily-region, flight-load, analytics, kpi, comparison, regions, monthly, calendar, whatsapp, achievements, forecast, logs)
-# For brevity, I'll include only the dashboard and order_details route which had the critical error.
-# In a real full answer, I would include all routes, but the user only asked for the complete code.
-# Since we already have the full code in the previous message, I'll continue from there.
+@app.route('/weekly-summary')
+@login_required
+def weekly_summary():
+    mode_class = 'guest-mode' if session.get('role') == 'guest' else 'admin-mode'
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weekly Summary - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('weekly') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Weekly <span>Summary</span></h1>
+    ''' + DATE_PICKER_HTML('week') + '''
+</div>
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+async function loadData() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/weekly-summary?' + dpParams());
+        const data = await r.json();
+        let html = '';
+        if (data.winner) {
+            let achHtml = '';
+            if (data.winner.achievements && data.winner.achievements.length > 0) {
+                achHtml = '<div class="achievements-row" style="margin-top:12px">' + data.winner.achievements.map(a=>`<div class="achievement-badge"><span class="badge-icon">${a.icon}</span>${a.name}</div>`).join('') + '</div>';
+            }
+            html += `<div class="provider-card winner-card"><div class="card-header"><div class="provider-info">
+<span style="font-size:32px;margin-right:12px">🏆</span><div>
+<div class="provider-name" style="font-size:24px">Week Winner: ${data.winner.name}</div>
+<div style="color:#4f46e5;margin-top:4px">${data.winner.total_boxes.toLocaleString()} boxes • ${formatWeight(data.winner.total_weight)} kg</div>
+${achHtml}</div></div></div></div>`;
+        }
+        html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Leaderboard</span></div></div>
+<table class="leaderboard-table"><thead><tr><th style="width:60px">Rank</th><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th><th style="text-align:right">Trend</th></tr></thead><tbody>`;
+        data.providers.forEach((p,i) => {
+            const rc = i < 3 ? 'rank-'+(i+1) : 'rank-other';
+            const tc = p.trend.direction === 'up' ? 'up' : 'down';
+            const ti = p.trend.direction === 'up' ? '▲' : '▼';
+            html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
+                <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        document.getElementById('content').innerHTML = html;
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+}
+dpInit('week'); loadData();
+</script></body></html>''')
 
-# I'll append the remaining routes as they were in the working version.
-# To save space, I'll just note that they are identical to the working code but with favicon fix.
+@app.route('/daily-region')
+@login_required
+def daily_region():
+    mode_class = 'guest-mode' if session.get('role') == 'guest' else 'admin-mode'
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Region - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('daily_region') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Daily <span>Region Summary</span></h1>
+    ''' + DATE_PICKER_HTML('today') + '''
+</div>
+<div class="stats-row-5">
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">-</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">-</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">-</div></a><div class="stat-label">Total Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">-</div><div class="stat-label">&lt;20 kg</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">-</div><div class="stat-label">20+ kg</div></div></div>
+</div>
+<div id="content"><div class="empty-state"><div class="empty-state-icon">📅</div><h3>Select a date range above</h3></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+function toggleProvider(id) {
+    const header = document.getElementById('hdr-'+id);
+    const body = document.getElementById('bdy-'+id);
+    header.classList.toggle('open');
+    body.classList.toggle('open');
+}
+async function loadData() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/daily-region-summary?' + dpParams());
+        const data = await r.json();
+        document.getElementById('t-orders').textContent = data.totals.orders.toLocaleString();
+        document.getElementById('t-boxes').textContent = data.totals.boxes.toLocaleString();
+        document.getElementById('t-weight').textContent = formatWeight(data.totals.weight) + ' kg';
+        document.getElementById('t-under20').textContent = data.totals.under20.toLocaleString();
+        document.getElementById('t-over20').textContent = data.totals.over20.toLocaleString();
+        if (data.totals.orders === 0) {
+            document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No Data</h3><p>No shipments for selected period</p></div>';
+            return;
+        }
+        const medals = ['🥇','🥈','🥉'];
+        let html = '';
+        data.providers.forEach((provider, idx) => {
+            html += `<div class="provider-section">
+<div class="provider-header-dr" id="hdr-${idx}" onclick="toggleProvider(${idx})">
+<div class="provider-header-left">
+<div class="provider-color-bar" style="background:${provider.color}"></div>
+<div class="provider-header-info"><h3>${provider.name}</h3><span>${provider.regions.length} regions</span></div>
+</div>
+<div class="provider-header-stats">
+<div class="header-stat"><div class="header-stat-val">${provider.orders}</div><div class="header-stat-lbl">Orders</div></div>
+<div class="header-stat"><div class="header-stat-val">${provider.boxes}</div><div class="header-stat-lbl">Boxes</div></div>
+<div class="header-stat"><div class="header-stat-val">${formatWeight(provider.weight)}</div><div class="header-stat-lbl">Weight</div></div>
+<span class="toggle-icon">▼</span>
+</div></div>
+<div class="provider-body" id="bdy-${idx}">`;
+            if (provider.regions.length > 0) {
+                html += '<table class="region-table"><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight</th><th>&lt;20 kg</th><th>20+ kg</th></tr></thead><tbody>';
+                provider.regions.forEach((rg,i) => {
+                    const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
+                    html += `<tr><td>${medal}${rg.name}</td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
+                        <td style="color:#10b981">${rg.under20}</td>
+                        <td style="color:#ef4444">${rg.over20}</td></tr>`;
+                });
+                html += '</tbody></table>';
+            } else {
+                html += '<p style="color:#64748b;text-align:center;padding:20px">No data</p>';
+            }
+            html += '</div></div>';
+        });
+        document.getElementById('content').innerHTML = html;
+        if (data.providers.length > 0) toggleProvider(0);
+    } catch(e) { document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><h3>Error</h3><p>'+e.message+'</p></div>'; }
+}
+dpInit('today'); loadData();
+</script></body></html>''')
 
-# ===== API ENDPOINTS (unchanged) =====
-# ... (all API routes remain the same as in the original working code)
+@app.route('/flight-load')
+@login_required
+def flight_load():
+    mode_class = 'guest-mode' if session.get('role') == 'guest' else 'admin-mode'
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flight Load - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('flight') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Flight <span>Load</span></h1>
+    ''' + DATE_PICKER_HTML('week') + '''
+</div>
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+async function loadData() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/flight-load?' + dpParams());
+        const data = await r.json();
+        let html = '';
+        for (const flight of data.flights) {
+            html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span style="font-size:24px;margin-right:12px">✈️</span><span class="provider-name">${flight.name}</span></div>
+<div class="card-stats">
+<div class="stat-item"><div class="stat-value">${flight.total_orders.toLocaleString()}</div><div class="stat-label">Orders</div></div>
+<div class="stat-item"><div class="stat-value">${flight.total_boxes.toLocaleString()}</div><div class="stat-label">Boxes</div></div>
+<div class="stat-item"><div class="stat-value">${formatWeight(flight.total_weight)} kg</div><div class="stat-label">Weight</div></div>
+</div></div>
+<table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
+            for (const p of flight.providers) {
+                html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
+            }
+            html += '</tbody></table></div>';
+        }
+        document.getElementById('content').innerHTML = html;
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+}
+dpInit('week'); loadData();
+</script></body></html>''')
 
-# ===== FORECAST API =====
-@app.route('/api/forecast')
-def api_forecast():
-    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    preds = dummy_forecast()
-    return jsonify([{'day': d, 'prediction': preds[i]} for i, d in enumerate(days)])
+@app.route('/analytics')
+@login_required
+def analytics():
+    mode_class = 'guest-mode' if session.get('role') == 'guest' else 'admin-mode'
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analytics - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('analytics') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Analytics & <span>Insights</span></h1>
+    ''' + DATE_PICKER_HTML('week') + '''
+</div>
+<div class="stats-row-5">
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">0</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">0</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">0</div></a><div class="stat-label">Total Weight (kg)</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">0</div><div class="stat-label">Light (&lt;20 kg)</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">0</div><div class="stat-label">Heavy (20+ kg)</div></div></div>
+</div>
+<div class="charts-grid">
+<div class="chart-card full-width"><div class="chart-title">📈 Orders & Boxes Trend</div><div class="chart-container"><canvas id="trendChart"></canvas></div></div>
+<div class="chart-card"><div class="chart-title">🏆 Provider Performance</div><div class="chart-container"><canvas id="providerChart"></canvas></div></div>
+<div class="chart-card"><div class="chart-title">🌍 Top Regions</div><div class="chart-container"><canvas id="regionChart"></canvas></div></div>
+<div class="chart-card"><div class="chart-title">📊 Weight Categories by Region</div><div class="chart-container"><canvas id="weightRegionChart"></canvas></div></div>
+<div class="chart-card"><div class="chart-title">📊 Weight Categories by 3PL</div><div class="chart-container"><canvas id="weightProviderChart"></canvas></div></div>
+</div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+let charts = {};
+Chart.defaults.color = '#475569';
+Chart.defaults.borderColor = '#e2e8f0';
 
-# ===== NOTIFICATIONS API =====
-notifications = []
+function destroyCharts() { Object.values(charts).forEach(c => c && c.destroy()); charts = {}; }
 
-@app.route('/api/notifications')
-def api_notifications():
-    global notifications
-    if notifications:
-        msg = notifications.pop(0)
-        return jsonify({'message': msg})
-    return jsonify({'message': None})
+async function loadData() {
+    destroyCharts();
+    try {
+        const r = await fetch('/api/analytics-data?' + dpParams());
+        const data = await r.json();
+        document.getElementById('t-orders').textContent = data.totals.orders.toLocaleString();
+        document.getElementById('t-boxes').textContent = data.totals.boxes.toLocaleString();
+        document.getElementById('t-weight').textContent = formatWeight(data.totals.weight);
+        document.getElementById('t-under20').textContent = data.totals.under20.toLocaleString();
+        document.getElementById('t-over20').textContent = data.totals.over20.toLocaleString();
+        charts.trend = new Chart(document.getElementById('trendChart'), { type:'line', data:{ labels:data.trend.labels, datasets:[{label:'Orders',data:data.trend.orders,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.4,pointRadius:4},{label:'Boxes',data:data.trend.boxes,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.1)',fill:true,tension:0.4,pointRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true,grid:{color:'#e2e8f0'}},x:{grid:{display:false}}}}});
+        charts.provider = new Chart(document.getElementById('providerChart'), { type:'doughnut', data:{labels:data.providers.map(p=>p.name),datasets:[{data:data.providers.map(p=>p.boxes),backgroundColor:data.providers.map(p=>p.color+'CC'),borderColor:'#ffffff',borderWidth:3}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{padding:12,usePointStyle:true}}}}});
+        const topR = data.regions.slice(0,8);
+        charts.region = new Chart(document.getElementById('regionChart'), { type:'bar', data:{labels:topR.map(r=>r.name),datasets:[{label:'Boxes',data:topR.map(r=>r.boxes),backgroundColor:'#4f46e599',borderColor:'#4f46e5',borderWidth:2,borderRadius:6}]}, options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,grid:{color:'#e2e8f0'}},y:{grid:{display:false}}}}});
+        const wR = data.regions.slice(0,6);
+        charts.weightRegion = new Chart(document.getElementById('weightRegionChart'), { type:'bar', data:{labels:wR.map(r=>r.name),datasets:[{label:'<20 kg',data:wR.map(r=>r.under20),backgroundColor:'#10b981',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'20+ kg',data:wR.map(r=>r.over20),backgroundColor:'#ef4444',borderColor:'#ef4444',borderWidth:1,borderRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,beginAtZero:true,grid:{color:'#e2e8f0'}}}}});
+        charts.weightProvider = new Chart(document.getElementById('weightProviderChart'), { type:'bar', data:{labels:data.providers.map(p=>p.name),datasets:[{label:'<20 kg',data:data.providers.map(p=>p.under20),backgroundColor:'#10b981',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'20+ kg',data:data.providers.map(p=>p.over20),backgroundColor:'#ef4444',borderColor:'#ef4444',borderWidth:1,borderRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,grid:{color:'#e2e8f0'}}}}});
+    } catch(e) { console.error(e); }
+}
+dpInit('week'); loadData();
+</script></body></html>''')
 
-def add_notification(msg):
-    notifications.append(msg)
+@app.route('/kpi')
+@login_required
+def kpi_dashboard():
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KPI Dashboard - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
+''' + sidebar('kpi') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">KPI <span>Dashboard</span></h1>
+    ''' + DATE_PICKER_HTML('week') + '''
+</div>
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+async function loadData() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/kpi?' + dpParams());
+        const data = await r.json();
+        const kpis = [
+            {icon:'📦',label:'Total Boxes',value:data.total_boxes.toLocaleString(),trend:data.boxes_trend},
+            {icon:'📋',label:'Total Orders',value:data.total_orders.toLocaleString(),trend:data.orders_trend},
+            {icon:'⚖️',label:'Total Weight',value:formatWeight(data.total_weight)+' kg',trend:data.weight_trend},
+            {icon:'📊',label:'Avg Boxes/Day',value:Math.round(data.avg_boxes_per_day).toString(),trend:null},
+            {icon:'📈',label:'Avg Weight/Order',value:data.avg_weight_per_order.toFixed(1)+' kg',trend:null},
+            {icon:'🌍',label:'Active Regions',value:data.active_regions,trend:null},
+            {icon:'🏆',label:'Top Provider',value:data.top_provider,trend:null},
+            {icon:'🗺️',label:'Top Region',value:data.top_region,trend:null},
+            {icon:'📅',label:'Best Day',value:data.best_day,trend:null}
+        ];
+        let html = '<div class="kpi-grid">';
+        kpis.forEach(k => {
+            let tHtml = '';
+            if (k.trend) {
+                const tc = k.trend.direction === 'up' ? 'up' : 'down';
+                const ti = k.trend.direction === 'up' ? '▲' : '▼';
+                tHtml = `<div class="kpi-trend ${tc}">${ti} ${k.trend.percentage}% vs prev period</div>`;
+            }
+            html += `<div class="kpi-card"><div class="kpi-icon">${k.icon}</div><div class="kpi-value">${k.value}</div><div class="kpi-label">${k.label}</div>${tHtml}</div>`;
+        });
+        html += '</div>';
+        document.getElementById('content').innerHTML = html;
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+}
+dpInit('week'); loadData();
+</script></body></html>''')
+
+@app.route('/comparison')
+@login_required
+def comparison():
+    mode_class = 'guest-mode' if session.get('role') == 'guest' else 'admin-mode'
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comparison - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('comparison') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Provider <span>Comparison</span></h1>
+    ''' + DATE_PICKER_HTML('week') + '''
+</div>
+<div class="tabs">
+<button class="tab-btn active" onclick="showTab(this,'ge-ecl')">GE vs ECL</button>
+<button class="tab-btn" onclick="showTab(this,'qc-zone')">QC vs ZONE</button>
+<button class="tab-btn" onclick="showTab(this,'all')">All Providers</button>
+</div>
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+let curTab = 'ge-ecl'; let curData = null;
+function showTab(btn, tab) {
+    curTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderComparison();
+}
+function renderCard(p1, p2) {
+    const stats = ['total_orders','total_boxes','total_weight'];
+    const labels = ['Orders','Boxes','Weight (kg)'];
+    let s1='',s2='';
+    stats.forEach((s,i) => {
+        const v1=p1[s], v2=p2[s];
+        const w1 = v1>v2 ? '<span class="winner-indicator">👑</span>' : '';
+        const w2 = v2>v1 ? '<span class="winner-indicator">👑</span>' : '';
+        const f1 = s==='total_weight' ? formatWeight(v1) : v1.toLocaleString();
+        const f2 = s==='total_weight' ? formatWeight(v2) : v2.toLocaleString();
+        s1+=`<div class="comparison-stat"><span class="comparison-stat-label">${labels[i]}</span><span class="comparison-stat-value">${f1}${w1}</span></div>`;
+        s2+=`<div class="comparison-stat"><span class="comparison-stat-label">${labels[i]}</span><span class="comparison-stat-value">${f2}${w2}</span></div>`;
+    });
+    return `<div class="comparison-grid"><div class="comparison-card"><div class="comparison-header"><div class="comparison-color" style="background:${p1.color}"></div><div class="comparison-name">${p1.short||p1.name}</div></div>${s1}</div><div class="comparison-vs">VS</div><div class="comparison-card"><div class="comparison-header"><div class="comparison-color" style="background:${p2.color}"></div><div class="comparison-name">${p2.short||p2.name}</div></div>${s2}</div></div>`;
+}
+function renderComparison() {
+    if (!curData) return;
+    const ps = curData.providers; let html = '';
+    if (curTab === 'ge-ecl') {
+        const ge = ps.filter(p=>p.group==='GE'); const ecl = ps.filter(p=>p.group==='ECL');
+        const geT = {name:'GE Total',short:'GE Total',color:'#3B82F6',total_orders:ge.reduce((s,p)=>s+p.total_orders,0),total_boxes:ge.reduce((s,p)=>s+p.total_boxes,0),total_weight:ge.reduce((s,p)=>s+p.total_weight,0)};
+        const eclT = {name:'ECL Total',short:'ECL Total',color:'#10B981',total_orders:ecl.reduce((s,p)=>s+p.total_orders,0),total_boxes:ecl.reduce((s,p)=>s+p.total_boxes,0),total_weight:ecl.reduce((s,p)=>s+p.total_weight,0)};
+        html = '<h3 style="color:#4f46e5;margin-bottom:20px">Global Express vs ECL Logistics</h3>'+renderCard(geT,eclT);
+    } else if (curTab === 'qc-zone') {
+        const qc = ps.filter(p=>p.name.includes('QC')); const zn = ps.filter(p=>p.name.includes('ZONE'));
+        const qcT = {short:'QC Total',color:'#8B5CF6',total_orders:qc.reduce((s,p)=>s+p.total_orders,0),total_boxes:qc.reduce((s,p)=>s+p.total_boxes,0),total_weight:qc.reduce((s,p)=>s+p.total_weight,0)};
+        const znT = {short:'Zone Total',color:'#F59E0B',total_orders:zn.reduce((s,p)=>s+p.total_orders,0),total_boxes:zn.reduce((s,p)=>s+p.total_boxes,0),total_weight:zn.reduce((s,p)=>s+p.total_weight,0)};
+        html = '<h3 style="color:#4f46e5;margin-bottom:20px">QC Center vs Zone</h3>'+renderCard(qcT,znT);
+    } else {
+        html = '<div class="provider-card"><table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th style="text-align:right">Avg/Order</th></tr></thead><tbody>';
+        ps.sort((a,b)=>b.total_boxes-a.total_boxes).forEach(p => {
+            const avg = p.total_orders>0 ? (p.total_weight/p.total_orders).toFixed(1) : 0;
+            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right">${avg} kg</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+    }
+    document.getElementById('content').innerHTML = html;
+}
+async function loadData() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/dashboard?' + dpParams());
+        curData = await r.json();
+        renderComparison();
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+}
+dpInit('week'); loadData();
+</script></body></html>''')
+
+@app.route('/regions')
+@login_required
+def regions():
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Region Heatmap - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
+''' + sidebar('regions') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Region <span>Heatmap</span></h1>
+    ''' + DATE_PICKER_HTML('week') + '''
+</div>
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+function heatColor(v,mx) {
+    const r=v/mx;
+    if(r>=0.8) return '#4f46e5'; if(r>=0.6) return '#6366f1';
+    if(r>=0.4) return '#818cf8'; if(r>=0.2) return '#a5b4fc'; return '#c7d2fe';
+}
+async function loadData() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/regions?' + dpParams());
+        const data = await r.json();
+        const mx = Math.max(...data.regions.map(r=>r.orders)) || 1;
+        let html = '<div class="heatmap-container">';
+        data.regions.forEach(rg => {
+            const c = heatColor(rg.orders,mx);
+            html+=`<div class="heatmap-item" style="border-color:${c}"><div class="heatmap-region">${rg.name}</div><div class="heatmap-value" style="color:${c}">${rg.orders}</div><div class="heatmap-label">orders</div><div class="heatmap-label" style="margin-top:4px">${rg.boxes} boxes • ${formatWeight(rg.weight)} kg</div></div>`;
+        });
+        html += '</div>';
+        document.getElementById('content').innerHTML = html;
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
+}
+dpInit('week'); loadData();
+</script></body></html>''')
+
+@app.route('/monthly')
+@login_required
+def monthly_report():
+    mode_class = 'guest-mode' if session.get('role') == 'guest' else 'admin-mode'
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monthly Report - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('monthly') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Monthly <span>Report</span></h1>
+    ''' + DATE_PICKER_HTML('month') + '''
+</div>
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+let chart = null;
+async function loadData() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/monthly?' + dpParams());
+        const data = await r.json();
+        let html = `<div class="stats-row">
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value">${data.total_orders.toLocaleString()}</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value">${data.total_boxes.toLocaleString()}</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value">${formatWeight(data.total_weight)} kg</div></a><div class="stat-label">Total Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(139,92,246,0.1)">📊</div><div class="stat-content"><div class="stat-value">${Math.round(data.avg_per_day)}</div><div class="stat-label">Avg Orders/Day</div></div></div>
+</div>
+<div class="charts-grid"><div class="chart-card full-width"><div class="chart-title">Weekly Breakdown</div><div class="chart-container"><canvas id="weeklyChart"></canvas></div></div></div>
+<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Monthly Summary</span></div></div>
+<table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
+        data.providers.forEach(p => {
+            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        document.getElementById('content').innerHTML = html;
+        if (chart) chart.destroy();
+        chart = new Chart(document.getElementById('weeklyChart'), { type:'bar', data:{labels:data.weeks.map(w=>w.label),datasets:[{label:'Boxes',data:data.weeks.map(w=>w.boxes),backgroundColor:'#4f46e599',borderColor:'#4f46e5',borderWidth:2,borderRadius:8}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#e2e8f0'}},x:{grid:{display:false}}}}});
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+}
+dpInit('month'); loadData();
+</script></body></html>''')
+
+@app.route('/calendar')
+@login_required
+def calendar_view():
+    mode_class = 'guest-mode' if session.get('role') == 'guest' else 'admin-mode'
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendar View - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('calendar') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Calendar <span>View</span></h1>
+    ''' + DATE_PICKER_HTML('month') + '''
+</div>
+<div class="stats-row-5">
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1);font-size:24px">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="s-orders">-</div></a><div class="stat-label">Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1);font-size:24px">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="s-boxes">-</div></a><div class="stat-label">Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1);font-size:24px">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="s-weight">-</div></a><div class="stat-label">Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1);font-size:24px">🪶</div><div class="stat-content"><div class="stat-value" id="s-light">-</div><div class="stat-label">&lt;20 kg</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1);font-size:24px">🏋️</div><div class="stat-content"><div class="stat-value" id="s-heavy">-</div><div class="stat-label">20+ kg</div></div></div>
+</div>
+<div class="premium-calendar">
+<div class="calendar-weekdays"><div class="weekday-label">Mon</div><div class="weekday-label">Tue</div><div class="weekday-label">Wed</div><div class="weekday-label">Thu</div><div class="weekday-label">Fri</div><div class="weekday-label">Sat</div><div class="weekday-label">Sun</div></div>
+<div class="calendar-days-grid" id="cal-grid"><div class="loading"><div class="spinner"></div></div></div>
+</div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+function getLevel(b,mx) { if(!b) return 0; const r=b/mx; if(r>=0.8) return 5; if(r>=0.6) return 4; if(r>=0.4) return 3; if(r>=0.2) return 2; return 1; }
+async function loadData() {
+    document.getElementById('cal-grid').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/calendar?' + dpParams());
+        const data = await r.json();
+        document.getElementById('s-orders').textContent = data.totals.orders.toLocaleString();
+        document.getElementById('s-boxes').textContent = data.totals.boxes.toLocaleString();
+        document.getElementById('s-weight').textContent = formatWeight(data.totals.weight)+' kg';
+        document.getElementById('s-light').textContent = data.totals.under20.toLocaleString();
+        document.getElementById('s-heavy').textContent = data.totals.over20.toLocaleString();
+        let html = '';
+        for(let i=0;i<data.first_weekday;i++) html+='<div class="cal-cell empty"></div>';
+        data.days.forEach(d => {
+            const lv = getLevel(d.boxes, data.max_boxes||1);
+            html+=`<div class="cal-cell level-${lv}"><div class="cal-day-num">${d.day}</div><div class="cal-stat">📦${d.orders}|📮${d.boxes}</div></div>`;
+        });
+        document.getElementById('cal-grid').innerHTML = html;
+    } catch(e) { document.getElementById('cal-grid').innerHTML = '<p style="color:#ef4444">Error</p>'; }
+}
+dpInit('month'); loadData();
+</script></body></html>''')
+
+@app.route('/whatsapp')
+@login_required
+def whatsapp_report():
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Report - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
+''' + sidebar('whatsapp') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">WhatsApp <span>Report</span></h1>
+    ''' + DATE_PICKER_HTML('week') + '''
+</div>
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        const b = document.querySelector('.copy-btn');
+        b.innerHTML = '✓ Copied!'; setTimeout(()=>{b.innerHTML='📋 Copy to Clipboard';},2000);
+    });
+}
+async function loadData() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/whatsapp?' + dpParams());
+        const data = await r.json();
+        document.getElementById('content').innerHTML = `<div class="whatsapp-box"><div class="whatsapp-header"><span class="whatsapp-icon">📱</span><span class="whatsapp-title">Report - Ready to Share</span></div><div class="whatsapp-content" id="report-text">${data.report}</div><button class="copy-btn" onclick="copyText(document.getElementById('report-text').textContent)">📋 Copy to Clipboard</button></div>`;
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
+}
+dpInit('week'); loadData();
+</script></body></html>''')
+
+@app.route('/achievements')
+@login_required
+def achievements_page():
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Achievements - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
+''' + sidebar('achievements') + '''
+<main class="main-content" id="main-content">
+<div class="page-header">
+    <h1 class="page-title">Provider <span>Achievements</span></h1>
+    ''' + DATE_PICKER_HTML('week') + '''
+</div>
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+async function loadData() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/dashboard?' + dpParams());
+        const data = await r.json();
+        let html = '';
+        data.providers.forEach(p => {
+            const ach = p.achievements || [];
+            html+=`<div class="provider-card" style="margin-bottom:16px"><div class="card-header"><div class="provider-info"><div style="background:${p.color};width:8px;height:40px;border-radius:4px"></div><span class="provider-name">${p.name}</span><span style="color:#64748b;font-size:14px">${p.total_boxes.toLocaleString()} boxes</span></div></div>
+<div style="padding:20px">${ach.length>0?'<div style="display:flex;flex-wrap:wrap;gap:12px">'+ach.map(a=>`<div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;min-width:120px"><div style="font-size:32px;margin-bottom:8px">${a.icon}</div><div style="font-size:14px;font-weight:600;color:#4f46e5">${a.name}</div><div style="font-size:11px;color:#64748b;margin-top:4px">${a.desc}</div></div>`).join('')+'</div>':'<div style="color:#64748b;text-align:center;padding:20px">No achievements this period 💪</div>'}</div></div>`;
+        });
+        document.getElementById('content').innerHTML = html;
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
+}
+dpInit('week'); loadData();
+</script></body></html>''')
+
+# ===== API ENDPOINTS =====
+
+@app.route('/api/dashboard')
+def api_dashboard():
+    start_date, end_date = parse_date_range(request)
+    prev_start = start_date - (end_date - start_date) - timedelta(seconds=1)
+    prev_end = start_date - timedelta(seconds=1)
+    providers_data = []
+    max_boxes = 0
+    winner_idx = 0
+    for idx, provider in enumerate(PROVIDERS):
+        current_data = process_provider_data(provider, start_date, end_date)
+        previous_data = process_provider_data(provider, prev_start, prev_end)
+        if current_data:
+            prev_boxes = previous_data['total_boxes'] if previous_data else 0
+            current_data['trend'] = calculate_trend(current_data['total_boxes'], prev_boxes)
+            if current_data['total_boxes'] > max_boxes:
+                max_boxes = current_data['total_boxes']
+                winner_idx = len(providers_data)
+            providers_data.append(current_data)
+    for idx, p in enumerate(providers_data):
+        is_winner = idx == winner_idx and p['total_boxes'] > 0
+        p['achievements'] = get_provider_achievements(p, is_winner, p['trend'])
+    return jsonify({'start_date': start_date.isoformat(), 'end_date': end_date.isoformat(), 'providers': providers_data})
+
+@app.route('/api/weekly-summary')
+def api_weekly_summary():
+    start_date, end_date = parse_date_range(request)
+    prev_start = start_date - (end_date - start_date) - timedelta(seconds=1)
+    prev_end = start_date - timedelta(seconds=1)
+    providers_data = []
+    for provider in PROVIDERS:
+        current_data = process_provider_data(provider, start_date, end_date)
+        previous_data = process_provider_data(provider, prev_start, prev_end)
+        if current_data:
+            prev_boxes = previous_data['total_boxes'] if previous_data else 0
+            current_data['trend'] = calculate_trend(current_data['total_boxes'], prev_boxes)
+            providers_data.append(current_data)
+    providers_data.sort(key=lambda x: x['total_boxes'], reverse=True)
+    winner = None
+    if providers_data and providers_data[0]['total_boxes'] > 0:
+        winner = providers_data[0]
+        winner['achievements'] = get_provider_achievements(winner, True, winner['trend'])
+    return jsonify({'start_date': start_date.isoformat(), 'end_date': end_date.isoformat(), 'winner': winner, 'providers': providers_data})
+
+@app.route('/api/flight-load')
+def api_flight_load():
+    start_date, end_date = parse_date_range(request)
+    providers_data = []
+    for provider in PROVIDERS:
+        data = process_provider_data(provider, start_date, end_date)
+        if data:
+            providers_data.append(data)
+    flights = [
+        {'name': 'Tuesday Flight (Mon + Tue)', 'days': ['Mon', 'Tue']},
+        {'name': 'Thursday Flight (Wed + Thu)', 'days': ['Wed', 'Thu']},
+        {'name': 'Saturday Flight (Fri + Sat)', 'days': ['Fri', 'Sat']}
+    ]
+    flight_data = []
+    for flight in flights:
+        fi = {'name': flight['name'], 'total_orders': 0, 'total_boxes': 0, 'total_weight': 0, 'providers': []}
+        for provider in providers_data:
+            pf = {'name': provider['name'], 'color': provider['color'], 'orders': 0, 'boxes': 0, 'weight': 0}
+            for region_data in provider['regions'].values():
+                for day in flight['days']:
+                    dd = region_data['days'].get(day, {})
+                    pf['orders'] += dd.get('orders', 0)
+                    pf['boxes'] += dd.get('boxes', 0)
+                    pf['weight'] += dd.get('weight', 0)
+            fi['total_orders'] += pf['orders']
+            fi['total_boxes'] += pf['boxes']
+            fi['total_weight'] += pf['weight']
+            fi['providers'].append(pf)
+        fi['providers'].sort(key=lambda x: x['boxes'], reverse=True)
+        flight_data.append(fi)
+    return jsonify({'flights': flight_data})
+
+@app.route('/api/daily-region-summary')
+def api_daily_region_summary():
+    start_date, end_date = parse_date_range(request)
+    result = {
+        'totals': {'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0},
+        'providers': []
+    }
+    for provider in PROVIDERS:
+        pd = {'name': provider['short'], 'color': provider['color'], 'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0, 'regions': {}}
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows:
+            result['providers'].append(pd)
+            continue
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1:
+                continue
+            try:
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                    continue
+                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                parsed_date = parse_date(date_val)
+                if not parsed_date or not (start_date <= parsed_date <= end_date):
+                    continue
+                region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                if region in INVALID_REGIONS or not region:
+                    continue
+                try:
+                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except:
+                    boxes = 0
+                try:
+                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                except:
+                    weight = 0.0
+                pd['orders'] += 1; pd['boxes'] += boxes; pd['weight'] += weight
+                if weight < 20: pd['under20'] += 1
+                else: pd['over20'] += 1
+                if region not in pd['regions']:
+                    pd['regions'][region] = {'name': region, 'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0}
+                pd['regions'][region]['orders'] += 1
+                pd['regions'][region]['boxes'] += boxes
+                pd['regions'][region]['weight'] += weight
+                if weight < 20: pd['regions'][region]['under20'] += 1
+                else: pd['regions'][region]['over20'] += 1
+            except:
+                continue
+        pd['regions'] = sorted(pd['regions'].values(), key=lambda x: x['boxes'], reverse=True)
+        result['totals']['orders'] += pd['orders']
+        result['totals']['boxes'] += pd['boxes']
+        result['totals']['weight'] += pd['weight']
+        result['totals']['under20'] += pd['under20']
+        result['totals']['over20'] += pd['over20']
+        result['providers'].append(pd)
+    result['providers'].sort(key=lambda x: x['boxes'], reverse=True)
+    return jsonify(result)
+
+@app.route('/api/analytics-data')
+def api_analytics_data():
+    start_date, end_date = parse_date_range(request)
+    result = {'totals': {'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0},
+              'trend': {'labels': [], 'orders': [], 'boxes': []}, 'providers': [], 'regions': []}
+    provider_data = {}
+    region_data = {}
+    trend_data = defaultdict(lambda: {'orders': 0, 'boxes': 0})
+    days_diff = (end_date - start_date).days + 1
+    for provider in PROVIDERS:
+        pkey = provider['short']
+        provider_data[pkey] = {'name': provider['short'], 'color': provider['color'], 'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0}
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows:
+            continue
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1:
+                continue
+            try:
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                    continue
+                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                parsed_date = parse_date(date_val)
+                if not parsed_date or not (start_date <= parsed_date <= end_date):
+                    continue
+                region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                if region in INVALID_REGIONS or not region:
+                    continue
+                try:
+                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except:
+                    boxes = 0
+                try:
+                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                except:
+                    weight = 0.0
+                result['totals']['orders'] += 1; result['totals']['boxes'] += boxes; result['totals']['weight'] += weight
+                if weight < 20: result['totals']['under20'] += 1
+                else: result['totals']['over20'] += 1
+                provider_data[pkey]['orders'] += 1; provider_data[pkey]['boxes'] += boxes; provider_data[pkey]['weight'] += weight
+                if weight < 20: provider_data[pkey]['under20'] += 1
+                else: provider_data[pkey]['over20'] += 1
+                if region not in region_data:
+                    region_data[region] = {'name': region, 'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0}
+                region_data[region]['orders'] += 1; region_data[region]['boxes'] += boxes; region_data[region]['weight'] += weight
+                if weight < 20: region_data[region]['under20'] += 1
+                else: region_data[region]['over20'] += 1
+                if days_diff <= 1:
+                    date_key = parsed_date.strftime('%H:00')
+                elif days_diff <= 31:
+                    date_key = parsed_date.strftime('%b %d')
+                else:
+                    date_key = parsed_date.strftime('%b %Y')
+                trend_data[date_key]['orders'] += 1; trend_data[date_key]['boxes'] += boxes
+            except:
+                continue
+    if days_diff <= 1:
+        labels = [f'{h:02d}:00' for h in range(24)]
+    elif days_diff <= 31:
+        labels = [(start_date + timedelta(days=i)).strftime('%b %d') for i in range(days_diff)]
+    else:
+        seen = []
+        d = start_date
+        while d <= end_date:
+            lbl = d.strftime('%b %Y')
+            if lbl not in seen: seen.append(lbl)
+            d = d + timedelta(days=32)
+            d = d.replace(day=1)
+        labels = seen
+    result['trend']['labels'] = labels
+    for lbl in labels:
+        result['trend']['orders'].append(trend_data[lbl]['orders'])
+        result['trend']['boxes'].append(trend_data[lbl]['boxes'])
+    result['providers'] = sorted(provider_data.values(), key=lambda x: x['boxes'], reverse=True)
+    result['regions'] = sorted(region_data.values(), key=lambda x: x['boxes'], reverse=True)
+    return jsonify(result)
+
+@app.route('/api/kpi')
+def api_kpi():
+    start_date, end_date = parse_date_range(request)
+    prev_start = start_date - (end_date - start_date) - timedelta(seconds=1)
+    prev_end = start_date - timedelta(seconds=1)
+    total_orders = 0; total_boxes = 0; total_weight = 0
+    prev_orders = 0; prev_boxes = 0; prev_weight = 0
+    all_regions = set(); daily_totals = defaultdict(int)
+    provider_totals = {}; region_totals = defaultdict(int)
+    for provider in PROVIDERS:
+        current_data = process_provider_data(provider, start_date, end_date)
+        previous_data = process_provider_data(provider, prev_start, prev_end)
+        if current_data:
+            total_orders += current_data['total_orders']; total_boxes += current_data['total_boxes']; total_weight += current_data['total_weight']
+            all_regions.update(current_data['regions'].keys())
+            provider_totals[current_data['short']] = current_data['total_boxes']
+            for day, data in current_data['daily_totals'].items():
+                daily_totals[day] += data['orders']
+            for region_name, region_info in current_data['regions'].items():
+                for day_data in region_info['days'].values():
+                    region_totals[region_name] += day_data['boxes']
+        if previous_data:
+            prev_orders += previous_data['total_orders']; prev_boxes += previous_data['total_boxes']; prev_weight += previous_data['total_weight']
+    days_in_range = (end_date - start_date).days + 1
+    best_day = max(daily_totals, key=daily_totals.get) if daily_totals else 'N/A'
+    top_provider = max(provider_totals, key=provider_totals.get) if provider_totals else 'N/A'
+    top_region = max(region_totals, key=region_totals.get) if region_totals else 'N/A'
+    return jsonify({
+        'total_orders': total_orders, 'total_boxes': total_boxes, 'total_weight': total_weight,
+        'avg_boxes_per_day': total_boxes / days_in_range if days_in_range > 0 else 0,
+        'avg_weight_per_order': total_weight / total_orders if total_orders > 0 else 0,
+        'active_regions': len(all_regions), 'top_provider': top_provider,
+        'top_region': top_region, 'best_day': best_day,
+        'boxes_trend': calculate_trend(total_boxes, prev_boxes),
+        'orders_trend': calculate_trend(total_orders, prev_orders),
+        'weight_trend': calculate_trend(total_weight, prev_weight)
+    })
+
+@app.route('/api/regions')
+def api_regions():
+    start_date, end_date = parse_date_range(request)
+    region_data = defaultdict(lambda: {'orders': 0, 'boxes': 0, 'weight': 0})
+    for provider in PROVIDERS:
+        data = process_provider_data(provider, start_date, end_date)
+        if data:
+            for region_name, region_info in data['regions'].items():
+                for day_data in region_info['days'].values():
+                    region_data[region_name]['orders'] += day_data['orders']
+                    region_data[region_name]['boxes'] += day_data['boxes']
+                    region_data[region_name]['weight'] += day_data['weight']
+    regions = [{'name': k, **v} for k, v in region_data.items()]
+    regions.sort(key=lambda x: x['orders'], reverse=True)
+    return jsonify({'regions': regions})
+
+@app.route('/api/monthly')
+def api_monthly():
+    start_date, end_date = parse_date_range(request)
+    total_orders = 0; total_boxes = 0; total_weight = 0
+    provider_totals = defaultdict(lambda: {'orders': 0, 'boxes': 0, 'weight': 0, 'color': '#64748b'})
+    weeks_data = []
+    current = start_date
+    week_num = 1
+    while current <= end_date:
+        week_start = current - timedelta(days=current.weekday())
+        week_end_dt = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        week_boxes = 0
+        for provider in PROVIDERS:
+            data = process_provider_data(provider, max(week_start, start_date), min(week_end_dt, end_date))
+            if data:
+                total_orders += data['total_orders']; total_boxes += data['total_boxes']; total_weight += data['total_weight']
+                week_boxes += data['total_boxes']
+                provider_totals[data['name']]['orders'] += data['total_orders']
+                provider_totals[data['name']]['boxes'] += data['total_boxes']
+                provider_totals[data['name']]['weight'] += data['total_weight']
+                provider_totals[data['name']]['color'] = data['color']
+        weeks_data.append({'label': f'Week {week_num}', 'boxes': week_boxes})
+        current = week_start + timedelta(days=7); week_num += 1
+    providers = [{'name': k, **v} for k, v in provider_totals.items()]
+    providers.sort(key=lambda x: x['boxes'], reverse=True)
+    days_in_range = (end_date - start_date).days + 1
+    return jsonify({'total_orders': total_orders, 'total_boxes': total_boxes, 'total_weight': total_weight, 'avg_per_day': total_orders / days_in_range if days_in_range > 0 else 0, 'weeks': weeks_data, 'providers': providers})
+
+@app.route('/api/calendar')
+def api_calendar():
+    start_date, end_date = parse_date_range(request)
+    year = start_date.year; month = start_date.month
+    _, num_days = calendar.monthrange(year, month)
+    first_day = datetime(year, month, 1)
+    first_weekday = first_day.weekday()
+    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    days_data = {}
+    for day in range(1, num_days + 1):
+        days_data[day] = {'day': day, 'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0}
+    month_start = datetime(year, month, 1)
+    month_end = datetime(year, month, num_days, 23, 59, 59)
+    for provider in PROVIDERS:
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows:
+            continue
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1:
+                continue
+            try:
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                    continue
+                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                parsed_date = parse_date(date_val)
+                if not parsed_date or not (month_start <= parsed_date <= month_end):
+                    continue
+                day = parsed_date.day
+                region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                if region in INVALID_REGIONS or not region:
+                    continue
+                try:
+                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except:
+                    boxes = 0
+                try:
+                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                except:
+                    weight = 0.0
+                days_data[day]['orders'] += 1; days_data[day]['boxes'] += boxes; days_data[day]['weight'] += weight
+                if weight < 20: days_data[day]['under20'] += 1
+                else: days_data[day]['over20'] += 1
+            except:
+                continue
+    return jsonify({
+        'year': year, 'month': month, 'first_weekday': first_weekday,
+        'totals': {'orders': sum(d['orders'] for d in days_data.values()), 'boxes': sum(d['boxes'] for d in days_data.values()), 'weight': sum(d['weight'] for d in days_data.values()), 'under20': sum(d['under20'] for d in days_data.values()), 'over20': sum(d['over20'] for d in days_data.values())},
+        'max_boxes': max((d['boxes'] for d in days_data.values()), default=1),
+        'days': list(days_data.values())
+    })
+
+@app.route('/api/whatsapp')
+def api_whatsapp():
+    start_date, end_date = parse_date_range(request)
+    providers_data = []
+    total_orders = 0; total_boxes = 0; total_weight = 0
+    for provider in PROVIDERS:
+        data = process_provider_data(provider, start_date, end_date)
+        if data:
+            providers_data.append(data)
+            total_orders += data['total_orders']; total_boxes += data['total_boxes']; total_weight += data['total_weight']
+    providers_data.sort(key=lambda x: x['total_boxes'], reverse=True)
+    date_range = f"{start_date.strftime('%b %d')} - {end_date.strftime('%b %d, %Y')}"
+    report = f"📊 *3PL Report*\n📅 {date_range}\n\n━━━━━━━━━━━━━━━━━━━━\n\n🏆 *PROVIDER RANKING*\n\n"
+    medals = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣']
+    for i, p in enumerate(providers_data):
+        report += f"{medals[i]} *{p['short']}*\n   📦 {p['total_boxes']:,} boxes | ⚖️ {p['total_weight']:,.1f} kg\n\n"
+    report += f"━━━━━━━━━━━━━━━━━━━━\n\n📈 *TOTALS*\n\n📋 Orders: *{total_orders:,}*\n📦 Boxes: *{total_boxes:,}*\n⚖️ Weight: *{total_weight:,.1f} kg*\n\n━━━━━━━━━━━━━━━━━━━━\n_Generated by 3PL Dashboard_"
+    return jsonify({'report': report})
+
+@app.route('/api/daily-summary')
+def api_daily_summary():
+    start_date, end_date = parse_date_range(request)
+    result = {'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0, 'regions': {}}
+    for provider in PROVIDERS:
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows:
+            continue
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1:
+                continue
+            try:
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                    continue
+                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                parsed_date = parse_date(date_val)
+                if not parsed_date or not (start_date <= parsed_date <= end_date):
+                    continue
+                region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                if region in INVALID_REGIONS or not region:
+                    continue
+                try:
+                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except:
+                    boxes = 0
+                try:
+                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                except:
+                    weight = 0.0
+                result['orders'] += 1; result['boxes'] += boxes; result['weight'] += weight
+                if weight < 20: result['under20'] += 1
+                else: result['over20'] += 1
+                if region not in result['regions']:
+                    result['regions'][region] = {'name': region, 'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0}
+                result['regions'][region]['orders'] += 1; result['regions'][region]['boxes'] += boxes; result['regions'][region]['weight'] += weight
+                if weight < 20: result['regions'][region]['under20'] += 1
+                else: result['regions'][region]['over20'] += 1
+            except:
+                continue
+    result['regions'] = sorted(result['regions'].values(), key=lambda x: x['boxes'], reverse=True)
+    return jsonify(result)
+
+@app.route('/api/clear-cache')
+def clear_cache():
+    global CACHE
+    CACHE = {}
+    return jsonify({'status': 'success', 'message': 'Cache cleared'})
 
 @app.route('/orders')
 @login_required
@@ -1186,7 +2618,7 @@ def order_details():
     <title>Order Details - {{ provider_short }}</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {{ favicon|safe }}
+    ''' + FAVICON + '''
     <style>
         body { background: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; padding: 20px; }
         h1 { color: #4f46e5; }
@@ -1235,10 +2667,7 @@ def order_details():
     </table>
 </body>
 </html>
-    ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
-
-# For the remaining routes (weekly-summary, daily-region, etc.), they are exactly as in the working code but with favicon passed.
-# I'll not repeat them here to keep the answer length manageable, but they are included in the final code the user should use.
+    ''', orders=orders, provider_short=provider_short_display, region=region, day=day)
 
 if __name__ == '__main__':
     app.run(debug=True)
