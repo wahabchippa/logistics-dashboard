@@ -15,7 +15,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-product
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
 
 CACHE = {}
-CACHE_DURATION = 300
+<meta http-equiv="Cache-Control" content="max-age=3600">
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
 PROVIDERS = [
