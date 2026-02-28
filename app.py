@@ -284,10 +284,57 @@ BASE_STYLES = """
         overflow-y: auto;
     }
     .sidebar.collapsed { width: 60px; }
-    .sidebar-header { display: flex; align-items: center; gap: 10px; padding-bottom: 16px; border-bottom: 1px solid var(--border-color); margin-bottom: 16px; }
-    .logo-icon { width: 36px; height: 36px; background: var(--brand-gradient); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #ffffff; font-size: 18px; }
-    .logo-text { font-size: 16px; font-weight: 600; color: var(--text-main); white-space: nowrap; overflow: hidden; transition: opacity 0.2s; }
-    .sidebar.collapsed .logo-text { opacity: 0; width: 0; }
+    .sidebar-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 16px;
+    }
+    .logo-icon {
+        width: 36px;
+        height: 36px;
+        background: var(--brand-gradient);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        color: #ffffff;
+        font-size: 18px;
+    }
+    .header-titles {
+        display: flex;
+        flex-direction: column;
+    }
+    .header-main {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-main);
+        line-height: 1.2;
+    }
+    .header-sub {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+    .header-sub .admin-name {
+        color: var(--text-main);
+        font-weight: 500;
+    }
+    .header-sub .admin-role {
+        color: #10b981;
+        font-weight: 600;
+    }
+    body.dark .header-sub .admin-name { color: #f1f5f9; }
+    body.dark .header-sub .admin-role { color: #10b981; }
+    .sidebar.collapsed .header-main,
+    .sidebar.collapsed .header-sub {
+        opacity: 0;
+        width: 0;
+        display: none;
+    }
     .nav-section { margin-bottom: 12px; }
     .nav-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 4px 8px; margin-bottom: 2px; font-weight: 600; }
     .sidebar.collapsed .nav-section-title { opacity: 0; }
@@ -346,23 +393,6 @@ BASE_STYLES = """
     }
     .page-title { font-size: 24px; font-weight: 700; color: var(--text-main); }
     .page-title span { color: var(--brand-color); }
-
-    /* Subtitle for wahab Admin */
-    .subtitle {
-        font-size: 14px;
-        margin-top: 4px;
-        color: var(--text-muted);
-    }
-    .subtitle .admin-name {
-        color: #000000;
-        font-weight: 500;
-    }
-    .subtitle .admin-role {
-        color: #10b981;
-        font-weight: 600;
-    }
-    body.dark .subtitle .admin-name { color: #f1f5f9; }
-    body.dark .subtitle .admin-role { color: #10b981; }
 
     /* Top Actions */
     .top-actions {
@@ -935,7 +965,12 @@ SIDEBAR_HTML = """
     <div class="sidebar-toggle" onclick="toggleSidebar()">«</div>
     <div class="sidebar-header">
         <div class="logo-icon">3P</div>
-        <span class="logo-text">wahab Admin</span>
+        <div class="header-titles">
+            <div class="header-main">3PL Dashboard</div>
+            <div class="header-sub">
+                <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+            </div>
+        </div>
     </div>
     <div class="nav-menu">
         <div class="nav-section">
@@ -1115,10 +1150,7 @@ def dashboard():
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
-    <h1 class="page-title">3PL <span>Dashboard</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
+    <h1 class="page-title">Provider <span>Dashboard</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="dashboard-content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1259,9 +1291,6 @@ def weekly_summary():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Weekly <span>Summary</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1329,9 +1358,6 @@ def daily_region():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Daily <span>Region Summary</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
     ''' + DATE_PICKER_HTML('today') + '''
 </div>
 <div class="stats-row-5">
@@ -1429,9 +1455,6 @@ def flight_load():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Flight <span>Load</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1488,9 +1511,6 @@ def analytics():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Analytics & <span>Insights</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div class="stats-row-5">
@@ -1551,9 +1571,6 @@ def kpi_dashboard():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">KPI <span>Dashboard</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1606,9 +1623,6 @@ def comparison():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Provider <span>Comparison</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div class="tabs">
@@ -1703,9 +1717,6 @@ def regions():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Region <span>Heatmap</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1748,9 +1759,6 @@ def monthly_report():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Monthly <span>Report</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
     ''' + DATE_PICKER_HTML('month') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1809,9 +1817,6 @@ def whatsapp_report():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">WhatsApp <span>Report</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1848,9 +1853,6 @@ def achievements_page():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Provider <span>Achievements</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1889,9 +1891,6 @@ def forecast():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Forecast <span>Predictions</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
 </div>
 <div id="forecast-content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -1945,9 +1944,6 @@ def logs():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Activity <span>Logs</span></h1>
-    <div class="subtitle">
-        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-    </div>
 </div>
 <div class="logs-container">
     ''' + logs_html + '''
