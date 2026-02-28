@@ -13,7 +13,7 @@ import random
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket#2024')
 
 CACHE = {}
 CACHE_DURATION = 300
