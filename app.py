@@ -219,7 +219,7 @@ def get_provider_achievements(provider_data, is_winner=False, trend=None):
 
 FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">'''
 
-# ========== BASE STYLES (UPDATED) ==========
+# ========== BASE STYLES (UPDATED WITH ANIMATIONS) ==========
 BASE_STYLES = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -273,6 +273,27 @@ BASE_STYLES = """
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; font-size: 13px; line-height: 1.4; transition: background 0.3s, color 0.3s; }
 
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .provider-card, .stat-card, .comparison-card, .heatmap-item, .forecast-day, .provider-section {
+        animation: fadeIn 0.4s ease-out;
+    }
+    .nav-item, .tab-btn, .qbtn, .action-btn, .apply-btn, .download-btn, .logout-btn {
+        transition: all 0.2s;
+    }
+    .nav-item:hover, .tab-btn:hover, .qbtn:hover, .action-btn:hover, .apply-btn:hover, .download-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    }
+    .provider-card:hover, .stat-card:hover, .comparison-card:hover, .heatmap-item:hover, .forecast-day:hover, .provider-section:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(79,70,229,0.08);
+        border-color: var(--brand-color);
+    }
+
     /* Skeleton Loading */
     .skeleton {
         background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%);
@@ -285,21 +306,6 @@ BASE_STYLES = """
     @keyframes skeleton-loading {
         0% { background-position: 200% 0; }
         100% { background-position: -200% 0; }
-    }
-
-    /* Hover Effects */
-    .provider-card, .stat-card, .comparison-card, .heatmap-item, .forecast-day, .provider-section {
-        transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-    }
-    .provider-card:hover, .stat-card:hover, .comparison-card:hover, .heatmap-item:hover, .forecast-day:hover, .provider-section:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 24px rgba(79,70,229,0.08);
-        border-color: var(--brand-color);
-    }
-
-    /* Tab & Button Transitions */
-    .tab-btn, .qbtn, .action-btn, .apply-btn, .nav-item, .logout-btn, .download-btn {
-        transition: all 0.2s;
     }
 
     /* Download Button */
@@ -813,6 +819,36 @@ BASE_STYLES = """
     .log-entry { padding: 6px 10px; border-bottom: 1px solid var(--border-color); font-family: monospace; font-size: 11px; }
     .log-entry:last-child { border-bottom: none; }
 
+    /* World Map Page */
+    .map-container {
+        height: 600px;
+        width: 100%;
+        background: var(--bg-card);
+        border-radius: 20px;
+        border: 1px solid var(--border-color);
+        overflow: hidden;
+        margin-top: 20px;
+    }
+    .map-legend {
+        display: flex;
+        gap: 20px;
+        margin-top: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+    }
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        opacity: 0.7;
+    }
+
     /* Responsive */
     @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5 { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
     @media (max-width: 768px) { .sidebar { width: 60px; } .main-content { margin-left: 60px; } .sidebar-toggle { width: 22px; height: 22px; right: -10px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
@@ -943,7 +979,7 @@ function exportProviderTable(btn, providerName) {
     exportTableToCSV(table, `${providerName}_${dateRange}.csv`);
 }
 
-function exportComparisonTable(type) {
+function exportComparisonTable() {
     const table = document.querySelector('.all-providers-table');
     if (table) {
         exportTableToCSV(table, `All_Providers_${fmtLocal(dpStart)}_to_${fmtLocal(dpEnd)}.csv`);
@@ -1154,6 +1190,13 @@ SIDEBAR_HTML = """
                 <span>Achievements</span>
             </a>
         </div>
+        <div class="nav-section">
+            <div class="nav-section-title">MAPS</div>
+            <a href="/world-map" class="nav-item {active_worldmap}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>World Map</span>
+            </a>
+        </div>
         {forecast_link}
         {logs_link}
     </div>
@@ -1192,7 +1235,7 @@ document.addEventListener('DOMContentLoaded', function() {
 """
 
 def sidebar(active, role='guest'):
-    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','whatsapp','achievements']
+    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','whatsapp','achievements','worldmap']
     kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
     
     if role == 'admin':
@@ -1270,7 +1313,7 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# ===== DASHBOARD (UPDATED) =====
+# ===== DASHBOARD =====
 @app.route('/')
 @login_required
 def dashboard():
@@ -1415,7 +1458,7 @@ dpInit('week');
 loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
-# ===== WEEKLY SUMMARY (UPDATED) =====
+# ===== WEEKLY SUMMARY =====
 @app.route('/weekly-summary')
 @login_required
 def weekly_summary():
@@ -1488,7 +1531,7 @@ ${achHtml}</div></div>
 dpInit('week'); loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
-# ===== DAILY REGION (UPDATED) =====
+# ===== DAILY REGION =====
 @app.route('/daily-region')
 @login_required
 def daily_region():
@@ -2020,7 +2063,7 @@ async function loadData() {
 dpInit('week'); loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
-# ===== COMPARISON (UPDATED) =====
+# ===== COMPARISON =====
 @app.route('/comparison')
 @login_required
 def comparison():
@@ -2683,6 +2726,252 @@ def logs():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>updateLastUpdateTime();</script>
 </body></html>''', favicon=FAVICON)
+
+# ===== WORLD MAP =====
+@app.route('/world-map')
+@login_required
+def world_map():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World Map - 3PL</title>
+    {{ favicon|safe }}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    ''' + BASE_STYLES + '''
+    <style>
+        #world-map {
+            height: 600px;
+            width: 100%;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            z-index: 1;
+        }
+        .map-controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .map-legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+            padding: 10px;
+            background: var(--bg-card);
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            opacity: 0.7;
+        }
+        .region-popup {
+            font-size: 12px;
+        }
+        .region-popup b {
+            color: var(--brand-color);
+        }
+    </style>
+</head>
+<body class="''' + mode_class + '''">
+''' + sidebar('worldmap', role) + '''
+<main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
+<div class="page-header">
+    <h1 class="page-title">World <span>Map</span></h1>
+    ''' + DATE_PICKER_HTML('week') + '''
+</div>
+
+<div class="map-controls">
+    <div style="color: var(--text-muted);">🌟 بڑا دائرہ = زیادہ آرڈرز</div>
+    <button class="download-btn" onclick="exportMapData()">📥 Export Map Data</button>
+</div>
+
+<div id="world-map"></div>
+
+<div class="map-legend" id="map-legend"></div>
+
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+let map;
+let markers = [];
+
+function initMap(regions) {
+    if (map) {
+        map.remove();
+        markers = [];
+    }
+    
+    // دنیا کا نقشہ
+    map = L.map('world-map').setView([20, 0], 2);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    
+    // ریجن کے کوآرڈینیٹس
+    const regionCoords = {
+        'UNITED KINGDOM': [55.3781, -3.4360],
+        'UNITED STATES': [37.0902, -95.7129],
+        'AUSTRALIA': [-25.2744, 133.7751],
+        'NEW ZEALAND': [-40.9006, 174.8860],
+        'EU': [50.0, 10.0],
+        'CANADA': [56.1304, -106.3468],
+        'GERMANY': [51.1657, 10.4515],
+        'FRANCE': [46.2276, 2.2137],
+        'ITALY': [41.8719, 12.5674],
+        'SPAIN': [40.4637, -3.7492],
+        'NETHERLANDS': [52.1326, 5.2913],
+        'BELGIUM': [50.5039, 4.4699],
+        'SWITZERLAND': [46.8182, 8.2275],
+        'SWEDEN': [60.1282, 18.6435],
+        'NORWAY': [60.4720, 8.4689],
+        'DENMARK': [56.2639, 9.5018],
+        'FINLAND': [61.9241, 25.7482],
+        'POLAND': [51.9194, 19.1451],
+        'CZECH REPUBLIC': [49.8175, 15.4730],
+        'AUSTRIA': [47.5162, 14.5501],
+        'HUNGARY': [47.1625, 19.5033],
+        'SLOVAKIA': [48.6690, 19.6990],
+        'SLOVENIA': [46.1512, 14.9955],
+        'CROATIA': [45.1000, 15.2000],
+        'ROMANIA': [45.9432, 24.9668],
+        'BULGARIA': [42.7339, 25.4858],
+        'GREECE': [39.0742, 21.8243],
+        'PORTUGAL': [39.3999, -8.2245],
+        'IRELAND': [53.1424, -7.6921],
+        'ICELAND': [64.9631, -19.0208],
+        'RUSSIA': [61.5240, 105.3188],
+        'CHINA': [35.8617, 104.1954],
+        'JAPAN': [36.2048, 138.2529],
+        'SOUTH KOREA': [35.9078, 127.7669],
+        'INDIA': [20.5937, 78.9629],
+        'BRAZIL': [-14.2350, -51.9253],
+        'ARGENTINA': [-38.4161, -63.6167],
+        'MEXICO': [23.6345, -102.5528],
+        'SOUTH AFRICA': [-30.5595, 22.9375],
+        'EGYPT': [26.8206, 30.8025],
+        'SAUDI ARABIA': [23.8859, 45.0792],
+        'UAE': [23.4241, 53.8478],
+        'TURKEY': [38.9637, 35.2433],
+        'ISRAEL': [31.0461, 34.8516],
+        'PAKISTAN': [30.3753, 69.3451],
+        'BANGLADESH': [23.6850, 90.3563],
+        'INDONESIA': [-0.7893, 113.9213],
+        'MALAYSIA': [4.2105, 101.9758],
+        'SINGAPORE': [1.3521, 103.8198],
+        'THAILAND': [15.8700, 100.9925],
+        'VIETNAM': [14.0583, 108.2772],
+        'PHILIPPINES': [12.8797, 121.7740],
+    };
+    
+    // زیادہ سے زیادہ آرڈرز کا پتہ لگائیں
+    const maxOrders = Math.max(...regions.map(r => r.orders), 1);
+    
+    regions.forEach(region => {
+        const name = region.name;
+        const orders = region.orders;
+        const boxes = region.boxes;
+        const weight = region.weight;
+        
+        // کوآرڈینیٹس ڈھونڈیں
+        let coord = regionCoords[name];
+        if (!coord) {
+            // اگر کوآرڈینیٹس نہ ہوں تو نقشے میں نہ دکھائیں
+            return;
+        }
+        
+        // دائرے کا سائز آرڈرز کے مطابق
+        const radius = Math.max(5, Math.min(30, 5 + (orders / maxOrders) * 25));
+        
+        // رنگ (پیلا سے گہرا نیلا)
+        const intensity = orders / maxOrders;
+        const color = intensity > 0.7 ? '#ef4444' : (intensity > 0.4 ? '#f59e0b' : '#3b82f6');
+        
+        // دائرہ بنائیں
+        const circle = L.circleMarker(coord, {
+            radius: radius,
+            fillColor: color,
+            color: '#ffffff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.7
+        }).addTo(map);
+        
+        // پاپ اپ
+        circle.bindPopup(`
+            <div class="region-popup">
+                <b>${name}</b><br>
+                📦 Orders: ${orders.toLocaleString()}<br>
+                📮 Boxes: ${boxes.toLocaleString()}<br>
+                ⚖️ Weight: ${formatWeight(weight)} kg
+            </div>
+        `);
+        
+        markers.push(circle);
+    });
+    
+    // لیجنڈ بنائیں
+    const legend = document.getElementById('map-legend');
+    legend.innerHTML = `
+        <div class="legend-item"><span class="legend-color" style="background:#3b82f6"></span> کم آرڈرز</div>
+        <div class="legend-item"><span class="legend-color" style="background:#f59e0b"></span> درمیانے آرڈرز</div>
+        <div class="legend-item"><span class="legend-color" style="background:#ef4444"></span> زیادہ آرڈرز</div>
+        <div class="legend-item"><span>دائرے کا سائز = آرڈرز کی تعداد</span></div>
+    `;
+}
+
+function exportMapData() {
+    // نقشے کا ڈیٹا CSV میں ایکسپورٹ کریں
+    const markersData = markers.map(m => {
+        const popup = m.getPopup();
+        const content = popup ? popup.getContent() : '';
+        // پاپ اپ سے ڈیٹا نکالیں (آسان طریقہ)
+        return content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    }).join('\\n');
+    
+    const blob = new Blob([markersData], {type: 'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `world_map_${fmtLocal(dpStart)}.txt`;
+    a.click();
+}
+
+async function loadData() {
+    document.getElementById('world-map').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/regions?' + dpParams());
+        const data = await r.json();
+        initMap(data.regions);
+        updateLastUpdateTime();
+    } catch(e) {
+        document.getElementById('world-map').innerHTML = '<p style="color:#ef4444; text-align:center; padding:40px;">Error loading map data</p>';
+    }
+}
+
+dpInit('week');
+loadData();
+</script>
+</body>
+</html>
+''', role=role, favicon=FAVICON)
 
 # ===== API ENDPOINTS =====
 @app.route('/api/dashboard')
