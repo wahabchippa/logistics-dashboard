@@ -347,6 +347,23 @@ BASE_STYLES = """
     .page-title { font-size: 24px; font-weight: 700; color: var(--text-main); }
     .page-title span { color: var(--brand-color); }
 
+    /* Subtitle for wahab Admin */
+    .subtitle {
+        font-size: 14px;
+        margin-top: 4px;
+        color: var(--text-muted);
+    }
+    .subtitle .admin-name {
+        color: #000000;
+        font-weight: 500;
+    }
+    .subtitle .admin-role {
+        color: #10b981;
+        font-weight: 600;
+    }
+    body.dark .subtitle .admin-name { color: #f1f5f9; }
+    body.dark .subtitle .admin-role { color: #10b981; }
+
     /* Top Actions */
     .top-actions {
         display: flex;
@@ -452,6 +469,13 @@ BASE_STYLES = """
     .data-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
     .data-table td.region-col { text-align: left; padding-left: 12px; font-weight: 500; background: var(--hover-bg); }
     .data-table tr.total-row td { background: rgba(79,70,229,0.1); font-weight: 600; color: var(--brand-color); border-top: 2px solid var(--brand-color); }
+
+    /* Region Table (for daily region) */
+    .region-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .region-table th { background: var(--table-hdr); padding: 8px 4px; text-align: center; font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 2px solid var(--brand-color); }
+    .region-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
+    .region-table td:first-child { text-align: left; font-weight: 500; background: var(--hover-bg); padding-left: 8px; }
+    .region-table tr:last-child td { border-bottom: none; }
 
     /* Day Data Grid */
     .day-data { display: flex; justify-content: center; gap: 2px; font-size: 10px; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-body); margin: 2px 0; }
@@ -944,7 +968,7 @@ SIDEBAR_HTML = """
                 <span>KPI Dashboard</span>
             </a>
             <a href="/comparison" class="nav-item {active_comparison}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
                 <span>Comparison</span>
             </a>
             <a href="/regions" class="nav-item {active_regions}">
@@ -1091,7 +1115,10 @@ def dashboard():
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
-    <h1 class="page-title">Provider <span>Dashboard</span></h1>
+    <h1 class="page-title">3PL <span>Dashboard</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="dashboard-content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1232,6 +1259,9 @@ def weekly_summary():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Weekly <span>Summary</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1299,6 +1329,9 @@ def daily_region():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Daily <span>Region Summary</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('today') + '''
 </div>
 <div class="stats-row-5">
@@ -1396,6 +1429,9 @@ def flight_load():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Flight <span>Load</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1452,6 +1488,9 @@ def analytics():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Analytics & <span>Insights</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div class="stats-row-5">
@@ -1512,6 +1551,9 @@ def kpi_dashboard():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">KPI <span>Dashboard</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1564,6 +1606,9 @@ def comparison():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Provider <span>Comparison</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div class="tabs">
@@ -1658,6 +1703,9 @@ def regions():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Region <span>Heatmap</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1700,6 +1748,9 @@ def monthly_report():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Monthly <span>Report</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('month') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1758,6 +1809,9 @@ def whatsapp_report():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">WhatsApp <span>Report</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1794,6 +1848,9 @@ def achievements_page():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Provider <span>Achievements</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
@@ -1832,6 +1889,9 @@ def forecast():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Forecast <span>Predictions</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
 </div>
 <div id="forecast-content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
@@ -1885,6 +1945,9 @@ def logs():
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Activity <span>Logs</span></h1>
+    <div class="subtitle">
+        <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+    </div>
 </div>
 <div class="logs-container">
     ''' + logs_html + '''
