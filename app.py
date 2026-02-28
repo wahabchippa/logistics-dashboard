@@ -313,7 +313,6 @@ BASE_STYLES = """
     .sidebar-footer { border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: auto; }
     .admin-info { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--hover-bg); border-radius: 8px; margin-bottom: 8px; }
     .admin-avatar { width: 28px; height: 28px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; }
-    .admin-name { font-weight: 600; color: var(--text-main); font-size: 12px; }
     .admin-role { font-size: 10px; color: var(--text-muted); }
     .logout-btn {
         display: flex;
@@ -974,10 +973,7 @@ SIDEBAR_HTML = """
     <div class="sidebar-footer">
         <div class="admin-info">
             <div class="admin-avatar">AW</div>
-            <div class="admin-details">
-                <div class="admin-name">wahab Admin</div>
-                <div class="admin-role">{user_role}</div>
-            </div>
+            <div class="admin-role">{user_role}</div>
         </div>
         <a href="/logout" class="logout-btn">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
