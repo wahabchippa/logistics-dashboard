@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ NEXUS CONTROL TOWER - THE FINAL FAST & PREMIUM EDITION (2026 FILTER)
+# 🛰️ NEXUS CONTROL TOWER - THE FINAL PRESTIGE EDITION (ULTRA-PREMIUM UI)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3622,7 +3622,7 @@ NEXUS_SOURCES = {
 }
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
-# --- 2. INSTANT SPEED CACHE ---
+# --- 2. CACHE ENGINE ---
 NEXUS_CACHE = {}
 RADAR_CACHE = {'time': 0, 'data': None}
 FILTER_DATE = datetime(2026, 1, 1)
@@ -3644,7 +3644,7 @@ def inject_nexus_button(response):
     if response.content_type and response.content_type.startswith('text/html'):
         if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
             html = response.get_data(as_text=True)
-            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#000; color:#fff; border:1px solid #333; padding:12px 20px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5);">🛰️ Nexus Tower</a>"""
+            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#000; color:#fff; border:1px solid #333; padding:12px 25px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; font-family:'Plus Jakarta Sans',sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5); transition:0.3s;">🛰️ Nexus Tower</a>"""
             if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
@@ -3676,7 +3676,7 @@ def parse_date(date_str):
     except: pass
     return None
 
-# --- 3. APIS ---
+# --- 3. API ENDPOINTS ---
 
 @app.route('/api/nexus/search', methods=['POST'])
 @login_required
@@ -3692,14 +3692,10 @@ def api_nexus_search():
                     tid_raw = get_alias_val(row, STRICT_ALIASES['tid'])
                     results.append({
                         "order_id": oid.upper(), "source": src, "status": k_stat, 
-                        "date": get_alias_val(row, STRICT_ALIASES['date']), 
-                        "boxes": get_alias_val(row, STRICT_ALIASES['boxes']), 
-                        "weight": get_alias_val(row, STRICT_ALIASES['weight']), 
-                        "vendor": get_alias_val(row, STRICT_ALIASES['vendor']), 
-                        "customer": get_alias_val(row, STRICT_ALIASES['customer']), 
-                        "country": get_alias_val(row, STRICT_ALIASES['country']), 
-                        "tids": [t.strip() for t in re.split(r'[\n,]+', tid_raw) if t.strip() and t.strip()!='N/A'], 
-                        "mawb": get_alias_val(row, STRICT_ALIASES['mawb'])
+                        "date": get_alias_val(row, STRICT_ALIASES['date']), "boxes": get_alias_val(row, STRICT_ALIASES['boxes']), 
+                        "weight": get_alias_val(row, STRICT_ALIASES['weight']), "vendor": get_alias_val(row, STRICT_ALIASES['vendor']), 
+                        "customer": get_alias_val(row, STRICT_ALIASES['customer']), "country": get_alias_val(row, STRICT_ALIASES['country']), 
+                        "tids": [t.strip() for t in re.split(r'[\n,]+', tid_raw) if t.strip() and t.strip()!='N/A'], "mawb": get_alias_val(row, STRICT_ALIASES['mawb'])
                     })
                     break
     return jsonify(results)
@@ -3712,15 +3708,15 @@ def api_nexus_ship24():
     responses = []
     for tid in tids:
         if ship24_key == 'MOCK':
-            responses.append({"tid": tid, "success": True, "current_status": "Transit", "progress": 60, "eta": "Calculated", "events": [{"status": "Processed", "time": "2026-03-01", "location": "Hub"}]})
+            responses.append({"tid": tid, "success": True, "current_status": "Transit", "progress": 65, "eta": "2026-03-05", "events": [{"status": "Processed", "time": "2026-03-01 09:00", "location": "Gateway"}]})
         else:
             try:
                 req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
                 with urllib.request.urlopen(req) as res:
                     tr = json.loads(res.read().decode()).get('data',{}).get('trackings',[{}])[0]
                     evs = tr.get('events',[])
-                    st = evs[0].get('statusMilestone','Transit') if evs else 'Pending'
-                    responses.append({"tid": tid, "success": True, "current_status": st, "progress": 100 if st.lower()=='delivered' else 60, "eta": "Live", "events": [{"status": e.get('statusMilestone', e.get('status', 'Update')), "time": e.get('datetime', 'N/A'), "location": e.get('location', '')} for e in evs]})
+                    st = evs[0].get('statusMilestone','Transit') if evs else 'Update Pending'
+                    responses.append({"tid": tid, "success": True, "current_status": st, "progress": 100 if st.lower()=='delivered' else 60, "events": [{"status": e.get('statusMilestone', e.get('status', 'Update')), "time": e.get('datetime', 'N/A'), "location": e.get('location', '')} for e in evs]})
             except: responses.append({"tid": tid, "success": False})
     return jsonify(responses)
 
@@ -3737,7 +3733,6 @@ def api_nexus_radar_data():
     
     for src, url in NEXUS_SOURCES.items():
         for row in fetch_nexus_csv(url):
-            # 1. Date Filter Logic (Only Jan 1st 2026+)
             dt_str = get_alias_val(row, STRICT_ALIASES['date'])
             dt_obj = parse_date(dt_str)
             if dt_obj and dt_obj < FILTER_DATE: continue
@@ -3747,9 +3742,7 @@ def api_nexus_radar_data():
             st = s_map.get(oid.lower(), "PENDING")
             tid = get_alias_val(row, STRICT_ALIASES['tid'])
             has_t = tid != 'N/A' and len(tid) > 2 and tid.lower() not in ['pending','none']
-            
-            r_d = { "Order": oid.upper(), "Date": dt_str, "Vendor": get_alias_val(row, STRICT_ALIASES['vendor']), "Customer": get_alias_val(row, STRICT_ALIASES['customer']), "TID": tid if has_t else "MISSING", "Status": st }
-            
+            r_d = { "Order": oid.upper(), "Vendor": get_alias_val(row, STRICT_ALIASES['vendor']), "Customer": get_alias_val(row, STRICT_ALIASES['customer']), "TID": tid if has_t else "MISSING", "Status": st }
             if not has_t: buckets["missing_tid"][src].append(r_d)
             elif st == "HANDED OVER TO LOGISTICS PARTNER": buckets["handed_over"][src].append(r_d)
             elif st in qc_not: buckets["qc_not_approved"][src].append(r_d)
@@ -3758,162 +3751,225 @@ def api_nexus_radar_data():
     RADAR_CACHE['time'] = time.time(); RADAR_CACHE['data'] = buckets
     return jsonify(buckets)
 
-# --- 4. UI ---
+# --- 4. THE INTERFACE ---
 
 @app.route('/nexus')
 @login_required
 def nexus_dashboard():
-    if session.get('role') != 'admin': return "Access Denied.", 403
+    if session.get('role') != 'admin': return "Forbidden", 403
     return render_template_string('''
-    <!DOCTYPE html><html lang="en" data-theme="light">
-    <head><meta charset="UTF-8"><title>Nexus Tower</title>
+    <!DOCTYPE html><html lang="en" data-theme="dark">
+    <head><meta charset="UTF-8"><title>Nexus Tower Console</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-        :root { --bg: #ffffff; --card: #ffffff; --border: #e5e7eb; --text: #000000; --muted: #6b7280; --primary: #000000; --accent: #3b82f6; }
-        [data-theme="dark"] { --bg: #000000; --card: #0a0a0a; --border: #262626; --text: #ffffff; --muted: #a3a3a3; --primary: #ffffff; --accent: #60a5fa; }
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        :root { --bg: #000; --card: #0a0a0a; --border: #1f1f1f; --text: #fff; --muted: #888; --primary: #fff; --accent: #3b82f6; --glass: rgba(255,255,255,0.03); }
+        [data-theme="light"] { --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0; --text: #0f172a; --muted: #64748b; --primary: #000; --accent: #2563eb; --glass: rgba(0,0,0,0.02); }
         
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; transition: 0.2s; }
-        .app-shell { display: flex; min-height: 100vh; }
-        .sidebar { width: 280px; background: var(--card); border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; gap: 8px; position: sticky; top: 0; height: 100vh; box-sizing: border-box; }
-        .nav-link { padding: 14px 18px; border-radius: 12px; text-decoration: none; color: var(--muted); font-weight: 600; cursor: pointer; border: 1px solid transparent; background: transparent; width: 100%; text-align: left; }
-        .nav-link.active { background: var(--primary); color: var(--bg); border-color: var(--primary); }
-        .main-content { flex: 1; padding: 40px; }
-        .glass-card { border: 1px solid var(--border); border-radius: 20px; padding: 25px; margin-bottom: 25px; background: var(--card); }
-        textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 15px; color: var(--text); font-family: inherit; outline: none; }
-        .btn-primary { background: var(--primary); color: var(--bg); border: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; cursor: pointer; }
-        .order-card { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 25px; margin-bottom: 25px; }
-        .order-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 15px; border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 20px; }
-        .meta-item label { display: block; font-size: 10px; text-transform: uppercase; color: var(--muted); font-weight: 800; }
-        .tid-scroll-container { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 10px; }
-        .tid-box { min-width: 300px; background: var(--bg); border-radius: 15px; border: 1px solid var(--border); padding: 15px; }
-        .progress-track { height: 4px; background: var(--border); border-radius: 10px; overflow: hidden; margin: 10px 0; }
-        .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: 1s; }
-        .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; }
-        .radar-card { background: var(--card); border: 1px solid var(--border); padding: 25px; border-radius: 20px; text-align: center; cursor: pointer; transition: 0.2s; }
-        .radar-card:hover { border-color: var(--accent); }
-        .detail-view { background: var(--card); border-radius: 20px; padding: 25px; display: none; margin-top: 20px; border: 1px solid var(--border); }
-        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
-        th, td { padding: 12px; border-bottom: 1px solid var(--border); }
-        .spinner { width: 20px; height: 20px; border: 2px solid var(--muted); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin: auto; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: var(--text); margin: 0; transition: 0.3s ease; }
+        .app-shell { display: flex; height: 100vh; overflow: hidden; }
+        
+        /* SIDEBAR */
+        .sidebar { width: 260px; background: var(--card); border-right: 1px solid var(--border); padding: 30px 15px; display: flex; flex-direction: column; gap: 8px; }
+        .logo-area { padding: 0 15px 30px; font-size: 22px; font-weight: 800; letter-spacing: -1px; }
+        .nav-link { padding: 12px 15px; border-radius: 12px; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; border: none; background: transparent; text-align: left; display: flex; align-items: center; gap: 10px; transition: 0.2s; text-decoration: none; }
+        .nav-link:hover { background: var(--glass); color: var(--text); }
+        .nav-link.active { background: var(--primary); color: var(--bg); }
+        
+        /* MAIN AREA */
+        .viewport { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 30px; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; }
+        .section-title { font-size: 28px; font-weight: 800; margin: 0; }
+        
+        /* SUMMARY WIDGETS */
+        .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+        .stat-widget { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 25px; }
+        .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+        .stat-value { font-size: 32px; font-weight: 800; margin-top: 10px; }
+
+        /* SEARCH CONSOLE */
+        .console-box { background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 30px; display: flex; flex-direction: column; gap: 20px; }
+        textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 16px; padding: 20px; color: var(--text); font-family: inherit; font-size: 15px; outline: none; border: 1px solid var(--border); resize: none; }
+        .btn-action { background: var(--primary); color: var(--bg); border: none; padding: 14px 28px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+        .btn-action:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* DATA CARDS */
+        .data-card { background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 30px; position: relative; }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 20px; margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid var(--border); }
+        .grid-item span:first-child { display: block; font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 5px; }
+        .grid-item span:last-child { font-weight: 700; font-size: 15px; }
+
+        /* MULTI TID GRID */
+        .tid-strip { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 10px; }
+        .tid-block { min-width: 320px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 20px; }
+        .tid-head { display: flex; justify-content: space-between; font-weight: 800; color: var(--accent); font-size: 13px; margin-bottom: 15px; }
+        .progress-bar { height: 4px; background: var(--border); border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
+        .progress-inner { height: 100%; background: var(--accent); width: 0%; transition: 1s ease; }
+        .tl-item { font-size: 13px; padding-left: 15px; border-left: 2px solid var(--border); position: relative; margin-bottom: 15px; }
+        .tl-item::before { content: ''; position: absolute; left: -6px; top: 0; width: 10px; height: 10px; background: var(--accent); border-radius: 50%; }
+
+        /* RADAR GRID */
+        .radar-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        .radar-tile { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 30px; text-align: center; cursor: pointer; transition: 0.2s; }
+        .radar-tile:hover { border-color: var(--muted); }
+        .radar-tile h4 { margin: 0; font-size: 13px; color: var(--muted); text-transform: uppercase; }
+        .radar-tile div { font-size: 42px; font-weight: 800; margin-top: 10px; }
+
+        /* DETAILS */
+        .overlay-view { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); z-index: 1000; display: none; padding: 50px; overflow-y: auto; }
+        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 30px; padding: 40px; max-width: 1200px; margin: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { padding: 15px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); text-transform: uppercase; }
+        td { padding: 15px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 600; }
+        
+        .spinner { width: 25px; height: 25px; border: 3px solid var(--glass); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s infinite linear; margin: auto; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style></head>
     <body>
     <div class="app-shell">
         <aside class="sidebar">
-            <div style="font-size: 20px; font-weight: 800; margin-bottom: 30px;">🛰️ NEXUS</div>
-            <button class="nav-link active" onclick="navSwitch(this, 'view-track')">🚀 Track & Sync</button>
+            <div class="logo-area">🛰️ NEXUS</div>
+            <button class="nav-link active" onclick="navSwitch(this, 'view-track')">🚀 Track Orders</button>
             <button class="nav-link" onclick="navSwitch(this, 'view-ho')">📦 Handed Over</button>
-            <button class="nav-link" onclick="navSwitch(this, 'view-miss')">⚠️ Missing TIDs</button>
-            <button class="nav-link" onclick="navSwitch(this, 'view-proc')">⏳ QC Not Approved</button>
+            <button class="nav-link" onclick="navSwitch(this, 'view-miss')">⚠️ Missing TID</button>
+            <button class="nav-link" onclick="navSwitch(this, 'view-proc')">⏳ QC Pending</button>
             <button class="nav-link" onclick="navSwitch(this, 'view-qc')">✅ QC Approved</button>
-            <button class="nav-link" onclick="toggleTheme()" style="margin-top:auto">🌓 Switch Theme</button>
-            <a href="/" class="nav-link" style="color:#ff4444;">🚪 Exit</a>
+            <button class="nav-link" onclick="toggleTheme()" style="margin-top:auto">🌓 Theme Mode</button>
+            <a href="/" class="nav-link" style="color:#ff4444">🚪 Exit</a>
         </aside>
-        <main class="main-content">
-            <div id="view-track" class="view-pane active">
-                <div class="glass-card">
-                    <textarea id="searchInput" placeholder="Paste Order IDs..."></textarea>
-                    <div style="margin-top:20px; display:flex; gap:15px;">
-                        <button class="btn-primary" onclick="searchOrders()">🔍 Scan</button>
-                        <button class="btn-primary" style="background:#4f46e5; display:none;" id="bulkBtn" onclick="syncAllTIDs()">⚡ Sync All</button>
-                    </div>
-                </div>
-                <div id="tracking-results"></div>
+        
+        <main class="viewport">
+            <div class="header-row"><h2 class="section-title" id="pane-title">Operational Dashboard</h2></div>
+            
+            <div class="summary-row" id="top-metrics">
+                <div class="stat-widget"><div class="stat-label">Handed Over</div><div class="stat-value" id="val-ho">-</div></div>
+                <div class="stat-widget"><div class="stat-label">Missing TID</div><div class="stat-value" id="val-miss">-</div></div>
+                <div class="stat-widget"><div class="stat-label">QC Not Approved</div><div class="stat-value" id="val-proc">-</div></div>
+                <div class="stat-widget"><div class="stat-label">QC Approved</div><div class="stat-value" id="val-qc">-</div></div>
             </div>
-            <div id="view-radar" class="view-pane" style="display:none;">
-                <div id="radar-loader" style="display:none;"><div class="spinner"></div></div>
-                <div id="radar-container" class="radar-grid"></div>
-                <div id="radar-detail" class="detail-view"></div>
+
+            <div id="view-track" class="view-pane active">
+                <div class="console-box">
+                    <textarea id="searchInput" rows="4" placeholder="Enter multi-line Order IDs to initiate matrix scan..."></textarea>
+                    <div><button class="btn-action" onclick="searchOrders()">🔍 SCAN GLOBAL MATRIX</button></div>
+                </div>
+                <div id="tracking-results" style="margin-top:30px"></div>
+            </div>
+
+            <div id="view-radar" class="view-pane" style="display:none">
+                <div id="radar-loader" style="display:none"><div class="spinner"></div></div>
+                <div id="radar-container" class="radar-box"></div>
             </div>
         </main>
     </div>
+
+    <div id="modal" class="overlay-view" onclick="if(event.target==this)this.style.display='none'">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; margin-bottom:30px">
+                <h2 id="modal-title" style="margin:0">Details</h2>
+                <button class="btn-action" style="background:#ff4444" onclick="document.getElementById('modal').style.display='none'">CLOSE (ESC)</button>
+            </div>
+            <div id="modal-body" style="overflow-x:auto"></div>
+        </div>
+    </div>
+
     <script>
         function toggleTheme() {
-            const root = document.documentElement;
-            const theme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-            root.setAttribute('data-theme', theme);
-            localStorage.setItem('nexus_theme', theme);
+            const current = document.documentElement.getAttribute('data-theme');
+            const target = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', target);
+            localStorage.setItem('nexus_theme', target);
         }
-        document.documentElement.setAttribute('data-theme', localStorage.getItem('nexus_theme') || 'light');
+        document.documentElement.setAttribute('data-theme', localStorage.getItem('nexus_theme') || 'dark');
 
-        let activeBucket = '';
+        let radarData = null;
         async function navSwitch(btn, view) {
-            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
             btn.classList.add('active');
-            document.querySelectorAll('.view-pane').forEach(v => v.style.display = 'none');
-            if(view === 'view-track') { document.getElementById('view-track').style.display = 'block'; }
-            else { document.getElementById('view-radar').style.display = 'block'; activeBucket = view.split('-')[1]; loadRadar(); }
+            document.querySelectorAll('.view-pane').forEach(p=>p.style.display='none');
+            document.getElementById('pane-title').innerText = btn.innerText;
+            if(view === 'view-track') {
+                document.getElementById('view-track').style.display = 'block';
+            } else {
+                document.getElementById('view-radar').style.display = 'block';
+                activeRadarBucket = view.split('-')[1];
+                loadRadar();
+            }
         }
 
         async function searchOrders() {
-            const q = document.getElementById('searchInput').value;
-            if(!q) return;
+            const q = document.getElementById('searchInput').value; if(!q) return;
             document.getElementById('tracking-results').innerHTML = '<div class="spinner"></div>';
             const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
-            const data = await r.json();
-            if(data.length) { document.getElementById('bulkBtn').style.display = 'block'; renderCards(data); }
+            const data = await r.json(); renderCards(data);
         }
 
         function renderCards(data) {
             let h = '';
-            data.forEach((item, idx) => {
-                h += `<div class="order-card">
-                    <div class="order-meta">
-                        <div class="meta-item"><label>Order</label><span>${item.order_id}</span></div>
-                        <div class="meta-item"><label>Vendor</label><span>${item.vendor}</span></div>
-                        <div class="meta-item"><label>Status</label><span>${item.status}</span></div>
+            data.forEach(item => {
+                h += `<div class="data-card">
+                    <div class="card-grid">
+                        <div class="grid-item"><span>Order ID</span><span>${item.order_id}</span></div>
+                        <div class="grid-item"><span>Status</span><span style="color:var(--accent)">${item.status}</span></div>
+                        <div class="grid-item"><span>Customer</span><span>${item.customer}</span></div>
+                        <div class="grid-item"><span>Source</span><span>${item.source}</span></div>
+                        <div class="grid-item"><span>MAWB</span><span>${item.mawb}</span></div>
                     </div>
-                    <div class="tid-scroll-container">
+                    <div class="tid-strip">
                         ${item.tids.map(tid => `
-                            <div class="tid-box">
-                                <div style="display:flex; justify-content:space-between"><b>📦 ${tid}</b> <button onclick="syncShip24('${tid}')" class="btn-primary" style="padding:5px 10px; font-size:10px">Track</button></div>
-                                <div class="progress-track"><div class="progress-fill" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
-                                <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px">Waiting...</div>
+                            <div class="tid-block">
+                                <div class="tid-head"><span>📦 ${tid}</span><button onclick="syncShip24('${tid}')" style="background:none; border:none; color:inherit; cursor:pointer; font-weight:800">[TRACK]</button></div>
+                                <div class="progress-bar"><div class="progress-inner" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
+                                <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted)">Pending Sync...</div>
                             </div>
                         `).join('')}
                     </div>
                 </div>`;
             });
-            document.getElementById('tracking-results').innerHTML = h;
+            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted)">No records found.</div>';
         }
 
         async function syncShip24(tid) {
             const sid = tid.replace(/\\s/g,'');
-            const log = document.getElementById(`log-${sid}`);
-            log.innerHTML = '<div class="spinner"></div>';
+            const log = document.getElementById(`log-${sid}`); log.innerHTML = '<div class="spinner" style="width:15px;height:15px"></div>';
             const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids:[tid]})});
             const d = (await r.json())[0];
             if(d.success) {
                 document.getElementById(`prog-${sid}`).style.width = d.progress + '%';
-                log.innerHTML = d.events.map(e => `<div><b>${e.status}</b><br><small>${e.time}</small></div>`).join('<hr style="border:0; border-top:1px solid var(--border); margin:5px 0">');
+                log.innerHTML = d.events.map(e => `<div class="tl-item"><b>${e.status}</b><br><small>${e.time} | ${e.location}</small></div>`).join('');
             }
         }
 
-        let radarData = null;
         async function loadRadar() {
-            const container = document.getElementById('radar-container');
-            const detail = document.getElementById('radar-detail');
-            container.innerHTML = ''; detail.style.display = 'none';
+            const cont = document.getElementById('radar-container'); cont.innerHTML = '';
             document.getElementById('radar-loader').style.display = 'block';
             const r = await fetch('/api/nexus/radar_data');
             radarData = await r.json();
             document.getElementById('radar-loader').style.display = 'none';
-            const map = {'ho':'handed_over','miss':'missing_tid','proc':'qc_not_approved','qc':'qc_approved'}[activeBucket];
-            Object.keys(radarData[map]).forEach(src => {
-                container.innerHTML += `<div class="radar-card" onclick="showRadarDetail('${src}')"><h3>${src}</h3><div style="font-size:32px; font-weight:800; color:var(--accent)">${radarData[map][src].length}</div></div>`;
+            
+            // Metrics Update
+            ['handed_over','missing_tid','qc_not_approved','qc_approved'].forEach(k => {
+                let count = 0; Object.values(radarData[k]).forEach(arr => count += arr.length);
+                const id = k === 'handed_over' ? 'ho' : k === 'missing_tid' ? 'miss' : k === 'qc_not_approved' ? 'proc' : 'qc';
+                document.getElementById(`val-${id}`).innerText = count;
+            });
+
+            const bucket = {'ho':'handed_over','miss':'missing_tid','proc':'qc_not_approved','qc':'qc_approved'}[activeRadarBucket];
+            Object.keys(radarData[bucket]).forEach(src => {
+                cont.innerHTML += `<div class="radar-tile" onclick="showDetail('${src}')"><h4>${src}</h4><div>${radarData[bucket][src].length}</div></div>`;
             });
         }
 
-        function showRadarDetail(src) {
-            const map = {'ho':'handed_over','miss':'missing_tid','proc':'qc_not_approved','qc':'qc_approved'}[activeBucket];
-            const data = radarData[map][src];
-            const detail = document.getElementById('radar-detail');
-            detail.style.display = 'block';
-            let th = '<tr>' + Object.keys(data[0]).map(k => `<th>${k}</th>`).join('') + '</tr>';
-            let tr = data.map(r => '<tr>' + Object.values(r).map(v => `<td>${v}</td>`).join('') + '</tr>').join('');
-            detail.innerHTML = `<button onclick="this.parentElement.style.display='none'" class="btn-primary" style="background:#ff4444; margin-bottom:20px">Close</button><div style="overflow-x:auto"><table>${th}${tr}</table></div>`;
-            detail.scrollIntoView({behavior:'smooth'});
+        function showDetail(src) {
+            const bucket = {'ho':'handed_over','miss':'missing_tid','proc':'qc_not_approved','qc':'qc_approved'}[activeRadarBucket];
+            const data = radarData[bucket][src];
+            document.getElementById('modal-title').innerText = `${activeRadarBucket.toUpperCase()} - ${src}`;
+            let th = '<tr>' + Object.keys(data[0]).map(k=>`<th>${k}</th>`).join('') + '</tr>';
+            let tr = data.map(r=>'<tr>' + Object.values(r).map(v=>`<td>${v}</td>`).join('') + '</tr>').join('');
+            document.getElementById('modal-body').innerHTML = `<table>${th}${tr}</table>`;
+            document.getElementById('modal').style.display = 'block';
         }
+
+        document.addEventListener('keydown', e => { if(e.key==='Escape') document.getElementById('modal').style.display='none'; });
     </script>
     </body></html>
     ''')
