@@ -13,13 +13,12 @@ import random
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket#2024')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
 
 CACHE = {}
 CACHE_DURATION = 300
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
-# ===== PROVIDERS (order_col for ECL ZONE fixed to 9) =====
 PROVIDERS = [
     {'name': 'GLOBAL EXPRESS (QC)', 'short': 'GE QC', 'sheet': 'GE QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#3B82F6', 'group': 'GE'},
     {'name': 'GLOBAL EXPRESS (ZONE)', 'short': 'GE ZONE', 'sheet': 'GE QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 15, 'region_col': 16, 'order_col': 9, 'start_row': 2, 'color': '#8B5CF6', 'group': 'GE'},
@@ -238,7 +237,7 @@ BASE_STYLES = """
     }
 
     [data-theme="dark"] {
-        --bg-body: #000000;  /* pure black */
+        --bg-body: #000000;
         --bg-sidebar: #111111;
         --bg-card: #111111;
         --text-main: #f1f5f9;
@@ -268,15 +267,15 @@ BASE_STYLES = """
         pointer-events: none !important;
     }
 
-    /* Sidebar - compact, border moved to left or removed? User wants scroll line removed. We'll remove right border entirely. */
+    /* Sidebar */
     .sidebar {
         position: fixed;
         left: 0;
         top: 0;
         height: 100vh;
-        width: 220px;  /* slightly more compact */
+        width: 220px;
         background: var(--bg-sidebar);
-        border-right: none;  /* no border */
+        border-right: none;
         padding: 16px 12px;
         transition: all 0.2s ease;
         z-index: 100;
@@ -316,7 +315,6 @@ BASE_STYLES = """
     .admin-avatar { width: 28px; height: 28px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; }
     .admin-name { font-weight: 600; color: var(--text-main); font-size: 12px; }
     .admin-role { font-size: 10px; color: var(--text-muted); }
-    /* Compact logout button */
     .logout-btn {
         display: flex;
         align-items: center;
@@ -350,7 +348,7 @@ BASE_STYLES = """
     .page-title { font-size: 24px; font-weight: 700; color: var(--text-main); }
     .page-title span { color: var(--brand-color); }
 
-    /* Top Actions (Search, Export, Theme) */
+    /* Top Actions */
     .top-actions {
         display: flex;
         justify-content: flex-end;
@@ -394,9 +392,8 @@ BASE_STYLES = """
         transition: 0.2s;
     }
     .action-btn:hover { border-color: var(--brand-color); color: var(--brand-color); }
-    .export-btn { /* for admin only */ }
 
-    /* Search Results Modal */
+    /* Search Results */
     #search-results {
         position: absolute;
         top: 100%;
@@ -434,7 +431,7 @@ BASE_STYLES = """
     .apply-btn { padding: 4px 14px; background: var(--brand-color); border: none; border-radius: 30px; color: #fff; font-size: 11px; cursor: pointer; }
     .week-badge { font-size: 11px; color: var(--brand-color); padding: 4px 12px; background: rgba(79,70,229,0.1); border-radius: 30px; }
 
-    /* Cards */
+    /* Provider Cards */
     .provider-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); margin-bottom: 20px; overflow: hidden; }
     .card-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border-color); }
     .provider-info { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
@@ -549,19 +546,7 @@ BASE_STYLES = """
     .whatsapp-content { font-family: 'Courier New', monospace; background: var(--hover-bg); padding: 14px; border-radius: 12px; color: var(--text-main); border: 1px solid var(--border-color); }
     .copy-btn { background: #10b981; color: #ffffff; padding: 10px; border: none; border-radius: 40px; font-weight: 600; font-size: 12px; cursor: pointer; margin-top: 14px; width: 100%; }
 
-    /* Calendar (removed from sidebar but styles remain) */
-    .premium-calendar { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; }
-    .calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 12px; }
-    .weekday-label { text-align: center; font-size: 12px; font-weight: 700; color: var(--brand-color); padding: 6px; text-transform: uppercase; }
-    .calendar-days-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-    .cal-cell { min-height: 70px; background: var(--hover-bg); border-radius: 10px; padding: 8px; cursor: pointer; border: 2px solid transparent; }
-    .cal-cell:hover { border-color: var(--brand-color); background: var(--bg-card); }
-    .cal-cell.empty { background: transparent; cursor: default; }
-    .cal-cell.level-5 { background: var(--brand-color); color: white; }
-    .cal-day-num { font-size: 14px; font-weight: 700; color: var(--text-main); }
-    .cal-stat { font-size: 9px; color: var(--text-muted); }
-
-    /* Login Page - Simple Professional Design */
+    /* Login Page */
     .login-container {
         min-height: 100vh;
         display: flex;
@@ -690,7 +675,7 @@ BASE_STYLES = """
     /* Forecast Page */
     .forecast-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; margin-bottom: 20px; }
     .forecast-title { font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 14px; }
-    .forecast-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 14px; } /* 6 days only */
+    .forecast-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 14px; }
     .forecast-day { background: var(--hover-bg); border-radius: 12px; padding: 14px; text-align: center; }
     .forecast-day .day-name { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
     .forecast-day .prediction { font-size: 16px; font-weight: 600; color: var(--brand-color); }
@@ -799,7 +784,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// ===== EXPORT TO CSV (Admin only) =====
+// ===== EXPORT TO CSV =====
 function exportTableToCSV(filename) {
     const role = '{{ role }}';
     if (role !== 'admin') return;
@@ -819,7 +804,7 @@ function exportTableToCSV(filename) {
     dl.style.display = "none"; document.body.appendChild(dl); dl.click();
 }
 
-// ===== GLOBAL SEARCH (Admin only) =====
+// ===== GLOBAL SEARCH =====
 function searchOrder(q) {
     const role = '{{ role }}';
     if (role !== 'admin') return;
@@ -859,7 +844,7 @@ document.addEventListener('keydown', e => {
     }
 });
 
-// ===== REAL-TIME NOTIFICATIONS (Admin only) =====
+// ===== NOTIFICATIONS =====
 function checkNotifications() {
     const role = '{{ role }}';
     if (role !== 'admin') return;
@@ -874,7 +859,7 @@ function checkNotifications() {
 if (Notification && Notification.permission === 'default') {
     Notification.requestPermission();
 }
-setInterval(checkNotifications, 30000); // every 30 seconds
+setInterval(checkNotifications, 30000);
 </script>
 """
 
@@ -927,7 +912,7 @@ SIDEBAR_HTML = """
     <div class="sidebar-toggle" onclick="toggleSidebar()">«</div>
     <div class="sidebar-header">
         <div class="logo-icon">3P</div>
-        <span class="logo-text">3PL Dashboard</span>
+        <span class="logo-text">wahab Admin</span>
     </div>
     <div class="nav-menu">
         <div class="nav-section">
@@ -990,7 +975,7 @@ SIDEBAR_HTML = """
         <div class="admin-info">
             <div class="admin-avatar">AW</div>
             <div class="admin-details">
-                <div class="admin-name">Admin Wahab</div>
+                <div class="admin-name">wahab Admin</div>
                 <div class="admin-role">{user_role}</div>
             </div>
         </div>
@@ -1049,8 +1034,6 @@ def sidebar(active, role='guest'):
         kwargs['logs_link'] = ''
         
     return SIDEBAR_HTML.format(**kwargs)
-
-# ===== ROUTES =====
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -1888,7 +1871,6 @@ def logs():
     role = session.get('role', 'guest')
     if role != 'admin':
         return "Access Denied", 403
-    # Dummy logs
     logs_data = [
         "2026-02-28 10:23: admin logged in",
         "2026-02-28 10:25: admin viewed Dashboard",
@@ -2214,7 +2196,6 @@ def api_calendar():
     _, num_days = calendar.monthrange(year, month)
     first_day = datetime(year, month, 1)
     first_weekday = first_day.weekday()
-    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     days_data = {}
     for day in range(1, num_days + 1):
         days_data[day] = {'day': day, 'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0}
@@ -2325,10 +2306,8 @@ def clear_cache():
     CACHE = {}
     return jsonify({'status': 'success', 'message': 'Cache cleared'})
 
-# ===== NEW API: FORECAST =====
 @app.route('/api/forecast')
 def api_forecast():
-    # Dummy forecast for Mon–Sat (6 days)
     days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
     predictions = []
     for _ in range(6):
@@ -2339,7 +2318,6 @@ def api_forecast():
         })
     return jsonify([{'day': d, **predictions[i]} for i, d in enumerate(days)])
 
-# ===== NEW API: SEARCH =====
 @app.route('/api/search')
 def api_search():
     query = request.args.get('q', '').strip().lower()
@@ -2377,7 +2355,6 @@ def api_search():
                 continue
     return jsonify(results)
 
-# ===== NOTIFICATIONS API =====
 notifications = []
 
 @app.route('/api/notifications')
@@ -2391,7 +2368,6 @@ def api_notifications():
 def add_notification(msg):
     notifications.append(msg)
 
-# ===== ORDERS ROUTE =====
 @app.route('/orders')
 @login_required
 def order_details():
@@ -2413,7 +2389,6 @@ def order_details():
     except:
         return "Invalid date", 400
     
-    # Handle "all" provider
     if provider_short == 'all':
         all_orders = []
         for provider in PROVIDERS:
