@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ NEXUS CONTROL TOWER - STRICT DISCIPLINE & ROW LAYOUT EDITION
+# 🛰️ NEXUS CONTROL TOWER - THE FINAL PRESTIGE EDITION (ULTRA-PREMIUM UI)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3622,6 +3622,7 @@ NEXUS_SOURCES = {
 }
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
+# --- 2. CACHE ENGINE ---
 NEXUS_CACHE = {}
 RADAR_CACHE = {'time': 0, 'data': None}
 FILTER_DATE = datetime(2026, 1, 1)
@@ -3643,7 +3644,7 @@ def inject_nexus_button(response):
     if response.content_type and response.content_type.startswith('text/html'):
         if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
             html = response.get_data(as_text=True)
-            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#000; color:#fff; border:1px solid #444; padding:12px 25px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; font-family:sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.8); transition:0.3s;">🛰️ Nexus Tower</a>"""
+            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#000; color:#fff; border:1px solid #333; padding:12px 25px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; font-family:'Plus Jakarta Sans',sans-serif; box-shadow:0 10px 30px rgba(0,0,0,0.5); transition:0.3s;">🛰️ Nexus Tower</a>"""
             if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
@@ -3653,8 +3654,7 @@ def fetch_nexus_csv(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=15) as res:
-            raw = res.read().decode('utf-8').splitlines()
-            data = list(csv.reader(raw))
+            data = list(csv.reader(res.read().decode('utf-8').splitlines()))
             headers = [str(h).lower().strip() for h in data[0]]
             dict_data = [dict(zip(headers, row)) for row in data[1:]]
             NEXUS_CACHE[url] = {'time': now, 'data': dict_data}
@@ -3676,7 +3676,49 @@ def parse_date(date_str):
     except: pass
     return None
 
-# --- 2. APIS ---
+# --- 3. API ENDPOINTS ---
+
+@app.route('/api/nexus/search', methods=['POST'])
+@login_required
+def api_nexus_search():
+    order_ids = [x.strip() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
+    results = []
+    k_data = fetch_nexus_csv(NEXUS_KERRY_STATUS_URL)
+    for oid in order_ids:
+        k_stat = next((str(r.get('latest_status', 'N/A')).strip() for r in k_data if str(r.get('fleek_id','')).strip().lower() == oid.lower()), "N/A")
+        for src, url in NEXUS_SOURCES.items():
+            for row in fetch_nexus_csv(url):
+                if oid.lower() in get_alias_val(row, STRICT_ALIASES['order']).lower():
+                    tid_raw = get_alias_val(row, STRICT_ALIASES['tid'])
+                    results.append({
+                        "order_id": oid.upper(), "source": src, "status": k_stat, 
+                        "date": get_alias_val(row, STRICT_ALIASES['date']), "boxes": get_alias_val(row, STRICT_ALIASES['boxes']), 
+                        "weight": get_alias_val(row, STRICT_ALIASES['weight']), "vendor": get_alias_val(row, STRICT_ALIASES['vendor']), 
+                        "customer": get_alias_val(row, STRICT_ALIASES['customer']), "country": get_alias_val(row, STRICT_ALIASES['country']), 
+                        "tids": [t.strip() for t in re.split(r'[\n,]+', tid_raw) if t.strip() and t.strip()!='N/A'], "mawb": get_alias_val(row, STRICT_ALIASES['mawb'])
+                    })
+                    break
+    return jsonify(results)
+
+@app.route('/api/nexus/ship24', methods=['POST'])
+@login_required
+def api_nexus_ship24():
+    tids = request.json.get('tids', [])
+    ship24_key = os.environ.get('SHIP24_API_KEY', 'MOCK')
+    responses = []
+    for tid in tids:
+        if ship24_key == 'MOCK':
+            responses.append({"tid": tid, "success": True, "current_status": "Transit", "progress": 65, "eta": "2026-03-05", "events": [{"status": "Processed", "time": "2026-03-01 09:00", "location": "Gateway"}]})
+        else:
+            try:
+                req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
+                with urllib.request.urlopen(req) as res:
+                    tr = json.loads(res.read().decode()).get('data',{}).get('trackings',[{}])[0]
+                    evs = tr.get('events',[])
+                    st = evs[0].get('statusMilestone','Transit') if evs else 'Update Pending'
+                    responses.append({"tid": tid, "success": True, "current_status": st, "progress": 100 if st.lower()=='delivered' else 60, "events": [{"status": e.get('statusMilestone', e.get('status', 'Update')), "time": e.get('datetime', 'N/A'), "location": e.get('location', '')} for e in evs]})
+            except: responses.append({"tid": tid, "success": False})
+    return jsonify(responses)
 
 @app.route('/api/nexus/radar_data', methods=['GET'])
 @login_required
@@ -3684,122 +3726,149 @@ def api_nexus_radar_data():
     global RADAR_CACHE
     if time.time() - RADAR_CACHE['time'] < 1800 and RADAR_CACHE['data']: return jsonify(RADAR_CACHE['data'])
     
-    buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES}, "tid_pending": {s: [] for s in NEXUS_SOURCES}, "qc_not_approved": {s: [] for s in NEXUS_SOURCES}, "qc_approved": {s: [] for s in NEXUS_SOURCES} }
+    buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES}, "missing_tid": {s: [] for s in NEXUS_SOURCES}, "qc_not_approved": {s: [] for s in NEXUS_SOURCES}, "qc_approved": {s: [] for s in NEXUS_SOURCES} }
     k_data = fetch_nexus_csv(NEXUS_KERRY_STATUS_URL)
     s_map = {str(r.get('fleek_id', '')).strip().lower(): str(r.get('latest_status', 'N/A')).strip().upper() for r in k_data}
-    qc_not_list = ["ACCEPTED", "CREATED", "PICKUP READY", "PICKUP SUCCESSFUL", "QC PENDING", "QC HOLD", "CANCELLED"]
+    qc_not = ["ACCEPTED", "CREATED", "PICKUP READY", "PICKUP SUCCESSFUL", "QC PENDING", "QC HOLD", "CANCELLED"]
     
     for src, url in NEXUS_SOURCES.items():
-        sheet_rows = fetch_nexus_csv(url)
-        for row in sheet_rows:
-            # Date Filter (Jan 2026+)
+        for row in fetch_nexus_csv(url):
             dt_str = get_alias_val(row, STRICT_ALIASES['date'])
             dt_obj = parse_date(dt_str)
             if dt_obj and dt_obj < FILTER_DATE: continue
             
             oid = get_alias_val(row, STRICT_ALIASES['order'])
             if oid == 'N/A': continue
-            
-            kerry_stat = s_map.get(oid.lower(), "PENDING")
+            st = s_map.get(oid.lower(), "PENDING")
             tid = get_alias_val(row, STRICT_ALIASES['tid'])
-            has_tid = tid != 'N/A' and len(tid) > 5 and tid.lower() not in ['pending','hold','none']
-            
-            r_d = { "Order": oid.upper(), "Date": dt_str, "Vendor": get_alias_val(row, STRICT_ALIASES['vendor']), "Customer": get_alias_val(row, STRICT_ALIASES['customer']), "Boxes": get_alias_val(row, STRICT_ALIASES['boxes']), "Weight": get_alias_val(row, STRICT_ALIASES['weight']), "TID": tid, "Status": kerry_stat }
-            
-            # --- STRICT ROUTING LOGIC ---
-            if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER":
-                if has_tid: buckets["handed_over"][src].append(r_d)
-                else: buckets["tid_pending"][src].append(r_d)
-            elif kerry_stat in qc_not_list:
-                buckets["qc_not_approved"][src].append(r_d)
-            elif kerry_stat == "QC APPROVED":
-                buckets["qc_approved"][src].append(r_d)
+            has_t = tid != 'N/A' and len(tid) > 2 and tid.lower() not in ['pending','none']
+            r_d = { "Order": oid.upper(), "Vendor": get_alias_val(row, STRICT_ALIASES['vendor']), "Customer": get_alias_val(row, STRICT_ALIASES['customer']), "TID": tid if has_t else "MISSING", "Status": st }
+            if not has_t: buckets["missing_tid"][src].append(r_d)
+            elif st == "HANDED OVER TO LOGISTICS PARTNER": buckets["handed_over"][src].append(r_d)
+            elif st in qc_not: buckets["qc_not_approved"][src].append(r_d)
+            elif st == "QC APPROVED": buckets["qc_approved"][src].append(r_d)
             
     RADAR_CACHE['time'] = time.time(); RADAR_CACHE['data'] = buckets
     return jsonify(buckets)
 
-# --- 3. UI DASHBOARD ---
+# --- 4. THE INTERFACE ---
 
 @app.route('/nexus')
 @login_required
 def nexus_dashboard():
-    if session.get('role') != 'admin': return "Access Denied", 403
+    if session.get('role') != 'admin': return "Forbidden", 403
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
     <head><meta charset="UTF-8"><title>Nexus Tower Console</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --text: #fff; --muted: #666; --accent: #fff; --row-bg: rgba(255,255,255,0.02); }
-        [data-theme="light"] { --bg: #fcfcfc; --card: #fff; --border: #eee; --text: #000; --muted: #888; --accent: #000; --row-bg: #f9f9f9; }
+        :root { --bg: #000; --card: #0a0a0a; --border: #1f1f1f; --text: #fff; --muted: #888; --primary: #fff; --accent: #3b82f6; --glass: rgba(255,255,255,0.03); }
+        [data-theme="light"] { --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0; --text: #0f172a; --muted: #64748b; --primary: #000; --accent: #2563eb; --glass: rgba(0,0,0,0.02); }
         
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: var(--text); margin: 0; transition: 0.2s; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: var(--text); margin: 0; transition: 0.3s ease; }
         .app-shell { display: flex; height: 100vh; overflow: hidden; }
         
         /* SIDEBAR */
-        .sidebar { width: 240px; background: var(--card); border-right: 1px solid var(--border); padding: 30px 15px; display: flex; flex-direction: column; gap: 5px; }
-        .logo { padding: 0 15px 30px; font-size: 20px; font-weight: 800; letter-spacing: -0.5px; border-bottom: 1px solid var(--border); margin-bottom: 20px;}
-        .nav-btn { padding: 12px 15px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: 13px; cursor: pointer; border: none; background: transparent; text-align: left; display: flex; align-items: center; gap: 10px; transition: 0.2s; }
-        .nav-btn:hover { background: var(--row-bg); color: var(--text); }
-        .nav-btn.active { background: var(--accent); color: var(--bg); }
+        .sidebar { width: 260px; background: var(--card); border-right: 1px solid var(--border); padding: 30px 15px; display: flex; flex-direction: column; gap: 8px; }
+        .logo-area { padding: 0 15px 30px; font-size: 22px; font-weight: 800; letter-spacing: -1px; }
+        .nav-link { padding: 12px 15px; border-radius: 12px; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; border: none; background: transparent; text-align: left; display: flex; align-items: center; gap: 10px; transition: 0.2s; text-decoration: none; }
+        .nav-link:hover { background: var(--glass); color: var(--text); }
+        .nav-link.active { background: var(--primary); color: var(--bg); }
         
-        /* MAIN VIEWPORT */
+        /* MAIN AREA */
         .viewport { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 30px; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; }
+        .section-title { font-size: 28px; font-weight: 800; margin: 0; }
         
-        /* DISCIPLINED ROW LAYOUT */
-        .radar-container { display: flex; flex-direction: column; gap: 15px; }
-        .tpl-row { display: flex; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 15px; padding: 20px 30px; cursor: pointer; transition: 0.3s; }
-        .tpl-row:hover { border-color: var(--muted); transform: translateX(5px); }
-        .tpl-name { font-size: 14px; font-weight: 700; flex: 1; text-transform: uppercase; letter-spacing: 1px; }
-        .tpl-count { font-size: 28px; font-weight: 800; width: 100px; text-align: right; }
-        .tpl-label { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; margin-top: 5px;}
+        /* SUMMARY WIDGETS */
+        .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+        .stat-widget { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 25px; }
+        .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+        .stat-value { font-size: 32px; font-weight: 800; margin-top: 10px; }
 
-        /* DETAIL PANEL */
-        .detail-panel { position: fixed; inset: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(15px); z-index: 1000; display: none; padding: 40px; overflow-y: auto; }
-        .panel-content { background: var(--card); border: 1px solid var(--border); border-radius: 25px; padding: 40px; max-width: 1300px; margin: auto; }
-        
+        /* SEARCH CONSOLE */
+        .console-box { background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 30px; display: flex; flex-direction: column; gap: 20px; }
+        textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 16px; padding: 20px; color: var(--text); font-family: inherit; font-size: 15px; outline: none; border: 1px solid var(--border); resize: none; }
+        .btn-action { background: var(--primary); color: var(--bg); border: none; padding: 14px 28px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+        .btn-action:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* DATA CARDS */
+        .data-card { background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 30px; position: relative; }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 20px; margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid var(--border); }
+        .grid-item span:first-child { display: block; font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 5px; }
+        .grid-item span:last-child { font-weight: 700; font-size: 15px; }
+
+        /* MULTI TID GRID */
+        .tid-strip { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 10px; }
+        .tid-block { min-width: 320px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 20px; }
+        .tid-head { display: flex; justify-content: space-between; font-weight: 800; color: var(--accent); font-size: 13px; margin-bottom: 15px; }
+        .progress-bar { height: 4px; background: var(--border); border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
+        .progress-inner { height: 100%; background: var(--accent); width: 0%; transition: 1s ease; }
+        .tl-item { font-size: 13px; padding-left: 15px; border-left: 2px solid var(--border); position: relative; margin-bottom: 15px; }
+        .tl-item::before { content: ''; position: absolute; left: -6px; top: 0; width: 10px; height: 10px; background: var(--accent); border-radius: 50%; }
+
+        /* RADAR GRID */
+        .radar-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        .radar-tile { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 30px; text-align: center; cursor: pointer; transition: 0.2s; }
+        .radar-tile:hover { border-color: var(--muted); }
+        .radar-tile h4 { margin: 0; font-size: 13px; color: var(--muted); text-transform: uppercase; }
+        .radar-tile div { font-size: 42px; font-weight: 800; margin-top: 10px; }
+
+        /* DETAILS */
+        .overlay-view { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); z-index: 1000; display: none; padding: 50px; overflow-y: auto; }
+        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 30px; padding: 40px; max-width: 1200px; margin: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
-        th { padding: 15px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid var(--border); }
-        td { padding: 15px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; }
+        th { padding: 15px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); text-transform: uppercase; }
+        td { padding: 15px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 600; }
         
-        .btn-close { background: #ff4444; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; }
-        .btn-csv { background: #00c853; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-right: 10px;}
-        
-        .loader { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s infinite linear; margin: auto; }
+        .spinner { width: 25px; height: 25px; border: 3px solid var(--glass); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s infinite linear; margin: auto; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style></head>
     <body>
     <div class="app-shell">
         <aside class="sidebar">
-            <div class="logo">🛰️ NEXUS TOWER</div>
-            <button class="nav-btn active" onclick="navSwitch(this, 'handed_over')">📦 Handed Over</button>
-            <button class="nav-btn" onclick="navSwitch(this, 'tid_pending')">⚠️ TID Pending</button>
-            <button class="nav-btn" onclick="navSwitch(this, 'qc_not_approved')">⏳ QC Not Approved</button>
-            <button class="nav-btn" onclick="navSwitch(this, 'qc_approved')">✅ QC Approved</button>
-            <button class="nav-btn" onclick="toggleTheme()" style="margin-top:auto">🌓 Appearance</button>
-            <a href="/" class="nav-btn" style="color:#ff4444">🚪 Exit Console</a>
+            <div class="logo-area">🛰️ NEXUS</div>
+            <button class="nav-link active" onclick="navSwitch(this, 'view-track')">🚀 Track Orders</button>
+            <button class="nav-link" onclick="navSwitch(this, 'view-ho')">📦 Handed Over</button>
+            <button class="nav-link" onclick="navSwitch(this, 'view-miss')">⚠️ Missing TID</button>
+            <button class="nav-link" onclick="navSwitch(this, 'view-proc')">⏳ QC Pending</button>
+            <button class="nav-link" onclick="navSwitch(this, 'view-qc')">✅ QC Approved</button>
+            <button class="nav-link" onclick="toggleTheme()" style="margin-top:auto">🌓 Theme Mode</button>
+            <a href="/" class="nav-link" style="color:#ff4444">🚪 Exit</a>
         </aside>
         
         <main class="viewport">
-            <div id="status-header">
-                <h1 id="view-title" style="margin:0; font-size:32px; font-weight:800;">Handed Over Radar</h1>
-                <p style="color:var(--muted); font-size:14px; margin-top:10px;">Strict Filter: Since 1st Jan 2026 • Disciplined Vertical View</p>
-            </div>
+            <div class="header-row"><h2 class="section-title" id="pane-title">Operational Dashboard</h2></div>
             
-            <div id="loader" style="display:none; padding:100px; text-align:center;"><div class="loader"></div><p>Scanning matrix...</p></div>
-            <div id="radar-container" class="radar-container"></div>
+            <div class="summary-row" id="top-metrics">
+                <div class="stat-widget"><div class="stat-label">Handed Over</div><div class="stat-value" id="val-ho">-</div></div>
+                <div class="stat-widget"><div class="stat-label">Missing TID</div><div class="stat-value" id="val-miss">-</div></div>
+                <div class="stat-widget"><div class="stat-label">QC Not Approved</div><div class="stat-value" id="val-proc">-</div></div>
+                <div class="stat-widget"><div class="stat-label">QC Approved</div><div class="stat-value" id="val-qc">-</div></div>
+            </div>
+
+            <div id="view-track" class="view-pane active">
+                <div class="console-box">
+                    <textarea id="searchInput" rows="4" placeholder="Enter multi-line Order IDs to initiate matrix scan..."></textarea>
+                    <div><button class="btn-action" onclick="searchOrders()">🔍 SCAN GLOBAL MATRIX</button></div>
+                </div>
+                <div id="tracking-results" style="margin-top:30px"></div>
+            </div>
+
+            <div id="view-radar" class="view-pane" style="display:none">
+                <div id="radar-loader" style="display:none"><div class="spinner"></div></div>
+                <div id="radar-container" class="radar-box"></div>
+            </div>
         </main>
     </div>
 
-    <div id="detailPanel" class="detail-panel" onclick="if(event.target==this)this.style.display='none'">
-        <div class="panel-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px">
-                <h2 id="modalTitle" style="margin:0"></h2>
-                <div>
-                    <button class="btn-csv" onclick="downloadCSV()">📥 DOWNLOAD CSV</button>
-                    <button class="btn-close" onclick="document.getElementById('detailPanel').style.display='none'">CLOSE (ESC)</button>
-                </div>
+    <div id="modal" class="overlay-view" onclick="if(event.target==this)this.style.display='none'">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; margin-bottom:30px">
+                <h2 id="modal-title" style="margin:0">Details</h2>
+                <button class="btn-action" style="background:#ff4444" onclick="document.getElementById('modal').style.display='none'">CLOSE (ESC)</button>
             </div>
-            <div style="overflow-x:auto;"><table id="detailTable"></table></div>
+            <div id="modal-body" style="overflow-x:auto"></div>
         </div>
     </div>
 
@@ -3813,75 +3882,94 @@ def nexus_dashboard():
         document.documentElement.setAttribute('data-theme', localStorage.getItem('nexus_theme') || 'dark');
 
         let radarData = null;
-        let activeBucket = 'handed_over';
-        let activeDetails = [];
-
-        async function navSwitch(btn, bucket) {
-            document.querySelectorAll('.nav-btn').forEach(l=>l.classList.remove('active'));
+        async function navSwitch(btn, view) {
+            document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
             btn.classList.add('active');
-            activeBucket = bucket;
-            document.getElementById('view-title').innerText = btn.innerText + ' Radar';
-            loadRadar();
+            document.querySelectorAll('.view-pane').forEach(p=>p.style.display='none');
+            document.getElementById('pane-title').innerText = btn.innerText;
+            if(view === 'view-track') {
+                document.getElementById('view-track').style.display = 'block';
+            } else {
+                document.getElementById('view-radar').style.display = 'block';
+                activeRadarBucket = view.split('-')[1];
+                loadRadar();
+            }
+        }
+
+        async function searchOrders() {
+            const q = document.getElementById('searchInput').value; if(!q) return;
+            document.getElementById('tracking-results').innerHTML = '<div class="spinner"></div>';
+            const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
+            const data = await r.json(); renderCards(data);
+        }
+
+        function renderCards(data) {
+            let h = '';
+            data.forEach(item => {
+                h += `<div class="data-card">
+                    <div class="card-grid">
+                        <div class="grid-item"><span>Order ID</span><span>${item.order_id}</span></div>
+                        <div class="grid-item"><span>Status</span><span style="color:var(--accent)">${item.status}</span></div>
+                        <div class="grid-item"><span>Customer</span><span>${item.customer}</span></div>
+                        <div class="grid-item"><span>Source</span><span>${item.source}</span></div>
+                        <div class="grid-item"><span>MAWB</span><span>${item.mawb}</span></div>
+                    </div>
+                    <div class="tid-strip">
+                        ${item.tids.map(tid => `
+                            <div class="tid-block">
+                                <div class="tid-head"><span>📦 ${tid}</span><button onclick="syncShip24('${tid}')" style="background:none; border:none; color:inherit; cursor:pointer; font-weight:800">[TRACK]</button></div>
+                                <div class="progress-bar"><div class="progress-inner" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
+                                <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted)">Pending Sync...</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`;
+            });
+            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted)">No records found.</div>';
+        }
+
+        async function syncShip24(tid) {
+            const sid = tid.replace(/\\s/g,'');
+            const log = document.getElementById(`log-${sid}`); log.innerHTML = '<div class="spinner" style="width:15px;height:15px"></div>';
+            const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids:[tid]})});
+            const d = (await r.json())[0];
+            if(d.success) {
+                document.getElementById(`prog-${sid}`).style.width = d.progress + '%';
+                log.innerHTML = d.events.map(e => `<div class="tl-item"><b>${e.status}</b><br><small>${e.time} | ${e.location}</small></div>`).join('');
+            }
         }
 
         async function loadRadar() {
-            const container = document.getElementById('radar-container');
-            container.innerHTML = '';
-            document.getElementById('loader').style.display = 'block';
-            
+            const cont = document.getElementById('radar-container'); cont.innerHTML = '';
+            document.getElementById('radar-loader').style.display = 'block';
             const r = await fetch('/api/nexus/radar_data');
             radarData = await r.json();
-            document.getElementById('loader').style.display = 'none';
+            document.getElementById('radar-loader').style.display = 'none';
             
-            const bucket = radarData[activeBucket];
-            // Render in exact discipline order
-            const order = ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"];
-            
-            order.forEach(src => {
-                const count = bucket[src] ? bucket[src].length : 0;
-                container.innerHTML += `
-                    <div class="tpl-row" onclick="showDetails('${src}')">
-                        <div class="tpl-name">${src}</div>
-                        <div class="tpl-count">
-                            ${count}
-                            <div class="tpl-label">Orders</div>
-                        </div>
-                    </div>
-                `;
+            // Metrics Update
+            ['handed_over','missing_tid','qc_not_approved','qc_approved'].forEach(k => {
+                let count = 0; Object.values(radarData[k]).forEach(arr => count += arr.length);
+                const id = k === 'handed_over' ? 'ho' : k === 'missing_tid' ? 'miss' : k === 'qc_not_approved' ? 'proc' : 'qc';
+                document.getElementById(`val-${id}`).innerText = count;
+            });
+
+            const bucket = {'ho':'handed_over','miss':'missing_tid','proc':'qc_not_approved','qc':'qc_approved'}[activeRadarBucket];
+            Object.keys(radarData[bucket]).forEach(src => {
+                cont.innerHTML += `<div class="radar-tile" onclick="showDetail('${src}')"><h4>${src}</h4><div>${radarData[bucket][src].length}</div></div>`;
             });
         }
 
-        function showDetails(src) {
-            activeDetails = radarData[activeBucket][src];
-            if(!activeDetails || activeDetails.length === 0) return;
-            
-            document.getElementById('modalTitle').innerText = src + ' (' + activeBucket.replace('_',' ').toUpperCase() + ')';
-            const table = document.getElementById('detailTable');
-            
-            let thead = '<thead><tr>' + Object.keys(activeDetails[0]).map(k=>`<th>${k}</th>`).join('') + '</tr></thead>';
-            let tbody = '<tbody>' + activeDetails.map(r=>'<tr>' + Object.values(r).map(v=>`<td>${v}</td>`).join('') + '</tr>').join('') + '</tbody>';
-            
-            table.innerHTML = thead + tbody;
-            document.getElementById('detailPanel').style.display = 'block';
+        function showDetail(src) {
+            const bucket = {'ho':'handed_over','miss':'missing_tid','proc':'qc_not_approved','qc':'qc_approved'}[activeRadarBucket];
+            const data = radarData[bucket][src];
+            document.getElementById('modal-title').innerText = `${activeRadarBucket.toUpperCase()} - ${src}`;
+            let th = '<tr>' + Object.keys(data[0]).map(k=>`<th>${k}</th>`).join('') + '</tr>';
+            let tr = data.map(r=>'<tr>' + Object.values(r).map(v=>`<td>${v}</td>`).join('') + '</tr>').join('');
+            document.getElementById('modal-body').innerHTML = `<table>${th}${tr}</table>`;
+            document.getElementById('modal').style.display = 'block';
         }
 
-        function downloadCSV() {
-            if(!activeDetails.length) return;
-            const headers = Object.keys(activeDetails[0]).join(',');
-            const rows = activeDetails.map(r => Object.values(r).join(',')).join('\\n');
-            const csvContent = "data:text/csv;charset=utf-8," + headers + "\\n" + rows;
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "nexus_report.csv");
-            document.body.appendChild(link);
-            link.click();
-        }
-
-        document.addEventListener('keydown', e => { if(e.key==='Escape') document.getElementById('detailPanel').style.display='none'; });
-        
-        // Initial load
-        window.onload = loadRadar;
+        document.addEventListener('keydown', e => { if(e.key==='Escape') document.getElementById('modal').style.display='none'; });
     </script>
     </body></html>
     ''')
