@@ -14,10 +14,12 @@ app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-product
 
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
 
+# ========== CACHE ==========
 CACHE = {}
-CACHE_DURATION = 300
+CACHE_DURATION = 3600  # 1 گھنٹہ (پہلے 300 تھا)
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
+# ========== PROVIDERS ==========
 PROVIDERS = [
     {'name': 'GLOBAL EXPRESS (QC)', 'short': 'GE QC', 'sheet': 'GE QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#3B82F6', 'group': 'GE'},
     {'name': 'GLOBAL EXPRESS (ZONE)', 'short': 'GE ZONE', 'sheet': 'GE QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 15, 'region_col': 16, 'order_col': 9, 'start_row': 2, 'color': '#8B5CF6', 'group': 'GE'},
@@ -217,6 +219,7 @@ def get_provider_achievements(provider_data, is_winner=False, trend=None):
 
 FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">'''
 
+# ========== BASE STYLES (UPDATED) ==========
 BASE_STYLES = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -234,6 +237,8 @@ BASE_STYLES = """
         --table-hdr: #f8fafc;
         --cell-empty: #f1f5f9;
         --flight-day-bg: #f1f5f9;
+        --skeleton-base: #e2e8f0;
+        --skeleton-highlight: #f1f5f9;
     }
 
     [data-theme="dark"] {
@@ -248,11 +253,86 @@ BASE_STYLES = """
         --table-hdr: #111111;
         --cell-empty: #222222;
         --flight-day-bg: #1e1e2e;
+        --skeleton-base: #1e1e2e;
+        --skeleton-highlight: #2a2a3a;
+    }
+
+    [data-theme="dark"] .provider-card:nth-child(odd) {
+        background: #0f0f15;
+    }
+    [data-theme="dark"] .provider-card:nth-child(even) {
+        background: #0a0a0f;
+    }
+    [data-theme="dark"] .stat-card:nth-child(odd) {
+        background: #0f0f15;
+    }
+    [data-theme="dark"] .stat-card:nth-child(even) {
+        background: #0a0a0f;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; font-size: 13px; line-height: 1.4; transition: background 0.3s, color 0.3s; }
 
+    /* Skeleton Loading */
+    .skeleton {
+        background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%);
+        background-size: 200% 100%;
+        animation: skeleton-loading 1.5s infinite;
+        border-radius: 4px;
+        height: 20px;
+        margin: 10px 0;
+    }
+    @keyframes skeleton-loading {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+
+    /* Hover Effects */
+    .provider-card, .stat-card, .comparison-card, .heatmap-item, .forecast-day, .provider-section {
+        transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    }
+    .provider-card:hover, .stat-card:hover, .comparison-card:hover, .heatmap-item:hover, .forecast-day:hover, .provider-section:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(79,70,229,0.08);
+        border-color: var(--brand-color);
+    }
+
+    /* Tab & Button Transitions */
+    .tab-btn, .qbtn, .action-btn, .apply-btn, .nav-item, .logout-btn, .download-btn {
+        transition: all 0.2s;
+    }
+
+    /* Download Button */
+    .download-btn {
+        background: none;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+        cursor: pointer;
+        color: var(--text-muted);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 10px;
+    }
+    .download-btn:hover {
+        background: var(--hover-bg);
+        color: var(--brand-color);
+        border-color: var(--brand-color);
+    }
+
+    /* Last Update */
+    .last-update {
+        font-size: 10px;
+        color: var(--text-muted);
+        padding: 8px 12px;
+        border-top: 1px solid var(--border-color);
+        margin-top: 8px;
+        text-align: center;
+    }
+
+    /* Guest Mode Restrictions */
     body.guest-mode .day-data a,
     body.guest-mode .orders-link,
     body.guest-mode .boxes-link,
@@ -262,11 +342,13 @@ BASE_STYLES = """
     body.guest-mode .export-btn,
     body.guest-mode .search-box,
     body.guest-mode #forecast-link,
-    body.guest-mode #logs-link {
+    body.guest-mode #logs-link,
+    body.guest-mode .download-btn {
         display: none !important;
         pointer-events: none !important;
     }
 
+    /* Sidebar */
     .sidebar {
         position: fixed;
         left: 0;
@@ -377,9 +459,11 @@ BASE_STYLES = """
     .logout-btn svg { width: 14px; height: 14px; }
     .sidebar.collapsed .logout-btn span { display: none; }
 
+    /* Main Content */
     .main-content { margin-left: 220px; padding: 20px; transition: margin-left 0.2s; min-height: 100vh; }
     .main-content.expanded { margin-left: 60px; }
 
+    /* Page Header */
     .page-header {
         display: flex;
         justify-content: space-between;
@@ -391,6 +475,7 @@ BASE_STYLES = """
     .page-title { font-size: 24px; font-weight: 700; color: var(--text-main); }
     .page-title span { color: var(--brand-color); }
 
+    /* Top Actions */
     .top-actions {
         display: flex;
         justify-content: flex-end;
@@ -435,6 +520,7 @@ BASE_STYLES = """
     }
     .action-btn:hover { border-color: var(--brand-color); color: var(--brand-color); }
 
+    /* Search Results */
     #search-results {
         position: absolute;
         top: 100%;
@@ -456,6 +542,7 @@ BASE_STYLES = """
     .search-item-title { font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between; }
     .search-item-meta { font-size: 11px; color: var(--text-muted); display: flex; gap: 10px; }
 
+    /* Date Picker */
     .date-range-picker {
         background: var(--bg-card);
         border-radius: 16px;
@@ -471,6 +558,7 @@ BASE_STYLES = """
     .apply-btn { padding: 4px 14px; background: var(--brand-color); border: none; border-radius: 30px; color: #fff; font-size: 11px; cursor: pointer; }
     .week-badge { font-size: 11px; color: var(--brand-color); padding: 4px 12px; background: rgba(79,70,229,0.1); border-radius: 30px; }
 
+    /* Provider Cards */
     .provider-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); margin-bottom: 20px; overflow: hidden; }
     .card-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border-color); }
     .provider-info { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
@@ -485,6 +573,7 @@ BASE_STYLES = """
     .stat-value { font-size: 18px; font-weight: 700; color: var(--text-main); }
     .stat-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; }
 
+    /* Tables */
     .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .data-table th { background: var(--table-hdr); padding: 8px 4px; text-align: center; font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 2px solid var(--brand-color); }
     .data-table th.region-col { text-align: left; padding-left: 12px; }
@@ -492,12 +581,7 @@ BASE_STYLES = """
     .data-table td.region-col { text-align: left; padding-left: 12px; font-weight: 500; background: var(--hover-bg); }
     .data-table tr.total-row td { background: rgba(79,70,229,0.1); font-weight: 600; color: var(--brand-color); border-top: 2px solid var(--brand-color); }
 
-    .region-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .region-table th { background: var(--table-hdr); padding: 8px 4px; text-align: center; font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 2px solid var(--brand-color); }
-    .region-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
-    .region-table td:first-child { text-align: left; font-weight: 500; background: var(--hover-bg); padding-left: 8px; }
-    .region-table tr:last-child td { border-bottom: none; }
-
+    /* Day Data Grid */
     .day-data { display: flex; justify-content: center; gap: 2px; font-size: 10px; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-body); margin: 2px 0; }
     .day-data span, .day-data a { flex: 1; min-width: 28px; padding: 3px 1px; text-align: center; font-weight: 500; border-right: 1px solid var(--border-color); color: inherit; text-decoration: none; }
     .day-data span:last-child, .day-data a:last-child { border-right: none; }
@@ -509,9 +593,11 @@ BASE_STYLES = """
     .day-data-empty { color: var(--text-muted); font-size: 10px; padding: 4px; background: var(--cell-empty); border-radius: 4px; }
     .orders-link:hover, .boxes-link:hover, .weight-link:hover { color: var(--brand-color); border-bottom: 1px dashed var(--brand-color); }
 
+    /* Sub-header */
     .sub-header { display: flex; justify-content: center; gap: 4px; font-size: 8px; color: var(--text-muted); }
     .sub-header span { min-width: 28px; text-align: center; padding: 2px 0; }
 
+    /* Stats Cards */
     .stats-row, .stats-row-5 { display: grid; gap: 12px; margin-bottom: 20px; }
     .stats-row { grid-template-columns: repeat(4, 1fr); }
     .stats-row-5 { grid-template-columns: repeat(5, 1fr); }
@@ -521,11 +607,13 @@ BASE_STYLES = """
     .stat-card .stat-value { font-size: 20px; font-weight: 700; color: var(--text-main); margin-bottom: 2px; }
     .stat-card .stat-label { font-size: 12px; color: var(--text-muted); }
 
+    /* Charts */
     .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
     .chart-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 16px; }
     .chart-card.full-width { grid-column: span 2; }
     .chart-title { font-size: 15px; font-weight: 600; color: var(--text-main); margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
 
+    /* Leaderboard */
     .leaderboard-table { width: 100%; border-collapse: collapse; }
     .leaderboard-table th { background: var(--table-hdr); padding: 10px; text-align: left; font-weight: 600; color: var(--text-muted); font-size: 11px; border-bottom: 2px solid var(--brand-color); }
     .leaderboard-table td { padding: 10px; border-bottom: 1px solid var(--border-color); }
@@ -536,6 +624,7 @@ BASE_STYLES = """
     .provider-cell { display: flex; align-items: center; gap: 10px; }
     .provider-color { width: 4px; height: 28px; border-radius: 2px; }
 
+    /* KPI Cards */
     .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
     .kpi-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 16px; text-align: center; }
     .kpi-icon { font-size: 28px; margin-bottom: 8px; }
@@ -545,13 +634,16 @@ BASE_STYLES = """
     .kpi-trend.up { background: #e6f7e6; color: #10b981; border: 1px solid #a7f3d0; }
     .kpi-trend.down { background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; }
 
+    /* Winner Card */
     .winner-card { background: #fef9e7; border: 2px solid #fbbf24; }
 
+    /* Comparison Tabs */
     .tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
     .tab-btn { padding: 5px 14px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 40px; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
     .tab-btn:hover { background: var(--border-color); }
     .tab-btn.active { background: var(--brand-color); border-color: var(--brand-color); color: #fff; }
 
+    /* Comparison Cards */
     .comparison-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: start; }
     .comparison-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 18px; }
     .comparison-vs { display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: var(--brand-color); padding: 16px; }
@@ -563,14 +655,17 @@ BASE_STYLES = """
     .comparison-stat-value { color: var(--text-main); font-size: 14px; font-weight: 600; }
     .winner-indicator { color: #10b981; font-size: 11px; margin-left: 4px; }
 
+    /* Heatmap */
     .heatmap-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
     .heatmap-item { background: var(--bg-card); border-radius: 16px; padding: 14px; text-align: center; border: 1px solid var(--border-color); }
     .heatmap-region { font-size: 14px; font-weight: 600; color: var(--text-main); }
     .heatmap-value { font-size: 20px; font-weight: 700; color: var(--brand-color); }
 
+    /* Achievements */
     .achievements-row { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
     .achievement-badge { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; font-size: 10px; color: var(--text-muted); }
 
+    /* WhatsApp Report */
     .whatsapp-box { background: var(--bg-card); border: 2px solid #10b981; border-radius: 20px; padding: 20px; }
     .whatsapp-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
     .whatsapp-icon { font-size: 24px; }
@@ -578,6 +673,7 @@ BASE_STYLES = """
     .whatsapp-content { font-family: 'Courier New', monospace; background: var(--hover-bg); padding: 14px; border-radius: 12px; color: var(--text-main); border: 1px solid var(--border-color); }
     .copy-btn { background: #10b981; color: #ffffff; padding: 10px; border: none; border-radius: 40px; font-weight: 600; font-size: 12px; cursor: pointer; margin-top: 14px; width: 100%; }
 
+    /* Login Page */
     .login-container {
         min-height: 100vh;
         display: flex;
@@ -698,10 +794,12 @@ BASE_STYLES = """
         margin-bottom: 12px;
     }
 
+    /* Loading */
     .loading { display: flex; justify-content: center; align-items: center; height: 200px; color: var(--brand-color); }
     .spinner { width: 36px; height: 36px; border: 3px solid rgba(79,70,229,0.1); border-top-color: var(--brand-color); border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Forecast Page */
     .forecast-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; margin-bottom: 20px; }
     .forecast-title { font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 14px; }
     .forecast-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 14px; }
@@ -710,15 +808,18 @@ BASE_STYLES = """
     .forecast-day .prediction { font-size: 16px; font-weight: 600; color: var(--brand-color); }
     .forecast-detail { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
+    /* Logs Page */
     .logs-container { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; }
     .log-entry { padding: 6px 10px; border-bottom: 1px solid var(--border-color); font-family: monospace; font-size: 11px; }
     .log-entry:last-child { border-bottom: none; }
 
+    /* Responsive */
     @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5 { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
     @media (max-width: 768px) { .sidebar { width: 60px; } .main-content { margin-left: 60px; } .sidebar-toggle { width: 22px; height: 22px; right: -10px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
 </style>
 """
 
+# ========== SHARED JAVASCRIPT (UPDATED) ==========
 SHARED_JS = """
 <script>
 // ===== DATE UTILITIES =====
@@ -777,6 +878,80 @@ function dpUpdateBadge() {
 function dpParams() { return 'start_date=' + fmtLocal(dpStart) + '&end_date=' + fmtLocal(dpEnd); }
 function getStarRating(stars) { return '★'.repeat(stars) + '☆'.repeat(5 - stars); }
 
+// ===== LAST UPDATE TIME =====
+function updateLastUpdateTime() {
+    const now = new Date();
+    const timeStr = now.toLocaleString();
+    const element = document.getElementById('last-update-time');
+    if (element) element.textContent = timeStr;
+}
+
+// ===== SKELETON SCREENS =====
+function renderDashboardSkeleton() {
+    let html = '';
+    for (let i = 0; i < 6; i++) {
+        html += `<div class="provider-card" style="padding: 20px;">
+            <div class="skeleton" style="width: 60%; height: 30px;"></div>
+            <div class="skeleton" style="width: 40%;"></div>
+            <div class="skeleton" style="width: 100%; height: 200px;"></div>
+        </div>`;
+    }
+    return html;
+}
+
+function renderDailyRegionSkeleton() {
+    let html = '';
+    for (let i = 0; i < 3; i++) {
+        html += `<div class="provider-section" style="padding: 20px;">
+            <div class="skeleton" style="width: 50%; height: 40px;"></div>
+            <div class="skeleton" style="width: 100%; height: 150px;"></div>
+        </div>`;
+    }
+    return html;
+}
+
+function renderComparisonSkeleton() {
+    return `<div class="comparison-grid">
+        <div class="comparison-card"><div class="skeleton" style="height: 200px;"></div></div>
+        <div class="comparison-vs">VS</div>
+        <div class="comparison-card"><div class="skeleton" style="height: 200px;"></div></div>
+    </div>`;
+}
+
+// ===== EXPORT FUNCTIONS =====
+function exportTableToCSV(table, filename) {
+    let csv = [];
+    let rows = table.querySelectorAll("tr");
+    for (let i = 0; i < rows.length; i++) {
+        let row = [], cols = rows[i].querySelectorAll("td, th");
+        for (let j = 0; j < cols.length; j++) {
+            let data = cols[j].innerText.replace(/(\\r\\n|\\n|\\r)/gm, "").replace(/"/g, '""');
+            row.push('"' + data + '"');
+        }
+        csv.push(row.join(","));
+    }
+    let csvFile = new Blob([csv.join("\\n")], {type: "text/csv"});
+    let dl = document.createElement("a");
+    dl.download = filename; dl.href = window.URL.createObjectURL(csvFile);
+    dl.style.display = "none"; document.body.appendChild(dl); dl.click();
+}
+
+function exportProviderTable(btn, providerName) {
+    const card = btn.closest('.provider-card, .provider-section');
+    const table = card.querySelector('table');
+    const dateRange = document.getElementById('dpBadge').innerText;
+    exportTableToCSV(table, `${providerName}_${dateRange}.csv`);
+}
+
+function exportComparisonTable(type) {
+    const table = document.querySelector('.all-providers-table');
+    if (table) {
+        exportTableToCSV(table, `All_Providers_${fmtLocal(dpStart)}_to_${fmtLocal(dpEnd)}.csv`);
+    } else {
+        alert('No table to export');
+    }
+}
+
 // ===== THEME TOGGLE =====
 function toggleTheme() {
     const isDark = document.body.getAttribute('data-theme') === 'dark';
@@ -810,26 +985,6 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('main-content').classList.add('expanded');
     }
 });
-
-// ===== EXPORT TO CSV =====
-function exportTableToCSV(filename) {
-    const role = '{{ role }}';
-    if (role !== 'admin') return;
-    let csv = [];
-    let rows = document.querySelectorAll("table tr");
-    for (let i = 0; i < rows.length; i++) {
-        let row = [], cols = rows[i].querySelectorAll("td, th");
-        for (let j = 0; j < cols.length; j++) {
-            let data = cols[j].innerText.replace(/(\\r\\n|\\n|\\r)/gm, "").replace(/"/g, '""');
-            row.push('"' + data + '"');
-        }
-        csv.push(row.join(","));
-    }
-    let csvFile = new Blob([csv.join("\\n")], {type: "text/csv"});
-    let dl = document.createElement("a");
-    dl.download = filename; dl.href = window.URL.createObjectURL(csvFile);
-    dl.style.display = "none"; document.body.appendChild(dl); dl.click();
-}
 
 // ===== GLOBAL SEARCH =====
 function searchOrder(q) {
@@ -922,7 +1077,6 @@ def ACTION_BAR_HTML(role):
             <div id="search-results"></div>
         </div>
         <div class="action-group">
-            <button class="action-btn export-btn" onclick="exportTableToCSV('Dashboard_Export.csv')">📥 Export CSV</button>
             <button class="action-btn" id="theme-toggle-btn" onclick="toggleTheme()">🌙 Dark</button>
         </div>
     </div>
@@ -1012,6 +1166,9 @@ SIDEBAR_HTML = """
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
             <span>Logout</span>
         </a>
+        <div class="last-update">
+            Last update: <span id="last-update-time">Never</span>
+        </div>
     </div>
 </nav>
 """
@@ -1064,6 +1221,7 @@ def sidebar(active, role='guest'):
         
     return SIDEBAR_HTML.format(**kwargs)
 
+# ===== LOGIN =====
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
@@ -1112,6 +1270,7 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
+# ===== DASHBOARD (UPDATED) =====
 @app.route('/')
 @login_required
 def dashboard():
@@ -1132,14 +1291,17 @@ def dashboard():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('dashboard-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('dashboard-content').innerHTML = renderDashboardSkeleton();
     try {
         const response = await fetch('/api/dashboard?' + dpParams());
         const data = await response.json();
         let html = '';
         for (const provider of data.providers) { html += renderProvider(provider); }
         document.getElementById('dashboard-content').innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No data for selected period</h3></div>';
-    } catch(e) { document.getElementById('dashboard-content').innerHTML = '<p style="color:#ef4444;padding:20px">Error loading data: '+e.message+'</p>'; }
+        updateLastUpdateTime();
+    } catch(e) { 
+        document.getElementById('dashboard-content').innerHTML = '<p style="color:#ef4444;padding:20px">Error loading data: '+e.message+'</p>';
+    }
 }
 
 function renderProvider(provider) {
@@ -1241,6 +1403,7 @@ ${achHtml}
 <div class="stat-item"><div class="stat-value">${provider.total_boxes.toLocaleString()}</div><div class="stat-label">Boxes</div></div>
 <div class="stat-item"><div class="stat-value">${formatWeight(provider.total_weight)} kg</div><div class="stat-label">Weight</div></div>
 </div>
+<button class="download-btn" onclick="exportProviderTable(this, '${provider.short}')">📥 CSV</button>
 </div>
 <div style="overflow-x:auto"><table class="data-table"><thead>
 <tr><th class="region-col" rowspan="2">Region</th>${dayHdrs}</tr>
@@ -1252,6 +1415,7 @@ dpInit('week');
 loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== WEEKLY SUMMARY (UPDATED) =====
 @app.route('/weekly-summary')
 @login_required
 def weekly_summary():
@@ -1272,7 +1436,7 @@ def weekly_summary():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderDashboardSkeleton();
     try {
         const r = await fetch('/api/weekly-summary?' + dpParams());
         const data = await r.json();
@@ -1288,9 +1452,13 @@ async function loadData() {
 <span style="font-size:32px;margin-right:12px">🏆</span><div>
 <div class="provider-name" style="font-size:24px">Week Winner: ${data.winner.name}</div>
 <div style="color:#4f46e5;margin-top:4px">${data.winner.total_boxes.toLocaleString()} boxes • ${formatWeight(data.winner.total_weight)} kg</div>
-${achHtml}</div></div></div></div>`;
+${achHtml}</div></div>
+<button class="download-btn" onclick="exportProviderTable(this, 'Winner')">📥 CSV</button>
+</div></div>`;
         }
-        html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Leaderboard</span></div></div>
+        html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Leaderboard</span></div>
+<button class="download-btn" onclick="exportComparisonTable()">📥 CSV</button>
+</div>
 <table class="leaderboard-table"><thead><tr><th style="width:60px">Rank</th><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th><th style="text-align:right">Trend</th></tr></thead><tbody>`;
         data.providers.forEach((p,i) => {
             const rc = i < 3 ? 'rank-'+(i+1) : 'rank-other';
@@ -1314,11 +1482,13 @@ ${achHtml}</div></div></div></div>`;
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== DAILY REGION (UPDATED) =====
 @app.route('/daily-region')
 @login_required
 def daily_region():
@@ -1348,7 +1518,9 @@ def daily_region():
         transition: all 0.2s;
     }
     .provider-section:hover {
-        box-shadow: 0 8px 20px rgba(79,70,229,0.08);
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(79,70,229,0.08);
+        border-color: var(--brand-color);
     }
     .provider-header-dr {
         display: flex;
@@ -1484,7 +1656,7 @@ function toggleProvider(id) {
 }
 
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderDailyRegionSkeleton();
     try {
         const r = await fetch('/api/daily-region-summary?' + dpParams());
         const data = await r.json();
@@ -1538,6 +1710,7 @@ async function loadData() {
 
         if (data.totals.orders === 0) {
             document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No Data Found</h3><p>No shipments for the selected period</p></div>';
+            updateLastUpdateTime();
             return;
         }
 
@@ -1567,6 +1740,7 @@ async function loadData() {
                             <div class="header-stat-val">${formatWeight(provider.weight)}</div>
                             <div class="header-stat-lbl">Weight</div>
                         </div>
+                        <button class="download-btn" onclick="exportProviderTable(this, '${provider.name}')">📥 CSV</button>
                         <span class="toggle-icon">▼</span>
                     </div>
                 </div>
@@ -1619,6 +1793,7 @@ async function loadData() {
         });
 
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
 
     } catch(e) {
         console.error(e);
@@ -1630,6 +1805,7 @@ dpInit('today');
 loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== FLIGHT LOAD =====
 @app.route('/flight-load')
 @login_required
 def flight_load():
@@ -1650,7 +1826,7 @@ def flight_load():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderDashboardSkeleton();
     try {
         const r = await fetch('/api/flight-load?' + dpParams());
         const data = await r.json();
@@ -1663,7 +1839,9 @@ async function loadData() {
 <div class="stat-item"><div class="stat-value">${flight.total_orders.toLocaleString()}</div><div class="stat-label">Orders</div></div>
 <div class="stat-item"><div class="stat-value">${flight.total_boxes.toLocaleString()}</div><div class="stat-label">Boxes</div></div>
 <div class="stat-item"><div class="stat-value">${formatWeight(flight.total_weight)} kg</div><div class="stat-label">Weight</div></div>
-</div></div>
+</div>
+<button class="download-btn" onclick="exportTableToCSV(this.closest('.provider-card').querySelector('table'), '${flight.name.replace(/ /g,'_')}_${fmtLocal(dpStart)}.csv')">📥 CSV</button>
+</div>
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
             for (const p of flight.providers) {
                 if (canClick) {
@@ -1681,11 +1859,13 @@ async function loadData() {
             html += '</tbody></table></div>';
         }
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== ANALYTICS =====
 @app.route('/analytics')
 @login_required
 def analytics():
@@ -1720,6 +1900,7 @@ function destroyCharts() { Object.values(charts).forEach(c => c && c.destroy());
 
 async function loadData() {
     destroyCharts();
+    document.getElementById('stat-cards').innerHTML = renderDashboardSkeleton();
     try {
         const r = await fetch('/api/analytics-data?' + dpParams());
         const data = await r.json();
@@ -1728,11 +1909,47 @@ async function loadData() {
         const canClick = role === 'admin';
         const statCards = document.getElementById('stat-cards');
         statCards.innerHTML = `
-            <div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content">${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;">` : ''}<div class="stat-value" id="t-orders">${data.totals.orders.toLocaleString()}</div>${canClick ? '</a>' : ''}<div class="stat-label">Total Orders</div></div></div>
-            <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content">${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;">` : ''}<div class="stat-value" id="t-boxes">${data.totals.boxes.toLocaleString()}</div>${canClick ? '</a>' : ''}<div class="stat-label">Total Boxes</div></div></div>
-            <div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content">${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;">` : ''}<div class="stat-value" id="t-weight">${formatWeight(data.totals.weight)} kg</div>${canClick ? '</a>' : ''}<div class="stat-label">Total Weight</div></div></div>
-            <div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">${data.totals.under20.toLocaleString()}</div><div class="stat-label">Light (<20 kg)</div></div></div>
-            <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">${data.totals.over20.toLocaleString()}</div><div class="stat-label">Heavy (20+ kg)</div></div></div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${data.totals.orders.toLocaleString()}</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Orders</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${data.totals.boxes.toLocaleString()}</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Boxes</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${formatWeight(data.totals.weight)} kg</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Weight</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div>
+                <div class="stat-content">
+                    <div class="stat-value">${data.totals.under20.toLocaleString()}</div>
+                    <div class="stat-label">Light (<20 kg)</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div>
+                <div class="stat-content">
+                    <div class="stat-value">${data.totals.over20.toLocaleString()}</div>
+                    <div class="stat-label">Heavy (20+ kg)</div>
+                </div>
+            </div>
         `;
 
         charts.trend = new Chart(document.getElementById('trendChart'), { type:'line', data:{ labels:data.trend.labels, datasets:[{label:'Orders',data:data.trend.orders,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.4,pointRadius:4},{label:'Boxes',data:data.trend.boxes,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.1)',fill:true,tension:0.4,pointRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true,grid:{color:'#e2e8f0'}},x:{grid:{display:false}}}}});
@@ -1742,11 +1959,13 @@ async function loadData() {
         const wR = data.regions.slice(0,6);
         charts.weightRegion = new Chart(document.getElementById('weightRegionChart'), { type:'bar', data:{labels:wR.map(r=>r.name),datasets:[{label:'<20 kg',data:wR.map(r=>r.under20),backgroundColor:'#10b981',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'20+ kg',data:wR.map(r=>r.over20),backgroundColor:'#ef4444',borderColor:'#ef4444',borderWidth:1,borderRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,beginAtZero:true,grid:{color:'#e2e8f0'}}}}});
         charts.weightProvider = new Chart(document.getElementById('weightProviderChart'), { type:'bar', data:{labels:data.providers.map(p=>p.name),datasets:[{label:'<20 kg',data:data.providers.map(p=>p.under20),backgroundColor:'#10b981',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'20+ kg',data:data.providers.map(p=>p.over20),backgroundColor:'#ef4444',borderColor:'#ef4444',borderWidth:1,borderRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,grid:{color:'#e2e8f0'}}}}});
+        updateLastUpdateTime();
     } catch(e) { console.error(e); }
 }
 dpInit('week'); loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== KPI =====
 @app.route('/kpi')
 @login_required
 def kpi_dashboard():
@@ -1767,7 +1986,8 @@ def kpi_dashboard():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = '<div class="kpi-grid">' + 
+        '<div class="kpi-card"><div class="skeleton" style="height:80px"></div></div>'.repeat(9) + '</div>';
     try {
         const r = await fetch('/api/kpi?' + dpParams());
         const data = await r.json();
@@ -1794,11 +2014,13 @@ async function loadData() {
         });
         html += '</div>';
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== COMPARISON (UPDATED) =====
 @app.route('/comparison')
 @login_required
 def comparison():
@@ -1839,6 +2061,7 @@ def comparison():
         transition: all 0.2s;
     }
     .comparison-card:hover {
+        transform: translateY(-2px);
         box-shadow: 0 12px 24px rgba(79,70,229,0.08);
         border-color: var(--brand-color);
     }
@@ -1907,11 +2130,6 @@ def comparison():
         color: #fbbf24;
         font-size: 20px;
         filter: drop-shadow(0 2px 4px rgba(251,191,36,0.3));
-    }
-    .trend-badge.small {
-        font-size: 12px;
-        padding: 2px 8px;
-        margin-left: 8px;
     }
     .all-providers-table {
         width: 100%;
@@ -2053,6 +2271,7 @@ function renderCard(p1, p2, title1, title2) {
             <div class="comparison-stats">
                 ${stats2}
             </div>
+            <button class="download-btn" onclick="exportTableToCSV(this.closest('.comparison-card').querySelector('.comparison-stats'), '${title1}_vs_${title2}_${fmtLocal(dpStart)}.csv')" style="margin-top:15px">📥 CSV</button>
         </div>
     </div>`;
 }
@@ -2177,15 +2396,16 @@ function renderComparison() {
         html += renderCard(qcTotal, zoneTotal, 'QC Total', 'Zone Total');
         
     } else {
-        html = '<h3 style="color:var(--brand-color); margin-bottom:24px; font-size:18px;">All Providers Comparison</h3>';
+        html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;"><h3 style="color:var(--brand-color); font-size:18px;">All Providers Comparison</h3><button class="download-btn" onclick="exportComparisonTable()">📥 CSV</button></div>';
         html += renderAllProviders(ps);
     }
     
     document.getElementById('content').innerHTML = html;
+    updateLastUpdateTime();
 }
 
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderComparisonSkeleton();
     try {
         const r = await fetch('/api/dashboard?' + dpParams());
         curData = await r.json();
@@ -2199,6 +2419,7 @@ dpInit('week');
 loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== REGIONS =====
 @app.route('/regions')
 @login_required
 def regions():
@@ -2224,7 +2445,8 @@ function heatColor(v,mx) {
     if(r>=0.4) return '#818cf8'; if(r>=0.2) return '#a5b4fc'; return '#c7d2fe';
 }
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = '<div class="heatmap-container">' + 
+        '<div class="heatmap-item"><div class="skeleton" style="height:60px"></div></div>'.repeat(8) + '</div>';
     try {
         const r = await fetch('/api/regions?' + dpParams());
         const data = await r.json();
@@ -2236,11 +2458,13 @@ async function loadData() {
         });
         html += '</div>';
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== MONTHLY =====
 @app.route('/monthly')
 @login_required
 def monthly_report():
@@ -2262,7 +2486,7 @@ def monthly_report():
 <script>
 let chart = null;
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderDashboardSkeleton();
     try {
         const r = await fetch('/api/monthly?' + dpParams());
         const data = await r.json();
@@ -2275,7 +2499,7 @@ async function loadData() {
 <div class="stat-card"><div class="stat-icon" style="background:rgba(139,92,246,0.1)">📊</div><div class="stat-content"><div class="stat-value">${Math.round(data.avg_per_day)}</div><div class="stat-label">Avg Orders/Day</div></div></div>
 </div>
 <div class="charts-grid"><div class="chart-card full-width"><div class="chart-title">Weekly Breakdown</div><div class="chart-container"><canvas id="weeklyChart"></canvas></div></div></div>
-<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Monthly Summary</span></div></div>
+<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Monthly Summary</span></div><button class="download-btn" onclick="exportComparisonTable()">📥 CSV</button></div>
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
         data.providers.forEach(p => {
             if (canClick) {
@@ -2294,11 +2518,13 @@ async function loadData() {
         document.getElementById('content').innerHTML = html;
         if (chart) chart.destroy();
         chart = new Chart(document.getElementById('weeklyChart'), { type:'bar', data:{labels:data.weeks.map(w=>w.label),datasets:[{label:'Boxes',data:data.weeks.map(w=>w.boxes),backgroundColor:'#4f46e599',borderColor:'#4f46e5',borderWidth:2,borderRadius:8}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#e2e8f0'}},x:{grid:{display:false}}}}});
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('month'); loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== WHATSAPP =====
 @app.route('/whatsapp')
 @login_required
 def whatsapp_report():
@@ -2325,16 +2551,18 @@ function copyText(text) {
     });
 }
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = '<div class="whatsapp-box"><div class="skeleton" style="height:200px"></div></div>';
     try {
         const r = await fetch('/api/whatsapp?' + dpParams());
         const data = await r.json();
-        document.getElementById('content').innerHTML = `<div class="whatsapp-box"><div class="whatsapp-header"><span class="whatsapp-icon">📱</span><span class="whatsapp-title">Report - Ready to Share</span></div><div class="whatsapp-content" id="report-text">${data.report}</div><button class="copy-btn" onclick="copyText(document.getElementById('report-text').textContent)">📋 Copy to Clipboard</button></div>`;
+        document.getElementById('content').innerHTML = `<div class="whatsapp-box"><div class="whatsapp-header"><span class="whatsapp-icon">📱</span><span class="whatsapp-title">Report - Ready to Share</span><button class="download-btn" onclick="copyText(document.getElementById('report-text').textContent)" style="margin-left:auto">📋 Copy</button></div><div class="whatsapp-content" id="report-text">${data.report}</div><button class="copy-btn" onclick="copyText(document.getElementById('report-text').textContent)">📋 Copy to Clipboard</button></div>`;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== ACHIEVEMENTS =====
 @app.route('/achievements')
 @login_required
 def achievements_page():
@@ -2355,22 +2583,24 @@ def achievements_page():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderDashboardSkeleton();
     try {
         const r = await fetch('/api/dashboard?' + dpParams());
         const data = await r.json();
         let html = '';
         data.providers.forEach(p => {
             const ach = p.achievements || [];
-            html+=`<div class="provider-card" style="margin-bottom:16px"><div class="card-header"><div class="provider-info"><div style="background:${p.color};width:8px;height:40px;border-radius:4px"></div><span class="provider-name">${p.name}</span><span style="color:#64748b;font-size:14px">${p.total_boxes.toLocaleString()} boxes</span></div></div>
-<div style="padding:20px">${ach.length>0?'<div style="display:flex;flex-wrap:wrap;gap:12px">'+ach.map(a=>`<div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;min-width:120px"><div style="font-size:32px;margin-bottom:8px">${a.icon}</div><div style="font-size:14px;font-weight:600;color:#4f46e5">${a.name}</div><div style="font-size:11px;color:#64748b;margin-top:4px">${a.desc}</div></div>`).join('')+'</div>':'<div style="color:#64748b;text-align:center;padding:20px">No achievements this period 💪</div>'}</div></div>`;
+            html+=`<div class="provider-card" style="margin-bottom:16px"><div class="card-header"><div class="provider-info"><div style="background:${p.color};width:8px;height:40px;border-radius:4px"></div><span class="provider-name">${p.name}</span><span style="color:#64748b;font-size:14px">${p.total_boxes.toLocaleString()} boxes</span></div><button class="download-btn" onclick="exportProviderTable(this, '${p.name}')">📥 CSV</button></div>
+<div style="padding:20px">${ach.length>0?'<div style="display:flex;flex-wrap:wrap;gap:12px">'+ach.map(a=>`<div style="background:var(--hover-bg);border:1px solid var(--border-color);border-radius:12px;padding:16px;text-align:center;min-width:120px"><div style="font-size:32px;margin-bottom:8px">${a.icon}</div><div style="font-size:14px;font-weight:600;color:var(--brand-color)">${a.name}</div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">${a.desc}</div></div>`).join('')+'</div>':'<div style="color:var(--text-muted);text-align:center;padding:20px">No achievements this period 💪</div>'}</div></div>`;
         });
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== FORECAST =====
 @app.route('/forecast')
 @login_required
 def forecast():
@@ -2392,7 +2622,8 @@ def forecast():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadForecast() {
-    document.getElementById('forecast-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('forecast-content').innerHTML = '<div class="forecast-grid">' + 
+        '<div class="forecast-day"><div class="skeleton" style="height:80px"></div></div>'.repeat(6) + '</div>';
     try {
         const r = await fetch('/api/forecast');
         const data = await r.json();
@@ -2408,6 +2639,7 @@ async function loadForecast() {
         });
         html += '</div></div>';
         document.getElementById('forecast-content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) {
         document.getElementById('forecast-content').innerHTML = '<p style="color:#ef4444">Error loading forecast</p>';
     }
@@ -2415,6 +2647,7 @@ async function loadForecast() {
 loadForecast();
 </script></body></html>''', favicon=FAVICON)
 
+# ===== LOGS =====
 @app.route('/logs')
 @login_required
 def logs():
@@ -2443,12 +2676,15 @@ def logs():
 <div class="logs-container">
     ''' + logs_html + '''
 </div>
+<div class="last-update" style="margin-top:20px">
+    Last update: <span id="last-update-time">Never</span>
+</div>
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>updateLastUpdateTime();</script>
 </body></html>''', favicon=FAVICON)
 
 # ===== API ENDPOINTS =====
-
 @app.route('/api/dashboard')
 def api_dashboard():
     start_date, end_date = parse_date_range(request)
@@ -3008,11 +3244,17 @@ def order_details():
         .back-btn { display: inline-block; margin-bottom: 20px; padding: 8px 16px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; }
         .stats { display: flex; gap: 20px; margin-bottom: 20px; }
         .stat-box { background: #ffffff; padding: 15px; border-radius: 8px; border-left: 4px solid #4f46e5; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .download-btn { background: none; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; color: #64748b; display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
+        .download-btn:hover { background: #f1f5f9; color: #4f46e5; border-color: #4f46e5; }
+        .last-update { font-size: 10px; color: #64748b; text-align: center; margin-top: 20px; }
     </style>
 </head>
 <body class="''' + mode_class + '''">
     <a href="javascript:history.back()" class="back-btn">← Back</a>
-    <h1>Orders - {{ provider_short }}</h1>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h1>Orders - {{ provider_short }}</h1>
+        <button class="download-btn" onclick="exportTableToCSV(document.querySelector('table'), '{{ provider_short }}_orders.csv')">📥 CSV</button>
+    </div>
     <div class="stats">
         <div class="stat-box">Total Orders: {{ orders|length }}</div>
         <div class="stat-box">Total Boxes: {{ orders|sum(attribute='boxes') }}</div>
@@ -3044,6 +3286,26 @@ def order_details():
             {% endfor %}
         </tbody>
     </table>
+    <div class="last-update">Last update: <span id="last-update-time">Never</span></div>
+    <script>
+        function exportTableToCSV(table, filename) {
+            let csv = [];
+            let rows = table.querySelectorAll("tr");
+            for (let i = 0; i < rows.length; i++) {
+                let row = [], cols = rows[i].querySelectorAll("td, th");
+                for (let j = 0; j < cols.length; j++) {
+                    let data = cols[j].innerText.replace(/(\\r\\n|\\n|\\r)/gm, "").replace(/"/g, '""');
+                    row.push('"' + data + '"');
+                }
+                csv.push(row.join(","));
+            }
+            let csvFile = new Blob([csv.join("\\n")], {type: "text/csv"});
+            let dl = document.createElement("a");
+            dl.download = filename; dl.href = window.URL.createObjectURL(csvFile);
+            dl.style.display = "none"; document.body.appendChild(dl); dl.click();
+        }
+        document.getElementById('last-update-time').textContent = new Date().toLocaleString();
+    </script>
 </body>
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
