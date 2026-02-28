@@ -15,7 +15,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-product
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
 
 CACHE = {}
-<meta http-equiv="Cache-Control" content="max-age=3600">
+CACHE_DURATION = 300
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
 PROVIDERS = [
@@ -253,7 +253,6 @@ BASE_STYLES = """
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; font-size: 13px; line-height: 1.4; transition: background 0.3s, color 0.3s; }
 
-    /* Guest Mode Restrictions */
     body.guest-mode .day-data a,
     body.guest-mode .orders-link,
     body.guest-mode .boxes-link,
@@ -268,7 +267,6 @@ BASE_STYLES = """
         pointer-events: none !important;
     }
 
-    /* Sidebar */
     .sidebar {
         position: fixed;
         left: 0;
@@ -379,11 +377,9 @@ BASE_STYLES = """
     .logout-btn svg { width: 14px; height: 14px; }
     .sidebar.collapsed .logout-btn span { display: none; }
 
-    /* Main Content */
     .main-content { margin-left: 220px; padding: 20px; transition: margin-left 0.2s; min-height: 100vh; }
     .main-content.expanded { margin-left: 60px; }
 
-    /* Page Header */
     .page-header {
         display: flex;
         justify-content: space-between;
@@ -395,7 +391,6 @@ BASE_STYLES = """
     .page-title { font-size: 24px; font-weight: 700; color: var(--text-main); }
     .page-title span { color: var(--brand-color); }
 
-    /* Top Actions */
     .top-actions {
         display: flex;
         justify-content: flex-end;
@@ -440,7 +435,6 @@ BASE_STYLES = """
     }
     .action-btn:hover { border-color: var(--brand-color); color: var(--brand-color); }
 
-    /* Search Results */
     #search-results {
         position: absolute;
         top: 100%;
@@ -462,7 +456,6 @@ BASE_STYLES = """
     .search-item-title { font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between; }
     .search-item-meta { font-size: 11px; color: var(--text-muted); display: flex; gap: 10px; }
 
-    /* Date Picker */
     .date-range-picker {
         background: var(--bg-card);
         border-radius: 16px;
@@ -478,7 +471,6 @@ BASE_STYLES = """
     .apply-btn { padding: 4px 14px; background: var(--brand-color); border: none; border-radius: 30px; color: #fff; font-size: 11px; cursor: pointer; }
     .week-badge { font-size: 11px; color: var(--brand-color); padding: 4px 12px; background: rgba(79,70,229,0.1); border-radius: 30px; }
 
-    /* Provider Cards */
     .provider-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); margin-bottom: 20px; overflow: hidden; }
     .card-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border-color); }
     .provider-info { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
@@ -493,7 +485,6 @@ BASE_STYLES = """
     .stat-value { font-size: 18px; font-weight: 700; color: var(--text-main); }
     .stat-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; }
 
-    /* Tables */
     .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .data-table th { background: var(--table-hdr); padding: 8px 4px; text-align: center; font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 2px solid var(--brand-color); }
     .data-table th.region-col { text-align: left; padding-left: 12px; }
@@ -501,14 +492,12 @@ BASE_STYLES = """
     .data-table td.region-col { text-align: left; padding-left: 12px; font-weight: 500; background: var(--hover-bg); }
     .data-table tr.total-row td { background: rgba(79,70,229,0.1); font-weight: 600; color: var(--brand-color); border-top: 2px solid var(--brand-color); }
 
-    /* Region Table (for daily region) */
     .region-table { width: 100%; border-collapse: collapse; font-size: 12px; }
     .region-table th { background: var(--table-hdr); padding: 8px 4px; text-align: center; font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 2px solid var(--brand-color); }
     .region-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
     .region-table td:first-child { text-align: left; font-weight: 500; background: var(--hover-bg); padding-left: 8px; }
     .region-table tr:last-child td { border-bottom: none; }
 
-    /* Day Data Grid */
     .day-data { display: flex; justify-content: center; gap: 2px; font-size: 10px; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-body); margin: 2px 0; }
     .day-data span, .day-data a { flex: 1; min-width: 28px; padding: 3px 1px; text-align: center; font-weight: 500; border-right: 1px solid var(--border-color); color: inherit; text-decoration: none; }
     .day-data span:last-child, .day-data a:last-child { border-right: none; }
@@ -520,11 +509,9 @@ BASE_STYLES = """
     .day-data-empty { color: var(--text-muted); font-size: 10px; padding: 4px; background: var(--cell-empty); border-radius: 4px; }
     .orders-link:hover, .boxes-link:hover, .weight-link:hover { color: var(--brand-color); border-bottom: 1px dashed var(--brand-color); }
 
-    /* Sub-header */
     .sub-header { display: flex; justify-content: center; gap: 4px; font-size: 8px; color: var(--text-muted); }
     .sub-header span { min-width: 28px; text-align: center; padding: 2px 0; }
 
-    /* Stats Cards */
     .stats-row, .stats-row-5 { display: grid; gap: 12px; margin-bottom: 20px; }
     .stats-row { grid-template-columns: repeat(4, 1fr); }
     .stats-row-5 { grid-template-columns: repeat(5, 1fr); }
@@ -534,13 +521,11 @@ BASE_STYLES = """
     .stat-card .stat-value { font-size: 20px; font-weight: 700; color: var(--text-main); margin-bottom: 2px; }
     .stat-card .stat-label { font-size: 12px; color: var(--text-muted); }
 
-    /* Charts */
     .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
     .chart-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 16px; }
     .chart-card.full-width { grid-column: span 2; }
     .chart-title { font-size: 15px; font-weight: 600; color: var(--text-main); margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
 
-    /* Leaderboard */
     .leaderboard-table { width: 100%; border-collapse: collapse; }
     .leaderboard-table th { background: var(--table-hdr); padding: 10px; text-align: left; font-weight: 600; color: var(--text-muted); font-size: 11px; border-bottom: 2px solid var(--brand-color); }
     .leaderboard-table td { padding: 10px; border-bottom: 1px solid var(--border-color); }
@@ -551,7 +536,6 @@ BASE_STYLES = """
     .provider-cell { display: flex; align-items: center; gap: 10px; }
     .provider-color { width: 4px; height: 28px; border-radius: 2px; }
 
-    /* KPI Cards */
     .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
     .kpi-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 16px; text-align: center; }
     .kpi-icon { font-size: 28px; margin-bottom: 8px; }
@@ -561,16 +545,13 @@ BASE_STYLES = """
     .kpi-trend.up { background: #e6f7e6; color: #10b981; border: 1px solid #a7f3d0; }
     .kpi-trend.down { background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; }
 
-    /* Winner Card */
     .winner-card { background: #fef9e7; border: 2px solid #fbbf24; }
 
-    /* Comparison Tabs */
     .tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
     .tab-btn { padding: 5px 14px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 40px; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
     .tab-btn:hover { background: var(--border-color); }
     .tab-btn.active { background: var(--brand-color); border-color: var(--brand-color); color: #fff; }
 
-    /* Comparison Cards */
     .comparison-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: start; }
     .comparison-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 18px; }
     .comparison-vs { display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: var(--brand-color); padding: 16px; }
@@ -582,17 +563,14 @@ BASE_STYLES = """
     .comparison-stat-value { color: var(--text-main); font-size: 14px; font-weight: 600; }
     .winner-indicator { color: #10b981; font-size: 11px; margin-left: 4px; }
 
-    /* Heatmap */
     .heatmap-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
     .heatmap-item { background: var(--bg-card); border-radius: 16px; padding: 14px; text-align: center; border: 1px solid var(--border-color); }
     .heatmap-region { font-size: 14px; font-weight: 600; color: var(--text-main); }
     .heatmap-value { font-size: 20px; font-weight: 700; color: var(--brand-color); }
 
-    /* Achievements */
     .achievements-row { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
     .achievement-badge { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; font-size: 10px; color: var(--text-muted); }
 
-    /* WhatsApp Report */
     .whatsapp-box { background: var(--bg-card); border: 2px solid #10b981; border-radius: 20px; padding: 20px; }
     .whatsapp-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
     .whatsapp-icon { font-size: 24px; }
@@ -600,7 +578,6 @@ BASE_STYLES = """
     .whatsapp-content { font-family: 'Courier New', monospace; background: var(--hover-bg); padding: 14px; border-radius: 12px; color: var(--text-main); border: 1px solid var(--border-color); }
     .copy-btn { background: #10b981; color: #ffffff; padding: 10px; border: none; border-radius: 40px; font-weight: 600; font-size: 12px; cursor: pointer; margin-top: 14px; width: 100%; }
 
-    /* Login Page */
     .login-container {
         min-height: 100vh;
         display: flex;
@@ -721,12 +698,10 @@ BASE_STYLES = """
         margin-bottom: 12px;
     }
 
-    /* Loading */
     .loading { display: flex; justify-content: center; align-items: center; height: 200px; color: var(--brand-color); }
     .spinner { width: 36px; height: 36px; border: 3px solid rgba(79,70,229,0.1); border-top-color: var(--brand-color); border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* Forecast Page */
     .forecast-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; margin-bottom: 20px; }
     .forecast-title { font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 14px; }
     .forecast-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 14px; }
@@ -735,12 +710,10 @@ BASE_STYLES = """
     .forecast-day .prediction { font-size: 16px; font-weight: 600; color: var(--brand-color); }
     .forecast-detail { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
-    /* Logs Page */
     .logs-container { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; }
     .log-entry { padding: 6px 10px; border-bottom: 1px solid var(--border-color); font-family: monospace; font-size: 11px; }
     .log-entry:last-child { border-bottom: none; }
 
-    /* Responsive */
     @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5 { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
     @media (max-width: 768px) { .sidebar { width: 60px; } .main-content { margin-left: 60px; } .sidebar-toggle { width: 22px; height: 22px; right: -10px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
 </style>
@@ -1159,14 +1132,14 @@ def dashboard():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('dashboard-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
-        const r = await fetch('/api/dashboard?' + dpParams());
-        curData = await r.json();
-        renderComparison();
-    } catch(e) {
-        document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: ' + e.message + '</p>';
-    }
+        const response = await fetch('/api/dashboard?' + dpParams());
+        const data = await response.json();
+        let html = '';
+        for (const provider of data.providers) { html += renderProvider(provider); }
+        document.getElementById('dashboard-content').innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No data for selected period</h3></div>';
+    } catch(e) { document.getElementById('dashboard-content').innerHTML = '<p style="color:#ef4444;padding:20px">Error loading data: '+e.message+'</p>'; }
 }
 
 function renderProvider(provider) {
@@ -1361,17 +1334,11 @@ def daily_region():
     <h1 class="page-title">Daily <span>Region Summary</span></h1>
     ''' + DATE_PICKER_HTML('today') + '''
 </div>
-
-<!-- Stats Cards -->
 <div class="stats-row-5" id="stat-cards"></div>
-
-<!-- Provider Cards Container -->
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
-
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <style>
-    /* Additional styles for daily region */
     .provider-section {
         background: var(--bg-card);
         border-radius: 20px;
@@ -1503,7 +1470,6 @@ def daily_region():
         opacity: 0.5;
     }
 </style>
-
 <script>
 function toggleProvider(id) {
     const body = document.getElementById('bdy-'+id);
@@ -1523,7 +1489,6 @@ async function loadData() {
         const r = await fetch('/api/daily-region-summary?' + dpParams());
         const data = await r.json();
 
-        // Update stat cards
         const role = '{{ role }}';
         const canClick = role === 'admin';
         const statCards = document.getElementById('stat-cards');
@@ -1580,7 +1545,6 @@ async function loadData() {
         let html = '';
 
         data.providers.forEach((provider, idx) => {
-            // Provider header
             html += `<div class="provider-section">
                 <div class="provider-header-dr" id="hdr-${idx}" onclick="toggleProvider(${idx})">
                     <div class="provider-header-left">
@@ -1608,7 +1572,6 @@ async function loadData() {
                 </div>
                 <div class="provider-body" id="bdy-${idx}" style="display: ${idx === 0 ? 'block' : 'none'};">`;
 
-            // Regions table
             if (provider.regions.length > 0) {
                 html += `<table class="region-table">
                     <thead>
@@ -1625,7 +1588,6 @@ async function loadData() {
 
                 provider.regions.forEach((rg, i) => {
                     const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
-                    const weightClass = rg.under20 > rg.over20 ? 'weight-light' : 'weight-heavy';
 
                     if (canClick) {
                         html += `<tr>
@@ -1658,11 +1620,6 @@ async function loadData() {
 
         document.getElementById('content').innerHTML = html;
 
-        // Auto-open first provider
-        if (data.providers.length > 0) {
-            document.getElementById('bdy-0').style.display = 'block';
-        }
-
     } catch(e) {
         console.error(e);
         document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><h3>Error Loading Data</h3><p>' + e.message + '</p></div>';
@@ -1672,6 +1629,7 @@ async function loadData() {
 dpInit('today');
 loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
+
 @app.route('/flight-load')
 @login_required
 def flight_load():
@@ -1766,7 +1724,6 @@ async function loadData() {
         const r = await fetch('/api/analytics-data?' + dpParams());
         const data = await r.json();
 
-        // Update stat cards
         const role = '{{ role }}';
         const canClick = role === 'admin';
         const statCards = document.getElementById('stat-cards');
@@ -1857,21 +1814,15 @@ def comparison():
     <h1 class="page-title">Provider <span>Comparison</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
-
-<!-- Tabs -->
 <div class="tabs">
     <button class="tab-btn active" onclick="showTab(this, 'ge-ecl')">GE vs ECL</button>
     <button class="tab-btn" onclick="showTab(this, 'qc-zone')">QC vs ZONE</button>
     <button class="tab-btn" onclick="showTab(this, 'all')">All Providers</button>
 </div>
-
-<!-- Content -->
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
-
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <style>
-    /* Comparison specific styles */
     .comparison-grid {
         display: grid;
         grid-template-columns: 1fr auto 1fr;
@@ -2017,7 +1968,6 @@ def comparison():
         font-weight: 600;
     }
 </style>
-
 <script>
 let curTab = 'ge-ecl';
 let curData = null;
@@ -2063,7 +2013,6 @@ function renderCard(p1, p2, title1, title2) {
         </div>`;
     });
     
-    // Add average weight per order
     const avg1 = p1.total_orders > 0 ? (p1.total_weight / p1.total_orders).toFixed(1) : '0';
     const avg2 = p2.total_orders > 0 ? (p2.total_weight / p2.total_orders).toFixed(1) : '0';
     const avgWinner1 = parseFloat(avg1) > parseFloat(avg2);
@@ -2127,48 +2076,6 @@ function renderAllProviders(providers) {
     
     providers.sort((a, b) => b.total_boxes - a.total_boxes).forEach(p => {
         const avg = p.total_orders > 0 ? (p.total_weight / p.total_orders).toFixed(1) : '0';
-        
-        if (canClick) {
-            html += `<tr>
-                <td>
-                    <div class="provider-cell">
-                        <div class="provider-color-dot" style="background:${p.color}"></div>
-                        <span>${p.short || p.name}</span>
-                    </div>
-                </td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
-                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
-                <td style="text-align:right">${avg} kg</td>
-                <td style="text-align:right"><span class="avg-badge">${p.total_under20} / ${p.total_over20}</span></td>
-            </tr>`;
-        } else {
-            html += `<tr>
-                <td>
-                    <div class="provider-cell">
-                        <div class="provider-color-dot" style="background:${p.color}"></div>
-                        <span>${p.short || p.name}</span>
-                    </div>
-                </td>
-                <td style="text-align:right">${p.total_orders.toLocaleString()}</td>
-                <td style="text-align:right">${p.total_boxes.toLocaleString()}</td>
-                <td style="text-align:right">${formatWeight(p.total_weight)}</td>
-                <td style="text-align:right">${avg} kg</td>
-                <td style="text-align:right"><span class="avg-badge">${p.total_under20} / ${p.total_over20}</span></td>
-            </tr>`;
-        }
-    });
-    
-    html += `</tbody></table>`;
-    return html;
-}
-    
-    const role = '{{ role }}';
-    const canClick = role === 'admin';
-    
-    providers.sort((a, b) => b.total_boxes - a.total_boxes).forEach(p => {
-        const avg = p.total_orders > 0 ? (p.total_weight / p.total_orders).toFixed(1) : '0';
-        const lightPct = p.total_orders > 0 ? Math.round((p.total_under20 / p.total_orders) * 100) : 0;
         
         if (canClick) {
             html += `<tr>
