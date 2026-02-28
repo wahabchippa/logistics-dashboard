@@ -1361,19 +1361,162 @@ def daily_region():
     <h1 class="page-title">Daily <span>Region Summary</span></h1>
     ''' + DATE_PICKER_HTML('today') + '''
 </div>
+
+<!-- Stats Cards -->
 <div class="stats-row-5" id="stat-cards"></div>
-<div id="content"><div class="empty-state"><div class="empty-state-icon">📅</div><h3>Select a date range above</h3></div></div>
+
+<!-- Provider Cards Container -->
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
+
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<style>
+    /* Additional styles for daily region */
+    .provider-section {
+        background: var(--bg-card);
+        border-radius: 20px;
+        border: 1px solid var(--border-color);
+        margin-bottom: 20px;
+        overflow: hidden;
+        transition: all 0.2s;
+    }
+    .provider-section:hover {
+        box-shadow: 0 8px 20px rgba(79,70,229,0.08);
+    }
+    .provider-header-dr {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+        background: var(--bg-card);
+    }
+    .provider-header-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+    .provider-color-bar {
+        width: 8px;
+        height: 40px;
+        border-radius: 4px;
+    }
+    .provider-header-info h3 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin: 0 0 4px 0;
+    }
+    .provider-header-info span {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+    .provider-header-stats {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+    }
+    .header-stat {
+        text-align: center;
+        padding: 4px 12px;
+        background: var(--hover-bg);
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+    }
+    .header-stat-val {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+    .header-stat-lbl {
+        font-size: 9px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+    .toggle-icon {
+        font-size: 18px;
+        color: var(--text-muted);
+        transition: transform 0.2s;
+    }
+    .provider-body {
+        padding: 0 20px 20px 20px;
+        background: var(--bg-card);
+    }
+    .region-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .region-table th {
+        background: var(--table-hdr);
+        padding: 10px 8px;
+        text-align: center;
+        font-weight: 600;
+        color: var(--text-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        border-bottom: 2px solid var(--brand-color);
+    }
+    .region-table th:first-child {
+        text-align: left;
+        padding-left: 16px;
+    }
+    .region-table td {
+        padding: 10px 8px;
+        text-align: center;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-main);
+    }
+    .region-table td:first-child {
+        text-align: left;
+        padding-left: 16px;
+        font-weight: 500;
+        background: var(--hover-bg);
+    }
+    .region-table tr:last-child td {
+        border-bottom: none;
+    }
+    .medal {
+        margin-right: 8px;
+        font-size: 14px;
+    }
+    .weight-light {
+        color: #10b981;
+        font-weight: 600;
+    }
+    .weight-heavy {
+        color: #ef4444;
+        font-weight: 600;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-muted);
+        background: var(--bg-card);
+        border-radius: 20px;
+        border: 1px solid var(--border-color);
+    }
+    .empty-state-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+        opacity: 0.5;
+    }
+</style>
+
 <script>
 function toggleProvider(id) {
     const body = document.getElementById('bdy-'+id);
+    const icon = document.querySelector('#hdr-'+id + ' .toggle-icon');
     if (body.style.display === 'none') {
         body.style.display = 'block';
+        if (icon) icon.innerHTML = '▼';
     } else {
         body.style.display = 'none';
+        if (icon) icon.innerHTML = '▶';
     }
 }
+
 async function loadData() {
     document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
@@ -1385,66 +1528,150 @@ async function loadData() {
         const canClick = role === 'admin';
         const statCards = document.getElementById('stat-cards');
         statCards.innerHTML = `
-            <div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content">${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;">` : ''}<div class="stat-value" id="t-orders">${data.totals.orders.toLocaleString()}</div>${canClick ? '</a>' : ''}<div class="stat-label">Total Orders</div></div></div>
-            <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div><div class="stat-content">${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;">` : ''}<div class="stat-value" id="t-boxes">${data.totals.boxes.toLocaleString()}</div>${canClick ? '</a>' : ''}<div class="stat-label">Total Boxes</div></div></div>
-            <div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div><div class="stat-content">${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;">` : ''}<div class="stat-value" id="t-weight">${formatWeight(data.totals.weight)} kg</div>${canClick ? '</a>' : ''}<div class="stat-label">Total Weight</div></div></div>
-            <div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">${data.totals.under20.toLocaleString()}</div><div class="stat-label">&lt;20 kg</div></div></div>
-            <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">${data.totals.over20.toLocaleString()}</div><div class="stat-label">20+ kg</div></div></div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${data.totals.orders.toLocaleString()}</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Orders</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${data.totals.boxes.toLocaleString()}</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Boxes</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${formatWeight(data.totals.weight)} kg</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Weight</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div>
+                <div class="stat-content">
+                    <div class="stat-value">${data.totals.under20.toLocaleString()}</div>
+                    <div class="stat-label">&lt;20 kg</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div>
+                <div class="stat-content">
+                    <div class="stat-value">${data.totals.over20.toLocaleString()}</div>
+                    <div class="stat-label">20+ kg</div>
+                </div>
+            </div>
         `;
 
         if (data.totals.orders === 0) {
-            document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No Data</h3><p>No shipments for selected period</p></div>';
+            document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No Data Found</h3><p>No shipments for the selected period</p></div>';
             return;
         }
 
-        const medals = ['🥇','🥈','🥉'];
+        const medals = ['🥇', '🥈', '🥉'];
         let html = '';
+
         data.providers.forEach((provider, idx) => {
+            // Provider header
             html += `<div class="provider-section">
-<div class="provider-header-dr" id="hdr-${idx}" onclick="toggleProvider(${idx})">
-<div class="provider-header-left">
-<div class="provider-color-bar" style="background:${provider.color}"></div>
-<div class="provider-header-info"><h3>${provider.name}</h3><span>${provider.regions.length} regions</span></div>
-</div>
-<div class="provider-header-stats">
-<div class="header-stat"><div class="header-stat-val">${provider.orders}</div><div class="header-stat-lbl">Orders</div></div>
-<div class="header-stat"><div class="header-stat-val">${provider.boxes}</div><div class="header-stat-lbl">Boxes</div></div>
-<div class="header-stat"><div class="header-stat-val">${formatWeight(provider.weight)}</div><div class="header-stat-lbl">Weight</div></div>
-<span class="toggle-icon">▼</span>
-</div></div>
-<div class="provider-body" id="bdy-${idx}" style="display:${idx===0?'block':'none'}">`;
+                <div class="provider-header-dr" id="hdr-${idx}" onclick="toggleProvider(${idx})">
+                    <div class="provider-header-left">
+                        <div class="provider-color-bar" style="background:${provider.color}"></div>
+                        <div class="provider-header-info">
+                            <h3>${provider.name}</h3>
+                            <span>${provider.regions.length} region${provider.regions.length !== 1 ? 's' : ''}</span>
+                        </div>
+                    </div>
+                    <div class="provider-header-stats">
+                        <div class="header-stat">
+                            <div class="header-stat-val">${provider.orders.toLocaleString()}</div>
+                            <div class="header-stat-lbl">Orders</div>
+                        </div>
+                        <div class="header-stat">
+                            <div class="header-stat-val">${provider.boxes.toLocaleString()}</div>
+                            <div class="header-stat-lbl">Boxes</div>
+                        </div>
+                        <div class="header-stat">
+                            <div class="header-stat-val">${formatWeight(provider.weight)}</div>
+                            <div class="header-stat-lbl">Weight</div>
+                        </div>
+                        <span class="toggle-icon">▼</span>
+                    </div>
+                </div>
+                <div class="provider-body" id="bdy-${idx}" style="display: ${idx === 0 ? 'block' : 'none'};">`;
+
+            // Regions table
             if (provider.regions.length > 0) {
-                html += '<table class="region-table"><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20 kg</th><th>20+ kg</th></tr></thead><tbody>';
-                provider.regions.forEach((rg,i) => {
+                html += `<table class="region-table">
+                    <thead>
+                        <tr>
+                            <th>Region</th>
+                            <th>Orders</th>
+                            <th>Boxes</th>
+                            <th>Weight (kg)</th>
+                            <th>&lt;20 kg</th>
+                            <th>20+ kg</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+                provider.regions.forEach((rg, i) => {
                     const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
+                    const weightClass = rg.under20 > rg.over20 ? 'weight-light' : 'weight-heavy';
+
                     if (canClick) {
-                        html += `<tr><td>${medal}${rg.name}</td>
-                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders}</a></td>
-                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes}</a></td>
+                        html += `<tr>
+                            <td>${medal}${rg.name}</td>
+                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders.toLocaleString()}</a></td>
+                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes.toLocaleString()}</a></td>
                             <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
-                            <td style="color:#10b981">${rg.under20}</td>
-                            <td style="color:#ef4444">${rg.over20}</td></tr>`;
+                            <td class="weight-light">${rg.under20.toLocaleString()}</td>
+                            <td class="weight-heavy">${rg.over20.toLocaleString()}</td>
+                        </tr>`;
                     } else {
-                        html += `<tr><td>${medal}${rg.name}</td>
-                            <td>${rg.orders}</td>
-                            <td>${rg.boxes}</td>
+                        html += `<tr>
+                            <td>${medal}${rg.name}</td>
+                            <td>${rg.orders.toLocaleString()}</td>
+                            <td>${rg.boxes.toLocaleString()}</td>
                             <td>${formatWeight(rg.weight)}</td>
-                            <td style="color:#10b981">${rg.under20}</td>
-                            <td style="color:#ef4444">${rg.over20}</td></tr>`;
+                            <td class="weight-light">${rg.under20.toLocaleString()}</td>
+                            <td class="weight-heavy">${rg.over20.toLocaleString()}</td>
+                        </tr>`;
                     }
                 });
-                html += '</tbody></table>';
-            } else {
-                html += '<p style="color:#64748b;text-align:center;padding:20px">No data</p>';
-            }
-            html += '</div></div>';
-        });
-        document.getElementById('content').innerHTML = html;
-    } catch(e) { document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><h3>Error</h3><p>'+e.message+'</p></div>'; }
-}
-dpInit('today'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
 
+                html += `</tbody></table>`;
+            } else {
+                html += `<div style="padding: 30px; text-align: center; color: var(--text-muted);">No regions data for this provider</div>`;
+            }
+
+            html += `</div></div>`;
+        });
+
+        document.getElementById('content').innerHTML = html;
+
+        // Auto-open first provider
+        if (data.providers.length > 0) {
+            document.getElementById('bdy-0').style.display = 'block';
+        }
+
+    } catch(e) {
+        console.error(e);
+        document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><h3>Error Loading Data</h3><p>' + e.message + '</p></div>';
+    }
+}
+
+dpInit('today');
+loadData();
+</script></body></html>''', role=role, favicon=FAVICON)
 @app.route('/flight-load')
 @login_required
 def flight_load():
