@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ NEXUS CONTROL TOWER & PENDING RADAR (PREMIUM DUAL-THEME EDITION)
+# 🛰️ NEXUS CONTROL TOWER & PENDING RADAR (FINAL CONSOLIDATED MASTER EDITION)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3610,7 +3610,7 @@ import os
 import time
 from flask import jsonify, request, session, render_template_string
 
-# 1. DATA SOURCES & 30-MIN CACHE SYSTEM
+# --- 1. DATA SOURCES CONFIGURATION ---
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
     "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
@@ -3621,6 +3621,7 @@ NEXUS_SOURCES = {
 }
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
+# --- 2. CACHING ENGINE ---
 NEXUS_CACHE = {}
 RADAR_CACHE = {'time': 0, 'data': None}
 
@@ -3629,7 +3630,7 @@ def inject_nexus_button(response):
     if response.content_type and response.content_type.startswith('text/html'):
         if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
             html = response.get_data(as_text=True)
-            fab = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg,#0ea5e9,#2563eb); color:white; padding:14px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:'Inter',sans-serif; font-size:14px; box-shadow:0 10px 25px rgba(14,165,233,0.4); z-index:9999; display:flex; align-items:center; gap:10px; transition:0.3s; border:1px solid rgba(255,255,255,0.2);"><span style="font-size:20px;">🛰️</span><span>Nexus Control Tower</span></a>"""
+            fab = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg,#007AFF,#00C6FF); color:white; padding:15px 25px; border-radius:50px; text-decoration:none; font-weight:700; box-shadow:0 10px 30px rgba(0,122,255,0.4); z-index:9999; display:flex; align-items:center; gap:10px; transition:0.3s; font-family:'Inter',sans-serif;"><span style="font-size:20px;">🛰️</span><span>Nexus Tower</span></a>"""
             if '</body>' in html: response.set_data(html.replace('</body>', fab + '</body>'))
     return response
 
@@ -3649,15 +3650,14 @@ def fetch_nexus_csv(url):
 
 STRICT_ALIASES = {
     'order': ['fleek id','order num','_order','order id','order'], 
-    'date': ['date', 'handover date', 'created at', 'created'], 
+    'date': ['date', 'handover date', 'created at'], 
     'boxes': ['box_count','no of boxes','boxes','box'], 
     'weight': ['chargeable weight','net weight','weight'], 
     'vendor': ['vendor name', 'vendor','seller','brand'], 
     'customer': ['customer name', 'consignee','customer','buyer'], 
     'country': ['destination','country','city'], 
-    'zip': ['zip','postal'], 
-    'tid': ['tracking id', 'trackingid', 'courier_tracking', 'tracking number', 'tid', 'tracking'], 
-    'mawb': ['awb','mawb','master','hawb']
+    'tid': ['tracking id', 'trackingid', 'courier_tracking', 'tid', 'tracking'], 
+    'mawb': ['awb','mawb','master']
 }
 
 def get_alias_val(row, aliases):
@@ -3665,41 +3665,35 @@ def get_alias_val(row, aliases):
         if k.strip().lower() in aliases:
             val = str(v).strip()
             if val and val.lower() not in ['n/a','nan','none','-','']: return val
-    for k, v in row.items():
-        for a in aliases:
-            if a in k.strip().lower():
-                val = str(v).strip()
-                if val and val.lower() not in ['n/a','nan','none','-','']: return val
     return "N/A"
 
-# 2. SEARCH API
+# --- 3. API ROUTES ---
+
 @app.route('/api/nexus/search', methods=['POST'])
 @login_required
 def api_nexus_search():
     order_ids = [x.strip() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
     results = []
     kerry_data = fetch_nexus_csv(NEXUS_KERRY_STATUS_URL)
-    
     for order_id in order_ids:
-        kerry_status = next((str(r.get('latest_status', 'N/A')).strip() for r in kerry_data if str(r.get('fleek_id','')).strip().lower() == order_id.lower()), "N/A")
-        order_found = False
+        k_status = next((str(r.get('latest_status', 'N/A')).strip() for r in kerry_data if str(r.get('fleek_id','')).strip().lower() == order_id.lower()), "N/A")
+        found = False
         for src, url in NEXUS_SOURCES.items():
             for row in fetch_nexus_csv(url):
                 if order_id.lower() in get_alias_val(row, STRICT_ALIASES['order']).lower():
-                    raw_tid = get_alias_val(row, STRICT_ALIASES['tid'])
+                    tid_raw = get_alias_val(row, STRICT_ALIASES['tid'])
                     results.append({
-                        "order_id": order_id.upper(), "source": src, "status": kerry_status,
+                        "order_id": order_id.upper(), "source": src, "status": k_status, 
                         "date": get_alias_val(row, STRICT_ALIASES['date']), "boxes": get_alias_val(row, STRICT_ALIASES['boxes']), 
                         "weight": get_alias_val(row, STRICT_ALIASES['weight']), "vendor": get_alias_val(row, STRICT_ALIASES['vendor']), 
                         "customer": get_alias_val(row, STRICT_ALIASES['customer']), "country": get_alias_val(row, STRICT_ALIASES['country']), 
-                        "tids": [t.strip() for t in re.split(r'[\n,]+', raw_tid) if t.strip() and t.strip()!='N/A'],
+                        "tids": [t.strip() for t in re.split(r'[\n,]+', tid_raw) if t.strip() and t.strip()!='N/A'], 
                         "mawb": get_alias_val(row, STRICT_ALIASES['mawb'])
                     })
-                    order_found = True; break
-            if order_found: break
+                    found = True; break
+            if found: break
     return jsonify(results)
 
-# 3. SHIP24 LIVE SYNC API
 @app.route('/api/nexus/ship24', methods=['POST'])
 @login_required
 def api_nexus_ship24():
@@ -3708,456 +3702,211 @@ def api_nexus_ship24():
     responses = []
     for tid in tids:
         if ship24_key == 'MOCK':
-            responses.append({
-                "tid": tid, "success": True, "courier": "Ship24 Tracker", "current_status": "Out for Delivery", "progress": 80, "eta": "Today, 5:00 PM",
-                "events": [
-                    {"status": "Out for Delivery to Consignee", "time": "2026-03-01 08:30:00", "location": "Karachi Hub"},
-                    {"status": "Arrived at Destination Hub", "time": "2026-02-28 14:15:00", "location": "Karachi"},
-                    {"status": "Customs Cleared", "time": "2026-02-27 09:00:00", "location": "Dubai Transit"},
-                    {"status": "Shipment Picked Up", "time": "2026-02-25 10:00:00", "location": "Origin Warehouse"}
-                ]
-            })
+            responses.append({"tid": tid, "success": True, "current_status": "Transit", "progress": 60, "eta": "2-3 Days", "events": [{"status": "Processed", "time": "2026-03-01 10:00", "location": "Hub"}]})
         else:
             try:
                 req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
                 with urllib.request.urlopen(req) as res:
-                    trackings = json.loads(res.read().decode()).get('data',{}).get('trackings',[{}])[0]
-                    evs = trackings.get('events',[])
-                    stat = evs[0].get('statusMilestone','Transit') if evs else 'Unknown'
-                    prog = 100 if stat.lower()=='delivered' else 60
-                    history = [{"status": e.get('statusMilestone', e.get('status', 'Update')), "time": e.get('datetime', 'N/A'), "location": e.get('location', '')} for e in evs]
-                    responses.append({"tid": tid, "success": True, "courier": "Ship24", "current_status": stat, "progress": prog, "eta": "Calculating...", "events": history})
+                    tr = json.loads(res.read().decode()).get('data',{}).get('trackings',[{}])[0]
+                    evs = tr.get('events',[])
+                    st = evs[0].get('statusMilestone','Transit') if evs else 'Pending'
+                    responses.append({"tid": tid, "success": True, "current_status": st, "progress": 100 if st.lower()=='delivered' else 60, "eta": "Calculating...", "events": [{"status": e.get('statusMilestone', e.get('status', 'Update')), "time": e.get('datetime', 'N/A'), "location": e.get('location', '')} for e in evs]})
             except: responses.append({"tid": tid, "success": False})
     return jsonify(responses)
 
-# 4. PENDING RADAR AUTO-FETCH API (30-Min Cache)
 @app.route('/api/nexus/radar_data', methods=['GET'])
 @login_required
 def api_nexus_radar_data():
     global RADAR_CACHE
     now = time.time()
-    if now - RADAR_CACHE['time'] < 1800 and RADAR_CACHE['data']:
-        return jsonify(RADAR_CACHE['data'])
-        
+    if now - RADAR_CACHE['time'] < 1800 and RADAR_CACHE['data']: return jsonify(RADAR_CACHE['data'])
     buckets = { "missing_tid": {s: [] for s in NEXUS_SOURCES}, "handed_over": {s: [] for s in NEXUS_SOURCES}, "qc_not_approved": {s: [] for s in NEXUS_SOURCES}, "qc_approved": {s: [] for s in NEXUS_SOURCES} }
-    
-    kerry_data = fetch_nexus_csv(NEXUS_KERRY_STATUS_URL)
-    status_map = {str(r.get('fleek_id', '')).strip().lower(): str(r.get('latest_status', 'N/A')).strip().upper() for r in kerry_data}
-    qc_not_approved_statuses = ["ACCEPTED", "CREATED", "PICKUP READY", "PICKUP SUCCESSFUL", "PICKUP SUCCESSFULL", "QC PENDING", "QC HOLD", "CANCELLED"]
-    
+    k_data = fetch_nexus_csv(NEXUS_KERRY_STATUS_URL)
+    s_map = {str(r.get('fleek_id', '')).strip().lower(): str(r.get('latest_status', 'N/A')).strip().upper() for r in k_data}
+    qc_not = ["ACCEPTED", "CREATED", "PICKUP READY", "PICKUP SUCCESSFUL", "PICKUP SUCCESSFULL", "QC PENDING", "QC HOLD", "CANCELLED"]
     for src, url in NEXUS_SOURCES.items():
         for row in fetch_nexus_csv(url):
-            order_id = get_alias_val(row, STRICT_ALIASES['order'])
-            if order_id == 'N/A': continue
-            status = status_map.get(order_id.lower(), "PENDING")
+            oid = get_alias_val(row, STRICT_ALIASES['order'])
+            if oid == 'N/A': continue
+            st = s_map.get(oid.lower(), "PENDING")
             tid = get_alias_val(row, STRICT_ALIASES['tid'])
-            
-            has_tid = False
-            if tid != 'N/A' and len(tid) > 2 and tid.lower() not in ['pending','hold','wait','none','n/a','null']:
-                has_tid = True
-            
-            r_dict = { "Order": order_id.upper(), "Date": get_alias_val(row, STRICT_ALIASES['date']), "Vendor": get_alias_val(row, STRICT_ALIASES['vendor']), "Customer": get_alias_val(row, STRICT_ALIASES['customer']), "Boxes": get_alias_val(row, STRICT_ALIASES['boxes']), "Weight": get_alias_val(row, STRICT_ALIASES['weight']), "TID": tid if has_tid else "MISSING", "Live_Status": status }
-            
-            if not has_tid: buckets["missing_tid"][src].append(r_dict)
-            elif status == "HANDED OVER TO LOGISTICS PARTNER": buckets["handed_over"][src].append(r_dict)
-            elif status in qc_not_approved_statuses: buckets["qc_not_approved"][src].append(r_dict)
-            elif status == "QC APPROVED": buckets["qc_approved"][src].append(r_dict)
-            
-    RADAR_CACHE['time'] = now
-    RADAR_CACHE['data'] = buckets
+            has_t = tid != 'N/A' and len(tid) > 2 and tid.lower() not in ['pending','hold','wait','none','n/a','null']
+            r_d = { "Order": oid.upper(), "Vendor": get_alias_val(row, STRICT_ALIASES['vendor']), "Customer": get_alias_val(row, STRICT_ALIASES['customer']), "TID": tid if has_t else "MISSING", "Status": st }
+            if not has_t: buckets["missing_tid"][src].append(r_d)
+            elif st == "HANDED OVER TO LOGISTICS PARTNER": buckets["handed_over"][src].append(r_d)
+            elif st in qc_not: buckets["qc_not_approved"][src].append(r_d)
+            elif st == "QC APPROVED": buckets["qc_approved"][src].append(r_d)
+    RADAR_CACHE['time'] = now; RADAR_CACHE['data'] = buckets
     return jsonify(buckets)
 
-# 5. FRONTEND DASHBOARD (DUAL-THEME)
+# --- 4. FRONTEND INTERFACE ---
+
 @app.route('/nexus')
 @login_required
 def nexus_dashboard():
     if session.get('role') != 'admin': return "Access Denied.", 403
     return render_template_string('''
-    <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Nexus Control Tower</title>
+    <!DOCTYPE html><html lang="en" data-theme="light">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Nexus Control Tower</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        
-        /* CSS Variables for Dual Theme Support */
-        :root { 
-            --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0; --text: #0f1015; --muted: #64748b; 
-            --brand: #0ea5e9; --brand-hover: #0284c7; --input-bg: #f1f5f9; --table-head: #f1f5f9; 
-            --hover-bg: rgba(0,0,0,0.02); --shadow: 0 4px 20px rgba(0,0,0,0.05); --track-bg: #f1f5f9;
-        }
-        
-        [data-theme="dark"] { 
-            --bg: #09090b; --card: #18181b; --border: #27272a; --text: #f8fafc; --muted: #a1a1aa; 
-            --brand: #3b82f6; --brand-hover: #2563eb; --input-bg: #09090b; --table-head: #15161e; 
-            --hover-bg: rgba(255,255,255,0.02); --shadow: 0 10px 15px -3px rgba(0,0,0,0.3); --track-bg: rgba(0,0,0,0.2);
-        }
-        
-        body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); margin:0; padding:0; min-height:100vh; transition: background 0.3s, color 0.3s; }
-        
-        /* Navbar & Header */
-        .navbar { background:var(--card); border-bottom:1px solid var(--border); padding:15px 30px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:100; box-shadow:0 2px 10px rgba(0,0,0,0.02);}
-        .navbar-brand { color:var(--text); text-decoration:none; font-weight:800; font-size:18px;}
-        .nav-actions { display:flex; gap:15px; align-items:center; }
-        .theme-btn { background:var(--input-bg); color:var(--text); border:1px solid var(--border); padding:8px 16px; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; transition:0.2s;}
-        .theme-btn:hover { border-color:var(--brand); }
-        .exit-btn { color:white; background:#ef4444; border:none; padding:8px 16px; border-radius:8px; font-weight:600; font-size:13px; text-decoration:none; transition:0.2s;}
-        .exit-btn:hover { background:#dc2626;}
-        
-        .container { max-width:1200px; margin:30px auto; padding:0 20px; }
-        
-        /* Master Navigation */
-        .master-nav { display:flex; gap:10px; margin-bottom:30px; background:var(--card); padding:8px; border-radius:12px; border:1px solid var(--border); overflow-x:auto; box-shadow:var(--shadow);}
-        .nav-btn { background:transparent; color:var(--muted); border:none; padding:12px 20px; border-radius:8px; font-weight:600; font-size:14px; cursor:pointer; white-space:nowrap; transition:all 0.2s;}
-        .nav-btn:hover { color:var(--text); background:var(--hover-bg);}
-        .nav-btn.active { background:var(--border); color:var(--text);}
-        .view-section { display:none; }
-        .view-section.active { display:block; }
-        
-        /* Search Area */
-        .search-container { position:relative; margin-bottom:20px; }
-        textarea { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:12px; padding:20px; color:var(--text); font-family:'Inter',monospace; font-size:15px; resize:vertical; min-height:100px; box-sizing:border-box; outline:none; transition:border 0.2s; box-shadow:inset 0 2px 4px rgba(0,0,0,0.02); }
-        textarea:focus { border-color:var(--brand); box-shadow:0 0 0 3px rgba(14,165,233,0.1);}
-        .search-actions { display:flex; gap:10px; margin-top:15px;}
-        
-        .btn { background:var(--brand); color:white; border:none; padding:12px 24px; border-radius:8px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:8px; transition:0.2s;}
-        .btn:hover { background:var(--brand-hover); transform:translateY(-1px); }
-        .btn-clear { background:transparent; border:1px solid var(--border); color:var(--muted); }
-        .btn-clear:hover { background:var(--border); color:var(--text); }
-        .btn-bulk { background:linear-gradient(to right, #6366f1, #a855f7); width:100%; justify-content:center; margin-bottom:20px; display:none; font-size:15px; padding:16px;}
-        
-        /* Result Cards */
-        .card { background:var(--card); border:1px solid var(--border); border-radius:16px; margin-bottom:24px; overflow:hidden; box-shadow:var(--shadow); transition:all 0.3s;}
-        .glow-green { border-color:#10b981; box-shadow:0 0 15px rgba(16,185,129,0.2); }
-        .glow-yellow { border-color:#3b82f6; box-shadow:0 0 15px rgba(59,130,246,0.2); }
-        .glow-red { border-color:#ef4444; box-shadow:0 0 15px rgba(239,68,104,0.2); }
-        
-        .card-header { padding:16px 24px; background:var(--hover-bg); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
-        .route-flags { font-size:13px; font-weight:700; color:var(--muted); display:flex; align-items:center; gap:8px;}
-        .badge { background:var(--bg); padding:6px 12px; border-radius:6px; font-size:12px; font-weight:700; border:1px solid var(--border); color:var(--text);}
-        
-        .card-body { padding:24px; display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:20px; }
-        .grid-item { display:flex; flex-direction:column; gap:6px; }
-        .grid-label { font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px; }
-        .grid-val { font-size:14px; font-weight:600; color:var(--text); word-break:break-all;}
-        
-        /* Timeline */
-        .track-area { padding:24px; background:var(--track-bg); border-top:1px solid var(--border); }
-        .progress-bg { height:6px; background:var(--border); border-radius:10px; margin:15px 0 25px 0; overflow:hidden; position:relative;}
-        .progress-fill { height:100%; background:var(--brand); width:0%; transition:1s ease-in-out; }
-        
-        .timeline-box { margin-bottom:20px; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:15px; max-height:220px; overflow-y:auto; box-shadow:inset 0 2px 4px rgba(0,0,0,0.02);}
-        .timeline-event { display:flex; gap:15px; margin-bottom:12px; position:relative; }
-        .timeline-event:last-child { margin-bottom:0; }
-        .tl-dot { width:10px; height:10px; border-radius:50%; background:var(--brand); margin-top:4px; z-index:2;}
-        .tl-line { position:absolute; left:4px; top:15px; bottom:-12px; width:2px; background:var(--border); z-index:1;}
-        .timeline-event:last-child .tl-line { display:none; }
-        .tl-content { display:flex; flex-direction:column; font-size:13px;}
-        .tl-status { font-weight:600; color:var(--text); }
-        .tl-time { color:var(--muted); font-size:11px; margin-top:2px;}
-        
-        .eta-badge { font-size:12px; font-weight:700; color:#059669; background:rgba(16,185,129,0.1); padding:6px 12px; border-radius:6px; border:1px solid rgba(16,185,129,0.2);}
-        [data-theme="dark"] .eta-badge { color:#10b981; }
-        
-        .wa-btn { background:#16a34a; color:white; border:none; padding:10px 16px; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:0.2s;}
-        .wa-btn:hover { background:#15803d; }
-        
-        /* Radar Tabs */
-        .tpl-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:30px; }
-        .tpl-card { background:var(--card); border:1px solid var(--border); padding:24px; border-radius:16px; text-align:center; cursor:pointer; transition:all 0.2s; box-shadow:var(--shadow);}
-        .tpl-card:hover { border-color:var(--brand); transform:translateY(-2px); box-shadow:0 10px 20px rgba(0,0,0,0.1);}
-        .tpl-title { font-size:12px; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:1px; margin-bottom:12px;}
-        .tpl-count { font-size:36px; font-weight:800; color:var(--text); }
-        
-        /* Table Details */
-        .detail-area { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:24px; display:none; margin-top:20px; box-shadow:var(--shadow); position:relative;}
-        .close-btn { position:absolute; top:20px; right:20px; background:var(--input-bg); color:var(--muted); border:1px solid var(--border); padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px; transition:0.2s;}
-        .close-btn:hover { background:#ef4444; color:white; border-color:#ef4444;}
-        
-        .table-wrap { overflow-x:auto; margin-top:20px; border-radius:10px; border:1px solid var(--border);}
-        table { width:100%; border-collapse:collapse; text-align:left; background:var(--card);}
-        th { background:var(--table-head); padding:16px; font-size:12px; color:var(--muted); text-transform:uppercase; font-weight:600; border-bottom:1px solid var(--border); white-space:nowrap;}
-        td { padding:16px; font-size:13px; border-bottom:1px solid var(--border); color:var(--text); white-space:nowrap;}
-        tr:hover { background:var(--hover-bg); }
-        
-        .spinner { border:3px solid rgba(14,165,233,0.1); border-top:3px solid var(--brand); border-radius:50%; width:24px; height:24px; animation:spin 1s linear infinite; margin:auto;}
-        @keyframes spin { 100% { transform:rotate(360deg); } }
-    </style>
-    </head>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+        :root { --bg: #F8FAFC; --surface: #FFFFFF; --border: #E2E8F0; --text: #0F172A; --muted: #64748B; --primary: #007AFF; --primary-light: rgba(0,122,255,0.1); --glass: rgba(255,255,255,0.7); }
+        [data-theme="dark"] { --bg: #0F172A; --surface: #1E293B; --border: #334155; --text: #F8FAFC; --muted: #94A3B8; --primary: #38BDF8; --primary-light: rgba(56,189,248,0.1); --glass: rgba(30,41,59,0.7); }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; transition: 0.3s; }
+        .app-shell { display: flex; min-height: 100vh; }
+        .sidebar { width: 280px; background: var(--surface); border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 0; height: 100vh; box-sizing: border-box; }
+        .logo { font-size: 22px; font-weight: 800; color: var(--primary); margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
+        .nav-link { padding: 14px 18px; border-radius: 12px; text-decoration: none; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 12px; transition: 0.2s; cursor: pointer; border: none; background: transparent; width: 100%; text-align: left; }
+        .nav-link.active { background: var(--primary); color: white; }
+        .main-content { flex: 1; padding: 40px; box-sizing: border-box; }
+        .glass-card { background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 24px; padding: 30px; margin-bottom: 30px; }
+        textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 16px; padding: 20px; color: var(--text); min-height: 120px; box-sizing: border-box; outline: none; }
+        .btn-primary { background: var(--primary); color: white; border: none; padding: 14px 28px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 10px; }
+        .order-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 25px; margin-bottom: 25px; }
+        .order-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 20px; border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 20px; }
+        .meta-item label { display: block; font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+        .tid-scroll-container { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 15px; }
+        .tid-box { min-width: 320px; flex: 1; background: var(--bg); border-radius: 16px; border: 1px solid var(--border); padding: 20px; }
+        .progress-track { height: 6px; background: var(--border); border-radius: 10px; overflow: hidden; margin: 15px 0; }
+        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: 1s; }
+        .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        .radar-card { background: var(--surface); border: 1px solid var(--border); padding: 25px; border-radius: 20px; text-align: center; cursor: pointer; }
+        .detail-view { background: var(--surface); border-radius: 20px; padding: 30px; display: none; margin-top: 30px; border: 1px solid var(--border); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 15px; border-bottom: 1px solid var(--border); text-align: left; font-size: 14px; }
+        .spinner { width: 20px; height: 20px; border: 3px solid rgba(0,0,0,0.1); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin: auto;}
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style></head>
     <body>
-    <nav class="navbar">
-        <div class="navbar-brand">🛰️ NEXUS CONTROL TOWER</div>
-        <div class="nav-actions">
-            <button id="theme-toggle" class="theme-btn" onclick="toggleTheme()">🌓 Theme</button>
-            <a href="/" class="exit-btn">Exit</a>
-        </div>
-    </nav>
-    
-    <div class="container">
-        <div class="master-nav">
-            <button class="nav-btn active" onclick="switchMainView('view-track')">🚀 Track & Sync</button>
-            <button class="nav-btn" onclick="switchMainView('view-ho')">📦 Handed Over</button>
-            <button class="nav-btn" onclick="switchMainView('view-miss')">⚠️ Missing TIDs</button>
-            <button class="nav-btn" onclick="switchMainView('view-proc')">⏳ QC Not Approved</button>
-            <button class="nav-btn" onclick="switchMainView('view-qc')">✅ QC Approved</button>
-        </div>
-
-        <div id="view-track" class="view-section active">
-            <div class="search-container">
-                <textarea id="searchInput" placeholder="Paste Multiple Order IDs here to scan..." oninput="handleInput()"></textarea>
-                <div class="search-actions">
-                    <button class="btn" onclick="searchOrders()">🔍 Scan Matrix</button>
-                    <button class="btn btn-clear" onclick="clearSearch()">✖ Clear Results</button>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="logo">🛰️ <span>Nexus Tower</span></div>
+            <button class="nav-link active" onclick="navSwitch(this, 'view-track')">🚀 Track & Sync</button>
+            <button class="nav-link" onclick="navSwitch(this, 'view-ho')">📦 Handed Over</button>
+            <button class="nav-link" onclick="navSwitch(this, 'view-miss')">⚠️ Missing TIDs</button>
+            <button class="nav-link" onclick="navSwitch(this, 'view-proc')">⏳ QC Not Approved</button>
+            <button class="nav-link" onclick="navSwitch(this, 'view-qc')">✅ QC Approved</button>
+            <button class="nav-link" onclick="toggleTheme()" style="margin-top:auto">🌓 Change Theme</button>
+            <a href="/" class="nav-link" style="color:#EF4444;">🚪 Exit</a>
+        </aside>
+        <main class="main-content">
+            <header style="margin-bottom:40px"><h1>Nexus Operational Console</h1></header>
+            <div id="view-track" class="view-pane active">
+                <div class="glass-card">
+                    <textarea id="searchInput" placeholder="Enter Order IDs..."></textarea>
+                    <div style="margin-top:20px; display:flex; gap:15px;">
+                        <button class="btn-primary" onclick="searchOrders()">🔍 Initialize Scan</button>
+                        <button class="btn-primary" style="background:#8B5CF6; display:none;" id="bulkBtn" onclick="syncAllTIDs()">⚡ Sync All</button>
+                    </div>
                 </div>
+                <div id="tracking-results"></div>
             </div>
-            <button id="bulkBtn" class="btn btn-bulk" onclick="syncAllTIDs()">⚡ MULTI-TRACK ALL SHIPMENTS</button>
-            <div id="tracking-results"></div>
-        </div>
-
-        <div id="radar-loader" style="padding:50px; text-align:center; display:none;"><div class="spinner"></div><br><span style="color:var(--muted); font-size:13px; display:block; margin-top:10px;">Fetching live database (Max 30-min delay)...</span></div>
-        
-        <div id="view-ho" class="view-section radar-view"><h2 style="font-size:20px;">📦 Handed Over (With TID)</h2><div class="tpl-grid" id="grid-ho"></div><div class="detail-area" id="detail-ho"></div></div>
-        <div id="view-miss" class="view-section radar-view"><h2 style="font-size:20px;">⚠️ Missing or Invalid TIDs</h2><div class="tpl-grid" id="grid-miss"></div><div class="detail-area" id="detail-miss"></div></div>
-        <div id="view-proc" class="view-section radar-view"><h2 style="font-size:20px;">⏳ QC Not Approved Orders</h2><div class="tpl-grid" id="grid-proc"></div><div class="detail-area" id="detail-proc"></div></div>
-        <div id="view-qc" class="view-section radar-view"><h2 style="font-size:20px;">✅ QC Approved Orders</h2><div class="tpl-grid" id="grid-qc"></div><div class="detail-area" id="detail-qc"></div></div>
+            <div id="view-radar" class="view-pane" style="display:none;">
+                <div id="radar-loader" style="display:none; text-align:center;"><div class="spinner"></div></div>
+                <div id="radar-container" class="radar-grid"></div>
+                <div id="radar-detail" class="detail-view"></div>
+            </div>
+        </main>
     </div>
-
     <script>
-        // --- THEME ENGINE ---
-        const toggleBtn = document.getElementById('theme-toggle');
-        const currentTheme = localStorage.getItem('nexus_theme') || 'light';
-        document.documentElement.setAttribute('data-theme', currentTheme);
-        toggleBtn.innerHTML = currentTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
-
         function toggleTheme() {
             const root = document.documentElement;
-            const newTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-            root.setAttribute('data-theme', newTheme);
-            localStorage.setItem('nexus_theme', newTheme);
-            toggleBtn.innerHTML = newTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+            const theme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            root.setAttribute('data-theme', theme);
+            localStorage.setItem('nexus_theme', theme);
         }
+        document.documentElement.setAttribute('data-theme', localStorage.getItem('nexus_theme') || 'light');
 
-        // --- NAVIGATION & CACHE ---
-        let radarDataLoaded = false;
-        
-        async function switchMainView(viewId) {
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.view-section').forEach(c => c.classList.remove('active'));
-            event.target.classList.add('active');
-            document.getElementById(viewId).classList.add('active');
-            
-            if(viewId !== 'view-track' && !radarDataLoaded) {
-                document.querySelectorAll('.radar-view').forEach(v => v.style.display = 'none');
-                document.getElementById('radar-loader').style.display = 'block';
-                try {
-                    const r = await fetch('/api/nexus/radar_data');
-                    radarData = await r.json();
-                    document.getElementById('radar-loader').style.display = 'none';
-                    document.querySelectorAll('.radar-view').forEach(v => v.style.display = 'block');
-                    renderRadarGrids();
-                    radarDataLoaded = true;
-                } catch(e) {
-                    document.getElementById('radar-loader').innerHTML = '<span style="color:#ef4444;">Error fetching data.</span>';
-                }
+        let activeBucket = '';
+        function navSwitch(btn, view) {
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.view-pane').forEach(v => v.style.display = 'none');
+            if(view === 'view-track') {
+                document.getElementById('view-track').style.display = 'block';
+            } else {
+                document.getElementById('view-radar').style.display = 'block';
+                activeBucket = view.split('-')[1];
+                loadRadar();
             }
         }
 
-        // --- TRACKING ENGINE ---
         let allCardsData = [];
-        function getFlag(c) { c=String(c).toLowerCase(); return c.includes('pk')?'🇵🇰':c.includes('cn')?'🇨🇳':c.includes('ae')?'🇦🇪':c.includes('uk')?'🇬🇧':c.includes('us')?'🇺🇸':'🏳️'; }
-
-        function handleInput() {
-            if(document.getElementById('searchInput').value.trim() === '') clearSearch();
-        }
-        function clearSearch() {
-            document.getElementById('searchInput').value = '';
-            document.getElementById('tracking-results').innerHTML = '';
-            document.getElementById('bulkBtn').style.display = 'none';
-            allCardsData = [];
-        }
-
         async function searchOrders() {
             const q = document.getElementById('searchInput').value;
-            if(!q.trim()) return;
-            document.getElementById('tracking-results').innerHTML = '<div style="padding:40px;"><div class="spinner"></div></div>';
-            
-            try {
-                const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
-                allCardsData = await r.json();
-                if(allCardsData.length > 0) {
-                    document.getElementById('bulkBtn').style.display = 'flex';
-                    renderCards();
-                } else {
-                    document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; padding:30px; color:var(--muted);">No orders found.</div>';
-                }
-            } catch(e) {
-                document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:#ef4444;">Search failed.</div>';
-            }
+            if(!q) return;
+            document.getElementById('tracking-results').innerHTML = '<div class="spinner"></div>';
+            const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
+            allCardsData = await r.json();
+            if(allCardsData.length) { document.getElementById('bulkBtn').style.display = 'flex'; renderCards(); }
         }
 
         function renderCards() {
-            let html = '';
+            let h = '';
             allCardsData.forEach((item, idx) => {
-                const flagOrigin = item.source.includes('ECL') ? '🇨🇳' : '🇵🇰';
-                const flagDest = getFlag(item.country);
-                const tidsStr = item.tids.join(', ');
-                html += `
-                <div class="card" id="card-${idx}">
-                    <div class="card-header">
-                        <div class="route-flags">[${flagOrigin} Origin] ➔ ✈️ ➔ [${flagDest} Dest]</div>
-                        <div class="badge">${item.source} | Kerry: ${item.status}</div>
+                h += `<div class="order-card">
+                    <div class="order-meta">
+                        <div class="meta-item"><label>Order</label><span>${item.order_id}</span></div>
+                        <div class="meta-item"><label>Customer</label><span>${item.customer}</span></div>
+                        <div class="meta-item"><label>Status</label><span>${item.status}</span></div>
+                        <div class="meta-item"><label>Weight</label><span>${item.weight}kg</span></div>
                     </div>
-                    <div class="card-body">
-                        <div class="grid-item"><span class="grid-label">Order</span><span class="grid-val" style="color:var(--brand);">${item.order_id}</span></div>
-                        <div class="grid-item"><span class="grid-label">Date</span><span class="grid-val">${item.date}</span></div>
-                        <div class="grid-item"><span class="grid-label">Boxes / Weight</span><span class="grid-val">${item.boxes} / ${item.weight}kg</span></div>
-                        <div class="grid-item"><span class="grid-label">Vendor</span><span class="grid-val">${item.vendor}</span></div>
-                        <div class="grid-item"><span class="grid-label">Customer</span><span class="grid-val">${item.customer}</span></div>
-                        <div class="grid-item"><span class="grid-label">Country</span><span class="grid-val">${item.country}</span></div>
-                        <div class="grid-item"><span class="grid-label">MAWB</span><span class="grid-val">${item.mawb}</span></div>
-                        <div class="grid-item"><span class="grid-label">Carrier TIDs</span><span class="grid-val" style="color:var(--brand);">${tidsStr || 'N/A'}</span></div>
-                    </div>
-                    <div class="track-area">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-weight:600; font-size:14px; color:var(--text);">Ship24 Live Tracking History</span>
-                            <span class="eta-badge" id="eta-${idx}">⏳ Pending Scan</span>
-                        </div>
-                        <div class="progress-bg"><div class="progress-fill" id="prog-${idx}"></div></div>
-                        <div id="log-${idx}" class="timeline-box" style="display:none;"></div>
-                        <div style="display:flex; gap:10px; margin-top:20px;">
-                            <button class="btn" style="padding:10px 16px; font-size:13px;" onclick="syncShip24(${idx}, '${tidsStr}')">Track Carrier</button>
-                            <button class="wa-btn" onclick="shareWA(${idx})">💬 Share on WhatsApp</button>
-                        </div>
+                    <div class="tid-scroll-container">
+                        ${item.tids.map(tid => `
+                            <div class="tid-box">
+                                <div style="display:flex; justify-content:space-between"><b>📦 ${tid}</b> <button onclick="syncShip24('${tid}')" class="btn-primary" style="padding:5px 10px; font-size:11px">Track</button></div>
+                                <div class="progress-track"><div class="progress-fill" id="prog-${tid.replace(/\s/g,'')}"></div></div>
+                                <div id="log-${tid.replace(/\s/g,'')}" style="font-size:12px">Awaiting sync...</div>
+                            </div>
+                        `).join('')}
                     </div>
                 </div>`;
             });
-            document.getElementById('tracking-results').innerHTML = html;
+            document.getElementById('tracking-results').innerHTML = h;
         }
 
-        async function syncAllTIDs() {
-            const btn = document.getElementById('bulkBtn');
-            btn.innerHTML = '<div class="spinner" style="width:16px; height:16px; border-width:2px; margin-right:10px;"></div> SYNCING ALL...';
-            btn.style.pointerEvents = 'none';
-            for(let i=0; i<allCardsData.length; i++) { if(allCardsData[i].tids.length > 0) await syncShip24(i, allCardsData[i].tids.join(',')); }
-            btn.innerHTML = '⚡ MULTI-TRACK COMPLETED';
-            btn.style.pointerEvents = 'auto';
-        }
-
-        async function syncShip24(idx, tidsStr) {
-            if(!tidsStr || tidsStr === 'N/A') return;
-            const logBox = document.getElementById(`log-${idx}`);
-            logBox.style.display = 'block';
-            logBox.innerHTML = '<div class="spinner" style="margin-top:20px;"></div>';
-            
-            try {
-                const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids: tidsStr.split(',')})});
-                const data = await r.json();
-                
-                let totalProg = 0; let eventsHtml = '';
-                data.forEach(d => {
-                    if(d.success) {
-                        totalProg += d.progress;
-                        document.getElementById(`eta-${idx}`).innerText = `🎯 ETA: ${d.eta}`;
-                        d.events.forEach(ev => {
-                            eventsHtml += `
-                            <div class="timeline-event">
-                                <div class="tl-line"></div>
-                                <div class="tl-dot"></div>
-                                <div class="tl-content">
-                                    <span class="tl-status">${ev.status} <span style="font-weight:400; color:var(--muted)">- ${ev.location}</span></span>
-                                    <span class="tl-time">${ev.time}</span>
-                                </div>
-                            </div>`;
-                        });
-                    }
-                });
-                
-                const avgProg = totalProg / data.length;
-                document.getElementById(`prog-${idx}`).style.width = avgProg + '%';
-                logBox.innerHTML = eventsHtml || '<span style="color:var(--muted); padding:10px;">No tracking events found yet.</span>';
-                
-                const card = document.getElementById(`card-${idx}`);
-                card.classList.remove('glow-green', 'glow-yellow', 'glow-red');
-                if(avgProg === 100) card.classList.add('glow-green');
-                else if(avgProg > 0) card.classList.add('glow-yellow');
-                else card.classList.add('glow-red');
-                
-            } catch(e) {
-                logBox.innerHTML = '<span style="color:#ef4444; padding:10px;">Ship24 API Error.</span>';
+        async function syncShip24(tid) {
+            const safeId = tid.replace(/\s/g,'');
+            const logBox = document.getElementById(`log-${safeId}`);
+            const prog = document.getElementById(`prog-${safeId}`);
+            logBox.innerHTML = '<div class="spinner"></div>';
+            const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids:[tid]})});
+            const d = (await r.json())[0];
+            if(d.success) {
+                prog.style.width = d.progress + '%';
+                logBox.innerHTML = d.events.map(e => `<div><b>${e.status}</b><br><small>${e.time} | ${e.location}</small></div>`).join('<hr style="border:0; border-top:1px solid var(--border); margin:5px 0">');
             }
         }
 
-        function shareWA(idx) {
-            const item = allCardsData[idx]; const tids = item.tids.join(', '); const eta = document.getElementById(`eta-${idx}`).innerText;
-            const text = `*Hello ${item.customer}!* 👋\nHere is your live tracking update:\n\n📦 *Order ID:* ${item.order_id}\n✈️ *Master AWB:* ${item.mawb}\n🚚 *Courier TIDs:* ${tids}\n${eta}\n\nTrack online at Ship24.com.`;
-            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-        }
+        async function syncAllTIDs() { for(let card of allCardsData) { for(let tid of card.tids) { await syncShip24(tid); } } }
 
-        // --- PENDING RADAR LOGIC ---
         let radarData = null;
-        const bucketMap = {'view-ho': 'handed_over', 'view-miss': 'missing_tid', 'view-proc': 'qc_not_approved', 'view-qc': 'qc_approved'};
-
-        function renderRadarGrids() {
-            Object.keys(bucketMap).forEach(viewId => {
-                const bucketName = bucketMap[viewId];
-                const suffix = viewId.split('-')[1];
-                let gridHtml = '';
-                Object.keys(radarData[bucketName]).forEach(tplName => {
-                    const count = radarData[bucketName][tplName].length;
-                    const color = viewId==='view-miss'?'#ef4444':viewId==='view-ho'?'#f59e0b':viewId==='view-proc'?'#8b5cf6':'#10b981';
-                    gridHtml += `<div class="tpl-card" onclick="openDetails('${viewId}', '${tplName}')"><div class="tpl-title">${tplName}</div><div class="tpl-count" style="color:${color}">${count}</div></div>`;
-                });
-                document.getElementById(`grid-${suffix}`).innerHTML = gridHtml;
+        async function loadRadar() {
+            const container = document.getElementById('radar-container');
+            const detail = document.getElementById('radar-detail');
+            container.innerHTML = ''; detail.style.display = 'none';
+            document.getElementById('radar-loader').style.display = 'block';
+            const r = await fetch('/api/nexus/radar_data');
+            radarData = await r.json();
+            document.getElementById('radar-loader').style.display = 'none';
+            const map = {'ho':'handed_over','miss':'missing_tid','proc':'qc_not_approved','qc':'qc_approved'}[activeBucket];
+            Object.keys(radarData[map]).forEach(src => {
+                container.innerHTML += `<div class="radar-card" onclick="showRadarDetail('${src}')"><h3>${src}</h3><div style="font-size:32px; font-weight:800; color:var(--primary)">${radarData[map][src].length}</div></div>`;
             });
         }
 
-        function openDetails(viewId, tplName) {
-            const suffix = viewId.split('-')[1];
-            const bucketName = bucketMap[viewId];
-            const data = radarData[bucketName][tplName];
-            const detailArea = document.getElementById(`detail-${suffix}`);
-            
-            document.querySelectorAll('.detail-area').forEach(d => d.style.display = 'none');
-            
-            if(data.length === 0) {
-                detailArea.innerHTML = `<button class="close-btn" onclick="closeDetails('${suffix}')">✖ Close (ESC)</button><div style="text-align:center; color:var(--muted); padding:30px;">No orders found in ${tplName}.</div>`;
-            } else {
-                let thead = '<tr>'; Object.keys(data[0]).forEach(k => thead += `<th>${k}</th>`); thead += '</tr>';
-                let tbody = '';
-                data.forEach(row => { tbody += '<tr>'; Object.values(row).forEach(v => tbody += `<td>${v}</td>`); tbody += '</tr>'; });
-                
-                detailArea.innerHTML = `
-                    <button class="close-btn" onclick="closeDetails('${suffix}')">✖ Close (ESC)</button>
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:15px; padding-right:100px;">
-                        <h3 style="margin:0; font-size:18px;">📋 ${tplName} Records</h3>
-                        <button class="btn" style="background:#10b981;" onclick="downloadCSV('${viewId}', '${tplName}')">📥 Export CSV</button>
-                    </div>
-                    <div class="table-wrap"><table>${thead}${tbody}</table></div>
-                `;
-            }
-            detailArea.style.display = 'block';
-            detailArea.scrollIntoView({behavior: "smooth", block: "start"});
-        }
-
-        function closeDetails(suffix) {
-            document.getElementById(`detail-${suffix}`).style.display = 'none';
-        }
-        
-        document.addEventListener('keydown', function(e) {
-            if(e.key === 'Escape') document.querySelectorAll('.detail-area').forEach(d => d.style.display = 'none');
-        });
-
-        function downloadCSV(viewId, tplName) {
-            const data = radarData[bucketMap[viewId]][tplName];
-            if(data.length===0) return;
-            const headers = Object.keys(data[0]).join(',');
-            const rows = data.map(obj => Object.values(obj).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\\n');
-            const csv = headers + '\\n' + rows;
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.setAttribute('href', url); a.setAttribute('download', `${tplName}_${bucketMap[viewId]}.csv`); a.click();
+        function showRadarDetail(src) {
+            const map = {'ho':'handed_over','miss':'missing_tid','proc':'qc_not_approved','qc':'qc_approved'}[activeBucket];
+            const data = radarData[map][src];
+            const detail = document.getElementById('radar-detail');
+            detail.style.display = 'block';
+            let th = '<tr>' + Object.keys(data[0]).map(k => `<th>${k}</th>`).join('') + '</tr>';
+            let tr = data.map(r => '<tr>' + Object.values(r).map(v => `<td>${v}</td>`).join('') + '</tr>').join('');
+            detail.innerHTML = `<button onclick="this.parentElement.style.display='none'" class="btn-primary" style="background:#EF4444; margin-bottom:20px">Close</button><div style="overflow-x:auto"><table>${th}${tr}</table></div>`;
+            detail.scrollIntoView({behavior:'smooth'});
         }
     </script>
-    </body>
-    </html>
+    </body></html>
     ''')
 # ==============================================================================
 # END OF CODE
