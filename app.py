@@ -2799,8 +2799,7 @@ def world_map():
 </div>
 
 <div class="map-controls">
-    <div style="color: var(--text-muted);">🌟 بڑا دائرہ = زیادہ آرڈرز</div>
-    <button class="download-btn" onclick="exportMapData()">📥 Export Map Data</button>
+    <div style="color: var(--text-muted);">World Map order tracker</div>
 </div>
 
 <div id="world-map"></div>
