@@ -9,11 +9,6 @@ import time
 import os
 import calendar
 from flask import Response
-import logging
-
-# ===== LOGGING SETUP =====
-logging.basicConfig(filename='activity.log', level=logging.INFO,
-                    format='%(asctime)s - %(message)s')
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
@@ -24,33 +19,6 @@ CACHE = {}
 CACHE_DURATION = 300
 
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
-
-# ===== USER ROLES =====
-ROLES = {
-    'admin': {'can_edit': True, 'can_view_orders': True, 'can_see_logs': True},
-    'guest': {'can_edit': False, 'can_view_orders': False, 'can_see_logs': False}
-}
-
-def get_user_role():
-    if session.get('logged_in'):
-        return 'admin'
-    elif session.get('guest'):
-        return 'guest'
-    return None
-
-def role_required(allowed_roles):
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            role = get_user_role()
-            if not role or role not in allowed_roles:
-                return redirect(url_for('login'))
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
-
-def log_activity(user, action, details=''):
-    logging.info(f"{user} - {action} - {details}")
 
 PROVIDERS = [
     {
@@ -148,7 +116,7 @@ ACHIEVEMENTS = {
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get('logged_in') and not session.get('guest'):
+        if not session.get('logged_in'):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -1772,18 +1740,6 @@ BASE_STYLES = """
         box-shadow: 0 8px 20px rgba(79,70,229,0.3);
     }
     
-    .guest-link {
-        margin-top: 16px;
-        font-size: 13px;
-        color: #64748b;
-    }
-    
-    .guest-link a {
-        color: #4f46e5;
-        text-decoration: none;
-        font-weight: 600;
-    }
-    
     .error-message {
         background: #fee2e2;
         border: 1px solid #fecaca;
@@ -1792,32 +1748,6 @@ BASE_STYLES = """
         color: #dc2626;
         font-size: 12px;
         margin-bottom: 14px;
-    }
-
-    /* ===== LOGS PAGE ===== */
-    .logs-table {
-        width: 100%;
-        border-collapse: collapse;
-        background: #ffffff;
-        border-radius: 16px;
-        overflow: hidden;
-    }
-    
-    .logs-table th {
-        background: #f8fafc;
-        padding: 12px;
-        text-align: left;
-        font-weight: 600;
-        color: #475569;
-        font-size: 12px;
-        border-bottom: 2px solid #4f46e5;
-    }
-    
-    .logs-table td {
-        padding: 10px 12px;
-        border-bottom: 1px solid #e2e8f0;
-        color: #1e293b;
-        font-size: 13px;
     }
 
     /* ===== RESPONSIVE ===== */
@@ -2047,22 +1977,13 @@ SIDEBAR_HTML = """
                 <span>Achievements</span><div class="tooltip">Achievements</div>
             </a>
         </div>
-        {% if role == 'admin' %}
-        <div class="nav-section">
-            <div class="nav-section-title">Admin</div>
-            <a href="/logs" class="nav-item {active_logs}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <span>Activity Logs</span><div class="tooltip">Activity Logs</div>
-            </a>
-        </div>
-        {% endif %}
     </div>
     <div class="sidebar-footer">
         <div class="admin-info">
             <div class="admin-avatar">AW</div>
             <div class="admin-details">
                 <div class="admin-name">Admin Wahab</div>
-                <div class="admin-role">{% if role == 'admin' %}Administrator{% else %}Guest{% endif %}</div>
+                <div class="admin-role">Administrator</div>
             </div>
         </div>
         <a href="/logout" class="logout-btn">
@@ -2092,10 +2013,10 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 """
 
-def sidebar(active, role='guest'):
-    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','calendar','whatsapp','achievements','logs']
+def sidebar(active):
+    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','calendar','whatsapp','achievements']
     kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
-    return SIDEBAR_HTML.format(**kwargs, role=role)
+    return SIDEBAR_HTML.format(**kwargs)
 
 # ===== ROUTES =====
 
@@ -2106,8 +2027,6 @@ def login():
         password = request.form.get('password', '')
         if password == ADMIN_PASSWORD:
             session['logged_in'] = True
-            session.pop('guest', None)
-            log_activity('admin', 'login', 'Admin logged in')
             return redirect(url_for('dashboard'))
         else:
             error = 'Invalid password. Please try again.'
@@ -2124,37 +2043,20 @@ def login():
 <div class="form-group"><label class="form-label">Password</label>
 <input type="password" name="password" class="form-input" placeholder="Enter your password" autofocus required></div>
 <button type="submit" class="login-btn">Sign In</button>
-</form>
-<div class="guest-link">
-    <a href="/guest-login">View as Guest</a> (read-only, no order details)
-</div>
-</div></div></body></html>''', error=error)
-
-@app.route('/guest-login')
-def guest_login():
-    session['guest'] = True
-    session.pop('logged_in', None)
-    log_activity('guest', 'login', 'Guest logged in')
-    return redirect(url_for('dashboard'))
+</form></div></div></body></html>''', error=error)
 
 @app.route('/logout')
 def logout():
-    role = get_user_role()
-    if role:
-        log_activity(role, 'logout', f'{role} logged out')
     session.pop('logged_in', None)
-    session.pop('guest', None)
     return redirect(url_for('login'))
 
 @app.route('/')
 @login_required
 def dashboard():
-    role = get_user_role()
-    log_activity(role, 'view', 'Dashboard')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('dashboard', role) + '''
+''' + sidebar('dashboard') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Provider <span>Dashboard</span></h1>
@@ -2176,8 +2078,6 @@ async function loadData() {
 }
 
 function renderProvider(provider) {
-    const role = '{{ role }}';
-    const canClick = role === 'admin';
     const trendClass = provider.trend.direction === 'up' ? 'up' : (provider.trend.direction === 'down' ? 'down' : 'neutral');
     const trendIcon = provider.trend.direction === 'up' ? '▲' : (provider.trend.direction === 'down' ? '▼' : '–');
     let achHtml = '';
@@ -2203,27 +2103,16 @@ function renderProvider(provider) {
                 const dayDate = new Date(dpStart);
                 dayDate.setDate(dayDate.getDate() + dayIndex);
                 const dateStr = fmtLocal(dayDate);
-                if (canClick) {
-                    rowsHtml += `<td class="day-cell"${fc}>
-                        <div class="day-data">
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
-                        </div>
-                    </td>`;
-                } else {
-                    rowsHtml += `<td class="day-cell"${fc}>
-                        <div class="day-data">
-                            <span class="orders">${d.orders}</span>
-                            <span class="boxes">${d.boxes}</span>
-                            <span class="weight">${formatWeight(d.weight)}</span>
-                            <span class="under20">${d.under20}</span>
-                            <span class="over20">${d.over20}</span>
-                        </div>
-                    </td>`;
-                }
+
+                rowsHtml += `<td class="day-cell"${fc}>
+                    <div class="day-data">
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
+                    </div>
+                </td>`;
             } else {
                 rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`;
             }
@@ -2234,27 +2123,15 @@ function renderProvider(provider) {
     days.forEach((day,i) => {
         const t = totals[day];
         const fc = flightDays.includes(i) ? ' style="background:#f1f5f9"' : '';
-        if (canClick) {
-            rowsHtml += `<td class="day-cell"${fc}>
-                <div class="day-data">
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a>
-                </div>
-            </td>`;
-        } else {
-            rowsHtml += `<td class="day-cell"${fc}>
-                <div class="day-data">
-                    <span class="orders">${t.o}</span>
-                    <span class="boxes">${t.b}</span>
-                    <span class="weight">${formatWeight(t.w)}</span>
-                    <span class="under20">${t.u}</span>
-                    <span class="over20">${t.v}</span>
-                </div>
-            </td>`;
-        }
+        rowsHtml += `<td class="day-cell"${fc}>
+            <div class="day-data">
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a>
+                <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a>
+            </div>
+        </td>`;
     });
     rowsHtml += '</tr>';
     const subHdr = days.map((_,i) => `<th${flightDays.includes(i)?' style="background:#f1f5f9"':''}><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>`).join('');
@@ -2282,17 +2159,15 @@ ${achHtml}
 
 dpInit('week');
 loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/weekly-summary')
 @login_required
 def weekly_summary():
-    role = get_user_role()
-    log_activity(role, 'view', 'Weekly Summary')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Weekly Summary - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('weekly', role) + '''
+''' + sidebar('weekly') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Weekly <span>Summary</span></h1>
@@ -2308,8 +2183,6 @@ async function loadData() {
         const r = await fetch('/api/weekly-summary?' + dpParams());
         const data = await r.json();
         let html = '';
-        const role = '{{ role }}';
-        const canClick = role === 'admin';
         if (data.winner) {
             let achHtml = '';
             if (data.winner.achievements && data.winner.achievements.length > 0) {
@@ -2327,47 +2200,36 @@ ${achHtml}</div></div></div></div>`;
             const rc = i < 3 ? 'rank-'+(i+1) : 'rank-other';
             const tc = p.trend.direction === 'up' ? 'up' : 'down';
             const ti = p.trend.direction === 'up' ? '▲' : '▼';
-            if (canClick) {
-                html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
-                    <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
-                    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
-                    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
-                    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
-                    <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
-            } else {
-                html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
-                    <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
-                    <td style="text-align:right;font-weight:600">${p.total_orders.toLocaleString()}</td>
-                    <td style="text-align:right;font-weight:600">${p.total_boxes.toLocaleString()}</td>
-                    <td style="text-align:right;font-weight:600">${formatWeight(p.total_weight)}</td>
-                    <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
-            }
+            html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
+                <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/daily-region')
 @login_required
 def daily_region():
-    role = get_user_role()
-    log_activity(role, 'view', 'Daily Region')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Daily Region - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('daily_region', role) + '''
+''' + sidebar('daily_region') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Daily <span>Region Summary</span></h1>
     ''' + DATE_PICKER_HTML('today') + '''
 </div>
 <div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content"><div class="stat-value" id="t-orders">-</div><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div><div class="stat-content"><div class="stat-value" id="t-boxes">-</div><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div><div class="stat-content"><div class="stat-value" id="t-weight">-</div><div class="stat-label">Total Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">-</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">-</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">-</div></a><div class="stat-label">Total Weight</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">-</div><div class="stat-label">&lt;20 kg</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">-</div><div class="stat-label">20+ kg</div></div></div>
 </div>
@@ -2397,8 +2259,6 @@ async function loadData() {
         }
         const medals = ['🥇','🥈','🥉'];
         let html = '';
-        const role = '{{ role }}';
-        const canClick = role === 'admin';
         data.providers.forEach((provider, idx) => {
             html += `<div class="provider-section">
 <div class="provider-header-dr" id="hdr-${idx}" onclick="toggleProvider(${idx})">
@@ -2417,21 +2277,12 @@ async function loadData() {
                 html += '<table class="region-table"><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight</th><th>&lt;20 kg</th><th>20+ kg</th></tr></thead><tbody>';
                 provider.regions.forEach((rg,i) => {
                     const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
-                    if (canClick) {
-                        html += `<tr><td>${medal}${rg.name}</td>
-                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders}</a></td>
-                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes}</a></td>
-                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
-                            <td style="color:#10b981">${rg.under20}</td>
-                            <td style="color:#ef4444">${rg.over20}</td></tr>`;
-                    } else {
-                        html += `<tr><td>${medal}${rg.name}</td>
-                            <td>${rg.orders}</td>
-                            <td>${rg.boxes}</td>
-                            <td>${formatWeight(rg.weight)}</td>
-                            <td style="color:#10b981">${rg.under20}</td>
-                            <td style="color:#ef4444">${rg.over20}</td></tr>`;
-                    }
+                    html += `<tr><td>${medal}${rg.name}</td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
+                        <td style="color:#10b981">${rg.under20}</td>
+                        <td style="color:#ef4444">${rg.over20}</td></tr>`;
                 });
                 html += '</tbody></table>';
             } else {
@@ -2444,17 +2295,15 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><h3>Error</h3><p>'+e.message+'</p></div>'; }
 }
 dpInit('today'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/flight-load')
 @login_required
 def flight_load():
-    role = get_user_role()
-    log_activity(role, 'view', 'Flight Load')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flight Load - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('flight', role) + '''
+''' + sidebar('flight') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Flight <span>Load</span></h1>
@@ -2470,8 +2319,6 @@ async function loadData() {
         const r = await fetch('/api/flight-load?' + dpParams());
         const data = await r.json();
         let html = '';
-        const role = '{{ role }}';
-        const canClick = role === 'admin';
         for (const flight of data.flights) {
             html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span style="font-size:24px;margin-right:12px">✈️</span><span class="provider-name">${flight.name}</span></div>
 <div class="card-stats">
@@ -2481,17 +2328,10 @@ async function loadData() {
 </div></div>
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
             for (const p of flight.providers) {
-                if (canClick) {
-                    html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
-                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
-                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
-                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
-                } else {
-                    html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
-                        <td style="text-align:right">${p.orders.toLocaleString()}</td>
-                        <td style="text-align:right">${p.boxes.toLocaleString()}</td>
-                        <td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
-                }
+                html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
             }
             html += '</tbody></table></div>';
         }
@@ -2499,26 +2339,24 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/analytics')
 @login_required
 def analytics():
-    role = get_user_role()
-    log_activity(role, 'view', 'Analytics')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Analytics - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body>
-''' + sidebar('analytics', role) + '''
+''' + sidebar('analytics') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Analytics & <span>Insights</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><div class="stat-value" id="t-orders">0</div><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><div class="stat-value" id="t-boxes">0</div><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><div class="stat-value" id="t-weight">0</div><div class="stat-label">Total Weight (kg)</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">0</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">0</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">0</div></a><div class="stat-label">Total Weight (kg)</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">0</div><div class="stat-label">Light (&lt;20 kg)</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">0</div><div class="stat-label">Heavy (20+ kg)</div></div></div>
 </div>
@@ -2558,17 +2396,15 @@ async function loadData() {
     } catch(e) { console.error(e); }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/kpi')
 @login_required
 def kpi_dashboard():
-    role = get_user_role()
-    log_activity(role, 'view', 'KPI Dashboard')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KPI Dashboard - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('kpi', role) + '''
+''' + sidebar('kpi') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">KPI <span>Dashboard</span></h1>
@@ -2609,17 +2445,15 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/comparison')
 @login_required
 def comparison():
-    role = get_user_role()
-    log_activity(role, 'view', 'Comparison')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Comparison - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('comparison', role) + '''
+''' + sidebar('comparison') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Provider <span>Comparison</span></h1>
@@ -2659,8 +2493,6 @@ function renderCard(p1, p2) {
 function renderComparison() {
     if (!curData) return;
     const ps = curData.providers; let html = '';
-    const role = '{{ role }}';
-    const canClick = role === 'admin';
     if (curTab === 'ge-ecl') {
         const ge = ps.filter(p=>p.group==='GE'); const ecl = ps.filter(p=>p.group==='ECL');
         const geT = {name:'GE Total',short:'GE Total',color:'#3B82F6',total_orders:ge.reduce((s,p)=>s+p.total_orders,0),total_boxes:ge.reduce((s,p)=>s+p.total_boxes,0),total_weight:ge.reduce((s,p)=>s+p.total_weight,0)};
@@ -2675,19 +2507,11 @@ function renderComparison() {
         html = '<div class="provider-card"><table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th style="text-align:right">Avg/Order</th></tr></thead><tbody>';
         ps.sort((a,b)=>b.total_boxes-a.total_boxes).forEach(p => {
             const avg = p.total_orders>0 ? (p.total_weight/p.total_orders).toFixed(1) : 0;
-            if (canClick) {
-                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
-                    <td style="text-align:right">${avg} kg</td></tr>`;
-            } else {
-                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
-                    <td style="text-align:right">${p.total_orders.toLocaleString()}</td>
-                    <td style="text-align:right">${p.total_boxes.toLocaleString()}</td>
-                    <td style="text-align:right">${formatWeight(p.total_weight)}</td>
-                    <td style="text-align:right">${avg} kg</td></tr>`;
-            }
+            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right">${avg} kg</td></tr>`;
         });
         html += '</tbody></table></div>';
     }
@@ -2702,17 +2526,15 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/regions')
 @login_required
 def regions():
-    role = get_user_role()
-    log_activity(role, 'view', 'Region Heatmap')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Region Heatmap - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('regions', role) + '''
+''' + sidebar('regions') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Region <span>Heatmap</span></h1>
@@ -2743,85 +2565,70 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/monthly')
 @login_required
 def monthly_report():
-    role = get_user_role()
-    log_activity(role, 'view', 'Monthly Report')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Monthly Report - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body>
-''' + sidebar('monthly', role) + '''
+''' + sidebar('monthly') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Monthly <span>Report</span></h1>
     ''' + DATE_PICKER_HTML('month') + '''
 </div>
-<div class="stats-row">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><div class="stat-value" id="month-orders">0</div><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><div class="stat-value" id="month-boxes">0</div><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><div class="stat-value" id="month-weight">0</div><div class="stat-label">Total Weight</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(139,92,246,0.1)">📊</div><div class="stat-content"><div class="stat-value" id="month-avg">0</div><div class="stat-label">Avg Orders/Day</div></div></div>
-</div>
-<div class="charts-grid"><div class="chart-card full-width"><div class="chart-title">Weekly Breakdown</div><div class="chart-container"><canvas id="weeklyChart"></canvas></div></div></div>
-<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Monthly Summary</span></div></div>
-<table class="leaderboard-table" id="monthly-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody></tbody></table></div>
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 let chart = null;
 async function loadData() {
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
         const r = await fetch('/api/monthly?' + dpParams());
         const data = await r.json();
-        document.getElementById('month-orders').textContent = data.total_orders.toLocaleString();
-        document.getElementById('month-boxes').textContent = data.total_boxes.toLocaleString();
-        document.getElementById('month-weight').textContent = formatWeight(data.total_weight);
-        document.getElementById('month-avg').textContent = Math.round(data.avg_per_day);
-        const role = '{{ role }}';
-        const canClick = role === 'admin';
-        let tbody = '';
+        let html = `<div class="stats-row">
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value">${data.total_orders.toLocaleString()}</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value">${data.total_boxes.toLocaleString()}</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value">${formatWeight(data.total_weight)} kg</div></a><div class="stat-label">Total Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(139,92,246,0.1)">📊</div><div class="stat-content"><div class="stat-value">${Math.round(data.avg_per_day)}</div><div class="stat-label">Avg Orders/Day</div></div></div>
+</div>
+<div class="charts-grid"><div class="chart-card full-width"><div class="chart-title">Weekly Breakdown</div><div class="chart-container"><canvas id="weeklyChart"></canvas></div></div></div>
+<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Monthly Summary</span></div></div>
+<table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
         data.providers.forEach(p => {
-            if (canClick) {
-                tbody += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
-            } else {
-                tbody += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
-                    <td style="text-align:right">${p.orders.toLocaleString()}</td>
-                    <td style="text-align:right">${p.boxes.toLocaleString()}</td>
-                    <td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
-            }
+            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
         });
-        document.querySelector('#monthly-table tbody').innerHTML = tbody;
+        html += '</tbody></table></div>';
+        document.getElementById('content').innerHTML = html;
         if (chart) chart.destroy();
         chart = new Chart(document.getElementById('weeklyChart'), { type:'bar', data:{labels:data.weeks.map(w=>w.label),datasets:[{label:'Boxes',data:data.weeks.map(w=>w.boxes),backgroundColor:'#4f46e599',borderColor:'#4f46e5',borderWidth:2,borderRadius:8}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#e2e8f0'}},x:{grid:{display:false}}}}});
-    } catch(e) { console.error(e); }
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('month'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/calendar')
 @login_required
 def calendar_view():
-    role = get_user_role()
-    log_activity(role, 'view', 'Calendar View')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Calendar View - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('calendar', role) + '''
+''' + sidebar('calendar') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Calendar <span>View</span></h1>
     ''' + DATE_PICKER_HTML('month') + '''
 </div>
 <div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1);font-size:24px">📦</div><div class="stat-content"><div class="stat-value" id="s-orders">-</div><div class="stat-label">Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1);font-size:24px">📮</div><div class="stat-content"><div class="stat-value" id="s-boxes">-</div><div class="stat-label">Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1);font-size:24px">⚖️</div><div class="stat-content"><div class="stat-value" id="s-weight">-</div><div class="stat-label">Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1);font-size:24px">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="s-orders">-</div></a><div class="stat-label">Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1);font-size:24px">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="s-boxes">-</div></a><div class="stat-label">Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1);font-size:24px">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="s-weight">-</div></a><div class="stat-label">Weight</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1);font-size:24px">🪶</div><div class="stat-content"><div class="stat-value" id="s-light">-</div><div class="stat-label">&lt;20 kg</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1);font-size:24px">🏋️</div><div class="stat-content"><div class="stat-value" id="s-heavy">-</div><div class="stat-label">20+ kg</div></div></div>
 </div>
@@ -2853,17 +2660,15 @@ async function loadData() {
     } catch(e) { document.getElementById('cal-grid').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('month'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/whatsapp')
 @login_required
 def whatsapp_report():
-    role = get_user_role()
-    log_activity(role, 'view', 'WhatsApp Report')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WhatsApp Report - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('whatsapp', role) + '''
+''' + sidebar('whatsapp') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">WhatsApp <span>Report</span></h1>
@@ -2888,17 +2693,15 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
 @app.route('/achievements')
 @login_required
 def achievements_page():
-    role = get_user_role()
-    log_activity(role, 'view', 'Achievements')
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Achievements - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('achievements', role) + '''
+''' + sidebar('achievements') + '''
 <main class="main-content" id="main-content">
 <div class="page-header">
     <h1 class="page-title">Provider <span>Achievements</span></h1>
@@ -2923,41 +2726,9 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role)
+</script></body></html>''')
 
-@app.route('/logs')
-@role_required(['admin'])
-def view_logs():
-    log_activity('admin', 'view', 'Activity Logs')
-    logs = []
-    try:
-        with open('activity.log', 'r') as f:
-            logs = f.readlines()[-100:]  # last 100 lines
-    except:
-        logs = ['No logs found']
-    return render_template_string('''
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Activity Logs - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('logs', 'admin') + '''
-<main class="main-content" id="main-content">
-<div class="page-header">
-    <h1 class="page-title">Activity <span>Logs</span></h1>
-</div>
-<div style="background: var(--bg-secondary); border-radius: 16px; padding: 20px;">
-    <table class="logs-table">
-        <thead><tr><th>Timestamp</th><th>Log Entry</th></tr></thead>
-        <tbody>
-        {% for log in logs %}
-            <tr><td>{{ log.split(' - ')[0] }}</td><td>{{ log.split(' - ')[1:]|join(' - ') }}</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
-</main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + ''', logs=logs)
-
-# ===== API ENDPOINTS ===== (unchanged from your original code, they already work)
+# ===== API ENDPOINTS =====
 
 @app.route('/api/dashboard')
 def api_dashboard():
@@ -3368,7 +3139,7 @@ def clear_cache():
     return jsonify({'status': 'success', 'message': 'Cache cleared'})
 
 @app.route('/orders')
-@role_required(['admin'])
+@login_required
 def order_details():
     provider_short = request.args.get('provider')
     start_str = request.args.get('start')
