@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ NEXUS CONTROL TOWER & PENDING RADAR (PREMIUM MASTER EDITION V2)
+# 🛰️ NEXUS CONTROL TOWER & PENDING RADAR (PREMIUM DUAL-THEME EDITION)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3622,7 +3622,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 NEXUS_CACHE = {}
-RADAR_CACHE = {'time': 0, 'data': None} # Special Cache for 30 Min Auto-Fetch
+RADAR_CACHE = {'time': 0, 'data': None}
 
 @app.after_request
 def inject_nexus_button(response):
@@ -3635,7 +3635,6 @@ def inject_nexus_button(response):
 
 def fetch_nexus_csv(url):
     now = time.time()
-    # Sheet memory cache: 30 Minutes (1800 seconds)
     if url in NEXUS_CACHE and now - NEXUS_CACHE[url]['time'] < 1800: return NEXUS_CACHE[url]['data']
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -3648,22 +3647,6 @@ def fetch_nexus_csv(url):
             return dict_data
     except: return []
 
-def get_alias_val(row, aliases):
-    # STEP 1: Strict Exact Match First (Prevents Vendor/Customer mix-up)
-    for k, v in row.items():
-        if k.strip().lower() in aliases:
-            val = str(v).strip()
-            if val and val.lower() not in ['n/a','nan','none','-','']: return val
-            
-    # STEP 2: Substring Match (Fallback)
-    for k, v in row.items():
-        for a in aliases:
-            if a in k.strip().lower():
-                val = str(v).strip()
-                if val and val.lower() not in ['n/a','nan','none','-','']: return val
-    return "N/A"
-
-# STRICT ALIASES DICTIONARY
 STRICT_ALIASES = {
     'order': ['fleek id','order num','_order','order id','order'], 
     'date': ['date', 'handover date', 'created at', 'created'], 
@@ -3677,7 +3660,19 @@ STRICT_ALIASES = {
     'mawb': ['awb','mawb','master','hawb']
 }
 
-# 2. SEARCH API (Ship24 Matrix)
+def get_alias_val(row, aliases):
+    for k, v in row.items():
+        if k.strip().lower() in aliases:
+            val = str(v).strip()
+            if val and val.lower() not in ['n/a','nan','none','-','']: return val
+    for k, v in row.items():
+        for a in aliases:
+            if a in k.strip().lower():
+                val = str(v).strip()
+                if val and val.lower() not in ['n/a','nan','none','-','']: return val
+    return "N/A"
+
+# 2. SEARCH API
 @app.route('/api/nexus/search', methods=['POST'])
 @login_required
 def api_nexus_search():
@@ -3704,7 +3699,7 @@ def api_nexus_search():
             if order_found: break
     return jsonify(results)
 
-# 3. SHIP24 LIVE SYNC API (Full History Timeline)
+# 3. SHIP24 LIVE SYNC API
 @app.route('/api/nexus/ship24', methods=['POST'])
 @login_required
 def api_nexus_ship24():
@@ -3730,20 +3725,17 @@ def api_nexus_ship24():
                     evs = trackings.get('events',[])
                     stat = evs[0].get('statusMilestone','Transit') if evs else 'Unknown'
                     prog = 100 if stat.lower()=='delivered' else 60
-                    
                     history = [{"status": e.get('statusMilestone', e.get('status', 'Update')), "time": e.get('datetime', 'N/A'), "location": e.get('location', '')} for e in evs]
                     responses.append({"tid": tid, "success": True, "courier": "Ship24", "current_status": stat, "progress": prog, "eta": "Calculating...", "events": history})
             except: responses.append({"tid": tid, "success": False})
     return jsonify(responses)
 
-# 4. PENDING RADAR AUTO-FETCH API (With 30-Min Fast Cache)
+# 4. PENDING RADAR AUTO-FETCH API (30-Min Cache)
 @app.route('/api/nexus/radar_data', methods=['GET'])
 @login_required
 def api_nexus_radar_data():
     global RADAR_CACHE
     now = time.time()
-    
-    # ⚡ MAGIC FIX: If 30 mins (1800s) haven't passed, return instant data! 
     if now - RADAR_CACHE['time'] < 1800 and RADAR_CACHE['data']:
         return jsonify(RADAR_CACHE['data'])
         
@@ -3757,11 +3749,9 @@ def api_nexus_radar_data():
         for row in fetch_nexus_csv(url):
             order_id = get_alias_val(row, STRICT_ALIASES['order'])
             if order_id == 'N/A': continue
-            
             status = status_map.get(order_id.lower(), "PENDING")
             tid = get_alias_val(row, STRICT_ALIASES['tid'])
             
-            # Smart TID Validation (No garbage text allowed)
             has_tid = False
             if tid != 'N/A' and len(tid) > 2 and tid.lower() not in ['pending','hold','wait','none','n/a','null']:
                 has_tid = True
@@ -3773,12 +3763,11 @@ def api_nexus_radar_data():
             elif status in qc_not_approved_statuses: buckets["qc_not_approved"][src].append(r_dict)
             elif status == "QC APPROVED": buckets["qc_approved"][src].append(r_dict)
             
-    # Save to 30-min Memory
     RADAR_CACHE['time'] = now
     RADAR_CACHE['data'] = buckets
     return jsonify(buckets)
 
-# 5. FRONTEND DASHBOARD
+# 5. FRONTEND DASHBOARD (DUAL-THEME)
 @app.route('/nexus')
 @login_required
 def nexus_dashboard():
@@ -3787,87 +3776,118 @@ def nexus_dashboard():
     <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Nexus Control Tower</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        :root { --bg:#09090b; --card:#18181b; --border:#27272a; --text:#f8fafc; --muted:#a1a1aa; --brand:#3b82f6; --brand-hover:#2563eb;}
-        body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); margin:0; padding:0; min-height:100vh; }
         
-        .navbar { background:rgba(24,24,27,0.8); backdrop-filter:blur(10px); border-bottom:1px solid var(--border); padding:15px 30px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:100; }
-        .navbar a { color:white; text-decoration:none; font-weight:800; font-size:18px;}
+        /* CSS Variables for Dual Theme Support */
+        :root { 
+            --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0; --text: #0f1015; --muted: #64748b; 
+            --brand: #0ea5e9; --brand-hover: #0284c7; --input-bg: #f1f5f9; --table-head: #f1f5f9; 
+            --hover-bg: rgba(0,0,0,0.02); --shadow: 0 4px 20px rgba(0,0,0,0.05); --track-bg: #f1f5f9;
+        }
+        
+        [data-theme="dark"] { 
+            --bg: #09090b; --card: #18181b; --border: #27272a; --text: #f8fafc; --muted: #a1a1aa; 
+            --brand: #3b82f6; --brand-hover: #2563eb; --input-bg: #09090b; --table-head: #15161e; 
+            --hover-bg: rgba(255,255,255,0.02); --shadow: 0 10px 15px -3px rgba(0,0,0,0.3); --track-bg: rgba(0,0,0,0.2);
+        }
+        
+        body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); margin:0; padding:0; min-height:100vh; transition: background 0.3s, color 0.3s; }
+        
+        /* Navbar & Header */
+        .navbar { background:var(--card); border-bottom:1px solid var(--border); padding:15px 30px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:100; box-shadow:0 2px 10px rgba(0,0,0,0.02);}
+        .navbar-brand { color:var(--text); text-decoration:none; font-weight:800; font-size:18px;}
+        .nav-actions { display:flex; gap:15px; align-items:center; }
+        .theme-btn { background:var(--input-bg); color:var(--text); border:1px solid var(--border); padding:8px 16px; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; transition:0.2s;}
+        .theme-btn:hover { border-color:var(--brand); }
+        .exit-btn { color:white; background:#ef4444; border:none; padding:8px 16px; border-radius:8px; font-weight:600; font-size:13px; text-decoration:none; transition:0.2s;}
+        .exit-btn:hover { background:#dc2626;}
+        
         .container { max-width:1200px; margin:30px auto; padding:0 20px; }
         
-        .master-nav { display:flex; gap:10px; margin-bottom:30px; background:var(--card); padding:8px; border-radius:12px; border:1px solid var(--border); overflow-x:auto;}
+        /* Master Navigation */
+        .master-nav { display:flex; gap:10px; margin-bottom:30px; background:var(--card); padding:8px; border-radius:12px; border:1px solid var(--border); overflow-x:auto; box-shadow:var(--shadow);}
         .nav-btn { background:transparent; color:var(--muted); border:none; padding:12px 20px; border-radius:8px; font-weight:600; font-size:14px; cursor:pointer; white-space:nowrap; transition:all 0.2s;}
-        .nav-btn:hover { color:white; background:rgba(255,255,255,0.05);}
-        .nav-btn.active { background:var(--border); color:white;}
+        .nav-btn:hover { color:var(--text); background:var(--hover-bg);}
+        .nav-btn.active { background:var(--border); color:var(--text);}
         .view-section { display:none; }
         .view-section.active { display:block; }
         
+        /* Search Area */
         .search-container { position:relative; margin-bottom:20px; }
-        textarea { width:100%; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; color:white; font-family:'Inter',sans-serif; font-size:15px; resize:vertical; min-height:100px; box-sizing:border-box; outline:none; transition:border 0.2s; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); }
-        textarea:focus { border-color:var(--brand); }
+        textarea { width:100%; background:var(--input-bg); border:1px solid var(--border); border-radius:12px; padding:20px; color:var(--text); font-family:'Inter',monospace; font-size:15px; resize:vertical; min-height:100px; box-sizing:border-box; outline:none; transition:border 0.2s; box-shadow:inset 0 2px 4px rgba(0,0,0,0.02); }
+        textarea:focus { border-color:var(--brand); box-shadow:0 0 0 3px rgba(14,165,233,0.1);}
         .search-actions { display:flex; gap:10px; margin-top:15px;}
         
         .btn { background:var(--brand); color:white; border:none; padding:12px 24px; border-radius:8px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:8px; transition:0.2s;}
         .btn:hover { background:var(--brand-hover); transform:translateY(-1px); }
         .btn-clear { background:transparent; border:1px solid var(--border); color:var(--muted); }
-        .btn-clear:hover { background:var(--border); color:white; }
+        .btn-clear:hover { background:var(--border); color:var(--text); }
         .btn-bulk { background:linear-gradient(to right, #6366f1, #a855f7); width:100%; justify-content:center; margin-bottom:20px; display:none; font-size:15px; padding:16px;}
         
-        .card { background:var(--card); border:1px solid var(--border); border-radius:16px; margin-bottom:24px; overflow:hidden; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1); transition:all 0.3s;}
-        .glow-green { box-shadow:0 0 20px rgba(16,185,129,0.2); border-color:#10b981; }
-        .glow-yellow { box-shadow:0 0 20px rgba(59,130,246,0.2); border-color:#3b82f6; }
-        .glow-red { box-shadow:0 0 20px rgba(239,68,104,0.2); border-color:#ef4444; }
+        /* Result Cards */
+        .card { background:var(--card); border:1px solid var(--border); border-radius:16px; margin-bottom:24px; overflow:hidden; box-shadow:var(--shadow); transition:all 0.3s;}
+        .glow-green { border-color:#10b981; box-shadow:0 0 15px rgba(16,185,129,0.2); }
+        .glow-yellow { border-color:#3b82f6; box-shadow:0 0 15px rgba(59,130,246,0.2); }
+        .glow-red { border-color:#ef4444; box-shadow:0 0 15px rgba(239,68,104,0.2); }
         
-        .card-header { padding:16px 24px; background:rgba(255,255,255,0.02); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
+        .card-header { padding:16px 24px; background:var(--hover-bg); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
         .route-flags { font-size:13px; font-weight:700; color:var(--muted); display:flex; align-items:center; gap:8px;}
-        .badge { background:rgba(255,255,255,0.05); padding:6px 12px; border-radius:6px; font-size:12px; font-weight:700; border:1px solid rgba(255,255,255,0.1);}
+        .badge { background:var(--bg); padding:6px 12px; border-radius:6px; font-size:12px; font-weight:700; border:1px solid var(--border); color:var(--text);}
         
         .card-body { padding:24px; display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:20px; }
         .grid-item { display:flex; flex-direction:column; gap:6px; }
-        .grid-label { font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:600; letter-spacing:0.5px; }
-        .grid-val { font-size:14px; font-weight:600; color:#f8fafc; word-break:break-all;}
+        .grid-label { font-size:11px; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px; }
+        .grid-val { font-size:14px; font-weight:600; color:var(--text); word-break:break-all;}
         
-        .track-area { padding:24px; background:rgba(0,0,0,0.2); border-top:1px solid var(--border); }
+        /* Timeline */
+        .track-area { padding:24px; background:var(--track-bg); border-top:1px solid var(--border); }
         .progress-bg { height:6px; background:var(--border); border-radius:10px; margin:15px 0 25px 0; overflow:hidden; position:relative;}
         .progress-fill { height:100%; background:var(--brand); width:0%; transition:1s ease-in-out; }
         
-        .timeline-box { margin-bottom:20px; background:#09090b; border:1px solid var(--border); border-radius:12px; padding:15px; max-height:220px; overflow-y:auto;}
+        .timeline-box { margin-bottom:20px; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:15px; max-height:220px; overflow-y:auto; box-shadow:inset 0 2px 4px rgba(0,0,0,0.02);}
         .timeline-event { display:flex; gap:15px; margin-bottom:12px; position:relative; }
         .timeline-event:last-child { margin-bottom:0; }
         .tl-dot { width:10px; height:10px; border-radius:50%; background:var(--brand); margin-top:4px; z-index:2;}
         .tl-line { position:absolute; left:4px; top:15px; bottom:-12px; width:2px; background:var(--border); z-index:1;}
         .timeline-event:last-child .tl-line { display:none; }
         .tl-content { display:flex; flex-direction:column; font-size:13px;}
-        .tl-status { font-weight:600; color:white; }
+        .tl-status { font-weight:600; color:var(--text); }
         .tl-time { color:var(--muted); font-size:11px; margin-top:2px;}
         
-        .eta-badge { font-size:12px; font-weight:700; color:#10b981; background:rgba(16,185,129,0.1); padding:6px 12px; border-radius:6px; border:1px solid rgba(16,185,129,0.2);}
+        .eta-badge { font-size:12px; font-weight:700; color:#059669; background:rgba(16,185,129,0.1); padding:6px 12px; border-radius:6px; border:1px solid rgba(16,185,129,0.2);}
+        [data-theme="dark"] .eta-badge { color:#10b981; }
+        
         .wa-btn { background:#16a34a; color:white; border:none; padding:10px 16px; border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:0.2s;}
         .wa-btn:hover { background:#15803d; }
         
+        /* Radar Tabs */
         .tpl-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:30px; }
-        .tpl-card { background:var(--card); border:1px solid var(--border); padding:24px; border-radius:16px; text-align:center; cursor:pointer; transition:all 0.2s;}
-        .tpl-card:hover { border-color:var(--muted); transform:translateY(-2px); box-shadow:0 10px 20px rgba(0,0,0,0.2);}
+        .tpl-card { background:var(--card); border:1px solid var(--border); padding:24px; border-radius:16px; text-align:center; cursor:pointer; transition:all 0.2s; box-shadow:var(--shadow);}
+        .tpl-card:hover { border-color:var(--brand); transform:translateY(-2px); box-shadow:0 10px 20px rgba(0,0,0,0.1);}
         .tpl-title { font-size:12px; color:var(--muted); text-transform:uppercase; font-weight:700; letter-spacing:1px; margin-bottom:12px;}
-        .tpl-count { font-size:36px; font-weight:800; color:white; }
+        .tpl-count { font-size:36px; font-weight:800; color:var(--text); }
         
-        .detail-area { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:24px; display:none; margin-top:20px; box-shadow:0 20px 40px rgba(0,0,0,0.5); position:relative;}
-        .close-btn { position:absolute; top:20px; right:20px; background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2); padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px; transition:0.2s;}
-        .close-btn:hover { background:#ef4444; color:white;}
+        /* Table Details */
+        .detail-area { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:24px; display:none; margin-top:20px; box-shadow:var(--shadow); position:relative;}
+        .close-btn { position:absolute; top:20px; right:20px; background:var(--input-bg); color:var(--muted); border:1px solid var(--border); padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px; transition:0.2s;}
+        .close-btn:hover { background:#ef4444; color:white; border-color:#ef4444;}
         
         .table-wrap { overflow-x:auto; margin-top:20px; border-radius:10px; border:1px solid var(--border);}
-        table { width:100%; border-collapse:collapse; text-align:left; background:#09090b;}
-        th { background:var(--card); padding:16px; font-size:12px; color:var(--muted); text-transform:uppercase; font-weight:600; border-bottom:1px solid var(--border); white-space:nowrap;}
-        td { padding:16px; font-size:13px; border-bottom:1px solid var(--border); color:#e2e8f0; white-space:nowrap;}
-        tr:hover { background:rgba(255,255,255,0.02); }
+        table { width:100%; border-collapse:collapse; text-align:left; background:var(--card);}
+        th { background:var(--table-head); padding:16px; font-size:12px; color:var(--muted); text-transform:uppercase; font-weight:600; border-bottom:1px solid var(--border); white-space:nowrap;}
+        td { padding:16px; font-size:13px; border-bottom:1px solid var(--border); color:var(--text); white-space:nowrap;}
+        tr:hover { background:var(--hover-bg); }
         
-        .spinner { border:3px solid rgba(255,255,255,0.1); border-top:3px solid var(--brand); border-radius:50%; width:24px; height:24px; animation:spin 1s linear infinite; margin:auto;}
+        .spinner { border:3px solid rgba(14,165,233,0.1); border-top:3px solid var(--brand); border-radius:50%; width:24px; height:24px; animation:spin 1s linear infinite; margin:auto;}
         @keyframes spin { 100% { transform:rotate(360deg); } }
     </style>
     </head>
     <body>
     <nav class="navbar">
-        <a href="#">🛰️ NEXUS CONTROL TOWER</a>
-        <a href="/" style="font-size:13px; background:var(--card); padding:8px 16px; border-radius:8px; border:1px solid var(--border);">Exit</a>
+        <div class="navbar-brand">🛰️ NEXUS CONTROL TOWER</div>
+        <div class="nav-actions">
+            <button id="theme-toggle" class="theme-btn" onclick="toggleTheme()">🌓 Theme</button>
+            <a href="/" class="exit-btn">Exit</a>
+        </div>
     </nav>
     
     <div class="container">
@@ -3891,7 +3911,7 @@ def nexus_dashboard():
             <div id="tracking-results"></div>
         </div>
 
-        <div id="radar-loader" style="padding:50px; text-align:center; display:none;"><div class="spinner"></div><br><span style="color:var(--muted); font-size:13px; display:block; margin-top:10px;">Fetching live database...</span></div>
+        <div id="radar-loader" style="padding:50px; text-align:center; display:none;"><div class="spinner"></div><br><span style="color:var(--muted); font-size:13px; display:block; margin-top:10px;">Fetching live database (Max 30-min delay)...</span></div>
         
         <div id="view-ho" class="view-section radar-view"><h2 style="font-size:20px;">📦 Handed Over (With TID)</h2><div class="tpl-grid" id="grid-ho"></div><div class="detail-area" id="detail-ho"></div></div>
         <div id="view-miss" class="view-section radar-view"><h2 style="font-size:20px;">⚠️ Missing or Invalid TIDs</h2><div class="tpl-grid" id="grid-miss"></div><div class="detail-area" id="detail-miss"></div></div>
@@ -3900,6 +3920,21 @@ def nexus_dashboard():
     </div>
 
     <script>
+        // --- THEME ENGINE ---
+        const toggleBtn = document.getElementById('theme-toggle');
+        const currentTheme = localStorage.getItem('nexus_theme') || 'light';
+        document.documentElement.setAttribute('data-theme', currentTheme);
+        toggleBtn.innerHTML = currentTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+
+        function toggleTheme() {
+            const root = document.documentElement;
+            const newTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            root.setAttribute('data-theme', newTheme);
+            localStorage.setItem('nexus_theme', newTheme);
+            toggleBtn.innerHTML = newTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+        }
+
+        // --- NAVIGATION & CACHE ---
         let radarDataLoaded = false;
         
         async function switchMainView(viewId) {
@@ -3924,6 +3959,7 @@ def nexus_dashboard():
             }
         }
 
+        // --- TRACKING ENGINE ---
         let allCardsData = [];
         function getFlag(c) { c=String(c).toLowerCase(); return c.includes('pk')?'🇵🇰':c.includes('cn')?'🇨🇳':c.includes('ae')?'🇦🇪':c.includes('uk')?'🇬🇧':c.includes('us')?'🇺🇸':'🏳️'; }
 
@@ -3980,7 +4016,7 @@ def nexus_dashboard():
                     </div>
                     <div class="track-area">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-weight:600; font-size:14px;">Ship24 Live Tracking History</span>
+                            <span style="font-weight:600; font-size:14px; color:var(--text);">Ship24 Live Tracking History</span>
                             <span class="eta-badge" id="eta-${idx}">⏳ Pending Scan</span>
                         </div>
                         <div class="progress-bg"><div class="progress-fill" id="prog-${idx}"></div></div>
@@ -4037,6 +4073,12 @@ def nexus_dashboard():
                 document.getElementById(`prog-${idx}`).style.width = avgProg + '%';
                 logBox.innerHTML = eventsHtml || '<span style="color:var(--muted); padding:10px;">No tracking events found yet.</span>';
                 
+                const card = document.getElementById(`card-${idx}`);
+                card.classList.remove('glow-green', 'glow-yellow', 'glow-red');
+                if(avgProg === 100) card.classList.add('glow-green');
+                else if(avgProg > 0) card.classList.add('glow-yellow');
+                else card.classList.add('glow-red');
+                
             } catch(e) {
                 logBox.innerHTML = '<span style="color:#ef4444; padding:10px;">Ship24 API Error.</span>';
             }
@@ -4048,6 +4090,7 @@ def nexus_dashboard():
             window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
         }
 
+        // --- PENDING RADAR LOGIC ---
         let radarData = null;
         const bucketMap = {'view-ho': 'handed_over', 'view-miss': 'missing_tid', 'view-proc': 'qc_not_approved', 'view-qc': 'qc_approved'};
 
@@ -4058,7 +4101,7 @@ def nexus_dashboard():
                 let gridHtml = '';
                 Object.keys(radarData[bucketName]).forEach(tplName => {
                     const count = radarData[bucketName][tplName].length;
-                    const color = viewId==='view-miss'?'#ef4444':viewId==='view-ho'?'#f59e0b':viewId==='view-proc'?'#a855f7':'#10b981';
+                    const color = viewId==='view-miss'?'#ef4444':viewId==='view-ho'?'#f59e0b':viewId==='view-proc'?'#8b5cf6':'#10b981';
                     gridHtml += `<div class="tpl-card" onclick="openDetails('${viewId}', '${tplName}')"><div class="tpl-title">${tplName}</div><div class="tpl-count" style="color:${color}">${count}</div></div>`;
                 });
                 document.getElementById(`grid-${suffix}`).innerHTML = gridHtml;
