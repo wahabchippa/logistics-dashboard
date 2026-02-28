@@ -2718,7 +2718,6 @@ def add_notification(msg):
 @app.route('/orders')
 @role_required(['admin'])
 def order_details():
-    # (same as before, unchanged)
     provider_short = request.args.get('provider')
     start_str = request.args.get('start')
     end_str = request.args.get('end')
@@ -2842,7 +2841,7 @@ def order_details():
     <title>Order Details - {{ provider_short }}</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    ''' + FAVICON + '''
+    {{ favicon|safe }}
     <style>
         body { background: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; padding: 20px; }
         h1 { color: #4f46e5; }
@@ -2891,7 +2890,4 @@ def order_details():
     </table>
 </body>
 </html>
-    ''', orders=orders, provider_short=provider_short_display, region=region, day=day)
-
-if __name__ == '__main__':
-    app.run(debug=True)
+    ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
