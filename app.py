@@ -1857,83 +1857,398 @@ def comparison():
     <h1 class="page-title">Provider <span>Comparison</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
+
+<!-- Tabs -->
 <div class="tabs">
-<button class="tab-btn active" onclick="showTab(this,'ge-ecl')">GE vs ECL</button>
-<button class="tab-btn" onclick="showTab(this,'qc-zone')">QC vs ZONE</button>
-<button class="tab-btn" onclick="showTab(this,'all')">All Providers</button>
+    <button class="tab-btn active" onclick="showTab(this, 'ge-ecl')">GE vs ECL</button>
+    <button class="tab-btn" onclick="showTab(this, 'qc-zone')">QC vs ZONE</button>
+    <button class="tab-btn" onclick="showTab(this, 'all')">All Providers</button>
 </div>
+
+<!-- Content -->
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
+
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<style>
+    /* Comparison specific styles */
+    .comparison-grid {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 24px;
+        align-items: start;
+        margin-bottom: 30px;
+    }
+    .comparison-card {
+        background: var(--bg-card);
+        border-radius: 24px;
+        border: 1px solid var(--border-color);
+        padding: 24px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+        transition: all 0.2s;
+    }
+    .comparison-card:hover {
+        box-shadow: 0 12px 24px rgba(79,70,229,0.08);
+        border-color: var(--brand-color);
+    }
+    .comparison-vs {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--brand-color);
+        background: var(--bg-card);
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        border: 2px solid var(--border-color);
+        margin: 0 auto;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .comparison-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 2px solid var(--border-color);
+    }
+    .comparison-color {
+        width: 8px;
+        height: 40px;
+        border-radius: 4px;
+    }
+    .comparison-name {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+    .comparison-stats {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .comparison-stat {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px dashed var(--border-color);
+    }
+    .comparison-stat:last-child {
+        border-bottom: none;
+    }
+    .comparison-stat-label {
+        color: var(--text-muted);
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .comparison-stat-value {
+        color: var(--text-main);
+        font-size: 18px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .winner-indicator {
+        color: #fbbf24;
+        font-size: 20px;
+        filter: drop-shadow(0 2px 4px rgba(251,191,36,0.3));
+    }
+    .trend-badge.small {
+        font-size: 12px;
+        padding: 2px 8px;
+        margin-left: 8px;
+    }
+    .all-providers-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--bg-card);
+        border-radius: 24px;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+    }
+    .all-providers-table th {
+        background: var(--table-hdr);
+        padding: 16px 12px;
+        text-align: left;
+        font-weight: 600;
+        color: var(--text-muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        border-bottom: 2px solid var(--brand-color);
+    }
+    .all-providers-table td {
+        padding: 14px 12px;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-main);
+        font-size: 14px;
+    }
+    .all-providers-table tr:last-child td {
+        border-bottom: none;
+    }
+    .all-providers-table tr:hover td {
+        background: var(--hover-bg);
+    }
+    .provider-cell {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .provider-color-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+    }
+    .avg-badge {
+        background: var(--hover-bg);
+        padding: 4px 10px;
+        border-radius: 30px;
+        font-size: 12px;
+        color: var(--text-muted);
+        border: 1px solid var(--border-color);
+        margin-left: 8px;
+    }
+    .tab-btn {
+        padding: 8px 24px;
+        font-size: 14px;
+        font-weight: 600;
+    }
+</style>
+
 <script>
-let curTab = 'ge-ecl'; let curData = null;
+let curTab = 'ge-ecl';
+let curData = null;
+
 function showTab(btn, tab) {
     curTab = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     renderComparison();
 }
-function renderCard(p1, p2) {
-    const stats = ['total_orders','total_boxes','total_weight'];
-    const labels = ['Orders','Boxes','Weight (kg)'];
-    let s1='',s2='';
-    stats.forEach((s,i) => {
-        const v1=p1[s], v2=p2[s];
-        const w1 = v1>v2 ? '<span class="winner-indicator">👑</span>' : '';
-        const w2 = v2>v1 ? '<span class="winner-indicator">👑</span>' : '';
-        const f1 = s==='total_weight' ? formatWeight(v1) : v1.toLocaleString();
-        const f2 = s==='total_weight' ? formatWeight(v2) : v2.toLocaleString();
-        s1+=`<div class="comparison-stat"><span class="comparison-stat-label">${labels[i]}</span><span class="comparison-stat-value">${f1}${w1}</span></div>`;
-        s2+=`<div class="comparison-stat"><span class="comparison-stat-label">${labels[i]}</span><span class="comparison-stat-value">${f2}${w2}</span></div>`;
+
+function renderCard(p1, p2, title1, title2) {
+    const stats = [
+        { key: 'total_orders', label: 'Orders' },
+        { key: 'total_boxes', label: 'Boxes' },
+        { key: 'total_weight', label: 'Weight (kg)' }
+    ];
+    
+    let stats1 = '', stats2 = '';
+    
+    stats.forEach(s => {
+        const v1 = p1[s.key];
+        const v2 = p2[s.key];
+        const isWinner1 = v1 > v2;
+        const isWinner2 = v2 > v1;
+        const display1 = s.key === 'total_weight' ? formatWeight(v1) : v1.toLocaleString();
+        const display2 = s.key === 'total_weight' ? formatWeight(v2) : v2.toLocaleString();
+        
+        stats1 += `<div class="comparison-stat">
+            <span class="comparison-stat-label">${s.label}</span>
+            <span class="comparison-stat-value">
+                ${display1}
+                ${isWinner1 ? '<span class="winner-indicator">👑</span>' : ''}
+            </span>
+        </div>`;
+        
+        stats2 += `<div class="comparison-stat">
+            <span class="comparison-stat-label">${s.label}</span>
+            <span class="comparison-stat-value">
+                ${display2}
+                ${isWinner2 ? '<span class="winner-indicator">👑</span>' : ''}
+            </span>
+        </div>`;
     });
-    return `<div class="comparison-grid"><div class="comparison-card"><div class="comparison-header"><div class="comparison-color" style="background:${p1.color}"></div><div class="comparison-name">${p1.short||p1.name}</div></div>${s1}</div><div class="comparison-vs">VS</div><div class="comparison-card"><div class="comparison-header"><div class="comparison-color" style="background:${p2.color}"></div><div class="comparison-name">${p2.short||p2.name}</div></div>${s2}</div></div>`;
+    
+    // Add average weight per order
+    const avg1 = p1.total_orders > 0 ? (p1.total_weight / p1.total_orders).toFixed(1) : '0';
+    const avg2 = p2.total_orders > 0 ? (p2.total_weight / p2.total_orders).toFixed(1) : '0';
+    const avgWinner1 = parseFloat(avg1) > parseFloat(avg2);
+    const avgWinner2 = parseFloat(avg2) > parseFloat(avg1);
+    
+    stats1 += `<div class="comparison-stat">
+        <span class="comparison-stat-label">Avg W/Order</span>
+        <span class="comparison-stat-value">
+            ${avg1} kg
+            ${avgWinner1 ? '<span class="winner-indicator">👑</span>' : ''}
+        </span>
+    </div>`;
+    
+    stats2 += `<div class="comparison-stat">
+        <span class="comparison-stat-label">Avg W/Order</span>
+        <span class="comparison-stat-value">
+            ${avg2} kg
+            ${avgWinner2 ? '<span class="winner-indicator">👑</span>' : ''}
+        </span>
+    </div>`;
+    
+    return `<div class="comparison-grid">
+        <div class="comparison-card">
+            <div class="comparison-header">
+                <div class="comparison-color" style="background:${p1.color}"></div>
+                <div class="comparison-name">${title1 || p1.short || p1.name}</div>
+            </div>
+            <div class="comparison-stats">
+                ${stats1}
+            </div>
+        </div>
+        <div class="comparison-vs">VS</div>
+        <div class="comparison-card">
+            <div class="comparison-header">
+                <div class="comparison-color" style="background:${p2.color}"></div>
+                <div class="comparison-name">${title2 || p2.short || p2.name}</div>
+            </div>
+            <div class="comparison-stats">
+                ${stats2}
+            </div>
+        </div>
+    </div>`;
 }
-function renderComparison() {
-    if (!curData) return;
-    const ps = curData.providers; let html = '';
+
+function renderAllProviders(providers) {
+    let html = `<table class="all-providers-table">
+        <thead>
+            <tr>
+                <th>Provider</th>
+                <th style="text-align:right">Orders</th>
+                <th style="text-align:right">Boxes</th>
+                <th style="text-align:right">Weight (kg)</th>
+                <th style="text-align:right">Avg/Order</th>
+                <th style="text-align:right">Light/Heavy</th>
+            </tr>
+        </thead>
+        <tbody>`;
+    
     const role = '{{ role }}';
     const canClick = role === 'admin';
+    
+    providers.sort((a, b) => b.total_boxes - a.total_boxes).forEach(p => {
+        const avg = p.total_orders > 0 ? (p.total_weight / p.total_orders).toFixed(1) : '0';
+        const lightPct = p.total_orders > 0 ? Math.round((p.total_under20 / p.total_orders) * 100) : 0;
+        
+        if (canClick) {
+            html += `<tr>
+                <td>
+                    <div class="provider-cell">
+                        <div class="provider-color-dot" style="background:${p.color}"></div>
+                        <span>${p.short || p.name}</span>
+                    </div>
+                </td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right">${avg} kg</td>
+                <td style="text-align:right"><span class="avg-badge">${p.total_under20} / ${p.total_over20}</span></td>
+            </tr>`;
+        } else {
+            html += `<tr>
+                <td>
+                    <div class="provider-cell">
+                        <div class="provider-color-dot" style="background:${p.color}"></div>
+                        <span>${p.short || p.name}</span>
+                    </div>
+                </td>
+                <td style="text-align:right">${p.total_orders.toLocaleString()}</td>
+                <td style="text-align:right">${p.total_boxes.toLocaleString()}</td>
+                <td style="text-align:right">${formatWeight(p.total_weight)}</td>
+                <td style="text-align:right">${avg} kg</td>
+                <td style="text-align:right"><span class="avg-badge">${p.total_under20} / ${p.total_over20}</span></td>
+            </tr>`;
+        }
+    });
+    
+    html += `</tbody></table>`;
+    return html;
+}
+
+function renderComparison() {
+    if (!curData || !curData.providers) return;
+    
+    const ps = curData.providers;
+    let html = '';
+    
     if (curTab === 'ge-ecl') {
-        const ge = ps.filter(p=>p.group==='GE'); const ecl = ps.filter(p=>p.group==='ECL');
-        const geT = {name:'GE Total',short:'GE Total',color:'#3B82F6',total_orders:ge.reduce((s,p)=>s+p.total_orders,0),total_boxes:ge.reduce((s,p)=>s+p.total_boxes,0),total_weight:ge.reduce((s,p)=>s+p.total_weight,0)};
-        const eclT = {name:'ECL Total',short:'ECL Total',color:'#10B981',total_orders:ecl.reduce((s,p)=>s+p.total_orders,0),total_boxes:ecl.reduce((s,p)=>s+p.total_boxes,0),total_weight:ecl.reduce((s,p)=>s+p.total_weight,0)};
-        html = '<h3 style="color:#4f46e5;margin-bottom:20px">Global Express vs ECL Logistics</h3>'+renderCard(geT,eclT);
+        const ge = ps.filter(p => p.group === 'GE');
+        const ecl = ps.filter(p => p.group === 'ECL');
+        
+        const geTotal = {
+            name: 'GE Total',
+            short: 'GE Total',
+            color: '#3B82F6',
+            total_orders: ge.reduce((s, p) => s + p.total_orders, 0),
+            total_boxes: ge.reduce((s, p) => s + p.total_boxes, 0),
+            total_weight: ge.reduce((s, p) => s + p.total_weight, 0),
+            total_under20: ge.reduce((s, p) => s + p.total_under20, 0),
+            total_over20: ge.reduce((s, p) => s + p.total_over20, 0)
+        };
+        
+        const eclTotal = {
+            name: 'ECL Total',
+            short: 'ECL Total',
+            color: '#10B981',
+            total_orders: ecl.reduce((s, p) => s + p.total_orders, 0),
+            total_boxes: ecl.reduce((s, p) => s + p.total_boxes, 0),
+            total_weight: ecl.reduce((s, p) => s + p.total_weight, 0),
+            total_under20: ecl.reduce((s, p) => s + p.total_under20, 0),
+            total_over20: ecl.reduce((s, p) => s + p.total_over20, 0)
+        };
+        
+        html = '<h3 style="color:var(--brand-color); margin-bottom:24px; font-size:18px;">Global Express vs ECL Logistics</h3>';
+        html += renderCard(geTotal, eclTotal, 'GE Total', 'ECL Total');
+        
     } else if (curTab === 'qc-zone') {
-        const qc = ps.filter(p=>p.name.includes('QC')); const zn = ps.filter(p=>p.name.includes('ZONE'));
-        const qcT = {short:'QC Total',color:'#8B5CF6',total_orders:qc.reduce((s,p)=>s+p.total_orders,0),total_boxes:qc.reduce((s,p)=>s+p.total_boxes,0),total_weight:qc.reduce((s,p)=>s+p.total_weight,0)};
-        const znT = {short:'Zone Total',color:'#F59E0B',total_orders:zn.reduce((s,p)=>s+p.total_orders,0),total_boxes:zn.reduce((s,p)=>s+p.total_boxes,0),total_weight:zn.reduce((s,p)=>s+p.total_weight,0)};
-        html = '<h3 style="color:#4f46e5;margin-bottom:20px">QC Center vs Zone</h3>'+renderCard(qcT,znT);
+        const qc = ps.filter(p => p.name.includes('QC'));
+        const zone = ps.filter(p => p.name.includes('ZONE'));
+        
+        const qcTotal = {
+            name: 'QC Total',
+            short: 'QC Total',
+            color: '#8B5CF6',
+            total_orders: qc.reduce((s, p) => s + p.total_orders, 0),
+            total_boxes: qc.reduce((s, p) => s + p.total_boxes, 0),
+            total_weight: qc.reduce((s, p) => s + p.total_weight, 0),
+            total_under20: qc.reduce((s, p) => s + p.total_under20, 0),
+            total_over20: qc.reduce((s, p) => s + p.total_over20, 0)
+        };
+        
+        const zoneTotal = {
+            name: 'Zone Total',
+            short: 'Zone Total',
+            color: '#F59E0B',
+            total_orders: zone.reduce((s, p) => s + p.total_orders, 0),
+            total_boxes: zone.reduce((s, p) => s + p.total_boxes, 0),
+            total_weight: zone.reduce((s, p) => s + p.total_weight, 0),
+            total_under20: zone.reduce((s, p) => s + p.total_under20, 0),
+            total_over20: zone.reduce((s, p) => s + p.total_over20, 0)
+        };
+        
+        html = '<h3 style="color:var(--brand-color); margin-bottom:24px; font-size:18px;">QC Center vs Zone</h3>';
+        html += renderCard(qcTotal, zoneTotal, 'QC Total', 'Zone Total');
+        
     } else {
-        html = '<div class="provider-card"><table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th style="text-align:right">Avg/Order</th></tr></thead><tbody>';
-        ps.sort((a,b)=>b.total_boxes-a.total_boxes).forEach(p => {
-            const avg = p.total_orders>0 ? (p.total_weight/p.total_orders).toFixed(1) : 0;
-            if (canClick) {
-                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
-                    <td style="text-align:right">${avg} kg</td></tr>`;
-            } else {
-                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
-                    <td style="text-align:right">${p.total_orders.toLocaleString()}</td>
-                    <td style="text-align:right">${p.total_boxes.toLocaleString()}</td>
-                    <td style="text-align:right">${formatWeight(p.total_weight)}</td>
-                    <td style="text-align:right">${avg} kg</td></tr>`;
-            }
-        });
-        html += '</tbody></table></div>';
+        html = '<h3 style="color:var(--brand-color); margin-bottom:24px; font-size:18px;">All Providers Comparison</h3>';
+        html += renderAllProviders(ps);
     }
+    
     document.getElementById('content').innerHTML = html;
 }
+
 async function loadData() {
     document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
         const r = await fetch('/api/dashboard?' + dpParams());
         curData = await r.json();
         renderComparison();
-    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+    } catch(e) {
+        document.getElementById('content').innerHTML = '<div style="color:#ef4444; text-align:center; padding:40px;">Error loading data: ' + e.message + '</div>';
+    }
 }
-dpInit('week'); loadData();
+
+dpInit('week');
+loadData();
 </script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/regions')
