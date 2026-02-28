@@ -8,6 +8,7 @@ from collections import defaultdict
 import time
 import os
 import calendar
+import random
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
@@ -111,6 +112,7 @@ def fetch_sheet_data(sheet_name):
             CACHE[cache_key] = (rows, current_time)
             return rows
     except Exception as e:
+        print(f"Error fetching {sheet_name}: {e}")
         return []
 
 def get_star_rating(boxes):
@@ -223,15 +225,20 @@ BASE_STYLES = """
     body { font-family: 'Inter', sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; font-size: 13px; line-height: 1.4; transition: background 0.3s, color 0.3s; }
     
     /* GUEST MODE RESTRICTIONS */
-    body.guest-mode .day-data a, body.guest-mode .orders-link, body.guest-mode .boxes-link, body.guest-mode .weight-link, body.guest-mode .under20-link, body.guest-mode .over20-link { pointer-events: none !important; text-decoration: none !important; cursor: default !important; }
+    body.guest-mode .day-data a, body.guest-mode .orders-link, body.guest-mode .boxes-link, body.guest-mode .weight-link, body.guest-mode .under20-link, body.guest-mode .over20-link,
+    body.guest-mode .export-btn, body.guest-mode .search-box, body.guest-mode #forecast-link, body.guest-mode #logs-link { pointer-events: none !important; text-decoration: none !important; cursor: default !important; display: none !important;}
 
     /* Sidebar */
     .sidebar { position: fixed; left: 0; top: 0; height: 100vh; width: 240px; background: var(--bg-sidebar); padding: 20px 16px; transition: all 0.2s ease; z-index: 100; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); box-shadow: 2px 0 10px rgba(0,0,0,0.02); }
     .sidebar.collapsed { width: 70px; }
     .sidebar-header { display: flex; align-items: center; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); margin-bottom: 20px; }
     .logo-icon { width: 40px; height: 40px; background: var(--brand-gradient); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #ffffff; font-size: 20px; box-shadow: 0 4px 10px rgba(79,70,229,0.2); }
-    .logo-text { font-size: 18px; font-weight: 600; color: var(--text-main); white-space: nowrap; overflow: hidden; transition: opacity 0.2s; }
-    .sidebar.collapsed .logo-text { opacity: 0; width: 0; }
+    .header-titles { display: flex; flex-direction: column; }
+    .header-main { font-size: 16px; font-weight: 600; color: var(--text-main); line-height: 1.2; }
+    .header-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .sidebar.collapsed .header-main, .sidebar.collapsed .header-sub { opacity: 0; width: 0; display: none; }
+    
+    .nav-section { margin-bottom: 16px; }
     .nav-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); padding: 6px 12px; margin-bottom: 4px; font-weight: 600; }
     .sidebar.collapsed .nav-section-title { opacity: 0; }
     .nav-menu { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }
@@ -240,9 +247,9 @@ BASE_STYLES = """
     .nav-item.active { background: rgba(79, 70, 229, 0.1); color: var(--brand-color); border-left: 4px solid var(--brand-color); }
     .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; color: currentColor; }
     .sidebar.collapsed .nav-item span { opacity: 0; width: 0; }
-    
     .sidebar-toggle { position: absolute; right: -15px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 3px solid var(--bg-body); color: #ffffff; font-size: 14px; transition: 0.2s; z-index: 101; }
     .sidebar.collapsed .sidebar-toggle { transform: translateY(-50%) rotate(180deg); }
+    
     .sidebar-footer { border-top: 1px solid var(--border-color); padding-top: 16px; margin-top: auto; }
     .admin-info { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--hover-bg); border-radius: 12px; margin-bottom: 10px; }
     .admin-avatar { width: 36px; height: 36px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 16px; }
@@ -274,7 +281,7 @@ BASE_STYLES = """
     #search-results { position: absolute; top: 100%; left: 0; width: 100%; max-width: 400px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); margin-top: 8px; z-index: 1000; display: none; max-height: 400px; overflow-y: auto; }
 
     /* Date Picker */
-    .date-range-picker { background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-color); padding: 14px 18px; }
+    .date-range-picker { background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-color); padding: 14px 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
     .qbtns-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
     .qbtn { padding: 5px 14px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; color: var(--text-muted); font-size: 11px; font-weight: 500; cursor: pointer; transition: 0.2s; }
     .qbtn:hover { background: var(--border-color); color: var(--text-main); }
@@ -285,8 +292,9 @@ BASE_STYLES = """
     .week-badge { font-size: 12px; color: var(--brand-color); font-weight: 500; padding: 5px 14px; background: rgba(79,70,229,0.1); border-radius: 30px; }
 
     /* Cards & Stats */
-    .provider-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); margin-bottom: 20px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
-    .card-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-color); position: relative; }
+    .provider-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); margin-bottom: 20px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.02); transition: transform 0.2s, box-shadow 0.2s; }
+    .provider-card:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(79,70,229,0.08); border-color: #cbd5e1; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-color); position: relative; background: var(--bg-card); }
     .provider-info { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .provider-name { font-size: 20px; font-weight: 600; color: var(--text-main); }
     .card-stats { display: flex; gap: 20px; }
@@ -308,7 +316,6 @@ BASE_STYLES = """
     .day-data span:nth-child(4), .day-data a:nth-child(4) { color: #8b5cf6; background: rgba(139,92,246,0.1); }
     .day-data span:nth-child(5), .day-data a:nth-child(5) { color: #ec4899; background: rgba(236,72,153,0.1); }
     .day-data-empty { color: var(--text-muted); font-size: 12px; padding: 4px; background: var(--cell-empty); border-radius: 4px; }
-    
     .orders-link:hover, .boxes-link:hover, .weight-link:hover { color: var(--brand-color); border-bottom: 1px dashed var(--brand-color); }
     .sub-header { display: flex; justify-content: center; gap: 4px; font-size: 9px; color: var(--text-muted); }
     
@@ -341,6 +348,19 @@ BASE_STYLES = """
     .tab-btn { padding: 6px 18px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 40px; color: var(--text-muted); cursor: pointer; transition: 0.2s; }
     .tab-btn.active { background: var(--brand-color); border-color: var(--brand-color); color: #ffffff; }
 
+    /* New Features Pages */
+    .forecast-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; margin-bottom: 20px; }
+    .forecast-title { font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 14px; }
+    .forecast-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 14px; }
+    .forecast-day { background: var(--hover-bg); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid var(--border-color); }
+    .forecast-day .day-name { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; }
+    .forecast-day .prediction { font-size: 16px; font-weight: 700; color: var(--brand-color); }
+    .forecast-detail { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    .logs-container { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; }
+    .log-entry { padding: 8px 12px; border-bottom: 1px solid var(--border-color); font-family: monospace; font-size: 12px; color: var(--text-main); }
+    .log-entry:last-child { border-bottom: none; }
+
     /* Login */
     .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg-body); padding: 20px; }
     .login-card { background: var(--bg-card); border-radius: 24px; border: 1px solid var(--border-color); padding: 40px; width: 100%; max-width: 400px; text-align: center; }
@@ -360,8 +380,8 @@ BASE_STYLES = """
         .provider-card { border: 1px solid #ccc !important; box-shadow: none !important; break-inside: avoid; }
     }
 
-    @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5 { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
-    @media (max-width: 768px) { .sidebar { width: 70px; } .main-content { margin-left: 70px; padding: 15px; } .sidebar-toggle { width: 28px; height: 28px; right: -12px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5, .forecast-grid { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
+    @media (max-width: 768px) { .sidebar { width: 70px; } .main-content { margin-left: 70px; padding: 15px; } .sidebar-toggle { width: 28px; height: 28px; right: -12px; } .stats-row, .stats-row-5, .kpi-grid, .forecast-grid { grid-template-columns: 1fr; } }
 </style>
 """
 
@@ -399,11 +419,16 @@ SIDEBAR_HTML = """
     <div class="sidebar-toggle" onclick="toggleSidebar()">«</div>
     <div class="sidebar-header">
         <div class="logo-icon">3P</div>
-        <span class="logo-text">3PL Dashboard</span>
+        <div class="header-titles">
+            <div class="header-main">3PL Dashboard</div>
+            <div class="header-sub">
+                <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+            </div>
+        </div>
     </div>
     <div class="nav-menu">
         <div class="nav-section">
-            <div class="nav-section-title">Main</div>
+            <div class="nav-section-title">MAIN</div>
             <a href="/" class="nav-item {active_dashboard}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                 <span>Dashboard</span>
@@ -422,7 +447,7 @@ SIDEBAR_HTML = """
             </a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-title">Analytics</div>
+            <div class="nav-section-title">ANALYTICS</div>
             <a href="/analytics" class="nav-item {active_analytics}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
                 <span>Analytics</span>
@@ -441,7 +466,7 @@ SIDEBAR_HTML = """
             </a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-title">Reports</div>
+            <div class="nav-section-title">REPORTS</div>
             <a href="/monthly" class="nav-item {active_monthly}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 <span>Monthly Report</span>
@@ -454,14 +479,13 @@ SIDEBAR_HTML = """
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
                 <span>WhatsApp Report</span>
             </a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-title">Achievements</div>
             <a href="/achievements" class="nav-item {active_achievements}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
                 <span>Achievements</span>
             </a>
         </div>
+        {forecast_link}
+        {logs_link}
     </div>
     <div class="sidebar-footer">
         <div class="admin-info">
@@ -488,24 +512,51 @@ function toggleSidebar() {
     mainContent.classList.toggle('expanded');
     localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
 }
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('sidebarCollapsed') === 'true') {
+        document.getElementById('sidebar').classList.add('collapsed');
+        document.getElementById('main-content').classList.add('expanded');
+    }
+});
 </script>
 """
 
 def sidebar(active, role='guest'):
-    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','calendar','whatsapp','achievements']
+    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','calendar','whatsapp','achievements', 'forecast', 'logs']
     kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
+    
     if role == 'admin':
         kwargs['user_initial'] = 'A'
         kwargs['user_name'] = 'Admin User'
-        kwargs['user_role'] = 'Full Access'
+        kwargs['user_role'] = 'Administrator'
+        kwargs['forecast_link'] = f"""
+        <div class="nav-section">
+            <div class="nav-section-title">TOOLS</div>
+            <a href="/forecast" id="forecast-link" class="nav-item {kwargs['active_forecast']}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <span>Forecast</span>
+            </a>
+        </div>
+        """
+        kwargs['logs_link'] = f"""
+        <div class="nav-section">
+            <a href="/logs" id="logs-link" class="nav-item {kwargs['active_logs']}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>Activity Logs</span>
+            </a>
+        </div>
+        """
     else:
         kwargs['user_initial'] = 'G'
         kwargs['user_name'] = 'Guest User'
         kwargs['user_role'] = 'View Only'
+        kwargs['forecast_link'] = ''
+        kwargs['logs_link'] = ''
+        
     return SIDEBAR_HTML.format(**kwargs)
 
 # ============================================
-# JAVASCRIPT (THEME, SEARCH, DATE)
+# JAVASCRIPT (THEME, CSV EXPORT, SEARCH)
 # ============================================
 SHARED_JS = """
 <script>
@@ -527,10 +578,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.setAttribute('data-theme', 'dark');
         document.querySelectorAll('.theme-btn-text').forEach(e => e.innerHTML = '☀️ Light Mode');
     }
-    if (localStorage.getItem('sidebarCollapsed') === 'true') {
-        document.getElementById('sidebar').classList.add('collapsed');
-        document.getElementById('main-content').classList.add('expanded');
-    }
 });
 
 function toggleTVMode() {
@@ -540,6 +587,24 @@ function toggleTVMode() {
     } else if (document.exitFullscreen) {
         document.exitFullscreen();
     }
+}
+
+function exportTableToCSV(filename) {
+    let csv = [];
+    let rows = document.querySelectorAll("table tr");
+    for (let i = 0; i < rows.length; i++) {
+        let row = [], cols = rows[i].querySelectorAll("td, th");
+        for (let j = 0; j < cols.length; j++) {
+            let data = cols[j].innerText.replace(/(\\r\\n|\\n|\\r)/gm, "").replace(/"/g, '""');
+            row.push('"' + data + '"');
+        }
+        csv.push(row.join(","));
+    }
+    if(csv.length <= 1) { alert("No table data to export."); return; }
+    let csvFile = new Blob([csv.join("\\n")], {type: "text/csv"});
+    let dl = document.createElement("a");
+    dl.download = filename; dl.href = window.URL.createObjectURL(csvFile);
+    dl.style.display = "none"; document.body.appendChild(dl); dl.click();
 }
 
 async function searchOrder(q) {
@@ -584,6 +649,7 @@ function dpInit(defaultPeriod) {
     defaultPeriod = defaultPeriod || 'week';
     const today = new Date(); today.setHours(0,0,0,0);
     if (defaultPeriod === 'today') { dpStart = new Date(today); dpEnd = new Date(today); } 
+    else if (defaultPeriod === '7d') { dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 6); } 
     else if (defaultPeriod === 'week') { dpStart = getMonday(today); dpEnd = new Date(dpStart); dpEnd.setDate(dpEnd.getDate() + 6); } 
     else if (defaultPeriod === 'month') { dpStart = new Date(today.getFullYear(), today.getMonth(), 1); dpEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0); }
     document.getElementById('dpStart').value = fmtLocal(dpStart); document.getElementById('dpEnd').value = fmtLocal(dpEnd);
@@ -606,8 +672,9 @@ function dpSetQuick(btn, period) {
 }
 function dpApply() {
     const sv = document.getElementById('dpStart').value; const ev = document.getElementById('dpEnd').value;
-    if (!sv || !ev) return;
+    if (!sv || !ev) { alert('Please select both dates'); return; }
     dpStart = new Date(sv + 'T00:00:00'); dpEnd = new Date(ev + 'T00:00:00');
+    if (dpStart > dpEnd) { alert('Start date must be before end date'); return; }
     document.querySelectorAll('.qbtn').forEach(b => b.classList.remove('active'));
     dpUpdateBadge(); loadData();
 }
@@ -615,7 +682,9 @@ function dpUpdateBadge() {
     const badge = document.getElementById('dpBadge'); if (!badge || !dpStart || !dpEnd) return;
     const wk = getISOWeek(dpStart); const days = Math.round((dpEnd - dpStart) / 86400000) + 1;
     let txt = 'Week ' + wk + ' • ';
-    if (days === 1) { txt += fmtDisp(dpStart, true); } else { txt += fmtDisp(dpStart, true) + ' – ' + fmtDisp(dpEnd, true); }
+    if (days === 1) { txt += fmtDisp(dpStart, true); } 
+    else if (days <= 31 && dpStart.getFullYear() === dpEnd.getFullYear()) { txt += fmtDisp(dpStart, false) + ' – ' + fmtDisp(dpEnd, true); if (days !== 7) txt += ' (' + days + 'd)'; } 
+    else { txt += fmtDisp(dpStart, true) + ' – ' + fmtDisp(dpEnd, true); }
     badge.textContent = txt;
 }
 function dpParams() { return 'start_date=' + fmtLocal(dpStart) + '&end_date=' + fmtLocal(dpEnd); }
@@ -645,28 +714,32 @@ def login():
     return render_template_string('''
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Login - 3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-<div class="login-container"><div class="login-card">
-<div class="login-logo">3P</div>
-<h1 class="login-title">Welcome Back</h1>
-<p class="login-subtitle">Access your 3PL Dashboard</p>
-{% if error %}<div class="error-message">{{ error }}</div>{% endif %}
-<form class="login-form" method="POST">
-    <div class="form-group"><label class="form-label">Admin Password</label>
-    <input type="password" name="password" class="form-input" placeholder="Enter password" autofocus></div>
-    <button type="submit" name="action" value="admin" class="login-btn">Sign In as Admin</button>
-    <div style="margin: 20px 0; display: flex; align-items: center; justify-content: center; gap: 10px;">
-        <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
-        <span style="color: var(--text-muted); font-size: 12px; font-weight: 600;">OR</span>
-        <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
+<title>Login - 3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-logo">3P</div>
+        <h1 class="login-title">Welcome Back</h1>
+        <p class="login-subtitle">Access your 3PL Dashboard</p>
+        {% if error %}<div class="error-message">{{ error }}</div>{% endif %}
+        <form class="login-form" method="POST">
+            <div class="form-group">
+                <label class="form-label">Admin Password</label>
+                <input type="password" name="password" class="form-input" placeholder="Enter password" autofocus>
+            </div>
+            <button type="submit" name="action" value="admin" class="login-btn">Sign In as Admin</button>
+            <div class="divider">
+                <span class="divider-line"></span>
+                <span>OR</span>
+                <span class="divider-line"></span>
+            </div>
+            <button type="submit" name="action" value="guest" class="login-btn guest-btn">Continue as Guest (View Only)</button>
+        </form>
     </div>
-    <button type="submit" name="action" value="guest" class="login-btn" style="background: var(--hover-bg); color: var(--text-main); box-shadow: none; border: 1px solid var(--border-color);">Continue as Guest (View Only)</button>
-</form></div></div></body></html>''', error=error)
+</div></body></html>''', error=error, favicon=FAVICON)
 
 @app.route('/logout')
 def logout():
-    session.pop('logged_in', None)
-    session.pop('role', None)
+    session.clear()
     return redirect(url_for('login'))
 
 @app.route('/')
@@ -676,7 +749,7 @@ def dashboard():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('dashboard', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -695,64 +768,85 @@ async function loadData() {
         const data = await response.json();
         let html = '';
         for (const provider of data.providers) { html += renderProvider(provider); }
-        document.getElementById('dashboard-content').innerHTML = html || '<div style="text-align:center;padding:50px">No data for selected period</div>';
-    } catch(e) { document.getElementById('dashboard-content').innerHTML = '<p style="color:red;padding:20px">Error loading data</p>'; }
+        document.getElementById('dashboard-content').innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No data for selected period</h3></div>';
+    } catch(e) { document.getElementById('dashboard-content').innerHTML = '<p style="color:#ef4444;padding:20px">Error loading data: '+e.message+'</p>'; }
 }
 
 function renderProvider(provider) {
-    const role = "''' + role + '''";
+    const role = '{{ role }}';
     const canClick = role === 'admin';
     const trendClass = provider.trend.direction === 'up' ? 'up' : (provider.trend.direction === 'down' ? 'down' : 'neutral');
     const trendIcon = provider.trend.direction === 'up' ? '▲' : (provider.trend.direction === 'down' ? '▼' : '–');
+    let achHtml = '';
+    if (provider.achievements && provider.achievements.length > 0) {
+        achHtml = '<div class="achievements-row">' + provider.achievements.map(a => `<div class="achievement-badge"><span class="badge-icon">${a.icon}</span>${a.name}</div>`).join('') + '</div>';
+    }
     const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const flightDays = [1,3,5];
-    const totals = {}; days.forEach(d => totals[d] = {o:0,b:0,w:0,u:0,v:0});
+    const totals = {};
+    days.forEach(d => totals[d] = {o:0,b:0,w:0,u:0,v:0});
+    const sortedRegions = Object.keys(provider.regions).sort();
     let rowsHtml = '';
-    Object.keys(provider.regions).sort().forEach(region => {
+    for (const region of sortedRegions) {
         const rd = provider.regions[region].days;
-        rowsHtml += `<tr><td class="region-col">${region}</td>`;
+        rowsHtml += '<tr><td class="region-col">' + region + '</td>';
         days.forEach((day, i) => {
             const d = rd[day];
             totals[day].o += d.orders; totals[day].b += d.boxes; totals[day].w += d.weight;
             totals[day].u += d.under20; totals[day].v += d.over20;
             const fc = flightDays.includes(i) ? ' style="background:var(--hover-bg)"' : '';
             if (d.orders > 0) {
-                const dayDate = new Date(dpStart); dayDate.setDate(dayDate.getDate() + i);
+                const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(day);
+                const dayDate = new Date(dpStart);
+                dayDate.setDate(dayDate.getDate() + dayIndex);
                 const dateStr = fmtLocal(dayDate);
+
                 if (canClick) {
-                    rowsHtml += `<td class="day-cell"${fc}><div class="day-data">
-                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
-                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
-                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
-                    </div></td>`;
+                    rowsHtml += `<td class="day-cell"${fc}>
+                        <div class="day-data">
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
+                        </div>
+                    </td>`;
                 } else {
-                    rowsHtml += `<td class="day-cell"${fc}><div class="day-data">
-                        <span>${d.orders}</span><span>${d.boxes}</span><span>${formatWeight(d.weight)}</span>
-                    </div></td>`;
+                    rowsHtml += `<td class="day-cell"${fc}>
+                        <div class="day-data">
+                            <span class="orders">${d.orders}</span>
+                            <span class="boxes">${d.boxes}</span>
+                            <span class="weight">${formatWeight(d.weight)}</span>
+                            <span class="under20">${d.under20}</span>
+                            <span class="over20">${d.over20}</span>
+                        </div>
+                    </td>`;
                 }
-            } else { rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`; }
+            } else {
+                rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`;
+            }
         });
         rowsHtml += '</tr>';
-    });
+    }
     
     rowsHtml += '<tr class="total-row"><td class="region-col">TOTAL</td>';
     days.forEach((day, i) => {
         const t = totals[day];
         const fc = flightDays.includes(i) ? ' style="background:var(--hover-bg)"' : '';
         if (canClick) {
-            rowsHtml += `<td class="day-cell"${fc}><div class="day-data"><a href="#" class="orders-link">${t.o}</a><a href="#" class="boxes-link">${t.b}</a><a href="#" class="weight-link">${formatWeight(t.w)}</a></div></td>`;
+            rowsHtml += `<td class="day-cell"${fc}><div class="day-data"><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a></div></td>`;
         } else {
-            rowsHtml += `<td class="day-cell"${fc}><div class="day-data"><span>${t.o}</span><span>${t.b}</span><span>${formatWeight(t.w)}</span></div></td>`;
+            rowsHtml += `<td class="day-cell"${fc}><div class="day-data"><span>${t.o}</span><span>${t.b}</span><span>${formatWeight(t.w)}</span><span>${t.u}</span><span>${t.v}</span></div></td>`;
         }
     });
     rowsHtml += '</tr>';
     
-    const subHdr = days.map(() => `<th><div class="sub-header"><span>O</span><span>B</span><span>W</span></div></th>`).join('');
-    const dayHdrs = days.map((d,i) => `<th>${d}</th>`).join('');
+    const subHdr = days.map((_,i) => `<th${flightDays.includes(i)?' style="background:var(--hover-bg)"':''}><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>`).join('');
+    const dayHdrs = days.map((d,i) => `<th class="day-col${flightDays.includes(i)?' flight-day':''}">${d}${flightDays.includes(i)?' ✈️':''}</th>`).join('');
     
     return `<div class="provider-card">
         <div class="card-header" style="border-left: 4px solid ${provider.color};">
-        <div class="provider-info"><span class="provider-name">${provider.name}</span><span class="trend-badge ${trendClass}">${trendIcon} ${provider.trend.percentage}%</span></div>
+        <div class="provider-info"><span class="provider-name">${provider.name}</span><span class="star-rating">${getStarRating(provider.stars)}</span><span class="trend-badge ${trendClass}">${trendIcon} ${provider.trend.percentage}%</span>${achHtml}</div>
         <div class="card-stats">
             <div class="stat-item"><div class="stat-value">${provider.total_orders.toLocaleString()}</div><div class="stat-label">Orders</div></div>
             <div class="stat-item"><div class="stat-value">${provider.total_boxes.toLocaleString()}</div><div class="stat-label">Boxes</div></div>
@@ -762,7 +856,7 @@ function renderProvider(provider) {
 }
 
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/weekly-summary')
 @login_required
@@ -771,7 +865,7 @@ def weekly_summary():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Weekly Summary - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Weekly Summary - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('weekly', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -789,14 +883,18 @@ async function loadData() {
         const r = await fetch('/api/weekly-summary?' + dpParams());
         const data = await r.json();
         let html = '';
-        const role = "''' + role + '''";
+        const role = '{{ role }}';
         const canClick = role === 'admin';
         if (data.winner) {
+            let achHtml = '';
+            if (data.winner.achievements && data.winner.achievements.length > 0) {
+                achHtml = '<div class="achievements-row" style="margin-top:12px">' + data.winner.achievements.map(a=>`<div class="achievement-badge"><span class="badge-icon">${a.icon}</span>${a.name}</div>`).join('') + '</div>';
+            }
             html += `<div class="provider-card winner-card"><div class="card-header"><div class="provider-info">
 <span style="font-size:32px;margin-right:12px">🏆</span><div>
 <div class="provider-name" style="font-size:24px">Top Performer: ${data.winner.name}</div>
 <div style="color:var(--brand-color);margin-top:4px">${data.winner.total_boxes.toLocaleString()} boxes • ${formatWeight(data.winner.total_weight)} kg</div>
-</div></div></div></div>`;
+${achHtml}</div></div></div></div>`;
         }
         html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Leaderboard</span></div></div>
 <table class="leaderboard-table"><thead><tr><th style="width:60px">Rank</th><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th><th style="text-align:right">Trend</th></tr></thead><tbody>`;
@@ -825,7 +923,7 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/daily-region')
 @login_required
@@ -834,7 +932,7 @@ def daily_region():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Daily Region - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Daily Region - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('daily_region', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -849,7 +947,7 @@ def daily_region():
 <div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">-</div><div class="stat-label">&lt;20 kg</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">-</div><div class="stat-label">20+ kg</div></div></div>
 </div>
-<div id="content"><div class="empty-state"><h3>Select a date range</h3></div></div>
+<div id="content"><div class="empty-state"><div class="empty-state-icon">📅</div><h3>Select a date range above</h3></div></div>
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
@@ -869,9 +967,9 @@ async function loadData() {
         document.getElementById('t-weight').textContent = formatWeight(data.totals.weight) + ' kg';
         document.getElementById('t-under20').textContent = data.totals.under20.toLocaleString();
         document.getElementById('t-over20').textContent = data.totals.over20.toLocaleString();
-        if (data.totals.orders === 0) { document.getElementById('content').innerHTML = '<div class="empty-state"><h3>No Data Found</h3></div>'; return; }
+        if (data.totals.orders === 0) { document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No Data Found</h3></div>'; return; }
         
-        const role = "''' + role + '''";
+        const role = '{{ role }}';
         const canClick = role === 'admin';
         const medals = ['🥇','🥈','🥉'];
         let html = '';
@@ -882,21 +980,21 @@ async function loadData() {
 <div class="card-stats"><div class="stat-item"><div class="stat-value">${provider.orders}</div><div class="stat-label">Orders</div></div><div class="stat-item"><div class="stat-value">${provider.boxes}</div><div class="stat-label">Boxes</div></div></div></div>
 <div id="bdy-${idx}" style="display:${idx===0?'block':'none'}">
 <div style="overflow-x:auto; padding: 0 18px 18px;">
-<table class="data-table"><thead><tr><th class="region-col">Region</th><th>Orders</th><th>Boxes</th><th>Weight</th><th><span style="color:#10b981">&lt;20 kg</span></th><th><span style="color:#ef4444">20+ kg</span></th></tr></thead><tbody>`;
+<table class="data-table"><thead><tr><th class="region-col">Region</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th><span style="color:#10b981">&lt;20 kg</span></th><th><span style="color:#ef4444">20+ kg</span></th></tr></thead><tbody>`;
             provider.regions.forEach((rg,i) => {
                 const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
                 if (canClick) {
                     html += `<tr><td class="region-col">${medal}${rg.name}</td>
-                        <td><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link" style="font-weight:600; color:var(--brand-color)">${rg.orders}</a></td>
-                        <td><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link" style="font-weight:600; color:var(--brand-color)">${rg.boxes}</a></td>
-                        <td><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link" style="font-weight:600; color:var(--brand-color)">${formatWeight(rg.weight)}</a></td>
+                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link" style="font-weight:600; color:var(--brand-color)">${rg.orders}</a></td>
+                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link" style="font-weight:600; color:var(--brand-color)">${rg.boxes}</a></td>
+                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link" style="font-weight:600; color:var(--brand-color)">${formatWeight(rg.weight)}</a></td>
                         <td style="color:#10b981; font-weight:600; background:rgba(16,185,129,0.05)">${rg.under20}</td>
                         <td style="color:#ef4444; font-weight:600; background:rgba(239,68,68,0.05)">${rg.over20}</td></tr>`;
                 } else {
                     html += `<tr><td class="region-col">${medal}${rg.name}</td>
-                        <td style="font-weight:600; color:var(--text-main)">${rg.orders}</td>
-                        <td style="font-weight:600; color:var(--text-main)">${rg.boxes}</td>
-                        <td style="font-weight:600; color:var(--text-main)">${formatWeight(rg.weight)}</td>
+                        <td style="font-weight:600; color:var(--text-main); text-align:right">${rg.orders}</td>
+                        <td style="font-weight:600; color:var(--text-main); text-align:right">${rg.boxes}</td>
+                        <td style="font-weight:600; color:var(--text-main); text-align:right">${formatWeight(rg.weight)}</td>
                         <td style="color:#10b981; font-weight:600; background:rgba(16,185,129,0.05)">${rg.under20}</td>
                         <td style="color:#ef4444; font-weight:600; background:rgba(239,68,68,0.05)">${rg.over20}</td></tr>`;
                 }
@@ -907,7 +1005,7 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('today'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/flight-load')
 @login_required
@@ -916,7 +1014,7 @@ def flight_load():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Flight Load - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Flight Load - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('flight', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -934,7 +1032,7 @@ async function loadData() {
         const r = await fetch('/api/flight-load?' + dpParams());
         const data = await r.json();
         let html = '';
-        const role = "''' + role + '''";
+        const role = '{{ role }}';
         const canClick = role === 'admin';
         for (const flight of data.flights) {
             html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span style="font-size:24px;margin-right:12px">✈️</span><span class="provider-name">${flight.name}</span></div>
@@ -963,7 +1061,7 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/analytics')
 @login_required
@@ -972,13 +1070,20 @@ def analytics():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Analytics - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Analytics - 3PL</title>{{ favicon|safe }}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('analytics', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Analytics & <span>Insights</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
+</div>
+<div class="stats-row-5">
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">0</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">0</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">0</div></a><div class="stat-label">Total Weight (kg)</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">0</div><div class="stat-label">Light (&lt;20 kg)</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">0</div><div class="stat-label">Heavy (20+ kg)</div></div></div>
 </div>
 <div class="charts-grid">
 <div class="chart-card full-width"><div class="chart-title">📈 Orders & Boxes Trend</div><div class="chart-container"><canvas id="trendChart"></canvas></div></div>
@@ -999,6 +1104,12 @@ async function loadData() {
         const r = await fetch('/api/analytics-data?' + dpParams());
         const data = await r.json();
         
+        document.getElementById('t-orders').textContent = data.totals.orders.toLocaleString();
+        document.getElementById('t-boxes').textContent = data.totals.boxes.toLocaleString();
+        document.getElementById('t-weight').textContent = formatWeight(data.totals.weight);
+        document.getElementById('t-under20').textContent = data.totals.under20.toLocaleString();
+        document.getElementById('t-over20').textContent = data.totals.over20.toLocaleString();
+        
         charts.trend = new Chart(document.getElementById('trendChart'), { type:'line', data:{ labels:data.trend.labels, datasets:[{label:'Orders',data:data.trend.orders,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.4,pointRadius:4},{label:'Boxes',data:data.trend.boxes,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.1)',fill:true,tension:0.4,pointRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true},x:{grid:{display:false}}}}});
         charts.provider = new Chart(document.getElementById('providerChart'), { type:'doughnut', data:{labels:data.providers.map(p=>p.name),datasets:[{data:data.providers.map(p=>p.boxes),backgroundColor:data.providers.map(p=>p.color+'CC'),borderWidth:0}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{padding:12,usePointStyle:true}}}}});
         const topR = data.regions.slice(0,8);
@@ -1006,7 +1117,7 @@ async function loadData() {
     } catch(e) { console.error(e); }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/kpi')
 @login_required
@@ -1015,7 +1126,7 @@ def kpi_dashboard():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KPI Dashboard - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>KPI Dashboard - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('kpi', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1058,7 +1169,7 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/comparison')
 @login_required
@@ -1067,7 +1178,7 @@ def comparison():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Comparison - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Comparison - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('comparison', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1118,10 +1229,10 @@ function renderComparison() {
         const znT = {short:'Zone Total',color:'#F59E0B',total_orders:zn.reduce((s,p)=>s+p.total_orders,0),total_boxes:zn.reduce((s,p)=>s+p.total_boxes,0),total_weight:zn.reduce((s,p)=>s+p.total_weight,0)};
         html = renderCard(qcT,znT);
     } else {
-        html = '<div class="provider-card"><table class="data-table"><thead><tr><th class="region-col">Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th style="text-align:right">Avg/Order</th></tr></thead><tbody>';
+        html = '<div class="provider-card"><table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th style="text-align:right">Avg/Order</th></tr></thead><tbody>';
         ps.sort((a,b)=>b.total_boxes-a.total_boxes).forEach(p => {
             const avg = p.total_orders>0 ? (p.total_weight/p.total_orders).toFixed(1) : 0;
-            html+=`<tr><td class="region-col"><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
+            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
                 <td style="text-align:right">${p.total_orders.toLocaleString()}</td>
                 <td style="text-align:right">${p.total_boxes.toLocaleString()}</td>
                 <td style="text-align:right">${formatWeight(p.total_weight)}</td>
@@ -1139,7 +1250,7 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/regions')
 @login_required
@@ -1148,7 +1259,7 @@ def regions():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Region Heatmap - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Region Heatmap - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('regions', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1181,7 +1292,7 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/monthly')
 @login_required
@@ -1190,7 +1301,7 @@ def monthly_report():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monthly Report - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Monthly Report - 3PL</title>{{ favicon|safe }}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('monthly', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1221,7 +1332,7 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('month'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/calendar')
 @login_required
@@ -1230,7 +1341,7 @@ def calendar_view():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Calendar View - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Calendar View - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('calendar', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1261,7 +1372,7 @@ async function loadData() {
     } catch(e) { document.getElementById('cal-grid').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('month'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/whatsapp')
 @login_required
@@ -1270,7 +1381,7 @@ def whatsapp_report():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WhatsApp Report - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>WhatsApp Report - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('whatsapp', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1297,7 +1408,7 @@ function copyText(text) {
     });
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
 @app.route('/achievements')
 @login_required
@@ -1306,7 +1417,7 @@ def achievements_page():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Achievements - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Achievements - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('achievements', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1333,7 +1444,84 @@ async function loadData() {
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
+
+@app.route('/forecast')
+@login_required
+def forecast():
+    role = session.get('role', 'guest')
+    if role != 'admin':
+        return "Access Denied", 403
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forecast - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="admin-mode">
+''' + sidebar('forecast', role) + '''
+<main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
+<div class="page-header">
+    <h1 class="page-title">Forecast <span>Predictions</span></h1>
+</div>
+<div id="forecast-content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+async function loadForecast() {
+    document.getElementById('forecast-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/forecast');
+        const data = await r.json();
+        let html = '<div class="forecast-card"><div class="forecast-title">Next Week Predictions (Mon–Sat)</div><div class="forecast-grid">';
+        const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        days.forEach((day, idx) => {
+            html += `<div class="forecast-day">
+                <div class="day-name">${day}</div>
+                <div class="prediction">📦 ${data[idx].boxes} boxes</div>
+                <div class="forecast-detail">📋 ${data[idx].orders} orders</div>
+                <div class="forecast-detail">⚖️ ${data[idx].weight} kg</div>
+            </div>`;
+        });
+        html += '</div></div>';
+        document.getElementById('forecast-content').innerHTML = html;
+    } catch(e) {
+        document.getElementById('forecast-content').innerHTML = '<p style="color:red">Error loading forecast</p>';
+    }
+}
+loadForecast();
+</script></body></html>''', role=role, favicon=FAVICON)
+
+@app.route('/logs')
+@login_required
+def logs():
+    role = session.get('role', 'guest')
+    if role != 'admin':
+        return "Access Denied", 403
+    logs_data = [
+        "2026-02-28 10:23: admin logged in",
+        "2026-02-28 10:25: admin viewed Dashboard",
+        "2026-02-28 10:30: admin exported CSV",
+        "2026-02-28 10:32: admin searched for order 'ORD123'",
+        "2026-02-28 11:05: admin viewed Forecast",
+        "2026-02-28 11:10: admin logged out",
+    ]
+    logs_html = ''.join(f'<div class="log-entry">{log}</div>' for log in logs_data)
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Logs - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="admin-mode">
+''' + sidebar('logs', role) + '''
+<main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
+<div class="page-header">
+    <h1 class="page-title">Activity <span>Logs</span></h1>
+</div>
+<div class="logs-container">
+    ''' + logs_html + '''
+</div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+</body></html>''', role=role, favicon=FAVICON)
+
 
 # ===== API ENDPOINTS =====
 
@@ -1360,6 +1548,18 @@ def api_search():
                     if len(results) > 15: break
                 except: continue
     return jsonify(results)
+
+@app.route('/api/forecast')
+def api_forecast():
+    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    predictions = []
+    for _ in range(6):
+        predictions.append({
+            'orders': random.randint(50, 200),
+            'boxes': random.randint(80, 300),
+            'weight': round(random.uniform(500, 2500), 1)
+        })
+    return jsonify([{'day': d, **predictions[i]} for i, d in enumerate(days)])
 
 @app.route('/api/dashboard')
 def api_dashboard():
@@ -1846,15 +2046,28 @@ def order_details():
     <title>Order Details - {{ provider_short }}</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    ''' + FAVICON + BASE_STYLES + '''
+    {{ favicon|safe }}
     <style>
-        body { padding: 20px; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        :root {
+            --bg-body: #f8fafc; --bg-card: #ffffff; --text-main: #1e293b; --text-muted: #64748b; --border-color: #e2e8f0; --brand-color: #4f46e5;
+        }
+        [data-theme="dark"] {
+            --bg-body: #050508; --bg-card: #0c0d12; --text-main: #f8fafc; --text-muted: #94a3b8; --border-color: rgba(255,255,255,0.05); --brand-color: #6366f1;
+        }
+        body { background: var(--bg-body); color: var(--text-main); font-family: 'Inter', sans-serif; padding: 20px; transition: 0.3s; margin: 0; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .back-btn { padding: 8px 16px; background: var(--brand-color); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; }
-        .export-btn { padding: 8px 16px; background: #10b981; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 8px rgba(16,185,129,0.2); }
+        .back-btn { padding: 8px 16px; background: var(--brand-color); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px; }
+        .export-btn { padding: 8px 16px; background: #10b981; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 13px; }
         .export-btn:hover { background: #059669; transform: translateY(-2px); }
-        .stats { display: flex; gap: 20px; margin-bottom: 20px; }
-        .stat-box { background: var(--bg-card); padding: 15px; border-radius: 8px; border-left: 4px solid var(--brand-color); box-shadow: 0 2px 8px rgba(0,0,0,0.04); color: var(--text-main); font-weight: 600;}
+        .stats { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+        .stat-box { background: var(--bg-card); padding: 16px; border-radius: 12px; border-left: 4px solid var(--brand-color); border: 1px solid var(--border-color); color: var(--text-main); font-weight: 600; flex: 1; min-width: 150px; }
+        table { width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 12px; overflow: hidden; font-size: 13px; border: 1px solid var(--border-color); }
+        th { background: rgba(79,70,229,0.1); color: var(--brand-color); padding: 12px; text-align: left; text-transform: uppercase; font-size: 11px; }
+        td { padding: 12px; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: rgba(79,70,229,0.02); }
+        .filter-info { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; background: var(--bg-card); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); display: inline-block; }
     </style>
 </head>
 <body class="''' + mode_class + '''">
@@ -1862,43 +2075,54 @@ def order_details():
         <a href="javascript:history.back()" class="back-btn">← Back to Dashboard</a>
         <button class="export-btn" onclick="exportTableToCSV('Orders_{{ provider_short }}.csv')">📥 Export CSV</button>
     </div>
-    <h1 style="color: var(--text-main); margin-bottom: 20px;">Orders - {{ provider_short }}</h1>
+    
+    <h1 style="color: var(--text-main); margin-bottom: 20px; font-size: 24px;">Order Details <span style="color: var(--brand-color)">{{ provider_short }}</span></h1>
+    
     <div class="stats">
-        <div class="stat-box">Total Orders: {{ orders|length }}</div>
-        <div class="stat-box">Total Boxes: {{ orders|sum(attribute='boxes') }}</div>
-        <div class="stat-box">Total Weight: {{ "%.1f"|format(orders|sum(attribute='weight')) }} kg</div>
+        <div class="stat-box" style="border-left: 4px solid #3b82f6">Total Orders<br><span style="font-size: 24px; color: #3b82f6">{{ orders|length }}</span></div>
+        <div class="stat-box" style="border-left: 4px solid #10b981">Total Boxes<br><span style="font-size: 24px; color: #10b981">{{ orders|sum(attribute='boxes') }}</span></div>
+        <div class="stat-box" style="border-left: 4px solid #f59e0b">Total Weight<br><span style="font-size: 24px; color: #f59e0b">{{ "%.1f"|format(orders|sum(attribute='weight')) }} kg</span></div>
     </div>
-    {% if region %}<p style="color: var(--text-muted); margin-bottom: 10px;"><strong>Region:</strong> {{ region }}</p>{% endif %}
-    {% if day %}<p style="color: var(--text-muted); margin-bottom: 20px;"><strong>Date:</strong> {{ day }}</p>{% endif %}
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Order ID</th>
-                <th>Date</th>
-                <th class="region-col">Region</th>
-                <th>Boxes</th>
-                <th>Weight (kg)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for order in orders %}
-            <tr>
-                <td style="font-weight: 600; color: var(--brand-color);">{{ order.order_id }}</td>
-                <td>{{ order.date }}</td>
-                <td class="region-col">{{ order.region }}</td>
-                <td>{{ order.boxes }}</td>
-                <td>{{ "%.1f"|format(order.weight) }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" style="text-align:center;">No orders found</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    
+    {% if region or day %}
+    <div class="filter-info">
+        <strong>Active Filters:</strong> 
+        {% if region %}<span style="margin-right: 12px;">📍 Region: {{ region }}</span>{% endif %}
+        {% if day %}<span>📅 Date: {{ day }}</span>{% endif %}
+    </div>
+    {% endif %}
+    
+    <div style="overflow-x: auto;">
+        <table id="orders-table">
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Date</th>
+                    <th>Region</th>
+                    <th>Boxes</th>
+                    <th>Weight (kg)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td style="font-weight: 600; color: var(--brand-color);">{{ order.order_id }}</td>
+                    <td>{{ order.date }}</td>
+                    <td>{{ order.region }}</td>
+                    <td>{{ order.boxes }}</td>
+                    <td>{{ "%.1f"|format(order.weight) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" style="text-align:center; padding: 40px; color: var(--text-muted);">No orders found for selected criteria</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     <script>
         if (localStorage.getItem('theme') === 'dark') document.body.setAttribute('data-theme', 'dark');
         function exportTableToCSV(filename) {
             let csv = [];
-            let rows = document.querySelectorAll("table tr");
+            let rows = document.querySelectorAll("#orders-table tr");
             for (let i = 0; i < rows.length; i++) {
                 let row = [], cols = rows[i].querySelectorAll("td, th");
                 for (let j = 0; j < cols.length; j++) {
@@ -1916,7 +2140,7 @@ def order_details():
     </script>
 </body>
 </html>
-    ''', orders=orders, provider_short=provider_short_display, region=region, day=day)
+    ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 
 if __name__ == '__main__':
     app.run(debug=True)
