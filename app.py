@@ -2930,10 +2930,12 @@ function initMap(regions) {
     // لیجنڈ بنائیں
     const legend = document.getElementById('map-legend');
     legend.innerHTML = `
-        <div class="legend-item"><span class="legend-color" style="background:#3b82f6"></span> کم آرڈرز</div>
-        <div class="legend-item"><span class="legend-color" style="background:#f59e0b"></span> درمیانے آرڈرز</div>
-        <div class="legend-item"><span class="legend-color" style="background:#ef4444"></span> زیادہ آرڈرز</div>
-        <div class="legend-item"><span>دائرے کا سائز = آرڈرز کی تعداد</span></div>
+        <div class="map-legend" id="map-legend">
+    <div class="legend-item"><span class="legend-color" style="background:#3b82f6"></span> Low orders</div>
+    <div class="legend-item"><span class="legend-color" style="background:#f59e0b"></span> Medium orders</div>
+    <div class="legend-item"><span class="legend-color" style="background:#ef4444"></span> High orders</div>
+    <div class="legend-item"><span>Circle size = Number of orders</span></div>
+</div>
     `;
 }
 
