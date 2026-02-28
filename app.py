@@ -2109,6 +2109,9 @@ function renderCard(p1, p2, title1, title2) {
 }
 
 function renderAllProviders(providers) {
+    const role = '{{ role }}';
+    const canClick = role === 'admin';
+    
     let html = `<table class="all-providers-table">
         <thead>
             <tr>
@@ -2121,6 +2124,44 @@ function renderAllProviders(providers) {
             </tr>
         </thead>
         <tbody>`;
+    
+    providers.sort((a, b) => b.total_boxes - a.total_boxes).forEach(p => {
+        const avg = p.total_orders > 0 ? (p.total_weight / p.total_orders).toFixed(1) : '0';
+        
+        if (canClick) {
+            html += `<tr>
+                <td>
+                    <div class="provider-cell">
+                        <div class="provider-color-dot" style="background:${p.color}"></div>
+                        <span>${p.short || p.name}</span>
+                    </div>
+                </td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right">${avg} kg</td>
+                <td style="text-align:right"><span class="avg-badge">${p.total_under20} / ${p.total_over20}</span></td>
+            </tr>`;
+        } else {
+            html += `<tr>
+                <td>
+                    <div class="provider-cell">
+                        <div class="provider-color-dot" style="background:${p.color}"></div>
+                        <span>${p.short || p.name}</span>
+                    </div>
+                </td>
+                <td style="text-align:right">${p.total_orders.toLocaleString()}</td>
+                <td style="text-align:right">${p.total_boxes.toLocaleString()}</td>
+                <td style="text-align:right">${formatWeight(p.total_weight)}</td>
+                <td style="text-align:right">${avg} kg</td>
+                <td style="text-align:right"><span class="avg-badge">${p.total_under20} / ${p.total_over20}</span></td>
+            </tr>`;
+        }
+    });
+    
+    html += `</tbody></table>`;
+    return html;
+}
     
     const role = '{{ role }}';
     const canClick = role === 'admin';
