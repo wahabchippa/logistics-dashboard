@@ -1159,14 +1159,14 @@ def dashboard():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('dashboard-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
-        const response = await fetch('/api/dashboard?' + dpParams());
-        const data = await response.json();
-        let html = '';
-        for (const provider of data.providers) { html += renderProvider(provider); }
-        document.getElementById('dashboard-content').innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No data for selected period</h3></div>';
-    } catch(e) { document.getElementById('dashboard-content').innerHTML = '<p style="color:#ef4444;padding:20px">Error loading data: '+e.message+'</p>'; }
+        const r = await fetch('/api/dashboard?' + dpParams());
+        curData = await r.json();
+        renderComparison();
+    } catch(e) {
+        document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: ' + e.message + '</p>';
+    }
 }
 
 function renderProvider(provider) {
