@@ -394,7 +394,7 @@ BASE_STYLES = """
     .page-title { font-size: 24px; font-weight: 700; color: var(--text-main); }
     .page-title span { color: var(--brand-color); }
 
-    /* Top Actions (only theme toggle and search for admin) */
+    /* Top Actions */
     .top-actions {
         display: flex;
         justify-content: flex-end;
@@ -501,110 +501,37 @@ BASE_STYLES = """
     .data-table tr.total-row td { background: rgba(79,70,229,0.1); font-weight: 600; color: var(--brand-color); border-top: 2px solid var(--brand-color); }
 
     /* Region Table (for daily region) */
-    .region-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-        margin-top: 10px;
-        background: var(--bg-card);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    .region-table th {
-        background: var(--table-hdr);
-        padding: 8px 4px;
-        text-align: center;
-        font-weight: 600;
-        color: var(--text-muted);
-        font-size: 10px;
-        text-transform: uppercase;
-        border-bottom: 2px solid var(--brand-color);
-    }
-    .region-table td {
-        padding: 6px 4px;
-        text-align: center;
-        border-bottom: 1px solid var(--border-color);
-        color: var(--text-main);
-    }
-    .region-table td:first-child {
-        text-align: left;
-        font-weight: 500;
-        background: var(--hover-bg);
-        padding-left: 8px;
-    }
-    .region-table tr:last-child td {
-        border-bottom: none;
-    }
-    .region-table a {
-        color: inherit;
-        text-decoration: none;
-    }
-    .region-table a:hover {
-        color: var(--brand-color);
-        text-decoration: underline;
-    }
+    .region-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .region-table th { background: var(--table-hdr); padding: 8px 4px; text-align: center; font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 2px solid var(--brand-color); }
+    .region-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
+    .region-table td:first-child { text-align: left; font-weight: 500; background: var(--hover-bg); padding-left: 8px; }
+    .region-table tr:last-child td { border-bottom: none; }
+
+    /* Day Data Grid */
+    .day-data { display: flex; justify-content: center; gap: 2px; font-size: 10px; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-body); margin: 2px 0; }
+    .day-data span, .day-data a { flex: 1; min-width: 28px; padding: 3px 1px; text-align: center; font-weight: 500; border-right: 1px solid var(--border-color); color: inherit; text-decoration: none; }
+    .day-data span:last-child, .day-data a:last-child { border-right: none; }
+    .day-data span:nth-child(1), .day-data a:nth-child(1) { color: #3b82f6; background: rgba(59,130,246,0.1); }
+    .day-data span:nth-child(2), .day-data a:nth-child(2) { color: #10b981; background: rgba(16,185,129,0.1); }
+    .day-data span:nth-child(3), .day-data a:nth-child(3) { color: #f59e0b; background: rgba(245,158,11,0.1); }
+    .day-data span:nth-child(4), .day-data a:nth-child(4) { color: #8b5cf6; background: rgba(139,92,246,0.1); }
+    .day-data span:nth-child(5), .day-data a:nth-child(5) { color: #ec4899; background: rgba(236,72,153,0.1); }
+    .day-data-empty { color: var(--text-muted); font-size: 10px; padding: 4px; background: var(--cell-empty); border-radius: 4px; }
+    .orders-link:hover, .boxes-link:hover, .weight-link:hover { color: var(--brand-color); border-bottom: 1px dashed var(--brand-color); }
+
+    /* Sub-header */
+    .sub-header { display: flex; justify-content: center; gap: 4px; font-size: 8px; color: var(--text-muted); }
+    .sub-header span { min-width: 28px; text-align: center; padding: 2px 0; }
 
     /* Stats Cards */
     .stats-row, .stats-row-5 { display: grid; gap: 12px; margin-bottom: 20px; }
     .stats-row { grid-template-columns: repeat(4, 1fr); }
     .stats-row-5 { grid-template-columns: repeat(5, 1fr); }
-    .stat-card {
-        background: var(--bg-card);
-        border-radius: 16px;
-        border: 1px solid var(--border-color);
-        padding: 12px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        text-decoration: none;
-        color: inherit;
-        transition: 0.2s;
-    }
-    .stat-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 20px rgba(79,70,229,0.1);
-        border-color: var(--brand-color);
-    }
+    .stat-card { background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-color); padding: 12px; display: flex; align-items: center; gap: 12px; }
     .stat-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--hover-bg); border: 1px solid var(--border-color); }
     .stat-content { flex: 1; }
     .stat-card .stat-value { font-size: 20px; font-weight: 700; color: var(--text-main); margin-bottom: 2px; }
     .stat-card .stat-label { font-size: 12px; color: var(--text-muted); }
-
-    /* Provider Section for Daily Region */
-    .provider-section {
-        background: var(--bg-card);
-        border-radius: 18px;
-        border: 1px solid var(--border-color);
-        margin-bottom: 20px;
-        overflow: hidden;
-    }
-    .provider-header-dr {
-        padding: 14px 18px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        cursor: pointer;
-        border-bottom: 1px solid var(--border-color);
-        background: linear-gradient(90deg, var(--hover-bg), transparent);
-    }
-    .provider-header-dr:hover { background: var(--hover-bg); }
-    .provider-header-left { display: flex; align-items: center; gap: 12px; }
-    .provider-color-bar { width: 4px; height: 36px; border-radius: 3px; }
-    .provider-header-info h3 { font-size: 16px; font-weight: 600; color: var(--text-main); }
-    .provider-header-info span { font-size: 12px; color: var(--text-muted); }
-    .provider-header-stats {
-        display: flex;
-        gap: 16px;
-        align-items: center;
-    }
-    .header-stat { text-align: center; }
-    .header-stat-val { font-size: 16px; font-weight: 700; color: var(--brand-color); }
-    .header-stat-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; }
-    .toggle-icon { color: var(--brand-color); transition: transform 0.2s; }
-    .provider-header-dr.open .toggle-icon { transform: rotate(180deg); }
-    .provider-body { padding: 0 18px 18px; display: none; }
-    .provider-body.open { display: block; }
 
     /* Charts */
     .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
@@ -812,46 +739,6 @@ BASE_STYLES = """
     .log-entry { padding: 6px 10px; border-bottom: 1px solid var(--border-color); font-family: monospace; font-size: 11px; }
     .log-entry:last-child { border-bottom: none; }
 
-    /* Order Details Page */
-    .order-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
-        margin-top: 20px;
-    }
-    .order-table th {
-        background: var(--table-hdr);
-        padding: 8px 4px;
-        text-align: left;
-        font-weight: 600;
-        color: var(--text-muted);
-        font-size: 10px;
-        text-transform: uppercase;
-        border-bottom: 2px solid var(--brand-color);
-    }
-    .order-table td {
-        padding: 6px 4px;
-        border-bottom: 1px solid var(--border-color);
-        color: var(--text-main);
-    }
-    .order-table tr:hover td {
-        background: var(--hover-bg);
-    }
-    .export-order-btn {
-        margin: 20px 0;
-        padding: 8px 16px;
-        background: var(--brand-color);
-        color: white;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 600;
-    }
-    .export-order-btn:hover {
-        background: #6366f1;
-    }
-
     /* Responsive */
     @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5 { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
     @media (max-width: 768px) { .sidebar { width: 60px; } .main-content { margin-left: 60px; } .sidebar-toggle { width: 22px; height: 22px; right: -10px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
@@ -950,10 +837,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// ===== EXPORT ORDERS TO CSV (for order details page) =====
-function exportOrdersToCSV() {
+// ===== EXPORT TO CSV =====
+function exportTableToCSV(filename) {
+    const role = '{{ role }}';
+    if (role !== 'admin') return;
     let csv = [];
-    let rows = document.querySelectorAll(".order-table tr");
+    let rows = document.querySelectorAll("table tr");
     for (let i = 0; i < rows.length; i++) {
         let row = [], cols = rows[i].querySelectorAll("td, th");
         for (let j = 0; j < cols.length; j++) {
@@ -964,7 +853,7 @@ function exportOrdersToCSV() {
     }
     let csvFile = new Blob([csv.join("\\n")], {type: "text/csv"});
     let dl = document.createElement("a");
-    dl.download = "orders_export.csv"; dl.href = window.URL.createObjectURL(csvFile);
+    dl.download = filename; dl.href = window.URL.createObjectURL(csvFile);
     dl.style.display = "none"; document.body.appendChild(dl); dl.click();
 }
 
@@ -1059,6 +948,7 @@ def ACTION_BAR_HTML(role):
             <div id="search-results"></div>
         </div>
         <div class="action-group">
+            <button class="action-btn export-btn" onclick="exportTableToCSV('Dashboard_Export.csv')">📥 Export CSV</button>
             <button class="action-btn" id="theme-toggle-btn" onclick="toggleTheme()">🌙 Dark</button>
         </div>
     </div>
@@ -1471,41 +1361,11 @@ def daily_region():
     ''' + DATE_PICKER_HTML('today') + '''
 </div>
 <div class="stats-row-5">
-    <a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="stat-card">
-        <div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div>
-        <div class="stat-content">
-            <div class="stat-value" id="t-orders">-</div>
-            <div class="stat-label">Total Orders</div>
-        </div>
-    </a>
-    <a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="stat-card">
-        <div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div>
-        <div class="stat-content">
-            <div class="stat-value" id="t-boxes">-</div>
-            <div class="stat-label">Total Boxes</div>
-        </div>
-    </a>
-    <a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="stat-card">
-        <div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div>
-        <div class="stat-content">
-            <div class="stat-value" id="t-weight">-</div>
-            <div class="stat-label">Total Weight</div>
-        </div>
-    </a>
-    <a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&under20=1" class="stat-card">
-        <div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div>
-        <div class="stat-content">
-            <div class="stat-value" id="t-under20">-</div>
-            <div class="stat-label">&lt;20 kg</div>
-        </div>
-    </a>
-    <a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&over20=1" class="stat-card">
-        <div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div>
-        <div class="stat-content">
-            <div class="stat-value" id="t-over20">-</div>
-            <div class="stat-label">20+ kg</div>
-        </div>
-    </a>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">-</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">-</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">-</div></a><div class="stat-label">Total Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">-</div><div class="stat-label">&lt;20 kg</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">-</div><div class="stat-label">20+ kg</div></div></div>
 </div>
 <div id="content"><div class="empty-state"><div class="empty-state-icon">📅</div><h3>Select a date range above</h3></div></div>
 </main>
@@ -1654,41 +1514,11 @@ def analytics():
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div class="stats-row-5">
-    <a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="stat-card">
-        <div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div>
-        <div class="stat-content">
-            <div class="stat-value" id="t-orders">0</div>
-            <div class="stat-label">Total Orders</div>
-        </div>
-    </a>
-    <a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="stat-card">
-        <div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div>
-        <div class="stat-content">
-            <div class="stat-value" id="t-boxes">0</div>
-            <div class="stat-label">Total Boxes</div>
-        </div>
-    </a>
-    <a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="stat-card">
-        <div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div>
-        <div class="stat-content">
-            <div class="stat-value" id="t-weight">0</div>
-            <div class="stat-label">Total Weight (kg)</div>
-        </div>
-    </a>
-    <a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&under20=1" class="stat-card">
-        <div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div>
-        <div class="stat-content">
-            <div class="stat-value" id="t-under20">0</div>
-            <div class="stat-label">Light (&lt;20 kg)</div>
-        </div>
-    </a>
-    <a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&over20=1" class="stat-card">
-        <div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div>
-        <div class="stat-content">
-            <div class="stat-value" id="t-over20">0</div>
-            <div class="stat-label">Heavy (20+ kg)</div>
-        </div>
-    </a>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">0</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">0</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">0</div></a><div class="stat-label">Total Weight (kg)</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">0</div><div class="stat-label">Light (&lt;20 kg)</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">0</div><div class="stat-label">Heavy (20+ kg)</div></div></div>
 </div>
 <div class="charts-grid">
 <div class="chart-card full-width"><div class="chart-title">📈 Orders & Boxes Trend</div><div class="chart-container"><canvas id="trendChart"></canvas></div></div>
@@ -2604,8 +2434,6 @@ def order_details():
     end_str = request.args.get('end')
     region = request.args.get('region', '').strip()
     day = request.args.get('day')
-    under20 = request.args.get('under20')
-    over20 = request.args.get('over20')
     
     if not provider_short or not start_str or not end_str:
         return "Missing parameters", 400
@@ -2616,35 +2444,85 @@ def order_details():
     except:
         return "Invalid date", 400
     
-    all_orders = []
-    # Handle "all" provider
-    providers_to_fetch = PROVIDERS if provider_short == 'all' else [next((p for p in PROVIDERS if p['short'] == provider_short), None)]
-    if provider_short != 'all' and providers_to_fetch[0] is None:
-        return "Provider not found", 404
-    
-    for provider in providers_to_fetch:
+    if provider_short == 'all':
+        all_orders = []
+        for provider in PROVIDERS:
+            rows = fetch_sheet_data(provider['sheet'])
+            if not rows:
+                continue
+            for row_idx, row in enumerate(rows):
+                if row_idx < provider['start_row'] - 1:
+                    continue
+                try:
+                    if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
+                        continue
+                    date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                    parsed_date = parse_date(date_val)
+                    if not parsed_date or not (start_date <= parsed_date <= end_date):
+                        continue
+                    row_region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                    if region and row_region != region:
+                        continue
+                    if day:
+                        day_date = datetime.strptime(day, '%Y-%m-%d')
+                        if parsed_date.date() != day_date.date():
+                            continue
+                    order_id = row[provider.get('order_col', 0)].strip() if provider.get('order_col', 0) < len(row) else 'N/A'
+                    try:
+                        boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                    except:
+                        boxes = 0
+                    try:
+                        weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                    except:
+                        weight = 0.0
+                    all_orders.append({
+                        'order_id': order_id,
+                        'date': parsed_date.strftime('%Y-%m-%d'),
+                        'region': row_region,
+                        'boxes': boxes,
+                        'weight': weight
+                    })
+                except:
+                    continue
+        all_orders.sort(key=lambda x: x['date'])
+        orders = all_orders
+        provider_short_display = 'All Providers'
+    else:
+        provider = next((p for p in PROVIDERS if p['short'] == provider_short), None)
         if not provider:
-            continue
+            return "Provider not found", 404
+        
         rows = fetch_sheet_data(provider['sheet'])
         if not rows:
-            continue
+            return "No data", 404
+        
+        orders = []
         for row_idx, row in enumerate(rows):
             if row_idx < provider['start_row'] - 1:
                 continue
             try:
                 if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
                     continue
+                
                 date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                 parsed_date = parse_date(date_val)
-                if not parsed_date or not (start_date <= parsed_date <= end_date):
+                if not parsed_date:
                     continue
+                if not (start_date <= parsed_date <= end_date):
+                    continue
+                
                 row_region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
                 if region and row_region != region:
                     continue
+                
                 if day:
                     day_date = datetime.strptime(day, '%Y-%m-%d')
                     if parsed_date.date() != day_date.date():
                         continue
+                
+                order_id = row[provider.get('order_col', 0)].strip() if provider.get('order_col', 0) < len(row) else 'N/A'
+                
                 try:
                     boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
                 except:
@@ -2653,12 +2531,8 @@ def order_details():
                     weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
                 except:
                     weight = 0.0
-                if under20 and weight >= 20:
-                    continue
-                if over20 and weight < 20:
-                    continue
-                order_id = row[provider.get('order_col', 0)].strip() if provider.get('order_col', 0) < len(row) else 'N/A'
-                all_orders.append({
+                
+                orders.append({
                     'order_id': order_id,
                     'date': parsed_date.strftime('%Y-%m-%d'),
                     'region': row_region,
@@ -2667,9 +2541,8 @@ def order_details():
                 })
             except Exception as e:
                 continue
-    all_orders.sort(key=lambda x: x['date'])
-    orders = all_orders
-    provider_short_display = 'All Providers' if provider_short == 'all' else provider_short
+        orders.sort(key=lambda x: x['date'])
+        provider_short_display = provider_short
     
     mode_class = 'guest-mode' if session.get('role') == 'guest' else 'admin-mode'
     return render_template_string('''
@@ -2683,15 +2556,13 @@ def order_details():
     <style>
         body { background: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; padding: 20px; }
         h1 { color: #4f46e5; }
-        .back-btn { display: inline-block; margin-bottom: 20px; padding: 8px 16px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; }
-        .stats { display: flex; gap: 20px; margin-bottom: 20px; }
-        .stat-box { background: #ffffff; padding: 15px; border-radius: 8px; border-left: 4px solid #4f46e5; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
-        .export-btn { margin: 20px 0; padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
-        .export-btn:hover { background: #059669; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th { background: #f1f5f9; color: #475569; padding: 10px; text-align: left; }
         td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
         tr:hover { background: #f1f5f9; }
+        .back-btn { display: inline-block; margin-bottom: 20px; padding: 8px 16px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; }
+        .stats { display: flex; gap: 20px; margin-bottom: 20px; }
+        .stat-box { background: #ffffff; padding: 15px; border-radius: 8px; border-left: 4px solid #4f46e5; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
     </style>
 </head>
 <body class="''' + mode_class + '''">
@@ -2704,8 +2575,7 @@ def order_details():
     </div>
     {% if region %}<p><strong>Region:</strong> {{ region }}</p>{% endif %}
     {% if day %}<p><strong>Date:</strong> {{ day }}</p>{% endif %}
-    <button class="export-btn" onclick="exportOrdersToCSV()">📥 Export as CSV</button>
-    <table class="order-table">
+    <table>
         <thead>
             <tr>
                 <th>Order ID</th>
@@ -2729,24 +2599,6 @@ def order_details():
             {% endfor %}
         </tbody>
     </table>
-    <script>
-    function exportOrdersToCSV() {
-        let csv = [];
-        let rows = document.querySelectorAll(".order-table tr");
-        for (let i = 0; i < rows.length; i++) {
-            let row = [], cols = rows[i].querySelectorAll("td, th");
-            for (let j = 0; j < cols.length; j++) {
-                let data = cols[j].innerText.replace(/(\\r\\n|\\n|\\r)/gm, "").replace(/"/g, '""');
-                row.push('"' + data + '"');
-            }
-            csv.push(row.join(","));
-        }
-        let csvFile = new Blob([csv.join("\\n")], {type: "text/csv"});
-        let dl = document.createElement("a");
-        dl.download = "orders_export.csv"; dl.href = window.URL.createObjectURL(csvFile);
-        dl.style.display = "none"; document.body.appendChild(dl); dl.click();
-    }
-    </script>
 </body>
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
