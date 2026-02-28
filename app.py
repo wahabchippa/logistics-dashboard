@@ -8,22 +8,34 @@ from collections import defaultdict
 import time
 import os
 import calendar
-import random
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
+# ============================================
+# ADMIN PASSWORD - Rocket2024
+# ============================================
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
 
+# ============================================
+# CACHE CONFIGURATION
+# ============================================
 CACHE = {}
-CACHE_DURATION = 300
+CACHE_DURATION = 300  # 5 minutes
+
+# ============================================
+# GOOGLE SHEET CONFIGURATION
+# ============================================
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
+# ============================================
+# 🔒 LOCKED COLUMN MAPPINGS
+# ============================================
 PROVIDERS = [
     {'name': 'GLOBAL EXPRESS (QC)', 'short': 'GE QC', 'sheet': 'GE QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#3B82F6', 'group': 'GE'},
     {'name': 'GLOBAL EXPRESS (ZONE)', 'short': 'GE ZONE', 'sheet': 'GE QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 15, 'region_col': 16, 'order_col': 9, 'start_row': 2, 'color': '#8B5CF6', 'group': 'GE'},
     {'name': 'ECL LOGISTICS (QC)', 'short': 'ECL QC', 'sheet': 'ECL QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 3, 'color': '#10B981', 'group': 'ECL'},
-    {'name': 'ECL LOGISTICS (ZONE)', 'short': 'ECL ZONE', 'sheet': 'ECL QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 14, 'region_col': 16, 'order_col': 9, 'start_row': 3, 'color': '#F59E0B', 'group': 'ECL'},
+    {'name': 'ECL LOGISTICS (ZONE)', 'short': 'ECL ZONE', 'sheet': 'ECL QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 14, 'region_col': 16, 'order_col': 0, 'start_row': 3, 'color': '#F59E0B', 'group': 'ECL'},
     {'name': 'KERRY', 'short': 'KERRY', 'sheet': 'Kerry', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#EF4444', 'group': 'OTHER'},
     {'name': 'APX', 'short': 'APX', 'sheet': 'APX', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#EC4899', 'group': 'OTHER'}
 ]
@@ -99,7 +111,6 @@ def fetch_sheet_data(sheet_name):
             CACHE[cache_key] = (rows, current_time)
             return rows
     except Exception as e:
-        print(f"Error fetching {sheet_name}: {e}")
         return []
 
 def get_star_rating(boxes):
@@ -110,114 +121,72 @@ def get_star_rating(boxes):
 
 def process_provider_data(provider, week_start, week_end):
     rows = fetch_sheet_data(provider['sheet'])
-    if not rows:
-        return None
+    if not rows: return None
     data = {
-        'name': provider['name'],
-        'short': provider.get('short', provider['name']),
-        'color': provider['color'],
-        'group': provider.get('group', 'OTHER'),
-        'total_orders': 0,
-        'total_boxes': 0,
-        'total_weight': 0.0,
-        'total_under20': 0,
-        'total_over20': 0,
-        'regions': defaultdict(lambda: {
-            'days': {day: {'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0}
-                    for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']}
-        }),
-        'daily_totals': {day: {'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0}
-                        for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']},
+        'name': provider['name'], 'short': provider.get('short', provider['name']), 'color': provider['color'], 'group': provider.get('group', 'OTHER'),
+        'total_orders': 0, 'total_boxes': 0, 'total_weight': 0.0, 'total_under20': 0, 'total_over20': 0,
+        'regions': defaultdict(lambda: {'days': {day: {'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0} for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']}}),
+        'daily_totals': {day: {'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0} for day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']},
         'active_days': set()
     }
     day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     for row_idx, row in enumerate(rows):
-        if row_idx < provider['start_row'] - 1:
-            continue
+        if row_idx < provider['start_row'] - 1: continue
         try:
-            if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
-                continue
+            if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']): continue
             date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
             parsed_date = parse_date(date_val)
-            if not parsed_date:
-                continue
-            if not (week_start <= parsed_date <= week_end):
-                continue
+            if not parsed_date or not (week_start <= parsed_date <= week_end): continue
             region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
-            if region in INVALID_REGIONS or not region:
-                continue
-            try:
-                boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
-            except:
-                boxes = 0
-            try:
-                weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
-            except:
-                weight = 0.0
+            if region in INVALID_REGIONS or not region: continue
+            try: boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+            except: boxes = 0
+            try: weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+            except: weight = 0.0
+            
             day_name = day_names[parsed_date.weekday()]
-            data['total_orders'] += 1
-            data['total_boxes'] += boxes
-            data['total_weight'] += weight
-            data['active_days'].add(day_name)
-            if weight < 20:
-                data['total_under20'] += 1
-            else:
-                data['total_over20'] += 1
-            data['daily_totals'][day_name]['orders'] += 1
-            data['daily_totals'][day_name]['boxes'] += boxes
-            data['daily_totals'][day_name]['weight'] += weight
-            if weight < 20:
-                data['daily_totals'][day_name]['under20'] += 1
-            else:
-                data['daily_totals'][day_name]['over20'] += 1
+            data['total_orders'] += 1; data['total_boxes'] += boxes; data['total_weight'] += weight; data['active_days'].add(day_name)
+            if weight < 20: data['total_under20'] += 1
+            else: data['total_over20'] += 1
+            
+            data['daily_totals'][day_name]['orders'] += 1; data['daily_totals'][day_name]['boxes'] += boxes; data['daily_totals'][day_name]['weight'] += weight
+            if weight < 20: data['daily_totals'][day_name]['under20'] += 1
+            else: data['daily_totals'][day_name]['over20'] += 1
+            
             region_data = data['regions'][region]['days'][day_name]
-            region_data['orders'] += 1
-            region_data['boxes'] += boxes
-            region_data['weight'] += weight
-            if weight < 20:
-                region_data['under20'] += 1
-            else:
-                region_data['over20'] += 1
-        except Exception as e:
-            continue
+            region_data['orders'] += 1; region_data['boxes'] += boxes; region_data['weight'] += weight
+            if weight < 20: region_data['under20'] += 1
+            else: region_data['over20'] += 1
+        except Exception: continue
+    
     data['stars'] = get_star_rating(data['total_boxes'])
     data['active_days'] = list(data['active_days'])
     data['regions'] = dict(data['regions'])
-    for region in data['regions']:
-        data['regions'][region] = dict(data['regions'][region])
+    for region in data['regions']: data['regions'][region] = dict(data['regions'][region])
     return data
 
 def calculate_trend(current_boxes, previous_boxes):
-    if previous_boxes == 0:
-        if current_boxes > 0:
-            return {'direction': 'up', 'percentage': 100}
-        return {'direction': 'neutral', 'percentage': 0}
+    if previous_boxes == 0: return {'direction': 'up', 'percentage': 100} if current_boxes > 0 else {'direction': 'neutral', 'percentage': 0}
     change = ((current_boxes - previous_boxes) / previous_boxes) * 100
-    if change >= 0:
-        return {'direction': 'up', 'percentage': round(change, 1)}
-    else:
-        return {'direction': 'down', 'percentage': round(abs(change), 1)}
+    if change >= 0: return {'direction': 'up', 'percentage': round(change, 1)}
+    else: return {'direction': 'down', 'percentage': round(abs(change), 1)}
 
 def get_provider_achievements(provider_data, is_winner=False, trend=None):
     achievements = []
-    if provider_data['stars'] >= 5:
-        achievements.append(ACHIEVEMENTS['star_5'])
-    elif provider_data['stars'] >= 4:
-        achievements.append(ACHIEVEMENTS['star_4'])
-    if is_winner:
-        achievements.append(ACHIEVEMENTS['champion'])
-    if trend and trend['direction'] == 'up' and trend['percentage'] >= 50:
-        achievements.append(ACHIEVEMENTS['rocket'])
-    if len(provider_data.get('active_days', [])) >= 7:
-        achievements.append(ACHIEVEMENTS['consistent'])
-    if provider_data['total_weight'] >= 5000:
-        achievements.append(ACHIEVEMENTS['heavyweight'])
-    if len(provider_data.get('regions', {})) >= 5:
-        achievements.append(ACHIEVEMENTS['region_king'])
+    if provider_data['stars'] >= 5: achievements.append(ACHIEVEMENTS['star_5'])
+    elif provider_data['stars'] >= 4: achievements.append(ACHIEVEMENTS['star_4'])
+    if is_winner: achievements.append(ACHIEVEMENTS['champion'])
+    if trend and trend['direction'] == 'up' and trend['percentage'] >= 50: achievements.append(ACHIEVEMENTS['rocket'])
+    if len(provider_data.get('active_days', [])) >= 7: achievements.append(ACHIEVEMENTS['consistent'])
+    if provider_data['total_weight'] >= 5000: achievements.append(ACHIEVEMENTS['heavyweight'])
+    if len(provider_data.get('regions', {})) >= 5: achievements.append(ACHIEVEMENTS['region_king'])
     return achievements
 
 FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">'''
 
+# ============================================
+# CSS INCLUDES DYNAMIC THEMING VARIABLES
+# ============================================
 BASE_STYLES = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -237,532 +206,384 @@ BASE_STYLES = """
     }
 
     [data-theme="dark"] {
-        --bg-body: #000000;
-        --bg-sidebar: #111111;
-        --bg-card: #111111;
-        --text-main: #f1f5f9;
+        --bg-body: #050508;
+        --bg-sidebar: #0a0a0f;
+        --bg-card: #0c0d12;
+        --text-main: #f8fafc;
         --text-muted: #94a3b8;
-        --border-color: #222222;
-        --brand-color: #818cf8;
-        --hover-bg: #222222;
-        --table-hdr: #111111;
-        --cell-empty: #222222;
+        --border-color: rgba(255,255,255,0.05);
+        --brand-color: #6366f1;
+        --brand-gradient: linear-gradient(145deg, #6366f1, #8b5cf6);
+        --hover-bg: rgba(255,255,255,0.02);
+        --table-hdr: #0f1015;
+        --cell-empty: rgba(255,255,255,0.02);
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; font-size: 13px; line-height: 1.4; transition: background 0.3s, color 0.3s; }
-
-    /* Guest Mode Restrictions */
-    body.guest-mode .day-data a,
-    body.guest-mode .orders-link,
-    body.guest-mode .boxes-link,
-    body.guest-mode .weight-link,
-    body.guest-mode .under20-link,
-    body.guest-mode .over20-link,
-    body.guest-mode .export-btn,
-    body.guest-mode .search-box,
-    body.guest-mode #forecast-link,
-    body.guest-mode #logs-link {
-        display: none !important;
-        pointer-events: none !important;
-    }
+    
+    /* GUEST MODE RESTRICTIONS */
+    body.guest-mode .day-data a, body.guest-mode .orders-link, body.guest-mode .boxes-link, body.guest-mode .weight-link, body.guest-mode .under20-link, body.guest-mode .over20-link { pointer-events: none !important; text-decoration: none !important; cursor: default !important; }
 
     /* Sidebar */
-    .sidebar {
-        position: fixed;
-        left: 0;
-        top: 0;
-        height: 100vh;
-        width: 220px;
-        background: var(--bg-sidebar);
-        border-right: none;
-        padding: 16px 12px;
-        transition: all 0.2s ease;
-        z-index: 100;
-        display: flex;
-        flex-direction: column;
-        overflow-y: auto;
-    }
-    .sidebar.collapsed { width: 60px; }
-    .sidebar-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding-bottom: 16px;
-        border-bottom: 1px solid var(--border-color);
-        margin-bottom: 16px;
-    }
-    .logo-icon {
-        width: 36px;
-        height: 36px;
-        background: var(--brand-gradient);
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        color: #ffffff;
-        font-size: 18px;
-    }
-    .header-titles {
-        display: flex;
-        flex-direction: column;
-    }
-    .header-main {
-        font-size: 16px;
-        font-weight: 600;
-        color: var(--text-main);
-        line-height: 1.2;
-    }
-    .header-sub {
-        font-size: 11px;
-        color: var(--text-muted);
-        margin-top: 2px;
-    }
-    .header-sub .admin-name {
-        color: var(--text-main);
-        font-weight: 500;
-    }
-    .header-sub .admin-role {
-        color: #10b981;
-        font-weight: 600;
-    }
-    body.dark .header-sub .admin-name { color: #f1f5f9; }
-    body.dark .header-sub .admin-role { color: #10b981; }
-    .sidebar.collapsed .header-main,
-    .sidebar.collapsed .header-sub {
-        opacity: 0;
-        width: 0;
-        display: none;
-    }
-    .nav-section { margin-bottom: 12px; }
-    .nav-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 4px 8px; margin-bottom: 2px; font-weight: 600; }
+    .sidebar { position: fixed; left: 0; top: 0; height: 100vh; width: 240px; background: var(--bg-sidebar); padding: 20px 16px; transition: all 0.2s ease; z-index: 100; display: flex; flex-direction: column; border-right: 1px solid var(--border-color); box-shadow: 2px 0 10px rgba(0,0,0,0.02); }
+    .sidebar.collapsed { width: 70px; }
+    .sidebar-header { display: flex; align-items: center; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); margin-bottom: 20px; }
+    .logo-icon { width: 40px; height: 40px; background: var(--brand-gradient); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #ffffff; font-size: 20px; box-shadow: 0 4px 10px rgba(79,70,229,0.2); }
+    .logo-text { font-size: 18px; font-weight: 600; color: var(--text-main); white-space: nowrap; overflow: hidden; transition: opacity 0.2s; }
+    .sidebar.collapsed .logo-text { opacity: 0; width: 0; }
+    .nav-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); padding: 6px 12px; margin-bottom: 4px; font-weight: 600; }
     .sidebar.collapsed .nav-section-title { opacity: 0; }
-    .nav-menu { display: flex; flex-direction: column; gap: 2px; flex-grow: 1; }
-    .nav-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 6px 8px;
-        border-radius: 6px;
-        color: var(--text-muted);
-        text-decoration: none;
-        transition: all 0.2s;
-        font-size: 12px;
-        font-weight: 500;
-    }
+    .nav-menu { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }
+    .nav-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; color: var(--text-muted); text-decoration: none; transition: all 0.2s; font-size: 13px; font-weight: 500; }
     .nav-item:hover { background: var(--hover-bg); color: var(--text-main); }
-    .nav-item.active { background: rgba(79,70,229,0.1); color: var(--brand-color); border-left: 3px solid var(--brand-color); }
-    .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; color: currentColor; }
+    .nav-item.active { background: rgba(79, 70, 229, 0.1); color: var(--brand-color); border-left: 4px solid var(--brand-color); }
+    .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; color: currentColor; }
     .sidebar.collapsed .nav-item span { opacity: 0; width: 0; }
-    .sidebar-toggle { position: absolute; right: -12px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 2px solid var(--bg-body); color: #ffffff; font-size: 12px; z-index: 101; }
+    
+    .sidebar-toggle { position: absolute; right: -15px; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 3px solid var(--bg-body); color: #ffffff; font-size: 14px; transition: 0.2s; z-index: 101; }
     .sidebar.collapsed .sidebar-toggle { transform: translateY(-50%) rotate(180deg); }
-    .sidebar-footer { border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: auto; }
-    .admin-info { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--hover-bg); border-radius: 8px; margin-bottom: 8px; }
-    .admin-avatar { width: 28px; height: 28px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; }
-    .admin-role { font-size: 10px; color: var(--text-muted); }
-    .logout-btn {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 10px;
-        border-radius: 6px;
-        color: #ef4444;
-        text-decoration: none;
-        font-size: 12px;
-        font-weight: 500;
-        transition: 0.2s;
-        width: fit-content;
-    }
+    .sidebar-footer { border-top: 1px solid var(--border-color); padding-top: 16px; margin-top: auto; }
+    .admin-info { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--hover-bg); border-radius: 12px; margin-bottom: 10px; }
+    .admin-avatar { width: 36px; height: 36px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 16px; }
+    .admin-name { font-weight: 600; color: var(--text-main); font-size: 14px; }
+    .admin-role { font-size: 11px; color: var(--text-muted); }
+    .logout-btn { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 10px; color: #ef4444; text-decoration: none; font-size: 13px; font-weight: 500; }
     .logout-btn:hover { background: rgba(239,68,68,0.1); }
-    .logout-btn svg { width: 14px; height: 14px; }
-    .sidebar.collapsed .logout-btn span { display: none; }
+    .sidebar.collapsed .logout-btn span, .sidebar.collapsed .admin-info { display: none; }
 
     /* Main Content */
-    .main-content { margin-left: 220px; padding: 20px; transition: margin-left 0.2s; min-height: 100vh; }
-    .main-content.expanded { margin-left: 60px; }
-
-    /* Page Header */
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-        flex-wrap: wrap;
-        gap: 12px;
-    }
-    .page-title { font-size: 24px; font-weight: 700; color: var(--text-main); }
+    .main-content { margin-left: 240px; padding: 20px; transition: margin-left 0.2s; min-height: 100vh; background: var(--bg-body); }
+    .main-content.expanded { margin-left: 70px; }
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    .page-title { font-size: 26px; font-weight: 700; color: var(--text-main); }
     .page-title span { color: var(--brand-color); }
 
-    /* Top Actions */
-    .top-actions {
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 16px;
-        flex-wrap: wrap;
-    }
-    .search-box {
-        position: relative;
-        display: flex;
-        align-items: center;
-    }
-    .search-input {
-        background: var(--bg-card);
-        border: 1px solid var(--border-color);
-        color: var(--text-main);
-        padding: 6px 12px 6px 32px;
-        border-radius: 20px;
-        font-size: 12px;
-        outline: none;
-        transition: 0.2s;
-        width: 220px;
-    }
+    /* Top Actions & Search */
+    .top-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+    .search-box { position: relative; display: flex; align-items: center; }
+    .search-input { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main); padding: 10px 14px 10px 36px; border-radius: 8px; font-size: 13px; outline: none; transition: 0.2s; width: 260px; }
     .search-input:focus { border-color: var(--brand-color); box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
-    .search-icon { position: absolute; left: 10px; color: var(--text-muted); font-size: 12px; }
-    .shortcut-hint { position: absolute; right: 10px; font-size: 9px; background: var(--hover-bg); padding: 2px 4px; border-radius: 4px; color: var(--text-muted); border: 1px solid var(--border-color); }
-    .action-group { display: flex; gap: 8px; }
-    .action-btn {
-        background: var(--bg-card);
-        border: 1px solid var(--border-color);
-        color: var(--text-main);
-        padding: 6px 12px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        transition: 0.2s;
-    }
+    .search-icon { position: absolute; left: 12px; color: var(--text-muted); font-size: 14px; }
+    .shortcut-hint { position: absolute; right: 12px; font-size: 10px; background: var(--hover-bg); padding: 2px 6px; border-radius: 4px; color: var(--text-muted); border: 1px solid var(--border-color); }
+    .action-group { display: flex; gap: 10px; }
+    .action-btn { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-main); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; transition: 0.2s; }
     .action-btn:hover { border-color: var(--brand-color); color: var(--brand-color); }
-
-    /* Search Results */
-    #search-results {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        width: 100%;
-        max-width: 400px;
-        background: var(--bg-card);
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-        margin-top: 8px;
-        z-index: 1000;
-        display: none;
-        max-height: 400px;
-        overflow-y: auto;
-    }
-    .search-item { padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
-    .search-item:hover { background: var(--hover-bg); }
-    .search-item-title { font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between; }
-    .search-item-meta { font-size: 11px; color: var(--text-muted); display: flex; gap: 10px; }
+    
+    /* Search Results Modal */
+    #search-results { position: absolute; top: 100%; left: 0; width: 100%; max-width: 400px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); margin-top: 8px; z-index: 1000; display: none; max-height: 400px; overflow-y: auto; }
 
     /* Date Picker */
-    .date-range-picker {
-        background: var(--bg-card);
-        border-radius: 16px;
-        border: 1px solid var(--border-color);
-        padding: 12px 16px;
-    }
-    .qbtns-row { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
-    .qbtn { padding: 4px 12px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; color: var(--text-muted); font-size: 10px; cursor: pointer; transition: 0.2s; }
-    .qbtn:hover { background: var(--border-color); }
+    .date-range-picker { background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-color); padding: 14px 18px; }
+    .qbtns-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .qbtn { padding: 5px 14px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; color: var(--text-muted); font-size: 11px; font-weight: 500; cursor: pointer; transition: 0.2s; }
+    .qbtn:hover { background: var(--border-color); color: var(--text-main); }
     .qbtn.active { background: var(--brand-color); border-color: var(--brand-color); color: #fff; }
-    .date-inputs-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .range-input { padding: 4px 10px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; color: var(--text-main); font-size: 11px; }
-    .apply-btn { padding: 4px 14px; background: var(--brand-color); border: none; border-radius: 30px; color: #fff; font-size: 11px; cursor: pointer; }
-    .week-badge { font-size: 11px; color: var(--brand-color); padding: 4px 12px; background: rgba(79,70,229,0.1); border-radius: 30px; }
+    .date-inputs-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .range-input { padding: 6px 12px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; color: var(--text-main); font-size: 12px; }
+    .apply-btn { padding: 6px 18px; background: var(--brand-color); border: none; border-radius: 30px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .week-badge { font-size: 12px; color: var(--brand-color); font-weight: 500; padding: 5px 14px; background: rgba(79,70,229,0.1); border-radius: 30px; }
 
-    /* Provider Cards */
-    .provider-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); margin-bottom: 20px; overflow: hidden; }
-    .card-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border-color); }
-    .provider-info { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-    .provider-name { font-size: 18px; font-weight: 600; color: var(--text-main); }
-    .star-rating { color: #fbbf24; font-size: 13px; letter-spacing: 2px; }
-    .trend-badge { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 30px; font-size: 11px; font-weight: 600; }
-    .trend-badge.up { background: #e6f7e6; color: #10b981; border: 1px solid #a7f3d0; }
-    .trend-badge.down { background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; }
-    .trend-badge.neutral { background: var(--hover-bg); color: var(--text-muted); border: 1px solid var(--border-color); }
-    .card-stats { display: flex; gap: 16px; }
-    .stat-item { text-align: center; padding: 4px 12px; background: var(--hover-bg); border-radius: 12px; border: 1px solid var(--border-color); }
-    .stat-value { font-size: 18px; font-weight: 700; color: var(--text-main); }
-    .stat-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; }
+    /* Cards & Stats */
+    .provider-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); margin-bottom: 20px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
+    .card-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-color); position: relative; }
+    .provider-info { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .provider-name { font-size: 20px; font-weight: 600; color: var(--text-main); }
+    .card-stats { display: flex; gap: 20px; }
+    .stat-item { text-align: center; padding: 6px 16px; background: var(--hover-bg); border-radius: 14px; border: 1px solid var(--border-color); }
+    .stat-value { font-size: 20px; font-weight: 700; color: var(--text-main); }
+    .stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
 
     /* Tables */
     .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .data-table th { background: var(--table-hdr); padding: 8px 4px; text-align: center; font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 2px solid var(--brand-color); }
-    .data-table th.region-col { text-align: left; padding-left: 12px; }
-    .data-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
-    .data-table td.region-col { text-align: left; padding-left: 12px; font-weight: 500; background: var(--hover-bg); }
-    .data-table tr.total-row td { background: rgba(79,70,229,0.1); font-weight: 600; color: var(--brand-color); border-top: 2px solid var(--brand-color); }
-
-    /* Region Table (for daily region) */
-    .region-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .region-table th { background: var(--table-hdr); padding: 8px 4px; text-align: center; font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 2px solid var(--brand-color); }
-    .region-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
-    .region-table td:first-child { text-align: left; font-weight: 500; background: var(--hover-bg); padding-left: 8px; }
-    .region-table tr:last-child td { border-bottom: none; }
-
-    /* Day Data Grid */
-    .day-data { display: flex; justify-content: center; gap: 2px; font-size: 10px; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-body); margin: 2px 0; }
-    .day-data span, .day-data a { flex: 1; min-width: 28px; padding: 3px 1px; text-align: center; font-weight: 500; border-right: 1px solid var(--border-color); color: inherit; text-decoration: none; }
-    .day-data span:last-child, .day-data a:last-child { border-right: none; }
+    .data-table th { background: var(--table-hdr); padding: 10px 6px; text-align: center; font-weight: 600; color: var(--text-muted); font-size: 11px; text-transform: uppercase; border-bottom: 2px solid var(--brand-color); }
+    .data-table th.region-col { text-align: left; padding-left: 16px; }
+    .data-table td { padding: 8px 6px; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
+    .data-table td.region-col { text-align: left; padding-left: 16px; font-weight: 500; background: var(--hover-bg); }
+    .day-data { display: flex; justify-content: center; gap: 2px; font-size: 11px; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-body); margin: 2px 0; }
+    .day-data span, .day-data a { flex: 1; min-width: 32px; padding: 4px 1px; text-align: center; font-weight: 500; border-right: 1px solid var(--border-color); color: inherit; text-decoration: none; }
     .day-data span:nth-child(1), .day-data a:nth-child(1) { color: #3b82f6; background: rgba(59,130,246,0.1); }
     .day-data span:nth-child(2), .day-data a:nth-child(2) { color: #10b981; background: rgba(16,185,129,0.1); }
     .day-data span:nth-child(3), .day-data a:nth-child(3) { color: #f59e0b; background: rgba(245,158,11,0.1); }
     .day-data span:nth-child(4), .day-data a:nth-child(4) { color: #8b5cf6; background: rgba(139,92,246,0.1); }
     .day-data span:nth-child(5), .day-data a:nth-child(5) { color: #ec4899; background: rgba(236,72,153,0.1); }
-    .day-data-empty { color: var(--text-muted); font-size: 10px; padding: 4px; background: var(--cell-empty); border-radius: 4px; }
+    .day-data-empty { color: var(--text-muted); font-size: 12px; padding: 4px; background: var(--cell-empty); border-radius: 4px; }
+    
     .orders-link:hover, .boxes-link:hover, .weight-link:hover { color: var(--brand-color); border-bottom: 1px dashed var(--brand-color); }
-
-    /* Sub-header */
-    .sub-header { display: flex; justify-content: center; gap: 4px; font-size: 8px; color: var(--text-muted); }
-    .sub-header span { min-width: 28px; text-align: center; padding: 2px 0; }
-
-    /* Stats Cards */
-    .stats-row, .stats-row-5 { display: grid; gap: 12px; margin-bottom: 20px; }
-    .stats-row { grid-template-columns: repeat(4, 1fr); }
-    .stats-row-5 { grid-template-columns: repeat(5, 1fr); }
-    .stat-card { background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-color); padding: 12px; display: flex; align-items: center; gap: 12px; }
-    .stat-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--hover-bg); border: 1px solid var(--border-color); }
-    .stat-content { flex: 1; }
-    .stat-card .stat-value { font-size: 20px; font-weight: 700; color: var(--text-main); margin-bottom: 2px; }
-    .stat-card .stat-label { font-size: 12px; color: var(--text-muted); }
-
-    /* Charts */
-    .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
-    .chart-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 16px; }
-    .chart-card.full-width { grid-column: span 2; }
-    .chart-title { font-size: 15px; font-weight: 600; color: var(--text-main); margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
-
-    /* Leaderboard */
-    .leaderboard-table { width: 100%; border-collapse: collapse; }
-    .leaderboard-table th { background: var(--table-hdr); padding: 10px; text-align: left; font-weight: 600; color: var(--text-muted); font-size: 11px; border-bottom: 2px solid var(--brand-color); }
-    .leaderboard-table td { padding: 10px; border-bottom: 1px solid var(--border-color); }
-    .rank-badge { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
-    .rank-1 { background: #fbbf24; color: #1e293b; }
-    .rank-2 { background: #94a3b8; color: #ffffff; }
-    .rank-3 { background: #f9a8d4; color: #1e293b; }
-    .provider-cell { display: flex; align-items: center; gap: 10px; }
-    .provider-color { width: 4px; height: 28px; border-radius: 2px; }
-
-    /* KPI Cards */
-    .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
-    .kpi-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 16px; text-align: center; }
-    .kpi-icon { font-size: 28px; margin-bottom: 8px; }
-    .kpi-value { font-size: 24px; font-weight: 700; color: var(--text-main); }
-    .kpi-label { font-size: 12px; color: var(--text-muted); }
-    .kpi-trend { font-size: 11px; margin-top: 8px; padding: 4px 10px; border-radius: 30px; display: inline-block; font-weight: 600; }
-    .kpi-trend.up { background: #e6f7e6; color: #10b981; border: 1px solid #a7f3d0; }
-    .kpi-trend.down { background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; }
-
-    /* Winner Card */
-    .winner-card { background: #fef9e7; border: 2px solid #fbbf24; }
-
-    /* Comparison Tabs */
-    .tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
-    .tab-btn { padding: 5px 14px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 40px; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
-    .tab-btn:hover { background: var(--border-color); }
-    .tab-btn.active { background: var(--brand-color); border-color: var(--brand-color); color: #fff; }
-
-    /* Comparison Cards */
-    .comparison-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: start; }
-    .comparison-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 18px; }
-    .comparison-vs { display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: var(--brand-color); padding: 16px; }
-    .comparison-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
-    .comparison-color { width: 5px; height: 32px; border-radius: 3px; }
-    .comparison-name { font-size: 18px; font-weight: 600; color: var(--text-main); }
-    .comparison-stat { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color); }
-    .comparison-stat-label { color: var(--text-muted); font-size: 12px; }
-    .comparison-stat-value { color: var(--text-main); font-size: 14px; font-weight: 600; }
-    .winner-indicator { color: #10b981; font-size: 11px; margin-left: 4px; }
-
-    /* Heatmap */
-    .heatmap-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
-    .heatmap-item { background: var(--bg-card); border-radius: 16px; padding: 14px; text-align: center; border: 1px solid var(--border-color); }
-    .heatmap-region { font-size: 14px; font-weight: 600; color: var(--text-main); }
-    .heatmap-value { font-size: 20px; font-weight: 700; color: var(--brand-color); }
-
-    /* Achievements */
-    .achievements-row { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
-    .achievement-badge { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; font-size: 10px; color: var(--text-muted); }
-
-    /* WhatsApp Report */
-    .whatsapp-box { background: var(--bg-card); border: 2px solid #10b981; border-radius: 20px; padding: 20px; }
-    .whatsapp-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
-    .whatsapp-icon { font-size: 24px; }
-    .whatsapp-title { font-size: 16px; font-weight: 700; color: #10b981; }
-    .whatsapp-content { font-family: 'Courier New', monospace; background: var(--hover-bg); padding: 14px; border-radius: 12px; color: var(--text-main); border: 1px solid var(--border-color); }
-    .copy-btn { background: #10b981; color: #ffffff; padding: 10px; border: none; border-radius: 40px; font-weight: 600; font-size: 12px; cursor: pointer; margin-top: 14px; width: 100%; }
-
-    /* Login Page */
-    .login-container {
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--bg-body);
-        padding: 20px;
-    }
-    .login-card {
-        background: var(--bg-card);
-        border-radius: 16px;
-        border: 1px solid var(--border-color);
-        padding: 40px 30px;
-        width: 100%;
-        max-width: 360px;
-        text-align: center;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-    }
-    .login-logo {
-        width: 60px;
-        height: 60px;
-        background: var(--brand-gradient);
-        border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin: 0 auto 20px;
-        color: white;
-        font-size: 26px;
-        font-weight: 700;
-    }
-    .login-title {
-        font-size: 20px;
-        font-weight: 600;
-        color: var(--text-main);
-        margin-bottom: 6px;
-    }
-    .login-subtitle {
-        font-size: 13px;
-        color: var(--text-muted);
-        margin-bottom: 24px;
-    }
-    .login-form {
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-    }
-    .form-group {
-        text-align: left;
-    }
-    .form-label {
-        display: block;
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--text-muted);
-        margin-bottom: 4px;
-    }
-    .form-input {
-        width: 100%;
-        padding: 10px 12px;
-        background: var(--bg-body);
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        color: var(--text-main);
-        font-size: 13px;
-        transition: 0.2s;
-    }
-    .form-input:focus {
-        outline: none;
-        border-color: var(--brand-color);
-        box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
-    }
-    .login-btn {
-        width: 100%;
-        padding: 10px;
-        background: var(--brand-color);
-        border: none;
-        border-radius: 10px;
-        color: white;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: 0.2s;
-    }
-    .login-btn:hover {
-        background: #6366f1;
-    }
-    .divider {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 12px 0;
-        color: var(--text-muted);
-        font-size: 11px;
-    }
-    .divider-line {
-        flex: 1;
-        height: 1px;
-        background: var(--border-color);
-    }
-    .guest-btn {
-        background: var(--bg-body);
-        border: 1px solid var(--border-color);
-        color: var(--text-main);
-    }
-    .guest-btn:hover {
-        background: var(--hover-bg);
-        border-color: var(--brand-color);
-        color: var(--brand-color);
-    }
-    .error-message {
-        background: #fee2e2;
-        border: 1px solid #fecaca;
-        border-radius: 8px;
-        padding: 8px;
-        color: #dc2626;
-        font-size: 11px;
-        margin-bottom: 12px;
-    }
-
-    /* Loading */
+    .sub-header { display: flex; justify-content: center; gap: 4px; font-size: 9px; color: var(--text-muted); }
+    
     .loading { display: flex; justify-content: center; align-items: center; height: 200px; color: var(--brand-color); }
-    .spinner { width: 36px; height: 36px; border: 3px solid rgba(79,70,229,0.1); border-top-color: var(--brand-color); border-radius: 50%; animation: spin 1s linear infinite; }
+    .spinner { width: 40px; height: 40px; border: 3px solid rgba(79, 70, 229, 0.1); border-top-color: var(--brand-color); border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* Forecast Page */
-    .forecast-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; margin-bottom: 20px; }
-    .forecast-title { font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 14px; }
-    .forecast-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 14px; }
-    .forecast-day { background: var(--hover-bg); border-radius: 12px; padding: 14px; text-align: center; }
-    .forecast-day .day-name { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
-    .forecast-day .prediction { font-size: 16px; font-weight: 600; color: var(--brand-color); }
-    .forecast-detail { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    /* Other Common UI Elements */
+    .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+    .kpi-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; text-align: center; }
+    .kpi-value { font-size: 28px; font-weight: 700; color: var(--text-main); margin-bottom: 4px; }
+    .kpi-label { font-size: 13px; color: var(--text-muted); }
 
-    /* Logs Page */
-    .logs-container { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; }
-    .log-entry { padding: 6px 10px; border-bottom: 1px solid var(--border-color); font-family: monospace; font-size: 11px; }
-    .log-entry:last-child { border-bottom: none; }
+    .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; }
+    .chart-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 18px; }
+    .chart-card.full-width { grid-column: span 2; }
+    .chart-title { font-size: 16px; font-weight: 600; color: var(--text-main); margin-bottom: 16px; }
+    
+    .stats-row, .stats-row-5 { display: grid; gap: 16px; margin-bottom: 20px; }
+    .stats-row { grid-template-columns: repeat(4, 1fr); }
+    .stats-row-5 { grid-template-columns: repeat(5, 1fr); }
+    .stat-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 16px; display: flex; align-items: center; gap: 14px; }
+    .stat-icon { width: 48px; height: 48px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; background: var(--hover-bg); }
+    
+    .leaderboard-table { width: 100%; border-collapse: collapse; }
+    .leaderboard-table th { background: var(--table-hdr); padding: 12px; text-align: left; color: var(--text-muted); border-bottom: 2px solid var(--brand-color); }
+    .leaderboard-table td { padding: 12px; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
+    
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab-btn { padding: 6px 18px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 40px; color: var(--text-muted); cursor: pointer; transition: 0.2s; }
+    .tab-btn.active { background: var(--brand-color); border-color: var(--brand-color); color: #ffffff; }
 
-    /* Responsive */
+    /* Login */
+    .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg-body); padding: 20px; }
+    .login-card { background: var(--bg-card); border-radius: 24px; border: 1px solid var(--border-color); padding: 40px; width: 100%; max-width: 400px; text-align: center; }
+    .form-input { width: 100%; padding: 12px 14px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-main); font-size: 14px; }
+    .login-btn { width: 100%; padding: 12px; background: var(--brand-color); border: none; border-radius: 12px; color: #ffffff; font-weight: 600; cursor: pointer; margin-top: 8px; }
+
+    /* TV Mode & Print */
+    body.tv-mode { overflow-x: hidden; }
+    body.tv-mode .sidebar { display: none !important; }
+    body.tv-mode .main-content { margin-left: 0 !important; padding: 40px !important; }
+    body.tv-mode .top-actions { display: none !important; }
+
+    @media print {
+        body { background: white !important; color: black !important; }
+        .sidebar, .top-actions, .date-range-picker, .tabs, .month-selector, .view-selector { display: none !important; }
+        .main-content { margin-left: 0 !important; padding: 0 !important; }
+        .provider-card { border: 1px solid #ccc !important; box-shadow: none !important; break-inside: avoid; }
+    }
+
     @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5 { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
-    @media (max-width: 768px) { .sidebar { width: 60px; } .main-content { margin-left: 60px; } .sidebar-toggle { width: 22px; height: 22px; right: -10px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 768px) { .sidebar { width: 70px; } .main-content { margin-left: 70px; padding: 15px; } .sidebar-toggle { width: 28px; height: 28px; right: -12px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
 </style>
 """
 
+# ============================================
+# NEW ACTION BAR (SEARCH, CSV, THEME)
+# ============================================
+def ACTION_BAR_HTML(role):
+    if role == 'admin':
+        return """
+        <div class="top-actions">
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="global-search" class="search-input" placeholder="Search Order ID..." onkeyup="if(event.key==='Enter' && this.value.length>2) searchOrder(this.value)">
+                <span class="shortcut-hint">Ctrl+/</span>
+                <div id="search-results"></div>
+            </div>
+            <div class="action-group">
+                <button class="action-btn theme-btn-text" onclick="toggleTheme()">🌗 Dark Mode</button>
+                <button class="action-btn" onclick="toggleTVMode()">📺 TV Mode</button>
+            </div>
+        </div>
+        """
+    else:
+        return """
+        <div class="top-actions">
+            <div class="action-group" style="margin-left: auto;">
+                <button class="action-btn theme-btn-text" onclick="toggleTheme()">🌗 Dark Mode</button>
+                <button class="action-btn" onclick="toggleTVMode()">📺 TV Mode</button>
+            </div>
+        </div>
+        """
+
+SIDEBAR_HTML = """
+<nav class="sidebar" id="sidebar">
+    <div class="sidebar-toggle" onclick="toggleSidebar()">«</div>
+    <div class="sidebar-header">
+        <div class="logo-icon">3P</div>
+        <span class="logo-text">3PL Dashboard</span>
+    </div>
+    <div class="nav-menu">
+        <div class="nav-section">
+            <div class="nav-section-title">Main</div>
+            <a href="/" class="nav-item {active_dashboard}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                <span>Dashboard</span>
+            </a>
+            <a href="/weekly-summary" class="nav-item {active_weekly}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <span>Weekly Summary</span>
+            </a>
+            <a href="/daily-region" class="nav-item {active_daily_region}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                <span>Daily Region</span>
+            </a>
+            <a href="/flight-load" class="nav-item {active_flight}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                <span>Flight Load</span>
+            </a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-title">Analytics</div>
+            <a href="/analytics" class="nav-item {active_analytics}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
+                <span>Analytics</span>
+            </a>
+            <a href="/kpi" class="nav-item {active_kpi}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                <span>KPI Dashboard</span>
+            </a>
+            <a href="/comparison" class="nav-item {active_comparison}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <span>Comparison</span>
+            </a>
+            <a href="/regions" class="nav-item {active_regions}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>Region Heatmap</span>
+            </a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-title">Reports</div>
+            <a href="/monthly" class="nav-item {active_monthly}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                <span>Monthly Report</span>
+            </a>
+            <a href="/calendar" class="nav-item {active_calendar}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                <span>Calendar View</span>
+            </a>
+            <a href="/whatsapp" class="nav-item {active_whatsapp}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                <span>WhatsApp Report</span>
+            </a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-title">Achievements</div>
+            <a href="/achievements" class="nav-item {active_achievements}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+                <span>Achievements</span>
+            </a>
+        </div>
+    </div>
+    <div class="sidebar-footer">
+        <div class="admin-info">
+            <div class="admin-avatar">{user_initial}</div>
+            <div class="admin-details">
+                <div class="admin-name">{user_name}</div>
+                <div class="admin-role">{user_role}</div>
+            </div>
+        </div>
+        <a href="/logout" class="logout-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+            <span>Logout</span>
+        </a>
+    </div>
+</nav>
+"""
+
+SIDEBAR_SCRIPT = """
+<script>
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const mainContent = document.getElementById('main-content');
+    sidebar.classList.toggle('collapsed');
+    mainContent.classList.toggle('expanded');
+    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+}
+</script>
+"""
+
+def sidebar(active, role='guest'):
+    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','calendar','whatsapp','achievements']
+    kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
+    if role == 'admin':
+        kwargs['user_initial'] = 'A'
+        kwargs['user_name'] = 'Admin User'
+        kwargs['user_role'] = 'Full Access'
+    else:
+        kwargs['user_initial'] = 'G'
+        kwargs['user_name'] = 'Guest User'
+        kwargs['user_role'] = 'View Only'
+    return SIDEBAR_HTML.format(**kwargs)
+
+# ============================================
+# JAVASCRIPT (THEME, SEARCH, DATE)
+# ============================================
 SHARED_JS = """
 <script>
-// ===== DATE UTILITIES =====
+document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.key === '/') { e.preventDefault(); const s = document.getElementById('global-search'); if(s) s.focus(); }
+    if (e.altKey && e.key === 'd') { window.location.href = '/'; }
+    if (e.altKey && e.key === 't') { toggleTheme(); }
+});
+
+function toggleTheme() {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    localStorage.setItem('theme', isDark ? 'light' : 'dark');
+    document.querySelectorAll('.theme-btn-text').forEach(e => e.innerHTML = isDark ? '🌗 Dark Mode' : '☀️ Light Mode');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.setAttribute('data-theme', 'dark');
+        document.querySelectorAll('.theme-btn-text').forEach(e => e.innerHTML = '☀️ Light Mode');
+    }
+    if (localStorage.getItem('sidebarCollapsed') === 'true') {
+        document.getElementById('sidebar').classList.add('collapsed');
+        document.getElementById('main-content').classList.add('expanded');
+    }
+});
+
+function toggleTVMode() {
+    document.body.classList.toggle('tv-mode');
+    if (document.body.classList.contains('tv-mode') && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen();
+    } else if (document.exitFullscreen) {
+        document.exitFullscreen();
+    }
+}
+
+async function searchOrder(q) {
+    const resBox = document.getElementById('search-results');
+    if(!q) { resBox.style.display = 'none'; return; }
+    resBox.innerHTML = '<div style="padding:15px;text-align:center;color:var(--text-muted)">Searching...</div>';
+    resBox.style.display = 'block';
+    try {
+        const r = await fetch('/api/search?q=' + encodeURIComponent(q));
+        const data = await r.json();
+        if(data.length === 0) {
+            resBox.innerHTML = '<div style="padding:15px;text-align:center;color:var(--text-muted)">No orders found</div>';
+            return;
+        }
+        let html = '';
+        data.forEach(item => {
+            html += `<div style="padding:12px 16px; border-bottom:1px solid var(--border-color); cursor:pointer;" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background='transparent'">
+                <div style="font-weight:600; color:var(--text-main); display:flex; justify-content:space-between;"><span>#${item.order_id}</span> <span style="color:${item.color}">${item.provider}</span></div>
+                <div style="font-size:11px; color:var(--text-muted); display:flex; gap:10px; margin-top:4px;"><span>📅 ${item.date}</span><span>📍 ${item.region}</span><span>⚖️ ${item.weight}kg</span></div>
+            </div>`;
+        });
+        resBox.innerHTML = html;
+    } catch(e) {
+        resBox.innerHTML = '<div style="padding:15px;text-align:center;color:red">Error searching</div>';
+    }
+}
+document.addEventListener('click', e => {
+    if(!e.target.closest('.search-box')) {
+        const b = document.getElementById('search-results');
+        if(b) b.style.display = 'none';
+    }
+});
+
 function getISOWeek(date) { const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())); const dayNum = d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate() + 4 - dayNum); const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); return Math.ceil((((d - yearStart) / 86400000) + 1) / 7); }
 function formatWeight(w) { if (w === undefined || w === null || w === 0) return '-'; const r = Math.round(w * 10) / 10; return r % 1 === 0 ? Math.round(r).toString() : r.toFixed(1); }
 function fmtLocal(date) { const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); return `${y}-${m}-${d}`; }
 function fmtDisp(date, includeYear) { if (includeYear === false) return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
 function getMonday(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
 
-// ===== DATE RANGE PICKER =====
 let dpStart = null; let dpEnd = null;
 function dpInit(defaultPeriod) {
     defaultPeriod = defaultPeriod || 'week';
     const today = new Date(); today.setHours(0,0,0,0);
     if (defaultPeriod === 'today') { dpStart = new Date(today); dpEnd = new Date(today); } 
-    else if (defaultPeriod === '7d') { dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 6); } 
-    else if (defaultPeriod === '15d') { dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 14); } 
-    else if (defaultPeriod === '30d') { dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 29); } 
     else if (defaultPeriod === 'week') { dpStart = getMonday(today); dpEnd = new Date(dpStart); dpEnd.setDate(dpEnd.getDate() + 6); } 
     else if (defaultPeriod === 'month') { dpStart = new Date(today.getFullYear(), today.getMonth(), 1); dpEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0); }
     document.getElementById('dpStart').value = fmtLocal(dpStart); document.getElementById('dpEnd').value = fmtLocal(dpEnd);
@@ -785,9 +606,8 @@ function dpSetQuick(btn, period) {
 }
 function dpApply() {
     const sv = document.getElementById('dpStart').value; const ev = document.getElementById('dpEnd').value;
-    if (!sv || !ev) { alert('Please select both dates'); return; }
+    if (!sv || !ev) return;
     dpStart = new Date(sv + 'T00:00:00'); dpEnd = new Date(ev + 'T00:00:00');
-    if (dpStart > dpEnd) { alert('Start date must be before end date'); return; }
     document.querySelectorAll('.qbtn').forEach(b => b.classList.remove('active'));
     dpUpdateBadge(); loadData();
 }
@@ -795,300 +615,15 @@ function dpUpdateBadge() {
     const badge = document.getElementById('dpBadge'); if (!badge || !dpStart || !dpEnd) return;
     const wk = getISOWeek(dpStart); const days = Math.round((dpEnd - dpStart) / 86400000) + 1;
     let txt = 'Week ' + wk + ' • ';
-    if (days === 1) { txt += fmtDisp(dpStart, true); } 
-    else if (days <= 31 && dpStart.getFullYear() === dpEnd.getFullYear()) { txt += fmtDisp(dpStart, false) + ' – ' + fmtDisp(dpEnd, true); if (days !== 7) txt += ' (' + days + 'd)'; } 
-    else { txt += fmtDisp(dpStart, true) + ' – ' + fmtDisp(dpEnd, true); }
+    if (days === 1) { txt += fmtDisp(dpStart, true); } else { txt += fmtDisp(dpStart, true) + ' – ' + fmtDisp(dpEnd, true); }
     badge.textContent = txt;
 }
 function dpParams() { return 'start_date=' + fmtLocal(dpStart) + '&end_date=' + fmtLocal(dpEnd); }
 function getStarRating(stars) { return '★'.repeat(stars) + '☆'.repeat(5 - stars); }
-
-// ===== THEME TOGGLE =====
-function toggleTheme() {
-    const isDark = document.body.getAttribute('data-theme') === 'dark';
-    document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
-    localStorage.setItem('theme', isDark ? 'light' : 'dark');
-    updateThemeButton();
-}
-function updateThemeButton() {
-    const btn = document.getElementById('theme-toggle-btn');
-    if (!btn) return;
-    const isDark = document.body.getAttribute('data-theme') === 'dark';
-    btn.innerHTML = isDark ? '☀️ Light' : '🌙 Dark';
-}
-document.addEventListener('DOMContentLoaded', () => {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    document.body.setAttribute('data-theme', savedTheme);
-    updateThemeButton();
-});
-
-// ===== SIDEBAR TOGGLE =====
-function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const mainContent = document.getElementById('main-content');
-    sidebar.classList.toggle('collapsed');
-    mainContent.classList.toggle('expanded');
-    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
-}
-document.addEventListener('DOMContentLoaded', function() {
-    if (localStorage.getItem('sidebarCollapsed') === 'true') {
-        document.getElementById('sidebar').classList.add('collapsed');
-        document.getElementById('main-content').classList.add('expanded');
-    }
-});
-
-// ===== EXPORT TO CSV =====
-function exportTableToCSV(filename) {
-    const role = '{{ role }}';
-    if (role !== 'admin') return;
-    let csv = [];
-    let rows = document.querySelectorAll("table tr");
-    for (let i = 0; i < rows.length; i++) {
-        let row = [], cols = rows[i].querySelectorAll("td, th");
-        for (let j = 0; j < cols.length; j++) {
-            let data = cols[j].innerText.replace(/(\\r\\n|\\n|\\r)/gm, "").replace(/"/g, '""');
-            row.push('"' + data + '"');
-        }
-        csv.push(row.join(","));
-    }
-    let csvFile = new Blob([csv.join("\\n")], {type: "text/csv"});
-    let dl = document.createElement("a");
-    dl.download = filename; dl.href = window.URL.createObjectURL(csvFile);
-    dl.style.display = "none"; document.body.appendChild(dl); dl.click();
-}
-
-// ===== GLOBAL SEARCH =====
-function searchOrder(q) {
-    const role = '{{ role }}';
-    if (role !== 'admin') return;
-    const resBox = document.getElementById('search-results');
-    if(!q) { resBox.style.display = 'none'; return; }
-    resBox.innerHTML = '<div style="padding:15px;text-align:center;color:var(--text-muted)">Searching...</div>';
-    resBox.style.display = 'block';
-    fetch('/api/search?q=' + encodeURIComponent(q))
-        .then(res => res.json())
-        .then(data => {
-            if(data.length === 0) {
-                resBox.innerHTML = '<div style="padding:15px;text-align:center;color:var(--text-muted)">No orders found</div>';
-                return;
-            }
-            let html = '';
-            data.forEach(item => {
-                html += `<div class="search-item">
-                    <div class="search-item-title"><span>#${item.order_id}</span> <span style="color:${item.color}">${item.provider}</span></div>
-                    <div class="search-item-meta"><span>📅 ${item.date}</span><span>📍 ${item.region}</span><span>⚖️ ${item.weight}kg</span></div>
-                </div>`;
-            });
-            resBox.innerHTML = html;
-        })
-        .catch(() => { resBox.innerHTML = '<div style="padding:15px;text-align:center;color:red">Error searching</div>'; });
-}
-document.addEventListener('click', e => {
-    if(!e.target.closest('.search-box')) {
-        const b = document.getElementById('search-results');
-        if(b) b.style.display = 'none';
-    }
-});
-document.addEventListener('keydown', e => {
-    if (e.ctrlKey && e.key === '/') {
-        e.preventDefault();
-        const input = document.getElementById('global-search');
-        if (input) input.focus();
-    }
-});
-
-// ===== NOTIFICATIONS =====
-function checkNotifications() {
-    const role = '{{ role }}';
-    if (role !== 'admin') return;
-    fetch('/api/notifications')
-        .then(res => res.json())
-        .then(data => {
-            if (data.message && Notification.permission === 'granted') {
-                new Notification('3PL Alert', { body: data.message });
-            }
-        });
-}
-if (Notification && Notification.permission === 'default') {
-    Notification.requestPermission();
-}
-setInterval(checkNotifications, 30000);
 </script>
 """
 
-def DATE_PICKER_HTML(default_period='week'):
-    return f"""
-<div class="date-range-picker">
-    <div class="qbtns-row">
-        <button class="qbtn" data-period="today" onclick="dpSetQuick(this,'today')">Today</button>
-        <button class="qbtn" data-period="7d" onclick="dpSetQuick(this,'7d')">7 Days</button>
-        <button class="qbtn" data-period="15d" onclick="dpSetQuick(this,'15d')">15 Days</button>
-        <button class="qbtn" data-period="30d" onclick="dpSetQuick(this,'30d')">30 Days</button>
-        <button class="qbtn" data-period="week" onclick="dpSetQuick(this,'week')">This Week</button>
-        <button class="qbtn" data-period="month" onclick="dpSetQuick(this,'month')">This Month</button>
-    </div>
-    <div class="date-inputs-row">
-        <input type="date" id="dpStart" class="range-input" onchange="dpUpdateBadge()">
-        <span class="range-sep">→</span>
-        <input type="date" id="dpEnd" class="range-input" onchange="dpUpdateBadge()">
-        <button class="apply-btn" onclick="dpApply()">Apply</button>
-        <span class="week-badge" id="dpBadge">Loading...</span>
-    </div>
-</div>
-"""
-
-def ACTION_BAR_HTML(role):
-    if role == 'admin':
-        return """
-    <div class="top-actions">
-        <div class="search-box">
-            <span class="search-icon">🔍</span>
-            <input type="text" id="global-search" class="search-input" placeholder="Search Order ID..." onkeyup="if(this.value.length>2) searchOrder(this.value)">
-            <span class="shortcut-hint">Ctrl+/</span>
-            <div id="search-results"></div>
-        </div>
-        <div class="action-group">
-            <button class="action-btn export-btn" onclick="exportTableToCSV('Dashboard_Export.csv')">📥 Export CSV</button>
-            <button class="action-btn" id="theme-toggle-btn" onclick="toggleTheme()">🌙 Dark</button>
-        </div>
-    </div>
-    """
-    else:
-        return """
-    <div class="top-actions">
-        <button class="action-btn" id="theme-toggle-btn" onclick="toggleTheme()">🌙 Dark</button>
-    </div>
-    """
-
-SIDEBAR_HTML = """
-<nav class="sidebar" id="sidebar">
-    <div class="sidebar-toggle" onclick="toggleSidebar()">«</div>
-    <div class="sidebar-header">
-        <div class="logo-icon">3P</div>
-        <div class="header-titles">
-            <div class="header-main">3PL Dashboard</div>
-            <div class="header-sub">
-                <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
-            </div>
-        </div>
-    </div>
-    <div class="nav-menu">
-        <div class="nav-section">
-            <div class="nav-section-title">MAIN</div>
-            <a href="/" class="nav-item {active_dashboard}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-                <span>Dashboard</span>
-            </a>
-            <a href="/weekly-summary" class="nav-item {active_weekly}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                <span>Weekly Summary</span>
-            </a>
-            <a href="/daily-region" class="nav-item {active_daily_region}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                <span>Daily Region</span>
-            </a>
-            <a href="/flight-load" class="nav-item {active_flight}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-                <span>Flight Load</span>
-            </a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-title">ANALYTICS</div>
-            <a href="/analytics" class="nav-item {active_analytics}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
-                <span>Analytics</span>
-            </a>
-            <a href="/kpi" class="nav-item {active_kpi}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-                <span>KPI Dashboard</span>
-            </a>
-            <a href="/comparison" class="nav-item {active_comparison}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                <span>Comparison</span>
-            </a>
-            <a href="/regions" class="nav-item {active_regions}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <span>Region Heatmap</span>
-            </a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-title">REPORTS</div>
-            <a href="/monthly" class="nav-item {active_monthly}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                <span>Monthly Report</span>
-            </a>
-            <a href="/whatsapp" class="nav-item {active_whatsapp}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                <span>WhatsApp Report</span>
-            </a>
-            <a href="/achievements" class="nav-item {active_achievements}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
-                <span>Achievements</span>
-            </a>
-        </div>
-        {forecast_link}
-        {logs_link}
-    </div>
-    <div class="sidebar-footer">
-        <div class="admin-info">
-            <div class="admin-avatar">AW</div>
-            <div class="admin-role">{user_role}</div>
-        </div>
-        <a href="/logout" class="logout-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            <span>Logout</span>
-        </a>
-    </div>
-</nav>
-"""
-
-SIDEBAR_SCRIPT = """
-<script>
-function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const mainContent = document.getElementById('main-content');
-    sidebar.classList.toggle('collapsed');
-    mainContent.classList.toggle('expanded');
-    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
-}
-document.addEventListener('DOMContentLoaded', function() {
-    if (localStorage.getItem('sidebarCollapsed') === 'true') {
-        document.getElementById('sidebar').classList.add('collapsed');
-        document.getElementById('main-content').classList.add('expanded');
-    }
-});
-</script>
-"""
-
-def sidebar(active, role='guest'):
-    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','whatsapp','achievements']
-    kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
-    
-    if role == 'admin':
-        kwargs['user_role'] = 'Administrator'
-        kwargs['forecast_link'] = """
-        <div class="nav-section">
-            <div class="nav-section-title">TOOLS</div>
-            <a href="/forecast" id="forecast-link" class="nav-item {active_forecast}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                <span>Forecast</span>
-            </a>
-        </div>
-        """
-        kwargs['logs_link'] = """
-        <div class="nav-section">
-            <a href="/logs" id="logs-link" class="nav-item {active_logs}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <span>Activity Logs</span>
-            </a>
-        </div>
-        """
-    else:
-        kwargs['user_role'] = 'Guest'
-        kwargs['forecast_link'] = ''
-        kwargs['logs_link'] = ''
-        
-    return SIDEBAR_HTML.format(**kwargs)
+# ===== ROUTES =====
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -1110,32 +645,28 @@ def login():
     return render_template_string('''
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Login - 3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
-<div class="login-container">
-    <div class="login-card">
-        <div class="login-logo">3P</div>
-        <h1 class="login-title">Welcome Back</h1>
-        <p class="login-subtitle">Access your 3PL Dashboard</p>
-        {% if error %}<div class="error-message">{{ error }}</div>{% endif %}
-        <form class="login-form" method="POST">
-            <div class="form-group">
-                <label class="form-label">Admin Password</label>
-                <input type="password" name="password" class="form-input" placeholder="Enter password" autofocus>
-            </div>
-            <button type="submit" name="action" value="admin" class="login-btn">Sign In as Admin</button>
-            <div class="divider">
-                <span class="divider-line"></span>
-                <span>OR</span>
-                <span class="divider-line"></span>
-            </div>
-            <button type="submit" name="action" value="guest" class="login-btn guest-btn">Continue as Guest (View Only)</button>
-        </form>
+<title>Login - 3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body>
+<div class="login-container"><div class="login-card">
+<div class="login-logo">3P</div>
+<h1 class="login-title">Welcome Back</h1>
+<p class="login-subtitle">Access your 3PL Dashboard</p>
+{% if error %}<div class="error-message">{{ error }}</div>{% endif %}
+<form class="login-form" method="POST">
+    <div class="form-group"><label class="form-label">Admin Password</label>
+    <input type="password" name="password" class="form-input" placeholder="Enter password" autofocus></div>
+    <button type="submit" name="action" value="admin" class="login-btn">Sign In as Admin</button>
+    <div style="margin: 20px 0; display: flex; align-items: center; justify-content: center; gap: 10px;">
+        <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
+        <span style="color: var(--text-muted); font-size: 12px; font-weight: 600;">OR</span>
+        <div style="height: 1px; background: var(--border-color); flex: 1;"></div>
     </div>
-</div></body></html>''', error=error, favicon=FAVICON)
+    <button type="submit" name="action" value="guest" class="login-btn" style="background: var(--hover-bg); color: var(--text-main); box-shadow: none; border: 1px solid var(--border-color);">Continue as Guest (View Only)</button>
+</form></div></div></body></html>''', error=error)
 
 @app.route('/logout')
 def logout():
-    session.clear()
+    session.pop('logged_in', None)
+    session.pop('role', None)
     return redirect(url_for('login'))
 
 @app.route('/')
@@ -1145,7 +676,7 @@ def dashboard():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('dashboard', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1164,119 +695,74 @@ async function loadData() {
         const data = await response.json();
         let html = '';
         for (const provider of data.providers) { html += renderProvider(provider); }
-        document.getElementById('dashboard-content').innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No data for selected period</h3></div>';
-    } catch(e) { document.getElementById('dashboard-content').innerHTML = '<p style="color:#ef4444;padding:20px">Error loading data: '+e.message+'</p>'; }
+        document.getElementById('dashboard-content').innerHTML = html || '<div style="text-align:center;padding:50px">No data for selected period</div>';
+    } catch(e) { document.getElementById('dashboard-content').innerHTML = '<p style="color:red;padding:20px">Error loading data</p>'; }
 }
 
 function renderProvider(provider) {
-    const role = '{{ role }}';
+    const role = "''' + role + '''";
     const canClick = role === 'admin';
     const trendClass = provider.trend.direction === 'up' ? 'up' : (provider.trend.direction === 'down' ? 'down' : 'neutral');
     const trendIcon = provider.trend.direction === 'up' ? '▲' : (provider.trend.direction === 'down' ? '▼' : '–');
-    let achHtml = '';
-    if (provider.achievements && provider.achievements.length > 0) {
-        achHtml = '<div class="achievements-row">' + provider.achievements.map(a => `<div class="achievement-badge"><span class="badge-icon">${a.icon}</span>${a.name}</div>`).join('') + '</div>';
-    }
     const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const flightDays = [1,3,5];
-    const totals = {};
-    days.forEach(d => totals[d] = {o:0,b:0,w:0,u:0,v:0});
-    const sortedRegions = Object.keys(provider.regions).sort();
+    const totals = {}; days.forEach(d => totals[d] = {o:0,b:0,w:0,u:0,v:0});
     let rowsHtml = '';
-    for (const region of sortedRegions) {
+    Object.keys(provider.regions).sort().forEach(region => {
         const rd = provider.regions[region].days;
-        rowsHtml += '<tr><td class="region-col">' + region + '</td>';
+        rowsHtml += `<tr><td class="region-col">${region}</td>`;
         days.forEach((day, i) => {
             const d = rd[day];
             totals[day].o += d.orders; totals[day].b += d.boxes; totals[day].w += d.weight;
             totals[day].u += d.under20; totals[day].v += d.over20;
-            const fc = flightDays.includes(i) ? ' style="background:#f1f5f9"' : '';
+            const fc = flightDays.includes(i) ? ' style="background:var(--hover-bg)"' : '';
             if (d.orders > 0) {
-                const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(day);
-                const dayDate = new Date(dpStart);
-                dayDate.setDate(dayDate.getDate() + dayIndex);
+                const dayDate = new Date(dpStart); dayDate.setDate(dayDate.getDate() + i);
                 const dateStr = fmtLocal(dayDate);
-
                 if (canClick) {
-                    rowsHtml += `<td class="day-cell"${fc}>
-                        <div class="day-data">
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
-                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
-                        </div>
-                    </td>`;
+                    rowsHtml += `<td class="day-cell"${fc}><div class="day-data">
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
+                        <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
+                    </div></td>`;
                 } else {
-                    rowsHtml += `<td class="day-cell"${fc}>
-                        <div class="day-data">
-                            <span class="orders">${d.orders}</span>
-                            <span class="boxes">${d.boxes}</span>
-                            <span class="weight">${formatWeight(d.weight)}</span>
-                            <span class="under20">${d.under20}</span>
-                            <span class="over20">${d.over20}</span>
-                        </div>
-                    </td>`;
+                    rowsHtml += `<td class="day-cell"${fc}><div class="day-data">
+                        <span>${d.orders}</span><span>${d.boxes}</span><span>${formatWeight(d.weight)}</span>
+                    </div></td>`;
                 }
-            } else {
-                rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`;
-            }
+            } else { rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`; }
         });
         rowsHtml += '</tr>';
-    }
+    });
+    
     rowsHtml += '<tr class="total-row"><td class="region-col">TOTAL</td>';
-    days.forEach((day,i) => {
+    days.forEach((day, i) => {
         const t = totals[day];
-        const fc = flightDays.includes(i) ? ' style="background:#f1f5f9"' : '';
+        const fc = flightDays.includes(i) ? ' style="background:var(--hover-bg)"' : '';
         if (canClick) {
-            rowsHtml += `<td class="day-cell"${fc}>
-                <div class="day-data">
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a>
-                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a>
-                </div>
-            </td>`;
+            rowsHtml += `<td class="day-cell"${fc}><div class="day-data"><a href="#" class="orders-link">${t.o}</a><a href="#" class="boxes-link">${t.b}</a><a href="#" class="weight-link">${formatWeight(t.w)}</a></div></td>`;
         } else {
-            rowsHtml += `<td class="day-cell"${fc}>
-                <div class="day-data">
-                    <span class="orders">${t.o}</span>
-                    <span class="boxes">${t.b}</span>
-                    <span class="weight">${formatWeight(t.w)}</span>
-                    <span class="under20">${t.u}</span>
-                    <span class="over20">${t.v}</span>
-                </div>
-            </td>`;
+            rowsHtml += `<td class="day-cell"${fc}><div class="day-data"><span>${t.o}</span><span>${t.b}</span><span>${formatWeight(t.w)}</span></div></td>`;
         }
     });
     rowsHtml += '</tr>';
-    const subHdr = days.map((_,i) => `<th${flightDays.includes(i)?' style="background:#f1f5f9"':''}><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>`).join('');
-    const dayHdrs = days.map((d,i) => `<th class="day-col${flightDays.includes(i)?' flight-day':''}">${d}${flightDays.includes(i)?' ✈️':''}</th>`).join('');
+    
+    const subHdr = days.map(() => `<th><div class="sub-header"><span>O</span><span>B</span><span>W</span></div></th>`).join('');
+    const dayHdrs = days.map((d,i) => `<th>${d}</th>`).join('');
+    
     return `<div class="provider-card">
-<div class="card-header" style="--pc:${provider.color}">
-<style>.provider-card .card-header::before{background:${provider.color}}</style>
-<div class="provider-info">
-<span class="provider-name">${provider.name}</span>
-<span class="star-rating">${getStarRating(provider.stars)}</span>
-<span class="trend-badge ${trendClass}">${trendIcon} ${provider.trend.percentage}%</span>
-${achHtml}
-</div>
-<div class="card-stats">
-<div class="stat-item"><div class="stat-value">${provider.total_orders.toLocaleString()}</div><div class="stat-label">Orders</div></div>
-<div class="stat-item"><div class="stat-value">${provider.total_boxes.toLocaleString()}</div><div class="stat-label">Boxes</div></div>
-<div class="stat-item"><div class="stat-value">${formatWeight(provider.total_weight)} kg</div><div class="stat-label">Weight</div></div>
-</div>
-</div>
-<div style="overflow-x:auto"><table class="data-table"><thead>
-<tr><th class="region-col" rowspan="2">Region</th>${dayHdrs}</tr>
-<tr class="sub-header-row">${subHdr}</tr>
-</thead><tbody>${rowsHtml}</tbody></table></div></div>`;
+        <div class="card-header" style="border-left: 4px solid ${provider.color};">
+        <div class="provider-info"><span class="provider-name">${provider.name}</span><span class="trend-badge ${trendClass}">${trendIcon} ${provider.trend.percentage}%</span></div>
+        <div class="card-stats">
+            <div class="stat-item"><div class="stat-value">${provider.total_orders.toLocaleString()}</div><div class="stat-label">Orders</div></div>
+            <div class="stat-item"><div class="stat-value">${provider.total_boxes.toLocaleString()}</div><div class="stat-label">Boxes</div></div>
+            <div class="stat-item"><div class="stat-value">${formatWeight(provider.total_weight)} kg</div><div class="stat-label">Weight</div></div>
+        </div></div>
+        <div style="overflow-x:auto"><table class="data-table"><thead><tr><th class="region-col" rowspan="2">Region</th>${dayHdrs}</tr><tr class="sub-header-row">${subHdr}</tr></thead><tbody>${rowsHtml}</tbody></table></div></div>`;
 }
 
-dpInit('week');
-loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+dpInit('week'); loadData();
+</script></body></html>''')
 
 @app.route('/weekly-summary')
 @login_required
@@ -1285,7 +771,7 @@ def weekly_summary():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Weekly Summary - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Weekly Summary - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('weekly', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1303,18 +789,14 @@ async function loadData() {
         const r = await fetch('/api/weekly-summary?' + dpParams());
         const data = await r.json();
         let html = '';
-        const role = '{{ role }}';
+        const role = "''' + role + '''";
         const canClick = role === 'admin';
         if (data.winner) {
-            let achHtml = '';
-            if (data.winner.achievements && data.winner.achievements.length > 0) {
-                achHtml = '<div class="achievements-row" style="margin-top:12px">' + data.winner.achievements.map(a=>`<div class="achievement-badge"><span class="badge-icon">${a.icon}</span>${a.name}</div>`).join('') + '</div>';
-            }
             html += `<div class="provider-card winner-card"><div class="card-header"><div class="provider-info">
 <span style="font-size:32px;margin-right:12px">🏆</span><div>
-<div class="provider-name" style="font-size:24px">Week Winner: ${data.winner.name}</div>
-<div style="color:#4f46e5;margin-top:4px">${data.winner.total_boxes.toLocaleString()} boxes • ${formatWeight(data.winner.total_weight)} kg</div>
-${achHtml}</div></div></div></div>`;
+<div class="provider-name" style="font-size:24px">Top Performer: ${data.winner.name}</div>
+<div style="color:var(--brand-color);margin-top:4px">${data.winner.total_boxes.toLocaleString()} boxes • ${formatWeight(data.winner.total_weight)} kg</div>
+</div></div></div></div>`;
         }
         html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Leaderboard</span></div></div>
 <table class="leaderboard-table"><thead><tr><th style="width:60px">Rank</th><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th><th style="text-align:right">Trend</th></tr></thead><tbody>`;
@@ -1340,10 +822,10 @@ ${achHtml}</div></div></div></div>`;
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
-    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+</script></body></html>''')
 
 @app.route('/daily-region')
 @login_required
@@ -1352,7 +834,7 @@ def daily_region():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Daily Region - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Daily Region - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('daily_region', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1361,13 +843,13 @@ def daily_region():
     ''' + DATE_PICKER_HTML('today') + '''
 </div>
 <div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">-</div></a><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">-</div></a><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">-</div></a><div class="stat-label">Total Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;text-decoration:none;"><div class="stat-value" id="t-orders">-</div></a><div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;text-decoration:none;"><div class="stat-value" id="t-boxes">-</div></a><div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;text-decoration:none;"><div class="stat-value" id="t-weight">-</div></a><div class="stat-label">Total Weight</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">-</div><div class="stat-label">&lt;20 kg</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">-</div><div class="stat-label">20+ kg</div></div></div>
 </div>
-<div id="content"><div class="empty-state"><div class="empty-state-icon">📅</div><h3>Select a date range above</h3></div></div>
+<div id="content"><div class="empty-state"><h3>Select a date range</h3></div></div>
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
@@ -1387,60 +869,45 @@ async function loadData() {
         document.getElementById('t-weight').textContent = formatWeight(data.totals.weight) + ' kg';
         document.getElementById('t-under20').textContent = data.totals.under20.toLocaleString();
         document.getElementById('t-over20').textContent = data.totals.over20.toLocaleString();
-        if (data.totals.orders === 0) {
-            document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No Data</h3><p>No shipments for selected period</p></div>';
-            return;
-        }
-        const role = '{{ role }}';
+        if (data.totals.orders === 0) { document.getElementById('content').innerHTML = '<div class="empty-state"><h3>No Data Found</h3></div>'; return; }
+        
+        const role = "''' + role + '''";
         const canClick = role === 'admin';
         const medals = ['🥇','🥈','🥉'];
         let html = '';
         data.providers.forEach((provider, idx) => {
-            html += `<div class="provider-section">
-<div class="provider-header-dr" id="hdr-${idx}" onclick="toggleProvider(${idx})">
-<div class="provider-header-left">
-<div class="provider-color-bar" style="background:${provider.color}"></div>
-<div class="provider-header-info"><h3>${provider.name}</h3><span>${provider.regions.length} regions</span></div>
-</div>
-<div class="provider-header-stats">
-<div class="header-stat"><div class="header-stat-val">${provider.orders}</div><div class="header-stat-lbl">Orders</div></div>
-<div class="header-stat"><div class="header-stat-val">${provider.boxes}</div><div class="header-stat-lbl">Boxes</div></div>
-<div class="header-stat"><div class="header-stat-val">${formatWeight(provider.weight)}</div><div class="header-stat-lbl">Weight</div></div>
-<span class="toggle-icon">▼</span>
-</div></div>
-<div class="provider-body" id="bdy-${idx}">`;
-            if (provider.regions.length > 0) {
-                html += '<table class="region-table"><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20 kg</th><th>20+ kg</th></tr></thead><tbody>';
-                provider.regions.forEach((rg,i) => {
-                    const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
-                    if (canClick) {
-                        html += `<tr><td>${medal}${rg.name}</td>
-                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders}</a></td>
-                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes}</a></td>
-                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
-                            <td style="color:#10b981">${rg.under20}</td>
-                            <td style="color:#ef4444">${rg.over20}</td></tr>`;
-                    } else {
-                        html += `<tr><td>${medal}${rg.name}</td>
-                            <td>${rg.orders}</td>
-                            <td>${rg.boxes}</td>
-                            <td>${formatWeight(rg.weight)}</td>
-                            <td style="color:#10b981">${rg.under20}</td>
-                            <td style="color:#ef4444">${rg.over20}</td></tr>`;
-                    }
-                });
-                html += '</tbody></table>';
-            } else {
-                html += '<p style="color:#64748b;text-align:center;padding:20px">No data</p>';
-            }
-            html += '</div></div>';
+            html += `<div class="provider-card">
+<div class="card-header" style="border-left: 4px solid ${provider.color}; cursor:pointer;" onclick="toggleProvider(${idx})" id="hdr-${idx}">
+<div class="provider-info"><span class="provider-name">${provider.name}</span></div>
+<div class="card-stats"><div class="stat-item"><div class="stat-value">${provider.orders}</div><div class="stat-label">Orders</div></div><div class="stat-item"><div class="stat-value">${provider.boxes}</div><div class="stat-label">Boxes</div></div></div></div>
+<div id="bdy-${idx}" style="display:${idx===0?'block':'none'}">
+<div style="overflow-x:auto; padding: 0 18px 18px;">
+<table class="data-table"><thead><tr><th class="region-col">Region</th><th>Orders</th><th>Boxes</th><th>Weight</th><th><span style="color:#10b981">&lt;20 kg</span></th><th><span style="color:#ef4444">20+ kg</span></th></tr></thead><tbody>`;
+            provider.regions.forEach((rg,i) => {
+                const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
+                if (canClick) {
+                    html += `<tr><td class="region-col">${medal}${rg.name}</td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link" style="font-weight:600; color:var(--brand-color)">${rg.orders}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link" style="font-weight:600; color:var(--brand-color)">${rg.boxes}</a></td>
+                        <td><a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link" style="font-weight:600; color:var(--brand-color)">${formatWeight(rg.weight)}</a></td>
+                        <td style="color:#10b981; font-weight:600; background:rgba(16,185,129,0.05)">${rg.under20}</td>
+                        <td style="color:#ef4444; font-weight:600; background:rgba(239,68,68,0.05)">${rg.over20}</td></tr>`;
+                } else {
+                    html += `<tr><td class="region-col">${medal}${rg.name}</td>
+                        <td style="font-weight:600; color:var(--text-main)">${rg.orders}</td>
+                        <td style="font-weight:600; color:var(--text-main)">${rg.boxes}</td>
+                        <td style="font-weight:600; color:var(--text-main)">${formatWeight(rg.weight)}</td>
+                        <td style="color:#10b981; font-weight:600; background:rgba(16,185,129,0.05)">${rg.under20}</td>
+                        <td style="color:#ef4444; font-weight:600; background:rgba(239,68,68,0.05)">${rg.over20}</td></tr>`;
+                }
+            });
+            html += '</tbody></table></div></div></div>';
         });
         document.getElementById('content').innerHTML = html;
-        if (data.providers.length > 0) toggleProvider(0);
-    } catch(e) { document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><h3>Error</h3><p>'+e.message+'</p></div>'; }
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('today'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+</script></body></html>''')
 
 @app.route('/flight-load')
 @login_required
@@ -1449,7 +916,7 @@ def flight_load():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Flight Load - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Flight Load - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('flight', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1467,7 +934,7 @@ async function loadData() {
         const r = await fetch('/api/flight-load?' + dpParams());
         const data = await r.json();
         let html = '';
-        const role = '{{ role }}';
+        const role = "''' + role + '''";
         const canClick = role === 'admin';
         for (const flight of data.flights) {
             html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span style="font-size:24px;margin-right:12px">✈️</span><span class="provider-name">${flight.name}</span></div>
@@ -1476,27 +943,27 @@ async function loadData() {
 <div class="stat-item"><div class="stat-value">${flight.total_boxes.toLocaleString()}</div><div class="stat-label">Boxes</div></div>
 <div class="stat-item"><div class="stat-value">${formatWeight(flight.total_weight)} kg</div><div class="stat-label">Weight</div></div>
 </div></div>
-<table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
+<div style="overflow-x:auto"><table class="data-table"><thead><tr><th class="region-col">Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
             for (const p of flight.providers) {
                 if (canClick) {
-                    html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                    html += `<tr><td class="region-col"><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
                         <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
                         <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
                         <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
                 } else {
-                    html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                    html += `<tr><td class="region-col"><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
                         <td style="text-align:right">${p.orders.toLocaleString()}</td>
                         <td style="text-align:right">${p.boxes.toLocaleString()}</td>
                         <td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
                 }
             }
-            html += '</tbody></table></div>';
+            html += '</tbody></table></div></div>';
         }
         document.getElementById('content').innerHTML = html;
-    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+</script></body></html>''')
 
 @app.route('/analytics')
 @login_required
@@ -1505,7 +972,7 @@ def analytics():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Analytics - 3PL</title>{{ favicon|safe }}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Analytics - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('analytics', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1513,26 +980,16 @@ def analytics():
     <h1 class="page-title">Analytics & <span>Insights</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
-<div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value" id="t-orders">0</div></a><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value" id="t-boxes">0</div></a><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value" id="t-weight">0</div></a><div class="stat-label">Total Weight (kg)</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">0</div><div class="stat-label">Light (&lt;20 kg)</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">0</div><div class="stat-label">Heavy (20+ kg)</div></div></div>
-</div>
 <div class="charts-grid">
 <div class="chart-card full-width"><div class="chart-title">📈 Orders & Boxes Trend</div><div class="chart-container"><canvas id="trendChart"></canvas></div></div>
 <div class="chart-card"><div class="chart-title">🏆 Provider Performance</div><div class="chart-container"><canvas id="providerChart"></canvas></div></div>
 <div class="chart-card"><div class="chart-title">🌍 Top Regions</div><div class="chart-container"><canvas id="regionChart"></canvas></div></div>
-<div class="chart-card"><div class="chart-title">📊 Weight Categories by Region</div><div class="chart-container"><canvas id="weightRegionChart"></canvas></div></div>
-<div class="chart-card"><div class="chart-title">📊 Weight Categories by 3PL</div><div class="chart-container"><canvas id="weightProviderChart"></canvas></div></div>
 </div>
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 let charts = {};
-Chart.defaults.color = '#475569';
-Chart.defaults.borderColor = '#e2e8f0';
+Chart.defaults.color = 'gray';
 
 function destroyCharts() { Object.values(charts).forEach(c => c && c.destroy()); charts = {}; }
 
@@ -1541,22 +998,15 @@ async function loadData() {
     try {
         const r = await fetch('/api/analytics-data?' + dpParams());
         const data = await r.json();
-        document.getElementById('t-orders').textContent = data.totals.orders.toLocaleString();
-        document.getElementById('t-boxes').textContent = data.totals.boxes.toLocaleString();
-        document.getElementById('t-weight').textContent = formatWeight(data.totals.weight);
-        document.getElementById('t-under20').textContent = data.totals.under20.toLocaleString();
-        document.getElementById('t-over20').textContent = data.totals.over20.toLocaleString();
-        charts.trend = new Chart(document.getElementById('trendChart'), { type:'line', data:{ labels:data.trend.labels, datasets:[{label:'Orders',data:data.trend.orders,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.4,pointRadius:4},{label:'Boxes',data:data.trend.boxes,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.1)',fill:true,tension:0.4,pointRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true,grid:{color:'#e2e8f0'}},x:{grid:{display:false}}}}});
-        charts.provider = new Chart(document.getElementById('providerChart'), { type:'doughnut', data:{labels:data.providers.map(p=>p.name),datasets:[{data:data.providers.map(p=>p.boxes),backgroundColor:data.providers.map(p=>p.color+'CC'),borderColor:'#ffffff',borderWidth:3}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{padding:12,usePointStyle:true}}}}});
+        
+        charts.trend = new Chart(document.getElementById('trendChart'), { type:'line', data:{ labels:data.trend.labels, datasets:[{label:'Orders',data:data.trend.orders,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.4,pointRadius:4},{label:'Boxes',data:data.trend.boxes,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.1)',fill:true,tension:0.4,pointRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true},x:{grid:{display:false}}}}});
+        charts.provider = new Chart(document.getElementById('providerChart'), { type:'doughnut', data:{labels:data.providers.map(p=>p.name),datasets:[{data:data.providers.map(p=>p.boxes),backgroundColor:data.providers.map(p=>p.color+'CC'),borderWidth:0}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{padding:12,usePointStyle:true}}}}});
         const topR = data.regions.slice(0,8);
-        charts.region = new Chart(document.getElementById('regionChart'), { type:'bar', data:{labels:topR.map(r=>r.name),datasets:[{label:'Boxes',data:topR.map(r=>r.boxes),backgroundColor:'#4f46e599',borderColor:'#4f46e5',borderWidth:2,borderRadius:6}]}, options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,grid:{color:'#e2e8f0'}},y:{grid:{display:false}}}}});
-        const wR = data.regions.slice(0,6);
-        charts.weightRegion = new Chart(document.getElementById('weightRegionChart'), { type:'bar', data:{labels:wR.map(r=>r.name),datasets:[{label:'<20 kg',data:wR.map(r=>r.under20),backgroundColor:'#10b981',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'20+ kg',data:wR.map(r=>r.over20),backgroundColor:'#ef4444',borderColor:'#ef4444',borderWidth:1,borderRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,beginAtZero:true,grid:{color:'#e2e8f0'}}}}});
-        charts.weightProvider = new Chart(document.getElementById('weightProviderChart'), { type:'bar', data:{labels:data.providers.map(p=>p.name),datasets:[{label:'<20 kg',data:data.providers.map(p=>p.under20),backgroundColor:'#10b981',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'20+ kg',data:data.providers.map(p=>p.over20),backgroundColor:'#ef4444',borderColor:'#ef4444',borderWidth:1,borderRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,grid:{color:'#e2e8f0'}}}}});
+        charts.region = new Chart(document.getElementById('regionChart'), { type:'bar', data:{labels:topR.map(r=>r.name),datasets:[{label:'Boxes',data:topR.map(r=>r.boxes),backgroundColor:'#4f46e599',borderRadius:4}]}, options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}} });
     } catch(e) { console.error(e); }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+</script></body></html>''')
 
 @app.route('/kpi')
 @login_required
@@ -1565,7 +1015,7 @@ def kpi_dashboard():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KPI Dashboard - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>KPI Dashboard - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('kpi', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1605,10 +1055,10 @@ async function loadData() {
         });
         html += '</div>';
         document.getElementById('content').innerHTML = html;
-    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+</script></body></html>''')
 
 @app.route('/comparison')
 @login_required
@@ -1617,7 +1067,7 @@ def comparison():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Comparison - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Comparison - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('comparison', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1636,10 +1086,8 @@ def comparison():
 <script>
 let curTab = 'ge-ecl'; let curData = null;
 function showTab(btn, tab) {
-    curTab = tab;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    renderComparison();
+    curTab = tab; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active'); renderComparison();
 }
 function renderCard(p1, p2) {
     const stats = ['total_orders','total_boxes','total_weight'];
@@ -1659,35 +1107,25 @@ function renderCard(p1, p2) {
 function renderComparison() {
     if (!curData) return;
     const ps = curData.providers; let html = '';
-    const role = '{{ role }}';
-    const canClick = role === 'admin';
     if (curTab === 'ge-ecl') {
         const ge = ps.filter(p=>p.group==='GE'); const ecl = ps.filter(p=>p.group==='ECL');
         const geT = {name:'GE Total',short:'GE Total',color:'#3B82F6',total_orders:ge.reduce((s,p)=>s+p.total_orders,0),total_boxes:ge.reduce((s,p)=>s+p.total_boxes,0),total_weight:ge.reduce((s,p)=>s+p.total_weight,0)};
         const eclT = {name:'ECL Total',short:'ECL Total',color:'#10B981',total_orders:ecl.reduce((s,p)=>s+p.total_orders,0),total_boxes:ecl.reduce((s,p)=>s+p.total_boxes,0),total_weight:ecl.reduce((s,p)=>s+p.total_weight,0)};
-        html = '<h3 style="color:#4f46e5;margin-bottom:20px">Global Express vs ECL Logistics</h3>'+renderCard(geT,eclT);
+        html = renderCard(geT,eclT);
     } else if (curTab === 'qc-zone') {
         const qc = ps.filter(p=>p.name.includes('QC')); const zn = ps.filter(p=>p.name.includes('ZONE'));
         const qcT = {short:'QC Total',color:'#8B5CF6',total_orders:qc.reduce((s,p)=>s+p.total_orders,0),total_boxes:qc.reduce((s,p)=>s+p.total_boxes,0),total_weight:qc.reduce((s,p)=>s+p.total_weight,0)};
         const znT = {short:'Zone Total',color:'#F59E0B',total_orders:zn.reduce((s,p)=>s+p.total_orders,0),total_boxes:zn.reduce((s,p)=>s+p.total_boxes,0),total_weight:zn.reduce((s,p)=>s+p.total_weight,0)};
-        html = '<h3 style="color:#4f46e5;margin-bottom:20px">QC Center vs Zone</h3>'+renderCard(qcT,znT);
+        html = renderCard(qcT,znT);
     } else {
-        html = '<div class="provider-card"><table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th style="text-align:right">Avg/Order</th></tr></thead><tbody>';
+        html = '<div class="provider-card"><table class="data-table"><thead><tr><th class="region-col">Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th style="text-align:right">Avg/Order</th></tr></thead><tbody>';
         ps.sort((a,b)=>b.total_boxes-a.total_boxes).forEach(p => {
             const avg = p.total_orders>0 ? (p.total_weight/p.total_orders).toFixed(1) : 0;
-            if (canClick) {
-                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
-                    <td style="text-align:right">${avg} kg</td></tr>`;
-            } else {
-                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
-                    <td style="text-align:right">${p.total_orders.toLocaleString()}</td>
-                    <td style="text-align:right">${p.total_boxes.toLocaleString()}</td>
-                    <td style="text-align:right">${formatWeight(p.total_weight)}</td>
-                    <td style="text-align:right">${avg} kg</td></tr>`;
-            }
+            html+=`<tr><td class="region-col"><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td>
+                <td style="text-align:right">${p.total_orders.toLocaleString()}</td>
+                <td style="text-align:right">${p.total_boxes.toLocaleString()}</td>
+                <td style="text-align:right">${formatWeight(p.total_weight)}</td>
+                <td style="text-align:right">${avg} kg</td></tr>`;
         });
         html += '</tbody></table></div>';
     }
@@ -1697,12 +1135,11 @@ async function loadData() {
     document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
         const r = await fetch('/api/dashboard?' + dpParams());
-        curData = await r.json();
-        renderComparison();
-    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+        curData = await r.json(); renderComparison();
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+</script></body></html>''')
 
 @app.route('/regions')
 @login_required
@@ -1711,7 +1148,7 @@ def regions():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Region Heatmap - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Region Heatmap - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('regions', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1741,10 +1178,10 @@ async function loadData() {
         });
         html += '</div>';
         document.getElementById('content').innerHTML = html;
-    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+</script></body></html>''')
 
 @app.route('/monthly')
 @login_required
@@ -1753,7 +1190,7 @@ def monthly_report():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monthly Report - 3PL</title>{{ favicon|safe }}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Monthly Report - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('monthly', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1771,38 +1208,60 @@ async function loadData() {
     try {
         const r = await fetch('/api/monthly?' + dpParams());
         const data = await r.json();
-        const role = '{{ role }}';
-        const canClick = role === 'admin';
-        let html = `<div class="stats-row">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;"><div class="stat-value">${data.total_orders.toLocaleString()}</div></a><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;"><div class="stat-value">${data.total_boxes.toLocaleString()}</div></a><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;"><div class="stat-value">${formatWeight(data.total_weight)} kg</div></a><div class="stat-label">Total Weight</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(139,92,246,0.1)">📊</div><div class="stat-content"><div class="stat-value">${Math.round(data.avg_per_day)}</div><div class="stat-label">Avg Orders/Day</div></div></div>
-</div>
-<div class="charts-grid"><div class="chart-card full-width"><div class="chart-title">Weekly Breakdown</div><div class="chart-container"><canvas id="weeklyChart"></canvas></div></div></div>
-<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Monthly Summary</span></div></div>
-<table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
+        let html = `<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Monthly Summary</span></div></div>
+<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th class="region-col">Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
         data.providers.forEach(p => {
-            if (canClick) {
-                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
-                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
-            } else {
-                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
-                    <td style="text-align:right">${p.orders.toLocaleString()}</td>
-                    <td style="text-align:right">${p.boxes.toLocaleString()}</td>
-                    <td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
-            }
+            html+=`<tr><td class="region-col"><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
+                <td style="text-align:right">${p.orders.toLocaleString()}</td>
+                <td style="text-align:right">${p.boxes.toLocaleString()}</td>
+                <td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
         });
-        html += '</tbody></table></div>';
+        html += '</tbody></table></div></div>';
         document.getElementById('content').innerHTML = html;
-        if (chart) chart.destroy();
-        chart = new Chart(document.getElementById('weeklyChart'), { type:'bar', data:{labels:data.weeks.map(w=>w.label),datasets:[{label:'Boxes',data:data.weeks.map(w=>w.boxes),backgroundColor:'#4f46e599',borderColor:'#4f46e5',borderWidth:2,borderRadius:8}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#e2e8f0'}},x:{grid:{display:false}}}}});
-    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('month'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+</script></body></html>''')
+
+@app.route('/calendar')
+@login_required
+def calendar_view():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendar View - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('calendar', role) + '''
+<main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
+<div class="page-header">
+    <h1 class="page-title">Calendar <span>View</span></h1>
+    ''' + DATE_PICKER_HTML('month') + '''
+</div>
+<div class="premium-calendar">
+<div class="calendar-weekdays"><div class="weekday-label">Mon</div><div class="weekday-label">Tue</div><div class="weekday-label">Wed</div><div class="weekday-label">Thu</div><div class="weekday-label">Fri</div><div class="weekday-label">Sat</div><div class="weekday-label">Sun</div></div>
+<div class="calendar-days-grid" id="cal-grid"><div class="loading"><div class="spinner"></div></div></div>
+</div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+function getLevel(b,mx) { if(!b) return 0; const r=b/mx; if(r>=0.8) return 5; if(r>=0.6) return 4; if(r>=0.4) return 3; if(r>=0.2) return 2; return 1; }
+async function loadData() {
+    document.getElementById('cal-grid').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/calendar?' + dpParams());
+        const data = await r.json();
+        let html = '';
+        for(let i=0;i<data.first_weekday;i++) html+='<div class="cal-cell empty"></div>';
+        data.days.forEach(d => {
+            const lv = getLevel(d.boxes, data.max_boxes||1);
+            html+=`<div class="cal-cell level-${lv}"><div class="cal-day-num">${d.day}</div><div class="cal-stat">📦${d.orders}|📮${d.boxes}</div></div>`;
+        });
+        document.getElementById('cal-grid').innerHTML = html;
+    } catch(e) { document.getElementById('cal-grid').innerHTML = '<p style="color:red">Error</p>'; }
+}
+dpInit('month'); loadData();
+</script></body></html>''')
 
 @app.route('/whatsapp')
 @login_required
@@ -1811,7 +1270,7 @@ def whatsapp_report():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WhatsApp Report - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>WhatsApp Report - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('whatsapp', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1823,22 +1282,22 @@ def whatsapp_report():
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
-function copyText(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        const b = document.querySelector('.copy-btn');
-        b.innerHTML = '✓ Copied!'; setTimeout(()=>{b.innerHTML='📋 Copy to Clipboard';},2000);
-    });
-}
 async function loadData() {
     document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
         const r = await fetch('/api/whatsapp?' + dpParams());
         const data = await r.json();
         document.getElementById('content').innerHTML = `<div class="whatsapp-box"><div class="whatsapp-header"><span class="whatsapp-icon">📱</span><span class="whatsapp-title">Report - Ready to Share</span></div><div class="whatsapp-content" id="report-text">${data.report}</div><button class="copy-btn" onclick="copyText(document.getElementById('report-text').textContent)">📋 Copy to Clipboard</button></div>`;
-    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
+}
+function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        const b = document.querySelector('.copy-btn');
+        b.innerHTML = '✓ Copied!'; setTimeout(()=>{b.innerHTML='📋 Copy to Clipboard';},2000);
+    });
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
+</script></body></html>''')
 
 @app.route('/achievements')
 @login_required
@@ -1847,7 +1306,7 @@ def achievements_page():
     mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Achievements - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+<title>Achievements - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
 ''' + sidebar('achievements', role) + '''
 <main class="main-content" id="main-content">
 ''' + ACTION_BAR_HTML(role) + '''
@@ -1867,92 +1326,40 @@ async function loadData() {
         let html = '';
         data.providers.forEach(p => {
             const ach = p.achievements || [];
-            html+=`<div class="provider-card" style="margin-bottom:16px"><div class="card-header"><div class="provider-info"><div style="background:${p.color};width:8px;height:40px;border-radius:4px"></div><span class="provider-name">${p.name}</span><span style="color:#64748b;font-size:14px">${p.total_boxes.toLocaleString()} boxes</span></div></div>
-<div style="padding:20px">${ach.length>0?'<div style="display:flex;flex-wrap:wrap;gap:12px">'+ach.map(a=>`<div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;min-width:120px"><div style="font-size:32px;margin-bottom:8px">${a.icon}</div><div style="font-size:14px;font-weight:600;color:#4f46e5">${a.name}</div><div style="font-size:11px;color:#64748b;margin-top:4px">${a.desc}</div></div>`).join('')+'</div>':'<div style="color:#64748b;text-align:center;padding:20px">No achievements this period 💪</div>'}</div></div>`;
+            html+=`<div class="provider-card" style="margin-bottom:16px"><div class="card-header"><div class="provider-info"><div style="background:${p.color};width:8px;height:40px;border-radius:4px"></div><span class="provider-name">${p.name}</span><span style="color:var(--text-muted);font-size:14px">${p.total_boxes.toLocaleString()} boxes</span></div></div>
+<div style="padding:20px">${ach.length>0?'<div style="display:flex;flex-wrap:wrap;gap:12px">'+ach.map(a=>`<div style="background:var(--hover-bg);border:1px solid var(--border-color);border-radius:12px;padding:16px;text-align:center;min-width:120px"><div style="font-size:32px;margin-bottom:8px">${a.icon}</div><div style="font-size:14px;font-weight:600;color:var(--brand-color)">${a.name}</div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">${a.desc}</div></div>`).join('')+'</div>':'<div style="color:var(--text-muted);text-align:center;padding:20px">No achievements this period 💪</div>'}</div></div>`;
         });
         document.getElementById('content').innerHTML = html;
-    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
+    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:red">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''', role=role, favicon=FAVICON)
-
-@app.route('/forecast')
-@login_required
-def forecast():
-    role = session.get('role', 'guest')
-    if role != 'admin':
-        return "Access Denied", 403
-    return render_template_string('''
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Forecast - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
-''' + sidebar('forecast', role) + '''
-<main class="main-content" id="main-content">
-''' + ACTION_BAR_HTML(role) + '''
-<div class="page-header">
-    <h1 class="page-title">Forecast <span>Predictions</span></h1>
-</div>
-<div id="forecast-content"><div class="loading"><div class="spinner"></div></div></div>
-</main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
-<script>
-async function loadForecast() {
-    document.getElementById('forecast-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    try {
-        const r = await fetch('/api/forecast');
-        const data = await r.json();
-        let html = '<div class="forecast-card"><div class="forecast-title">Next Week Predictions (Mon–Sat)</div><div class="forecast-grid">';
-        const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        days.forEach((day, idx) => {
-            html += `<div class="forecast-day">
-                <div class="day-name">${day}</div>
-                <div class="prediction">📦 ${data[idx].boxes} boxes</div>
-                <div class="forecast-detail">📋 ${data[idx].orders} orders</div>
-                <div class="forecast-detail">⚖️ ${data[idx].weight} kg</div>
-            </div>`;
-        });
-        html += '</div></div>';
-        document.getElementById('forecast-content').innerHTML = html;
-    } catch(e) {
-        document.getElementById('forecast-content').innerHTML = '<p style="color:#ef4444">Error loading forecast</p>';
-    }
-}
-loadForecast();
-</script></body></html>''', favicon=FAVICON)
-
-@app.route('/logs')
-@login_required
-def logs():
-    role = session.get('role', 'guest')
-    if role != 'admin':
-        return "Access Denied", 403
-    logs_data = [
-        "2026-02-28 10:23: admin logged in",
-        "2026-02-28 10:25: admin viewed Dashboard",
-        "2026-02-28 10:30: admin exported CSV",
-        "2026-02-28 10:32: admin searched for order 'ORD123'",
-        "2026-02-28 11:05: admin viewed Forecast",
-        "2026-02-28 11:10: admin logged out",
-    ]
-    logs_html = ''.join(f'<div class="log-entry">{log}</div>' for log in logs_data)
-    return render_template_string('''
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Activity Logs - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
-''' + sidebar('logs', role) + '''
-<main class="main-content" id="main-content">
-''' + ACTION_BAR_HTML(role) + '''
-<div class="page-header">
-    <h1 class="page-title">Activity <span>Logs</span></h1>
-</div>
-<div class="logs-container">
-    ''' + logs_html + '''
-</div>
-</main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
-</body></html>''', favicon=FAVICON)
+</script></body></html>''')
 
 # ===== API ENDPOINTS =====
+
+@app.route('/api/search')
+@login_required
+def api_search():
+    query = request.args.get('q', '').strip().lower()
+    if not query: return jsonify([])
+    results = []
+    for provider in PROVIDERS:
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows: continue
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1: continue
+            order_col = provider.get('order_col', 0)
+            if order_col < len(row) and query in str(row[order_col]).strip().lower():
+                try:
+                    date_val = row[provider['date_col']].strip() if provider['date_col']<len(row) else ''
+                    parsed = parse_date(date_val)
+                    date_str = parsed.strftime('%Y-%m-%d') if parsed else 'N/A'
+                    region = row[provider['region_col']].strip() if provider['region_col']<len(row) else 'N/A'
+                    weight = float(row[provider['weight_col']].replace(',','')) if provider['weight_col']<len(row) else 0
+                    results.append({'provider': provider['name'], 'order_id': row[order_col], 'date': date_str, 'region': region, 'weight': weight, 'color': provider['color']})
+                    if len(results) > 15: break
+                except: continue
+    return jsonify(results)
 
 @app.route('/api/dashboard')
 def api_dashboard():
@@ -2251,6 +1658,7 @@ def api_calendar():
     _, num_days = calendar.monthrange(year, month)
     first_day = datetime(year, month, 1)
     first_weekday = first_day.weekday()
+    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     days_data = {}
     for day in range(1, num_days + 1):
         days_data[day] = {'day': day, 'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0}
@@ -2309,7 +1717,7 @@ def api_whatsapp():
     report = f"📊 *3PL Report*\n📅 {date_range}\n\n━━━━━━━━━━━━━━━━━━━━\n\n🏆 *PROVIDER RANKING*\n\n"
     medals = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣']
     for i, p in enumerate(providers_data):
-        report += f"{medals[i]} *{p['short']}*\n   📦 {p['total_boxes']:,} boxes | ⚖️ {p['total_weight']:,.1f} kg\n\n"
+        report += f"{medals[i] if i<6 else '🔸'} *{p['short']}*\n   📦 {p['total_boxes']:,} boxes | ⚖️ {p['total_weight']:,.1f} kg\n\n"
     report += f"━━━━━━━━━━━━━━━━━━━━\n\n📈 *TOTALS*\n\n📋 Orders: *{total_orders:,}*\n📦 Boxes: *{total_boxes:,}*\n⚖️ Weight: *{total_weight:,.1f} kg*\n\n━━━━━━━━━━━━━━━━━━━━\n_Generated by 3PL Dashboard_"
     return jsonify({'report': report})
 
@@ -2361,68 +1769,6 @@ def clear_cache():
     CACHE = {}
     return jsonify({'status': 'success', 'message': 'Cache cleared'})
 
-@app.route('/api/forecast')
-def api_forecast():
-    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-    predictions = []
-    for _ in range(6):
-        predictions.append({
-            'orders': random.randint(50, 200),
-            'boxes': random.randint(80, 300),
-            'weight': round(random.uniform(500, 2500), 1)
-        })
-    return jsonify([{'day': d, **predictions[i]} for i, d in enumerate(days)])
-
-@app.route('/api/search')
-def api_search():
-    query = request.args.get('q', '').strip().lower()
-    if not query:
-        return jsonify([])
-    results = []
-    for provider in PROVIDERS:
-        rows = fetch_sheet_data(provider['sheet'])
-        if not rows:
-            continue
-        for row_idx, row in enumerate(rows):
-            if row_idx < provider['start_row'] - 1:
-                continue
-            try:
-                order_col = provider.get('order_col', 0)
-                if order_col >= len(row):
-                    continue
-                if query in row[order_col].strip().lower():
-                    date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
-                    parsed = parse_date(date_val)
-                    date_str = parsed.strftime('%Y-%m-%d') if parsed else 'N/A'
-                    region = row[provider['region_col']].strip() if provider['region_col'] < len(row) else 'N/A'
-                    weight = float(row[provider['weight_col']].replace(',', '')) if provider['weight_col'] < len(row) else 0
-                    results.append({
-                        'provider': provider['name'],
-                        'order_id': row[order_col],
-                        'date': date_str,
-                        'region': region,
-                        'weight': weight,
-                        'color': provider['color']
-                    })
-                    if len(results) >= 20:
-                        break
-            except:
-                continue
-    return jsonify(results)
-
-notifications = []
-
-@app.route('/api/notifications')
-def api_notifications():
-    global notifications
-    if notifications:
-        msg = notifications.pop(0)
-        return jsonify({'message': msg})
-    return jsonify({'message': None})
-
-def add_notification(msg):
-    notifications.append(msg)
-
 @app.route('/orders')
 @login_required
 def order_details():
@@ -2435,112 +1781,60 @@ def order_details():
     region = request.args.get('region', '').strip()
     day = request.args.get('day')
     
-    if not provider_short or not start_str or not end_str:
-        return "Missing parameters", 400
-    
+    if not provider_short or not start_str or not end_str: return "Missing parameters", 400
     try:
         start_date = datetime.strptime(start_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
         end_date = datetime.strptime(end_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
-    except:
-        return "Invalid date", 400
+    except: return "Invalid date", 400
     
     if provider_short == 'all':
         all_orders = []
         for provider in PROVIDERS:
             rows = fetch_sheet_data(provider['sheet'])
-            if not rows:
-                continue
+            if not rows: continue
             for row_idx, row in enumerate(rows):
-                if row_idx < provider['start_row'] - 1:
-                    continue
+                if row_idx < provider['start_row'] - 1: continue
                 try:
-                    if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
-                        continue
+                    if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)): continue
                     date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                     parsed_date = parse_date(date_val)
-                    if not parsed_date or not (start_date <= parsed_date <= end_date):
-                        continue
+                    if not parsed_date or not (start_date <= parsed_date <= end_date): continue
                     row_region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
-                    if region and row_region != region:
-                        continue
-                    if day:
-                        day_date = datetime.strptime(day, '%Y-%m-%d')
-                        if parsed_date.date() != day_date.date():
-                            continue
+                    if region and row_region != region: continue
+                    if day and parsed_date.date() != datetime.strptime(day, '%Y-%m-%d').date(): continue
                     order_id = row[provider.get('order_col', 0)].strip() if provider.get('order_col', 0) < len(row) else 'N/A'
-                    try:
-                        boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
-                    except:
-                        boxes = 0
-                    try:
-                        weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
-                    except:
-                        weight = 0.0
-                    all_orders.append({
-                        'order_id': order_id,
-                        'date': parsed_date.strftime('%Y-%m-%d'),
-                        'region': row_region,
-                        'boxes': boxes,
-                        'weight': weight
-                    })
-                except:
-                    continue
+                    try: boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                    except: boxes = 0
+                    try: weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                    except: weight = 0.0
+                    all_orders.append({'order_id': order_id, 'date': parsed_date.strftime('%Y-%m-%d'), 'region': row_region, 'boxes': boxes, 'weight': weight})
+                except: continue
         all_orders.sort(key=lambda x: x['date'])
         orders = all_orders
         provider_short_display = 'All Providers'
     else:
         provider = next((p for p in PROVIDERS if p['short'] == provider_short), None)
-        if not provider:
-            return "Provider not found", 404
-        
+        if not provider: return "Provider not found", 404
         rows = fetch_sheet_data(provider['sheet'])
-        if not rows:
-            return "No data", 404
-        
+        if not rows: return "No data", 404
         orders = []
         for row_idx, row in enumerate(rows):
-            if row_idx < provider['start_row'] - 1:
-                continue
+            if row_idx < provider['start_row'] - 1: continue
             try:
-                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
-                    continue
-                
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)): continue
                 date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                 parsed_date = parse_date(date_val)
-                if not parsed_date:
-                    continue
-                if not (start_date <= parsed_date <= end_date):
-                    continue
-                
+                if not parsed_date or not (start_date <= parsed_date <= end_date): continue
                 row_region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
-                if region and row_region != region:
-                    continue
-                
-                if day:
-                    day_date = datetime.strptime(day, '%Y-%m-%d')
-                    if parsed_date.date() != day_date.date():
-                        continue
-                
+                if region and row_region != region: continue
+                if day and parsed_date.date() != datetime.strptime(day, '%Y-%m-%d').date(): continue
                 order_id = row[provider.get('order_col', 0)].strip() if provider.get('order_col', 0) < len(row) else 'N/A'
-                
-                try:
-                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
-                except:
-                    boxes = 0
-                try:
-                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
-                except:
-                    weight = 0.0
-                
-                orders.append({
-                    'order_id': order_id,
-                    'date': parsed_date.strftime('%Y-%m-%d'),
-                    'region': row_region,
-                    'boxes': boxes,
-                    'weight': weight
-                })
-            except Exception as e:
-                continue
+                try: boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except: boxes = 0
+                try: weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                except: weight = 0.0
+                orders.append({'order_id': order_id, 'date': parsed_date.strftime('%Y-%m-%d'), 'region': row_region, 'boxes': boxes, 'weight': weight})
+            except Exception as e: continue
         orders.sort(key=lambda x: x['date'])
         provider_short_display = provider_short
     
@@ -2552,35 +1846,36 @@ def order_details():
     <title>Order Details - {{ provider_short }}</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {{ favicon|safe }}
+    ''' + FAVICON + BASE_STYLES + '''
     <style>
-        body { background: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; padding: 20px; }
-        h1 { color: #4f46e5; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th { background: #f1f5f9; color: #475569; padding: 10px; text-align: left; }
-        td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
-        tr:hover { background: #f1f5f9; }
-        .back-btn { display: inline-block; margin-bottom: 20px; padding: 8px 16px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; }
+        body { padding: 20px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .back-btn { padding: 8px 16px; background: var(--brand-color); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; }
+        .export-btn { padding: 8px 16px; background: #10b981; color: #fff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 8px rgba(16,185,129,0.2); }
+        .export-btn:hover { background: #059669; transform: translateY(-2px); }
         .stats { display: flex; gap: 20px; margin-bottom: 20px; }
-        .stat-box { background: #ffffff; padding: 15px; border-radius: 8px; border-left: 4px solid #4f46e5; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .stat-box { background: var(--bg-card); padding: 15px; border-radius: 8px; border-left: 4px solid var(--brand-color); box-shadow: 0 2px 8px rgba(0,0,0,0.04); color: var(--text-main); font-weight: 600;}
     </style>
 </head>
 <body class="''' + mode_class + '''">
-    <a href="javascript:history.back()" class="back-btn">← Back</a>
-    <h1>Orders - {{ provider_short }}</h1>
+    <div class="top-bar">
+        <a href="javascript:history.back()" class="back-btn">← Back to Dashboard</a>
+        <button class="export-btn" onclick="exportTableToCSV('Orders_{{ provider_short }}.csv')">📥 Export CSV</button>
+    </div>
+    <h1 style="color: var(--text-main); margin-bottom: 20px;">Orders - {{ provider_short }}</h1>
     <div class="stats">
         <div class="stat-box">Total Orders: {{ orders|length }}</div>
         <div class="stat-box">Total Boxes: {{ orders|sum(attribute='boxes') }}</div>
         <div class="stat-box">Total Weight: {{ "%.1f"|format(orders|sum(attribute='weight')) }} kg</div>
     </div>
-    {% if region %}<p><strong>Region:</strong> {{ region }}</p>{% endif %}
-    {% if day %}<p><strong>Date:</strong> {{ day }}</p>{% endif %}
-    <table>
+    {% if region %}<p style="color: var(--text-muted); margin-bottom: 10px;"><strong>Region:</strong> {{ region }}</p>{% endif %}
+    {% if day %}<p style="color: var(--text-muted); margin-bottom: 20px;"><strong>Date:</strong> {{ day }}</p>{% endif %}
+    <table class="data-table">
         <thead>
             <tr>
                 <th>Order ID</th>
                 <th>Date</th>
-                <th>Region</th>
+                <th class="region-col">Region</th>
                 <th>Boxes</th>
                 <th>Weight (kg)</th>
             </tr>
@@ -2588,9 +1883,9 @@ def order_details():
         <tbody>
             {% for order in orders %}
             <tr>
-                <td>{{ order.order_id }}</td>
+                <td style="font-weight: 600; color: var(--brand-color);">{{ order.order_id }}</td>
                 <td>{{ order.date }}</td>
-                <td>{{ order.region }}</td>
+                <td class="region-col">{{ order.region }}</td>
                 <td>{{ order.boxes }}</td>
                 <td>{{ "%.1f"|format(order.weight) }}</td>
             </tr>
@@ -2599,9 +1894,29 @@ def order_details():
             {% endfor %}
         </tbody>
     </table>
+    <script>
+        if (localStorage.getItem('theme') === 'dark') document.body.setAttribute('data-theme', 'dark');
+        function exportTableToCSV(filename) {
+            let csv = [];
+            let rows = document.querySelectorAll("table tr");
+            for (let i = 0; i < rows.length; i++) {
+                let row = [], cols = rows[i].querySelectorAll("td, th");
+                for (let j = 0; j < cols.length; j++) {
+                    let data = cols[j].innerText.replace(/(\\r\\n|\\n|\\r)/gm, "").replace(/"/g, '""');
+                    row.push('"' + data + '"');
+                }
+                csv.push(row.join(","));
+            }
+            if(csv.length <= 1) { alert("No data to export."); return; }
+            let csvFile = new Blob([csv.join("\\n")], {type: "text/csv"});
+            let dl = document.createElement("a");
+            dl.download = filename; dl.href = window.URL.createObjectURL(csvFile);
+            dl.style.display = "none"; document.body.appendChild(dl); dl.click();
+        }
+    </script>
 </body>
 </html>
-    ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
+    ''', orders=orders, provider_short=provider_short_display, region=region, day=day)
 
 if __name__ == '__main__':
     app.run(debug=True)
