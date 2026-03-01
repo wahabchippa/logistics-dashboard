@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - FIXED EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - FINAL FIXED EDITION WITH PROXY FALLBACK
 # ==============================================================================
 import urllib.request
 import csv
@@ -3644,24 +3644,39 @@ STRICT_ALIASES = {
     'status': ['latest_status', 'latest status', 'status', 'kerry status']
 }
 
-def fetch_single_csv(url, retries=2):
-    """Fetch CSV with retry and logging."""
-    for attempt in range(retries):
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=20) as res:
-                raw = res.read().decode('utf-8').splitlines()
-                data = list(csv.reader(raw))
-                if not data:
-                    print(f"⚠️ Empty CSV from {url}")
-                    return []
+def fetch_with_proxy(url):
+    """Try direct fetch first, then proxy if fails."""
+    # Direct attempt
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=15) as res:
+            raw = res.read().decode('utf-8').splitlines()
+            data = list(csv.reader(raw))
+            if data:
                 headers = [str(h).lower().strip() for h in data[0]]
                 rows = [dict(zip(headers, row)) for row in data[1:]]
-                print(f"✅ Fetched {len(rows)} rows from {url}")
+                print(f"✅ Direct fetch success: {url[:60]}... ({len(rows)} rows)")
                 return rows
-        except Exception as e:
-            print(f"❌ Attempt {attempt+1} failed for {url}: {e}")
-            time.sleep(1)
+    except Exception as e:
+        print(f"⚠️ Direct fetch failed: {e}. Trying proxy...")
+    
+    # Proxy attempt (corsproxy.io)
+    try:
+        # Encode the original URL
+        import urllib.parse
+        proxy_url = f"https://corsproxy.io/?{urllib.parse.quote(url, safe='')}"
+        req = urllib.request.Request(proxy_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=20) as res:
+            raw = res.read().decode('utf-8').splitlines()
+            data = list(csv.reader(raw))
+            if data:
+                headers = [str(h).lower().strip() for h in data[0]]
+                rows = [dict(zip(headers, row)) for row in data[1:]]
+                print(f"✅ Proxy fetch success: {url[:60]}... ({len(rows)} rows)")
+                return rows
+    except Exception as e:
+        print(f"❌ Proxy fetch also failed: {e}")
+    
     return []
 
 def get_alias_val(row, aliases):
@@ -3696,13 +3711,12 @@ def clean_and_pad_tids(raw_tid):
             cleaned.append(t)
     return cleaned
 
-# ✅ FIXED: Parallel fetching with proper logging
 def force_sync_all_databases():
     global GLOBAL_DB_CACHE
     print("🔄 Starting full sync...")
 
     # Fetch Kerry status first (sequential)
-    kerry_raw = fetch_single_csv(NEXUS_KERRY_STATUS_URL)
+    kerry_raw = fetch_with_proxy(NEXUS_KERRY_STATUS_URL)
     s_map = {}
     for r in kerry_raw:
         oid = get_alias_val(r, STRICT_ALIASES['order'])
@@ -3714,7 +3728,7 @@ def force_sync_all_databases():
     # Fetch all sheets in parallel (faster, avoids timeout)
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        future_to_name = {executor.submit(fetch_single_csv, url): name for name, url in NEXUS_SOURCES.items()}
+        future_to_name = {executor.submit(fetch_with_proxy, url): name for name, url in NEXUS_SOURCES.items()}
         for future in concurrent.futures.as_completed(future_to_name):
             name = future_to_name[future]
             try:
@@ -3894,35 +3908,8 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_tid_text})
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI & UX (GOD TIER EDITION) - (No major changes, but note below)
+# 4. FRONTEND UI & UX (GOD TIER EDITION) - Keep as is
 # ------------------------------------------------------------------------------
-# The frontend template remains exactly as you had it in your third code.
-# However, I recommend adding a small improvement in searchOrders function 
-# to show a more helpful message when no data is returned.
-# You can replace the existing searchOrders function with this:
-
-"""
-async function searchOrders() {
-    const q = document.getElementById('searchInput').value; if(!q) return;
-    document.getElementById('tracking-results').innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
-    document.getElementById('bulkBtn').style.display = 'none';
-    try {
-        const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
-        allTrackingData = await r.json(); 
-        if(allTrackingData.length > 0) {
-            document.getElementById('bulkBtn').style.display = 'flex';
-        } else {
-            // Check if cache is actually empty due to fetch failure
-            document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:#EF4444; padding:40px; border:1px dashed var(--border); border-radius:12px;">⚠️ No data found. Please click the green "Sync Live Data" button first and ensure sheets are accessible.</div>';
-            return;
-        }
-        renderCards();
-    } catch(e) {
-        document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:#EF4444; padding:20px;">⚠️ Network error. Please try again.</div>';
-    }
-}
-"""
-
 @app.route('/nexus')
 @login_required
 def nexus_dashboard():
