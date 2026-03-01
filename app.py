@@ -3861,16 +3861,15 @@ def api_nexus_ops_commander():
         return jsonify({"error": str(e)})
 
 # FIX: BUTTON WILL ALWAYS SHOW NOW
-@app.route('/nexus')
-@login_required  # <-- Login laazmi hai
-def nexus_dashboard():
-    # <-- Admin check laazmi hai
-    if session.get('role') != 'admin': 
-        return "Access Denied: Only Admins can access the Operations Hub.", 403
-        
-    return render_template_string('''
-    <!DOCTYPE html><html lang="en" data-theme="dark">
-    ... (baaki HTML code wesa hi rahega) ...
+@app.after_request
+def inject_nexus_button(response):
+    if response.content_type and response.content_type.startswith('text/html'):
+        # Yahan ADMIN ki shart wapas lag gayi hai
+        if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
+            html = response.get_data(as_text=True)
+            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #18181b, #09090b); color:#fff; border:1px solid #27272a; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:999999; font-family:'Inter',sans-serif; box-shadow:0 10px 25px -5px rgba(0,0,0,0.8); transition:0.3s;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">🚀 TID Operations Hub</a>"""
+            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
+    return response
 
 # ------------------------------------------------------------------------------
 # 4. FRONTEND UI & UX (ANTI-FREEZE JAVASCRIPT)
