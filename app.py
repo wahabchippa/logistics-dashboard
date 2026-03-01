@@ -3985,7 +3985,7 @@ def api_nexus_radar_data():
     return jsonify(buckets)
 
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - VERCEL SAFE & PRO SAAS UI
+# 🛰️ NEXUS CONTROL TOWER - STRICT DISCIPLINE & PRO SAAS UI (VERCEL SAFE)
 # ==============================================================================
 import urllib.request
 import csv
@@ -4010,9 +4010,10 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. VERCEL-SAFE CACHE ENGINE (10 MINS TTL)
+# 2. CACHE & EXACT COLUMN ALIASING (VERCEL SAFE)
 # ------------------------------------------------------------------------------
-GLOBAL_DB_CACHE = {'time': 0, 'sheets': {}, 'kerry': []}
+NEXUS_CACHE = {}
+RADAR_CACHE = {'time': 0, 'data': None}
 FILTER_DATE = datetime(2026, 1, 1)
 
 STRICT_ALIASES = {
@@ -4027,7 +4028,18 @@ STRICT_ALIASES = {
     'mawb': ['awb','mawb','master']
 }
 
-def fetch_single_csv(url):
+@app.after_request
+def inject_nexus_button(response):
+    if response.content_type and response.content_type.startswith('text/html'):
+        if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
+            html = response.get_data(as_text=True)
+            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#0F172A; color:#F1F5F9; border:1px solid #334155; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:600; z-index:9999; font-family:'Inter',sans-serif; box-shadow:0 4px 6px -1px rgba(0,0,0,0.3); transition:transform 0.2s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">📊 TID Operations Hub</a>"""
+            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
+    return response
+
+def fetch_nexus_csv(url):
+    now = time.time()
+    if url in NEXUS_CACHE and now - NEXUS_CACHE[url]['time'] < 1800: return NEXUS_CACHE[url]['data']
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=10) as res:
@@ -4035,27 +4047,10 @@ def fetch_single_csv(url):
             data = list(csv.reader(raw))
             if not data: return []
             headers = [str(h).lower().strip() for h in data[0]]
-            return [dict(zip(headers, row)) for row in data[1:]]
+            dict_data = [dict(zip(headers, row)) for row in data[1:]]
+            NEXUS_CACHE[url] = {'time': now, 'data': dict_data}
+            return dict_data
     except: return []
-
-def sync_all_databases():
-    global GLOBAL_DB_CACHE
-    now = time.time()
-    # 10 Minutes Cache - Instant Load after first fetch!
-    if now - GLOBAL_DB_CACHE['time'] < 600 and GLOBAL_DB_CACHE['sheets']:
-        return GLOBAL_DB_CACHE['sheets'], GLOBAL_DB_CACHE['kerry']
-
-    # Sequential fetching (Safe for Vercel Serverless limits)
-    sheets_data = {}
-    for name, url in NEXUS_SOURCES.items():
-        sheets_data[name] = fetch_single_csv(url)
-    
-    kerry_data = fetch_single_csv(NEXUS_KERRY_STATUS_URL)
-
-    GLOBAL_DB_CACHE['time'] = now
-    GLOBAL_DB_CACHE['sheets'] = sheets_data
-    GLOBAL_DB_CACHE['kerry'] = kerry_data
-    return sheets_data, kerry_data
 
 def get_alias_val(row, aliases):
     for k, v in row.items():
@@ -4072,31 +4067,30 @@ def parse_date(date_str):
     except: pass
     return None
 
-@app.after_request
-def inject_nexus_button(response):
-    if response.content_type and response.content_type.startswith('text/html'):
-        if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
-            html = response.get_data(as_text=True)
-            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#111827; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:600; font-family:'Inter',sans-serif; box-shadow:0 10px 15px -3px rgba(0,0,0,0.2); transition:transform 0.2s ease; z-index:9999;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">📊 TID Operations</a>"""
-            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
-    return response
-
 # ------------------------------------------------------------------------------
 # 3. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
+
+# New Route for Manual Refresh
+@app.route('/api/nexus/refresh', methods=['POST'])
+@login_required
+def api_nexus_refresh():
+    global NEXUS_CACHE, RADAR_CACHE
+    NEXUS_CACHE.clear()  # Wipes sheet memory
+    RADAR_CACHE = {'time': 0, 'data': None} # Wipes radar memory
+    return jsonify({"success": True})
 
 @app.route('/api/nexus/search', methods=['POST'])
 @login_required
 def api_nexus_search():
     order_ids = [x.strip() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
     results = []
-    sheets_data, kerry_data = sync_all_databases()
-    
+    k_data = fetch_nexus_csv(NEXUS_KERRY_STATUS_URL)
     for oid in order_ids:
-        k_stat = next((str(r.get('latest_status', 'N/A')).strip() for r in kerry_data if str(r.get('fleek_id','')).strip().lower() == oid.lower()), "N/A")
+        k_stat = next((str(r.get('latest_status', 'N/A')).strip() for r in k_data if str(r.get('fleek_id','')).strip().lower() == oid.lower()), "N/A")
         found = False
-        for src, rows in sheets_data.items():
-            for row in rows:
+        for src, url in NEXUS_SOURCES.items():
+            for row in fetch_nexus_csv(url):
                 if oid.lower() in get_alias_val(row, STRICT_ALIASES['order']).lower():
                     tid_raw = get_alias_val(row, STRICT_ALIASES['tid'])
                     results.append({
@@ -4137,13 +4131,24 @@ def api_nexus_ship24():
 @app.route('/api/nexus/radar_data', methods=['GET'])
 @login_required
 def api_nexus_radar_data():
-    sheets_data, kerry_data = sync_all_databases()
-    buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES}, "tid_pending": {s: [] for s in NEXUS_SOURCES}, "qc_not_approved": {s: [] for s in NEXUS_SOURCES}, "qc_approved": {s: [] for s in NEXUS_SOURCES} }
-    s_map = {str(r.get('fleek_id', '')).strip().lower(): str(r.get('latest_status', 'N/A')).strip().upper() for r in kerry_data}
+    global RADAR_CACHE
+    if time.time() - RADAR_CACHE['time'] < 1800 and RADAR_CACHE['data']: 
+        return jsonify(RADAR_CACHE['data'])
+    
+    buckets = { 
+        "handed_over": {s: [] for s in NEXUS_SOURCES}, 
+        "tid_pending": {s: [] for s in NEXUS_SOURCES}, 
+        "qc_not_approved": {s: [] for s in NEXUS_SOURCES}, 
+        "qc_approved": {s: [] for s in NEXUS_SOURCES} 
+    }
+    
+    k_data = fetch_nexus_csv(NEXUS_KERRY_STATUS_URL)
+    s_map = {str(r.get('fleek_id', '')).strip().lower(): str(r.get('latest_status', 'N/A')).strip().upper() for r in k_data}
     qc_not_list = ["ACCEPTED", "CREATED", "PICKUP READY", "PICKUP SUCCESSFUL", "PICKUP SUCCESSFULL", "QC PENDING", "QC HOLD", "CANCELLED"]
     
-    for src, rows in sheets_data.items():
-        for row in rows:
+    for src, url in NEXUS_SOURCES.items():
+        sheet_rows = fetch_nexus_csv(url)
+        for row in sheet_rows:
             dt_str = get_alias_val(row, STRICT_ALIASES['date'])
             dt_obj = parse_date(dt_str)
             if dt_obj and dt_obj < FILTER_DATE: continue
@@ -4157,207 +4162,19 @@ def api_nexus_radar_data():
             
             r_d = { "Order": oid.upper(), "Date": dt_str, "Vendor": get_alias_val(row, STRICT_ALIASES['vendor']), "Customer": get_alias_val(row, STRICT_ALIASES['customer']), "Boxes": get_alias_val(row, STRICT_ALIASES['boxes']), "Weight": get_alias_val(row, STRICT_ALIASES['weight']), "TID": tid if has_tid else "MISSING", "Status": kerry_stat }
             
+            # --- STRICT ISOLATION LOGIC ---
             if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER":
                 if has_tid: buckets["handed_over"][src].append(r_d)
                 else: buckets["tid_pending"][src].append(r_d)
             elif kerry_stat in qc_not_list: buckets["qc_not_approved"][src].append(r_d)
             elif kerry_stat == "QC APPROVED": buckets["qc_approved"][src].append(r_d)
             
-    return jsonify(buckets)
-
-# ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - MANUAL REFRESH & ZERO LAG EDITION
-# ==============================================================================
-import urllib.request
-import csv
-import re
-import json
-import os
-import time
-import concurrent.futures
-from datetime import datetime
-from flask import jsonify, request, session, render_template_string
-
-# ------------------------------------------------------------------------------
-# 1. CORE DATA SOURCES
-# ------------------------------------------------------------------------------
-NEXUS_SOURCES = {
-    "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-    "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-    "GE QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=710036753&single=true&output=csv",
-    "GE Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-    "APX": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRDEzAMUwnFZ7aoThGoMERtxxsll2kfEaSpa9ksXIx6sqbdMncts6Go2d5mKKabepbNXDSoeaUlk-mP/pub?gid=0&single=true&output=csv",
-    "Kerry": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=0&single=true&output=csv"
-}
-NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
-
-# ------------------------------------------------------------------------------
-# 2. INFINITE CACHE & PARALLEL FETCHING
-# ------------------------------------------------------------------------------
-# Ab cache expire nahi hoga (Infinite). Sirf Manual Refresh par update hoga!
-GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': []}
-FILTER_DATE = datetime(2026, 1, 1)
-
-STRICT_ALIASES = {
-    'order': ['fleek id','order num','order id','order'], 
-    'date': ['date', 'handover date', 'created at'], 
-    'boxes': ['box_count','no of boxes','boxes','box'], 
-    'weight': ['chargeable weight','weight'], 
-    'vendor': ['vendor name', 'vendor','seller'], 
-    'customer': ['customer name', 'consignee','customer'], 
-    'country': ['destination','country'], 
-    'tid': ['tracking id', 'trackingid', 'tid', 'tracking'], 
-    'mawb': ['awb','mawb','master']
-}
-
-def fetch_single_csv(url):
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=8) as res:
-            raw = res.read().decode('utf-8').splitlines()
-            data = list(csv.reader(raw))
-            if not data: return []
-            headers = [str(h).lower().strip() for h in data[0]]
-            return [dict(zip(headers, row)) for row in data[1:]]
-    except: return []
-
-def force_sync_all_databases():
-    global GLOBAL_DB_CACHE
-    results = {}
-    
-    # 8 Workers ki power se saari sheets 1.5 second mein download hongi (Vercel Timeout Safe!)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        future_to_name = {executor.submit(fetch_single_csv, url): name for name, url in NEXUS_SOURCES.items()}
-        future_to_name[executor.submit(fetch_single_csv, NEXUS_KERRY_STATUS_URL)] = "KERRY_MASTER"
-        
-        for future in concurrent.futures.as_completed(future_to_name):
-            name = future_to_name[future]
-            try: results[name] = future.result()
-            except: results[name] = []
-
-    GLOBAL_DB_CACHE['kerry'] = results.pop("KERRY_MASTER", [])
-    GLOBAL_DB_CACHE['sheets'] = results
-    GLOBAL_DB_CACHE['loaded'] = True
-
-def get_alias_val(row, aliases):
-    for k, v in row.items():
-        if k.strip().lower() in aliases:
-            val = str(v).strip()
-            if val and val.lower() not in ['n/a','nan','none','-','']: return val
-    return "N/A"
-
-def parse_date(date_str):
-    try:
-        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y'):
-            try: return datetime.strptime(date_str, fmt)
-            except: continue
-    except: pass
-    return None
-
-@app.after_request
-def inject_nexus_button(response):
-    if response.content_type and response.content_type.startswith('text/html'):
-        if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
-            html = response.get_data(as_text=True)
-            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#111827; color:#fff; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:600; font-family:'Inter',sans-serif; box-shadow:0 10px 15px -3px rgba(0,0,0,0.3); transition:transform 0.2s ease; z-index:9999;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">📊 TID Operations Hub</a>"""
-            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
-    return response
-
-# ------------------------------------------------------------------------------
-# 3. BACKEND API ROUTES
-# ------------------------------------------------------------------------------
-
-@app.route('/api/nexus/refresh', methods=['POST'])
-@login_required
-def api_nexus_refresh():
-    # Yeh API sirf tab chalegi jab user "Refresh" ka button dabayega!
-    force_sync_all_databases()
-    return jsonify({"success": True, "message": "Global Database Synchronized!"})
-
-@app.route('/api/nexus/search', methods=['POST'])
-@login_required
-def api_nexus_search():
-    if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
-        
-    order_ids = [x.strip() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
-    results = []
-    
-    for oid in order_ids:
-        k_stat = next((str(r.get('latest_status', 'N/A')).strip() for r in GLOBAL_DB_CACHE['kerry'] if str(r.get('fleek_id','')).strip().lower() == oid.lower()), "N/A")
-        found = False
-        for src, rows in GLOBAL_DB_CACHE['sheets'].items():
-            for row in rows:
-                if oid.lower() in get_alias_val(row, STRICT_ALIASES['order']).lower():
-                    tid_raw = get_alias_val(row, STRICT_ALIASES['tid'])
-                    results.append({
-                        "order_id": oid.upper(), "source": src, "status": k_stat, 
-                        "date": get_alias_val(row, STRICT_ALIASES['date']), 
-                        "boxes": get_alias_val(row, STRICT_ALIASES['boxes']), 
-                        "weight": get_alias_val(row, STRICT_ALIASES['weight']), 
-                        "vendor": get_alias_val(row, STRICT_ALIASES['vendor']), 
-                        "customer": get_alias_val(row, STRICT_ALIASES['customer']), 
-                        "country": get_alias_val(row, STRICT_ALIASES['country']), 
-                        "tids": [t.strip() for t in re.split(r'[\n,]+', tid_raw) if t.strip() and t.strip()!='N/A'], 
-                        "mawb": get_alias_val(row, STRICT_ALIASES['mawb'])
-                    })
-                    found = True; break
-            if found: break
-    return jsonify(results)
-
-@app.route('/api/nexus/ship24', methods=['POST'])
-@login_required
-def api_nexus_ship24():
-    tids = request.json.get('tids', [])
-    ship24_key = os.environ.get('SHIP24_API_KEY', 'MOCK')
-    responses = []
-    for tid in tids:
-        if ship24_key == 'MOCK':
-            responses.append({"tid": tid, "success": True, "current_status": "Transit", "progress": 60, "eta": "Calculating...", "events": [{"status": "Processed", "time": "2026-03-01", "location": "Gateway Hub"}]})
-        else:
-            try:
-                req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
-                with urllib.request.urlopen(req) as res:
-                    tr = json.loads(res.read().decode()).get('data',{}).get('trackings',[{}])[0]
-                    evs = tr.get('events',[])
-                    st = evs[0].get('statusMilestone','Transit') if evs else 'Pending'
-                    responses.append({"tid": tid, "success": True, "current_status": st, "progress": 100 if st.lower()=='delivered' else 60, "eta": "Live", "events": [{"status": e.get('statusMilestone', e.get('status', 'Update')), "time": e.get('datetime', 'N/A'), "location": e.get('location', '')} for e in evs]})
-            except: responses.append({"tid": tid, "success": False})
-    return jsonify(responses)
-
-@app.route('/api/nexus/radar_data', methods=['GET'])
-@login_required
-def api_nexus_radar_data():
-    if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
-        
-    buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES}, "tid_pending": {s: [] for s in NEXUS_SOURCES}, "qc_not_approved": {s: [] for s in NEXUS_SOURCES}, "qc_approved": {s: [] for s in NEXUS_SOURCES} }
-    s_map = {str(r.get('fleek_id', '')).strip().lower(): str(r.get('latest_status', 'N/A')).strip().upper() for r in GLOBAL_DB_CACHE['kerry']}
-    qc_not_list = ["ACCEPTED", "CREATED", "PICKUP READY", "PICKUP SUCCESSFUL", "PICKUP SUCCESSFULL", "QC PENDING", "QC HOLD", "CANCELLED"]
-    
-    for src, rows in GLOBAL_DB_CACHE['sheets'].items():
-        for row in rows:
-            dt_str = get_alias_val(row, STRICT_ALIASES['date'])
-            dt_obj = parse_date(dt_str)
-            if dt_obj and dt_obj < FILTER_DATE: continue
-            
-            oid = get_alias_val(row, STRICT_ALIASES['order'])
-            if oid == 'N/A': continue
-            
-            kerry_stat = s_map.get(oid.lower(), "PENDING")
-            tid = get_alias_val(row, STRICT_ALIASES['tid'])
-            has_tid = tid != 'N/A' and len(tid) > 3 and tid.lower() not in ['pending', 'hold', 'none', 'blank', '-']
-            
-            r_d = { "Order": oid.upper(), "Date": dt_str, "Vendor": get_alias_val(row, STRICT_ALIASES['vendor']), "Customer": get_alias_val(row, STRICT_ALIASES['customer']), "Boxes": get_alias_val(row, STRICT_ALIASES['boxes']), "Weight": get_alias_val(row, STRICT_ALIASES['weight']), "TID": tid if has_tid else "MISSING", "Status": kerry_stat }
-            
-            if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER":
-                if has_tid: buckets["handed_over"][src].append(r_d)
-                else: buckets["tid_pending"][src].append(r_d)
-            elif kerry_stat in qc_not_list: buckets["qc_not_approved"][src].append(r_d)
-            elif kerry_stat == "QC APPROVED": buckets["qc_approved"][src].append(r_d)
-            
+    RADAR_CACHE['time'] = time.time()
+    RADAR_CACHE['data'] = buckets
     return jsonify(buckets)
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI & UX (PRO SAAS DESIGN WITH MANUAL REFRESH)
+# 4. FRONTEND UI & JAVASCRIPT (PRO SAAS DESIGN)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -4394,13 +4211,13 @@ def nexus_dashboard():
             --border: #E5E7EB; 
             --text: #111827; 
             --muted: #6B7280; 
-            --accent: #111827; 
+            --accent: #1E3A8A; 
             --btn-bg: #111827;
             --btn-text: #FFFFFF;
             --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
             --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.15);
-            --badge-bg: #F3F4F6;
-            --badge-text: #111827;
+            --badge-bg: #EFF6FF;
+            --badge-text: #1D4ED8;
             --input-bg: #FFFFFF;
             --table-row-hover: #F8F9FB;
             --success: #059669;
@@ -4423,24 +4240,28 @@ def nexus_dashboard():
         
         .profile-icon { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--btn-text); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px;}
 
-        /* SIDEBAR & MAIN */
+        /* MAIN AREA */
         .main-wrapper { display: flex; flex: 1; overflow: hidden; }
+        
+        /* SIDEBAR */
         .sidebar { width: 240px; background: var(--card); border-right: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;}
         .nav-item { padding: 12px 16px; border-radius: 8px; color: var(--muted); font-weight: 500; font-size: 13px; cursor: pointer; transition: all 0.2s ease-in-out; border: none; background: transparent; text-align: left; display: flex; align-items: center; gap: 10px; }
-        .nav-item:hover { background: var(--input-bg); color: var(--text); }
+        .nav-item:hover { background: var(--input-bg); color: var(--text); transform: translateX(2px); }
         .nav-item.active { background: var(--badge-bg); color: var(--accent); font-weight: 600; }
         
-        .viewport { flex: 1; padding: 32px 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; position: relative;}
+        /* CONTENT PORT */
+        .viewport { flex: 1; padding: 32px 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; position: relative; }
         
         /* FULL SCREEN SYNC LOADER */
-        .sync-overlay { position: absolute; inset: 0; background: rgba(15,23,42,0.9); backdrop-filter: blur(8px); z-index: 50; display: none; flex-direction: column; justify-content: center; align-items: center; color: white;}
-        .sync-spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.2); border-top-color: #3B82F6; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 20px;}
+        .sync-overlay { position: absolute; inset: 0; background: rgba(15,23,42,0.8); backdrop-filter: blur(8px); z-index: 50; display: none; flex-direction: column; justify-content: center; align-items: center; color: white;}
         
-        /* COMPONENTS */
+        /* UI COMPONENTS */
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); transition: all 0.2s ease-in-out; }
+        
+        /* Premium Hover Effect */
         .card.hoverable:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); border-color: var(--accent); cursor: pointer;}
         
-        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s ease-in-out; }
+        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 10px 20px; border-radius: 8px; font-weight: 500; font-size: 13px; cursor: pointer; transition: all 0.2s ease-in-out; }
         .btn:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: var(--shadow); }
         
         textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; outline: none; transition: 0.2s; resize: vertical; min-height: 80px; }
@@ -4448,7 +4269,7 @@ def nexus_dashboard():
         
         .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--badge-bg); color: var(--badge-text); }
         
-        /* RADAR GRID (Strict 2 Columns) */
+        /* STRICT DISCIPLINE GRID (Exactly 2 columns per row) */
         .radar-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1000px;}
         .stat-value { font-size: 32px; font-weight: 700; color: var(--text); line-height: 1; margin-bottom: 4px;}
         .stat-label { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;}
@@ -4470,7 +4291,7 @@ def nexus_dashboard():
         .modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
         .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 32px; max-width: 1200px; margin: auto; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
         table { width: 100%; border-collapse: collapse; text-align: left; }
-        th { padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--border); white-space: nowrap;}
+        th { padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--border); white-space: nowrap; letter-spacing: 0.5px;}
         td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text); }
         tr:hover { background: var(--table-row-hover); }
         
@@ -4504,14 +4325,14 @@ def nexus_dashboard():
                 <button class="nav-item" onclick="navSwitch(this, 'qc_not_approved')">⏳ QC Not Approved</button>
                 <button class="nav-item" onclick="navSwitch(this, 'qc_approved')">✅ QC Approved</button>
                 <div style="flex:1"></div>
-                <a href="/" class="nav-item" style="color: #EF4444; margin-bottom:16px;">🚪 Exit Hub</a>
+                <a href="/" class="nav-item" style="color: #EF4444; margin-bottom:16px;">🚪 Exit Dashboard</a>
             </aside>
             
             <main class="viewport">
                 <div class="sync-overlay" id="syncOverlay">
-                    <div class="sync-spinner"></div>
-                    <h2 style="margin:0; font-size:18px;">Synchronizing Global Database</h2>
-                    <p style="color:var(--muted); font-size:14px; margin-top:8px;">Fetching latest updates from 7 operations sheets...</p>
+                    <div class="loader" style="width: 40px; height: 40px; margin-bottom:20px;"></div>
+                    <h2 style="margin:0; font-size:18px;">Clearing Cache & Syncing...</h2>
+                    <p style="color:var(--muted); font-size:14px; margin-top:8px;">Fetching fresh data. This takes 3-4 seconds.</p>
                 </div>
 
                 <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom:8px;">
@@ -4526,14 +4347,14 @@ def nexus_dashboard():
                         <textarea id="searchInput" placeholder="Paste multiple order IDs here..."></textarea>
                         <div style="margin-top: 16px; display: flex; gap: 12px;">
                             <button class="btn" onclick="searchOrders()">Scan Matrix</button>
-                            <button class="btn-outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML='';">Clear Results</button>
+                            <button class="btn btn-outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML='';">Clear Results</button>
                         </div>
                     </div>
                     <div id="tracking-results"></div>
                 </div>
                 
                 <div id="view-radar" class="view-pane" style="display:none;">
-                    <div id="loader" style="display:none; padding:40px; text-align:center;"><div class="loader" style="margin:auto"></div><p style="color:var(--muted); font-size:13px; margin-top:12px;">Drawing dashboard...</p></div>
+                    <div id="loader" style="display:none; padding:40px; text-align:center;"><div class="loader" style="margin:auto"></div><p style="color:var(--muted); font-size:13px; margin-top:12px;">Fetching from cache...</p></div>
                     <div id="radar-container" class="radar-grid"></div>
                 </div>
             </main>
@@ -4545,8 +4366,8 @@ def nexus_dashboard():
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px">
                 <h2 id="modalTitle" style="margin:0; font-size:18px;">Details</h2>
                 <div style="display:flex; gap:12px;">
-                    <button class="btn-outline" onclick="downloadCSV()">Export CSV</button>
-                    <button class="btn" style="background:#EF4444;" onclick="document.getElementById('detailPanel').style.display='none'">Close</button>
+                    <button class="btn btn-outline" onclick="downloadCSV()">Export CSV</button>
+                    <button class="btn" style="background:#EF4444;" onclick="document.getElementById('detailPanel').style.display='none'">Close (ESC)</button>
                 </div>
             </div>
             <div style="overflow-x:auto; max-height: 60vh;"><table id="detailTable"></table></div>
@@ -4572,15 +4393,16 @@ def nexus_dashboard():
         let activeDetails = [];
         let radarData = null;
 
-        // MANAUL SYNC LOGIC
+        // MANUAL SYNC LOGIC (Wipes Python Memory Cache securely)
         async function forceGlobalSync() {
             const overlay = document.getElementById('syncOverlay');
             overlay.style.display = 'flex';
             try {
                 await fetch('/api/nexus/refresh', {method: 'POST'});
-                // Refresh current view instantly
+                // Force a fresh fetch visually
+                radarData = null; 
                 if(activeBucket) await loadRadar();
-                else await searchOrders();
+                else if(document.getElementById('searchInput').value) await searchOrders();
             } catch(e) {
                 console.error("Sync failed", e);
             }
@@ -4629,7 +4451,7 @@ def nexus_dashboard():
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <span style="font-family:monospace; font-weight:600; font-size:13px;">${tid}</span>
-                                        <button class="btn-outline" style="padding:4px 10px; font-size:11px;" onclick="syncShip24('${tid}')">Live Sync</button>
+                                        <button class="btn btn-outline" style="padding:4px 10px; font-size:11px;" onclick="syncShip24('${tid}')">Live Sync</button>
                                     </div>
                                     <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
                                     <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted)">Pending API Call...</div>
@@ -4655,7 +4477,7 @@ def nexus_dashboard():
 
         async function loadRadar() {
             const container = document.getElementById('radar-container');
-            container.innerHTML = ''; 
+            container.innerHTML = ''; // CLEARS GHOST CARDS IMMEDIATELY
             document.getElementById('loader').style.display = 'block';
             
             const r = await fetch('/api/nexus/radar_data');
@@ -4663,6 +4485,7 @@ def nexus_dashboard():
             document.getElementById('loader').style.display = 'none';
             
             const bucketData = radarData[activeBucket];
+            // STRICT ORDERING FOR GRID (Exactly 2 columns per row)
             const order = ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"];
             
             order.forEach(src => {
@@ -4700,6 +4523,8 @@ def nexus_dashboard():
             link.setAttribute("download", `nexus_${activeBucket}_export.csv`);
             link.click();
         }
+
+        document.addEventListener('keydown', e => { if(e.key==='Escape') document.getElementById('detailPanel').style.display='none'; });
     </script>
     </body></html>
     ''')
