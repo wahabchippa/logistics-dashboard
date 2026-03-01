@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - FINAL PRODUCTION EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - COMPLETE FINAL CODE - ALL SHEETS FIXED
 # ==============================================================================
 import urllib.request
 import csv
@@ -3626,102 +3626,99 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. CACHE & SMART ALIASING
+# 2. ULTRA AGGRESSIVE FIELD MATCHING
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
-# Expanded aliases with more variations
-STRICT_ALIASES = {
-    'order': ['fleek id','order num','order id','order', 'fleek_id', 'fleekid', 'orderid', 'ordernum'], 
-    'date': ['date', 'handover date', 'created at', 'handover_date', 'created_at', 'order date'], 
-    'boxes': ['box_count','no of boxes','boxes','box', 'total boxes', 'qty', 'quantity', 'box_count', 'no_of_boxes', 'total_boxes'], 
-    'weight': ['chargeable weight','weight', 'net weight', 'chargeable_weight', 'net_weight', 'chargeable'], 
-    'vendor': ['vendor name', 'vendor','seller', 'vendor_name', 'vendorname'], 
-    'customer': ['customer name', 'consignee','customer', 'customer_name', 'consignee_name'], 
-    'country': ['destination','country', 'city', 'dest_country', 'dest', 'destination country'], 
-    'tid': ['tracking id', 'trackingid', 'tid', 'tracking', 'courier_tracking', 'tracking_id', 'tracking number', 'trackingnumber'], 
-    'mawb': ['awb','mawb','master', 'master awb', 'master_awb', 'masterawb'],
-    'status': ['latest_status', 'latest status', 'status', 'kerry status', 'kerry_status', 'latest']
+FIELD_KEYWORDS = {
+    'order': ['order', 'fleek', 'id', 'order id', 'fleek id'],
+    'date': ['date', 'handover', 'created', 'handover date', 'created at'],
+    'boxes': ['box', 'qty', 'quantity', 'count', 'boxes', 'box count'],
+    'weight': ['weight', 'chargeable', 'net weight', 'chargeable weight'],
+    'vendor': ['vendor', 'seller', 'vendor name'],
+    'customer': ['customer', 'consignee', 'customer name'],
+    'country': ['country', 'destination', 'city', 'dest country'],
+    'tid': ['tracking', 'tid', 'courier', 'tracking id', 'courier tracking'],
+    'mawb': ['mawb', 'awb', 'master', 'master awb'],
+    'status': ['status', 'latest', 'kerry status']
 }
 
+def get_field_value(row, field):
+    """ULTRA AGGRESSIVE: kisi bhi column name se value nikal lega"""
+    keywords = FIELD_KEYWORDS[field]
+    
+    # Strategy 1: Exact match
+    for col, val in row.items():
+        col_lower = col.lower().strip()
+        if col_lower in keywords:
+            v = str(val).strip()
+            if v and v.lower() not in ['n/a', 'nan', 'none', '-', '', 'null', 'pending']:
+                return v
+    
+    # Strategy 2: Partial match (keyword column mein hai)
+    for col, val in row.items():
+        col_lower = col.lower().strip()
+        for keyword in keywords:
+            if keyword in col_lower:
+                v = str(val).strip()
+                if v and v.lower() not in ['n/a', 'nan', 'none', '-', '', 'null', 'pending']:
+                    return v
+    
+    # Strategy 3: Word match (column name ke words mein se koi keyword match ho)
+    for col, val in row.items():
+        col_words = re.findall(r'\w+', col.lower())
+        for keyword in keywords:
+            keyword_words = re.findall(r'\w+', keyword)
+            if any(word in col_words for word in keyword_words):
+                v = str(val).strip()
+                if v and v.lower() not in ['n/a', 'nan', 'none', '-', '', 'null', 'pending']:
+                    return v
+    
+    return "N/A"
+
 def fetch_with_proxy(url):
-    """Try direct fetch first, then proxy if fails."""
+    """Fetch with direct + proxy fallback"""
     # Direct attempt
     try:
-        print(f"📡 Direct fetch: {url[:80]}...")
+        print(f"📡 Fetching: {url[:60]}...")
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=20) as res:
             raw = res.read().decode('utf-8').splitlines()
             data = list(csv.reader(raw))
             if not data:
-                print(f"⚠️ Empty CSV from direct: {url[:80]}...")
+                print(f"⚠️ Empty CSV")
                 return []
             headers = [str(h).lower().strip() for h in data[0]]
             rows = [dict(zip(headers, row)) for row in data[1:]]
-            print(f"✅ Direct success: {len(rows)} rows from {url[:80]}...")
+            print(f"✅ Direct success: {len(rows)} rows")
             return rows
     except Exception as e:
-        print(f"⚠️ Direct fetch failed: {e}. Trying proxy...")
+        print(f"⚠️ Direct failed: {e}")
     
-    # Proxy attempt (corsproxy.io)
+    # Proxy attempt
     try:
         import urllib.parse
-        proxy_url = f"https://corsproxy.io/?{urllib.parse.quote(url, safe='')}"
-        print(f"📡 Proxy fetch: {proxy_url[:80]}...")
+        proxy_url = f"https://api.allorigins.win/raw?url={urllib.parse.quote(url)}"
+        print(f"📡 Trying proxy: {proxy_url[:60]}...")
         req = urllib.request.Request(proxy_url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=20) as res:
             raw = res.read().decode('utf-8').splitlines()
             data = list(csv.reader(raw))
             if not data:
-                print(f"⚠️ Empty CSV from proxy: {url[:80]}...")
                 return []
             headers = [str(h).lower().strip() for h in data[0]]
             rows = [dict(zip(headers, row)) for row in data[1:]]
-            print(f"✅ Proxy success: {len(rows)} rows from {url[:80]}...")
+            print(f"✅ Proxy success: {len(rows)} rows")
             return rows
     except Exception as e:
-        print(f"❌ Proxy fetch also failed: {e}")
+        print(f"❌ Proxy failed: {e}")
         return []
-
-def get_alias_val(row, aliases):
-    """
-    ULTRA AGGRESSIVE value extraction.
-    Tries multiple strategies to get ANY value from the row.
-    """
-    # Strategy 1: Exact match (case insensitive)
-    for k, v in row.items():
-        k_clean = k.strip().lower()
-        if k_clean in aliases:
-            val = str(v).strip()
-            if val and val.lower() not in ['n/a', 'nan', 'none', '-', '', 'null', 'pending']:
-                return val
-    
-    # Strategy 2: Partial match (alias is part of column name)
-    for k, v in row.items():
-        k_clean = k.strip().lower()
-        for alias in aliases:
-            if alias in k_clean or k_clean in alias:
-                val = str(v).strip()
-                if val and val.lower() not in ['n/a', 'nan', 'none', '-', '', 'null', 'pending']:
-                    return val
-    
-    # Strategy 3: Word match (split column name into words)
-    for k, v in row.items():
-        k_words = re.findall(r'\w+', k.lower())
-        for alias in aliases:
-            alias_words = re.findall(r'\w+', alias)
-            if any(word in k_words for word in alias_words):
-                val = str(v).strip()
-                if val and val.lower() not in ['n/a', 'nan', 'none', '-', '', 'null', 'pending']:
-                    return val
-    
-    return "N/A"
 
 def parse_date(date_str):
     if not date_str or date_str == 'N/A': return None
     try:
-        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%d-%m-%Y', '%Y/%m/%d', '%b %d, %Y'):
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%d-%m-%Y', '%Y/%m/%d'):
             try: return datetime.strptime(date_str.split(' ')[0], fmt)
             except: continue
     except: pass
@@ -3729,6 +3726,7 @@ def parse_date(date_str):
     return datetime(1970, 1, 1)
 
 def clean_and_pad_tids(raw_tid):
+    if raw_tid == 'N/A': return []
     parts = [t.strip() for t in re.split(r'[\n,\/]+', str(raw_tid)) if t.strip() and t.strip().lower() not in ['n/a', 'none', 'pending', '-', '']]
     cleaned = []
     for t in parts:
@@ -3741,15 +3739,12 @@ def clean_and_pad_tids(raw_tid):
 def force_sync_all_databases():
     global GLOBAL_DB_CACHE
     print("\n" + "="*60)
-    print("🔄 STARTING FULL SYNCHRONIZATION")
+    print("🔄 SYNC STARTED - FETCHING ALL SHEETS")
     print("="*60)
+    
     results = {}
-
-    # Fetch all sheets in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        # Add Kerry status URL
         future_to_name = {executor.submit(fetch_with_proxy, NEXUS_KERRY_STATUS_URL): "KERRY_MASTER"}
-        # Add all source sheets
         for name, url in NEXUS_SOURCES.items():
             future_to_name[executor.submit(fetch_with_proxy, url)] = name
         
@@ -3758,15 +3753,15 @@ def force_sync_all_databases():
             try:
                 results[name] = future.result()
             except Exception as e:
-                print(f"🔥 {name} failed with exception: {e}")
+                print(f"🔥 {name} failed: {e}")
                 results[name] = []
 
     # Process Kerry status
     kerry_raw = results.pop("KERRY_MASTER", [])
     s_map = {}
     for r in kerry_raw:
-        oid = get_alias_val(r, STRICT_ALIASES['order'])
-        stat = get_alias_val(r, STRICT_ALIASES['status'])
+        oid = get_field_value(r, 'order')
+        stat = get_field_value(r, 'status')
         if oid != 'N/A':
             s_map[oid.lower()] = stat.upper()
     print(f"\n📊 Kerry status map: {len(s_map)} entries")
@@ -3775,16 +3770,17 @@ def force_sync_all_databases():
     GLOBAL_DB_CACHE['sheets'] = results
     GLOBAL_DB_CACHE['loaded'] = True
     
-    # Print detailed summary
+    # Detailed summary
     print("\n📊 SYNC SUMMARY:")
     print("-" * 40)
-    total_rows = 0
-    for name, rows in results.items():
-        print(f"  {name:20}: {len(rows):5} rows")
-        total_rows += len(rows)
+    total = 0
+    for name in ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"]:
+        rows = results.get(name, [])
+        print(f"  {name:20}: {len(rows)} rows")
+        total += len(rows)
     print("-" * 40)
-    print(f"  TOTAL            : {total_rows} rows")
-    print("✅ Sync completed successfully!")
+    print(f"  TOTAL            : {total} rows")
+    print("✅ SYNC COMPLETED SUCCESSFULLY")
     print("="*60)
 
 @app.after_request
@@ -3793,7 +3789,8 @@ def inject_nexus_button(response):
         if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
             html = response.get_data(as_text=True)
             btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #18181b, #09090b); color:#fff; border:1px solid #27272a; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; font-family:'Inter',sans-serif; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); transition:0.3s;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">🚀 TID Operations</a>"""
-            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
+            if '</body>' in html:
+                response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
 # ------------------------------------------------------------------------------
@@ -3812,7 +3809,6 @@ def api_nexus_search():
     if not GLOBAL_DB_CACHE['loaded']:
         force_sync_all_databases()
     
-    # Split by commas, newlines, spaces, tabs
     query_text = request.json.get('query', '')
     queries = [x.strip() for x in re.split(r'[\n,\t\s]+', query_text) if x.strip()]
     results = []
@@ -3823,35 +3819,33 @@ def api_nexus_search():
         
         for src, rows in GLOBAL_DB_CACHE['sheets'].items():
             for row in rows:
-                # Get order ID and TIDs from row
-                order_val = get_alias_val(row, STRICT_ALIASES['order']).lower()
-                tid_raw = get_alias_val(row, STRICT_ALIASES['tid'])
+                order_val = get_field_value(row, 'order').lower()
+                tid_raw = get_field_value(row, 'tid')
                 tids_list = clean_and_pad_tids(tid_raw)
                 
-                # Check if query matches order ID OR any TID
-                match_found = False
+                # Match by order ID or any TID
+                match = False
                 if q_lower in order_val:
-                    match_found = True
+                    match = True
                 else:
                     for tid in tids_list:
                         if q_lower in tid.lower():
-                            match_found = True
+                            match = True
                             break
                 
-                if match_found:
-                    k_stat = GLOBAL_DB_CACHE['kerry'].get(order_val, "N/A")
+                if match:
                     results.append({
-                        "order_id": order_val.upper(), 
-                        "source": src, 
-                        "status": k_stat, 
-                        "date": get_alias_val(row, STRICT_ALIASES['date']), 
-                        "boxes": get_alias_val(row, STRICT_ALIASES['boxes']), 
-                        "weight": get_alias_val(row, STRICT_ALIASES['weight']), 
-                        "vendor": get_alias_val(row, STRICT_ALIASES['vendor']), 
-                        "customer": get_alias_val(row, STRICT_ALIASES['customer']), 
-                        "country": get_alias_val(row, STRICT_ALIASES['country']), 
+                        "order_id": order_val.upper(),
+                        "source": src,
+                        "status": GLOBAL_DB_CACHE['kerry'].get(order_val, "N/A"),
+                        "date": get_field_value(row, 'date'),
+                        "boxes": get_field_value(row, 'boxes'),
+                        "weight": get_field_value(row, 'weight'),
+                        "vendor": get_field_value(row, 'vendor'),
+                        "customer": get_field_value(row, 'customer'),
+                        "country": get_field_value(row, 'country'),
                         "tids": tids_list,
-                        "mawb": get_alias_val(row, STRICT_ALIASES['mawb'])
+                        "mawb": get_field_value(row, 'mawb')
                     })
                     found = True
                     break
@@ -3867,18 +3861,17 @@ def api_nexus_ship24():
     responses = []
     
     for tid in tids:
-        # Fix TID format
         if tid.startswith('150') and 12 <= len(tid) <= 15:
             tid = '0' + tid
             
         if ship24_key == 'MOCK':
             responses.append({
-                "tid": tid, 
-                "success": True, 
-                "courier": "Ship24", 
-                "current_status": "In Transit", 
-                "progress": 60, 
-                "eta": "In 3 Days", 
+                "tid": tid,
+                "success": True,
+                "courier": "Ship24",
+                "current_status": "In Transit",
+                "progress": 60,
+                "eta": "In 3 Days",
                 "signed_by": "",
                 "events": [
                     {"status": "Arrival at Hub", "time": "2026-03-01", "location": "Gateway"},
@@ -3888,37 +3881,39 @@ def api_nexus_ship24():
         else:
             try:
                 req = urllib.request.Request(
-                    "https://api.ship24.com/public/v1/trackers/track", 
-                    data=json.dumps({"trackingNumber": tid}).encode(), 
-                    headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, 
+                    "https://api.ship24.com/public/v1/trackers/track",
+                    data=json.dumps({"trackingNumber": tid}).encode(),
+                    headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"},
                     method="POST"
                 )
                 with urllib.request.urlopen(req) as res:
-                    tr = json.loads(res.read().decode()).get('data',{}).get('trackings',[{}])[0]
-                    evs = tr.get('events',[])
-                    st = evs[0].get('statusMilestone','Transit') if evs else 'Pending'
+                    tr = json.loads(res.read().decode()).get('data', {}).get('trackings', [{}])[0]
+                    evs = tr.get('events', [])
+                    st = evs[0].get('statusMilestone', 'Transit') if evs else 'Pending'
                     courier = evs[0].get('courierCode', 'Carrier') if evs else 'Carrier'
                     
-                    delivery_info = tr.get('shipment', {}).get('delivery', {})
-                    eta = delivery_info.get('estimatedDeliveryDate', None)
-                    signed_by = delivery_info.get('signatureName', '')
+                    delivery = tr.get('shipment', {}).get('delivery', {})
+                    eta = delivery.get('estimatedDeliveryDate')
+                    signed = delivery.get('signatureName', '')
                     
-                    if st.lower() == 'delivered': 
+                    if st.lower() == 'delivered':
                         eta = "Delivered"
-                    elif not eta: 
+                    elif not eta:
                         eta = "Awaiting Update"
                     
                     responses.append({
-                        "tid": tid, 
-                        "success": True, 
-                        "courier": str(courier).upper(), 
-                        "current_status": st, 
-                        "progress": 100 if st.lower()=='delivered' else (80 if st.lower()=='out_for_delivery' else 60), 
-                        "eta": str(eta), 
-                        "signed_by": signed_by,
-                        "events": [{"status": e.get('statusMilestone', e.get('status', 'Update')), 
-                                  "time": e.get('datetime', 'N/A'), 
-                                  "location": e.get('location', '')} for e in evs]
+                        "tid": tid,
+                        "success": True,
+                        "courier": str(courier).upper(),
+                        "current_status": st,
+                        "progress": 100 if st.lower() == 'delivered' else (80 if st.lower() == 'out_for_delivery' else 60),
+                        "eta": str(eta),
+                        "signed_by": signed,
+                        "events": [{
+                            "status": e.get('statusMilestone', e.get('status', 'Update')),
+                            "time": e.get('datetime', 'N/A'),
+                            "location": e.get('location', '')
+                        } for e in evs]
                     })
             except Exception as e:
                 print(f"Ship24 error for {tid}: {e}")
@@ -3928,110 +3923,104 @@ def api_nexus_ship24():
 @app.route('/api/nexus/radar_data', methods=['GET'])
 @login_required
 def api_nexus_radar_data():
-    if not GLOBAL_DB_CACHE['loaded']: 
+    if not GLOBAL_DB_CACHE['loaded']:
         force_sync_all_databases()
-        
-    buckets = { src: {"with_tid": [], "missing_tid": []} for src in NEXUS_SOURCES.keys() }
+    
+    buckets = {src: {"with_tid": [], "missing_tid": []} for src in NEXUS_SOURCES.keys()}
     
     for src, rows in GLOBAL_DB_CACHE['sheets'].items():
         for row in rows:
-            dt_str = get_alias_val(row, STRICT_ALIASES['date'])
+            dt_str = get_field_value(row, 'date')
             dt_obj = parse_date(dt_str)
-            if dt_obj and dt_obj < FILTER_DATE: 
+            if dt_obj and dt_obj < FILTER_DATE:
                 continue
             
-            oid = get_alias_val(row, STRICT_ALIASES['order'])
-            if oid == 'N/A': 
+            oid = get_field_value(row, 'order')
+            if oid == 'N/A':
                 continue
             
             kerry_stat = GLOBAL_DB_CACHE['kerry'].get(oid.lower(), "PENDING")
-            if kerry_stat != "HANDED OVER TO LOGISTICS PARTNER": 
+            if kerry_stat != "HANDED OVER TO LOGISTICS PARTNER":
                 continue
             
-            tid_raw = get_alias_val(row, STRICT_ALIASES['tid'])
+            tid_raw = get_field_value(row, 'tid')
             tids = clean_and_pad_tids(tid_raw)
-            has_tid = len(tids) > 0 and tids[0].lower() not in ['pending', 'none', 'n/a']
+            has_tid = len(tids) > 0
             
-            r_d = { 
-                "Date": dt_str, 
-                "Order": oid.upper(), 
-                "Boxes": get_alias_val(row, STRICT_ALIASES['boxes']), 
-                "Weight": get_alias_val(row, STRICT_ALIASES['weight']), 
-                "Vendor": get_alias_val(row, STRICT_ALIASES['vendor']), 
-                "Customer": get_alias_val(row, STRICT_ALIASES['customer']), 
-                "Country": get_alias_val(row, STRICT_ALIASES['country']), 
-                "MAWB": get_alias_val(row, STRICT_ALIASES['mawb']), 
-                "Tracking ID": ", ".join(tids) if has_tid else "MISSING" 
-            }
-            
-            if has_tid: 
-                buckets[src]["with_tid"].append(r_d)
-            else: 
-                buckets[src]["missing_tid"].append(r_d)
-            
+            buckets[src]["with_tid" if has_tid else "missing_tid"].append({
+                "Date": dt_str,
+                "Order": oid.upper(),
+                "Boxes": get_field_value(row, 'boxes'),
+                "Weight": get_field_value(row, 'weight'),
+                "Vendor": get_field_value(row, 'vendor'),
+                "Customer": get_field_value(row, 'customer'),
+                "Country": get_field_value(row, 'country'),
+                "MAWB": get_field_value(row, 'mawb'),
+                "Tracking ID": ", ".join(tids) if has_tid else "MISSING"
+            })
+    
     return jsonify(buckets)
 
 @app.route('/api/nexus/ops_commander', methods=['GET'])
 @login_required
 def api_nexus_ops_commander():
-    if not GLOBAL_DB_CACHE['loaded']: 
+    if not GLOBAL_DB_CACHE['loaded']:
         force_sync_all_databases()
     
-    blame_radar = []
-    missing_tid_text = "Hi Kerry Team,\n\nThe following orders have been Handed Over but are missing Tracking IDs. Kindly update ASAP:\n\n"
+    blame = []
+    missing_text = "Hi Kerry Team,\n\nFollowing orders are Handed Over but missing TIDs:\n\n"
     count = 1
-
+    
     for src, rows in GLOBAL_DB_CACHE['sheets'].items():
         for row in rows:
-            dt_str = get_alias_val(row, STRICT_ALIASES['date'])
+            dt_str = get_field_value(row, 'date')
             dt_obj = parse_date(dt_str)
-            if not dt_obj or dt_obj < FILTER_DATE: 
+            if not dt_obj or dt_obj < FILTER_DATE:
                 continue
             
-            oid = get_alias_val(row, STRICT_ALIASES['order'])
-            if oid == 'N/A': 
+            oid = get_field_value(row, 'order')
+            if oid == 'N/A':
                 continue
             
             kerry_stat = GLOBAL_DB_CACHE['kerry'].get(oid.lower(), "PENDING")
-            tid_raw = get_alias_val(row, STRICT_ALIASES['tid'])
-            has_tid = len(clean_and_pad_tids(tid_raw)) > 0 and tid_raw.lower() not in ['pending', 'none', 'n/a', '']
+            tid_raw = get_field_value(row, 'tid')
+            has_tid = len(clean_and_pad_tids(tid_raw)) > 0
+            days = (datetime.now() - dt_obj).days if dt_obj else 0
             
-            days_aging = (datetime.now() - dt_obj).days if dt_obj else 0
-
-            if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and not has_tid and days_aging > 1:
-                blame_radar.append({
-                    "order": oid.upper(), 
-                    "source": src, 
-                    "issue": "Missing TID", 
-                    "aging": f"{days_aging} Days", 
+            if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and not has_tid and days > 1:
+                blame.append({
+                    "order": oid.upper(),
+                    "source": src,
+                    "issue": "Missing TID",
+                    "aging": f"{days} Days",
                     "blame": "Kerry Logistics"
                 })
-                missing_tid_text += f"{count}. Order: {oid.upper()} | Date: {dt_str} | Source: {src}\n"
+                missing_text += f"{count}. Order: {oid.upper()} | Date: {dt_str} | Source: {src}\n"
                 count += 1
-            elif kerry_stat in ["QC PENDING", "CREATED", "ACCEPTED"] and days_aging > 2:
-                blame_radar.append({
-                    "order": oid.upper(), 
-                    "source": src, 
-                    "issue": "Stuck in QC", 
-                    "aging": f"{days_aging} Days", 
+            elif kerry_stat in ["QC PENDING", "CREATED", "ACCEPTED"] and days > 2:
+                blame.append({
+                    "order": oid.upper(),
+                    "source": src,
+                    "issue": "Stuck in QC",
+                    "aging": f"{days} Days",
                     "blame": f"{src} Operations"
                 })
-
-    if count == 1: 
-        missing_tid_text = "✅ All good! No missing TIDs currently."
+    
+    if count == 1:
+        missing_text = "✅ All good! No missing TIDs currently."
     
     return jsonify({
-        "blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), 
-        "missing_text": missing_tid_text
+        "blame_radar": sorted(blame, key=lambda x: int(x['aging'].split()[0]), reverse=True),
+        "missing_text": missing_text
     })
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI (Keep your existing frontend - it's fine)
+# 4. FRONTEND (COMPLETE)
 # ------------------------------------------------------------------------------
 @app.route('/nexus')
 @login_required
 def nexus_dashboard():
-    if session.get('role') != 'admin': 
+    if session.get('role') != 'admin':
         return "Access Denied", 403
     
     return render_template_string('''
@@ -4508,7 +4497,7 @@ def nexus_dashboard():
                         <div style="font-size: 14px; color: var(--muted);">Identify bottlenecks and follow up</div>
                     </div>
                     <div id="ops-loader" style="display:none; padding:50px; text-align:center;"><div class="loader" style="margin:auto"></div></div>
-                    <div class="ops-grid" id="ops-content" style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+                    <div class="ops-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:24px;" id="ops-content">
                         <div class="card">
                             <h3 style="margin-top:0;">🚨 The Blame Game (Aging Radar)</h3>
                             <div style="max-height:400px; overflow-y:auto; border:1px solid var(--border); border-radius:8px;">
@@ -4564,7 +4553,6 @@ def nexus_dashboard():
         let radarData = null;
         let allTrackingData = [];
 
-        // Helper functions
         function getFlag(cStr) {
             const c = String(cStr || '').toLowerCase().trim();
             if(!c || c === 'n/a' || c === '-') return '🏳️ Unknown';
@@ -4613,9 +4601,11 @@ def nexus_dashboard():
                     radarData = null;
                     if(document.getElementById('view-radar').style.display === 'block') await loadRadar();
                     if(document.getElementById('view-ops').style.display === 'block') await loadOpsCommander();
+                    alert('✅ Sync completed! Check Vercel logs for details.');
                 }
             } catch(e) {
                 console.error("Sync failed", e);
+                alert('❌ Sync failed. Check Vercel logs.');
             }
             overlay.style.display = 'none';
         }
@@ -4715,15 +4705,12 @@ def nexus_dashboard():
                 const d = (await r.json())[0];
                 
                 if(d.success) {
-                    // Update progress bar
                     const progBar = document.getElementById(`${prefix}prog-${safeTid}`);
                     if(progBar) progBar.style.width = d.progress + '%';
                     
-                    // Update courier
                     const courierEl = document.getElementById(`${prefix}courier-${safeTid}`);
                     if(courierEl) courierEl.innerText = d.courier;
                     
-                    // Update ETA
                     const etaEl = document.getElementById(`${prefix}eta-${safeTid}`);
                     if(etaEl) {
                         if(d.progress === 100) {
@@ -4735,7 +4722,6 @@ def nexus_dashboard():
                         }
                     }
                     
-                    // Build timeline
                     let timelineHtml = '';
                     if(d.events.length === 0) {
                         timelineHtml = '<div class="tl-event"><span class="tl-status" style="color:var(--muted)">Awaiting Carrier Update...</span></div>';
@@ -4748,7 +4734,6 @@ def nexus_dashboard():
                         ).join('');
                     }
                     
-                    // Add signature if delivered
                     let extraHtml = `<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">`;
                     if(d.progress === 100 && d.signed_by) {
                         extraHtml += `<div style="color: #10B981; font-size: 13px; font-weight: 700; margin-bottom: 10px;">✍️ Signed By: ${d.signed_by}</div>`;
@@ -4786,11 +4771,9 @@ def nexus_dashboard():
             let val = document.getElementById('directInput').value;
             if(!val) return;
             
-            // Split and clean TIDs
             let tids = val.split(/[\\n,\\t \\/]+/).map(t => t.trim()).filter(Boolean);
             tids = tids.map(t => (t.startsWith('150') && t.length >= 12 && t.length <= 15) ? '0' + t : t);
 
-            // Build HTML
             let h = '<div class="tid-area" style="border-radius:12px; border:1px solid var(--border);"><div class="tid-grid">';
             tids.forEach(tid => {
                 const safeTid = tid.replace(/[\\s\\/]+/g, '');
@@ -4812,13 +4795,12 @@ def nexus_dashboard():
             h += '</div></div>';
             document.getElementById('direct-results').innerHTML = h;
 
-            // Track each TID
             for(let tid of tids) {
                 await syncShip24(tid, true);
             }
         }
 
-        // --- RADAR (Handed Over) ---
+        // --- RADAR ---
         async function loadRadar() {
             const container = document.getElementById('radar-container');
             container.innerHTML = '';
@@ -4873,8 +4855,8 @@ def nexus_dashboard():
                 <td style="color:var(--accent); font-weight:700;">${r['Order'] || ''}</td>
                 <td>${r['Boxes'] || ''}</td>
                 <td>${r['Weight'] || ''}</td>
-                <td>${r['Vendor'] || r['Vendor Name'] || ''}</td>
-                <td>${r['Customer'] || r['Customer Name'] || ''}</td>
+                <td>${r['Vendor'] || ''}</td>
+                <td>${r['Customer'] || ''}</td>
                 <td>${r['Country'] || ''}</td>
                 <td>${r['MAWB'] || ''}</td>
                 <td style="font-family:monospace;">${r['Tracking ID'] || ''}</td>
@@ -4931,7 +4913,7 @@ def nexus_dashboard():
             const headers = ["Date", "Order", "Boxes", "Weight", "Vendor", "Customer", "Country", "MAWB", "Tracking ID"];
             const headerStr = headers.join(',');
             const rows = activeDetails.map(r => 
-                headers.map(h => `"${String(r[h] || r[h.replace(' ', '')] || '').replace(/"/g, '""')}"`).join(',')
+                headers.map(h => `"${String(r[h] || '').replace(/"/g, '""')}"`).join(',')
             ).join('\\n');
             
             const csvContent = "data:text/csv;charset=utf-8," + headerStr + "\\n" + rows;
@@ -4941,7 +4923,6 @@ def nexus_dashboard():
             link.click();
         }
 
-        // Escape key to close modal
         document.addEventListener('keydown', e => { 
             if(e.key === 'Escape') {
                 document.getElementById('detailPanel').style.display = 'none';
