@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - DIRECT TRACK & EXACT DATA EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% VERCEL SAFE DATA EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -3608,7 +3608,6 @@ import re
 import json
 import os
 import time
-import concurrent.futures
 from datetime import datetime
 from flask import jsonify, request, session, render_template_string
 
@@ -3626,7 +3625,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. FAST CACHE ENGINE (CONCURRENT THREADS)
+# 2. VERCEL-SAFE CACHE (SEQUENTIAL FETCH - PREVENTS 0 ROWS)
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
@@ -3687,23 +3686,22 @@ def clean_and_pad_tids(raw_tid):
             cleaned.append(t)
     return cleaned
 
+# 🚨 THE FIX: 100% Sequential Fetching (Vercel cannot block this)
 def force_sync_all_databases():
     global GLOBAL_DB_CACHE
-    results = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        f_to_name = {executor.submit(fetch_single_csv, url): name for name, url in NEXUS_SOURCES.items()}
-        f_to_name[executor.submit(fetch_single_csv, NEXUS_KERRY_STATUS_URL)] = "KERRY_MASTER"
-        for future in concurrent.futures.as_completed(f_to_name):
-            name = f_to_name[future]
-            try: results[name] = future.result()
-            except: results[name] = []
-
-    kerry_raw = results.pop("KERRY_MASTER", [])
+    
+    # Fetch Kerry First
+    kerry_raw = fetch_single_csv(NEXUS_KERRY_STATUS_URL)
     s_map = {}
     for r in kerry_raw:
         oid = get_alias_val(r, STRICT_ALIASES['order'])
         stat = get_alias_val(r, STRICT_ALIASES['status'])
         if oid != 'N/A': s_map[oid.lower()] = stat.upper()
+
+    # Fetch Data Sheets Line by Line safely
+    results = {}
+    for name, url in NEXUS_SOURCES.items():
+        results[name] = fetch_single_csv(url)
 
     GLOBAL_DB_CACHE['kerry'] = s_map
     GLOBAL_DB_CACHE['sheets'] = results
@@ -3737,10 +3735,7 @@ def api_nexus_search():
     
     for query in queries:
         q_lower = query.lower()
-        if q_lower.startswith('150') and 12 <= len(q_lower) <= 15:
-            q_lower_alt = '0' + q_lower
-        else:
-            q_lower_alt = q_lower
+        q_lower_alt = '0' + q_lower if (q_lower.startswith('150') and 12 <= len(q_lower) <= 15) else q_lower
 
         found = False
         for src, rows in GLOBAL_DB_CACHE['sheets'].items():
@@ -3775,7 +3770,7 @@ def api_nexus_ship24():
         if tid.startswith('150') and 12 <= len(tid) <= 15: tid = '0' + tid
             
         if ship24_key == 'MOCK':
-            responses.append({"tid": tid, "success": True, "courier": "Ship24", "current_status": "Transit", "progress": 60, "eta": "In 3 Days", "signed_by": "J. SMITH", "events": [{"statusMilestone":"transit", "status": "Arrival at Hub", "time": "2026-03-01 14:30", "location": "Gateway"}]})
+            responses.append({"tid": tid, "success": True, "courier": "Ship24", "current_status": "Transit", "progress": 60, "eta": "In 3 Days", "signed_by": "J. SMITH", "events": [{"statusMilestone":"transit", "status": "Arrival at Hub", "time": "2026-03-01", "location": "Gateway"}]})
         else:
             try:
                 req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
@@ -3794,7 +3789,8 @@ def api_nexus_ship24():
                     
                     responses.append({
                         "tid": tid, "success": True, "courier": str(courier).upper(), "current_status": st.lower(), 
-                        "progress": 100 if st.lower()=='delivered' else 60, "eta": str(eta), "signed_by": signed_by,
+                        "progress": 100 if st.lower()=='delivered' else (75 if st.lower()=='out_for_delivery' else 50), 
+                        "eta": str(eta), "signed_by": signed_by,
                         "events": [{"statusMilestone": e.get('statusMilestone','info').lower(), "status": e.get('status', 'Update'), "time": e.get('datetime', 'N/A'), "location": e.get('location', '')} for e in evs]
                     })
             except: responses.append({"tid": tid, "success": False})
@@ -3869,7 +3865,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_tid_text})
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI & UX (BUG-FREE JAVASCRIPT)
+# 4. FRONTEND UI & UX (GOD TIER EDITION)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3922,6 +3918,7 @@ def nexus_dashboard():
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: var(--shadow); }
         .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.2s; }
         .btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+        .btn-purple { background: linear-gradient(135deg, #8B5CF6, #6D28D9); color: white; display:none; }
         
         textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--text); font-family: 'Inter', monospace; font-size: 15px; outline: none; resize: vertical; min-height: 100px; transition: 0.2s;}
         textarea:focus { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent);}
@@ -3929,7 +3926,7 @@ def nexus_dashboard():
         /* RADAR GRID */
         .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px;}
         .source-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display:flex; flex-direction:column; gap:16px;}
-        .source-header { font-size: 15px; font-weight: 800; text-transform: uppercase; color:var(--text);}
+        .source-header { font-size: 15px; font-weight: 800; letter-spacing:0.5px; text-transform: uppercase; color:var(--text);}
         .split-box { display: flex; gap: 12px; }
         .split-btn { flex: 1; background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; transition: 0.2s; }
         .split-btn:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: var(--shadow-hover); }
@@ -4025,12 +4022,12 @@ def nexus_dashboard():
                 <div class="sync-overlay" id="syncOverlay">
                     <div class="loader" style="width: 50px; height: 50px; margin-bottom:20px;"></div>
                     <h2 style="margin:0; font-size:24px;">Synchronizing Database</h2>
-                    <p style="color:var(--muted); margin-top:10px;">Pulling live data from sheets...</p>
+                    <p style="color:var(--muted); margin-top:10px;">Fetching safely from 7 sheets (approx 5 seconds)...</p>
                 </div>
 
                 <div id="view-track" class="view-pane active">
                     <div style="margin-bottom:20px;">
-                        <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 800;">Matrix Search</h1>
+                        <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 800; letter-spacing:-0.5px;">Matrix Search</h1>
                         <div style="font-size: 14px; color: var(--muted);">Search by Order ID or Carrier TID to find details from sheets.</div>
                     </div>
                     <div class="card" style="margin-bottom: 30px;">
@@ -4046,7 +4043,7 @@ def nexus_dashboard():
 
                 <div id="view-direct" class="view-pane" style="display:none;">
                     <div style="margin-bottom:20px;">
-                        <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 800;">Direct Carrier Tracking</h1>
+                        <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 800; letter-spacing:-0.5px;">Direct Carrier Tracking</h1>
                         <div style="font-size: 14px; color: var(--muted);">Track any TID worldwide directly without checking Google Sheets.</div>
                     </div>
                     <div class="card" style="margin-bottom: 30px;">
@@ -4061,7 +4058,7 @@ def nexus_dashboard():
                 
                 <div id="view-radar" class="view-pane" style="display:none;">
                     <div style="margin-bottom:20px;">
-                        <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 800;">Handed Over Operations</h1>
+                        <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 800; letter-spacing:-0.5px;">Handed Over Operations</h1>
                         <div style="font-size: 14px; color: var(--muted);">Data filtered purely from 1st Jan 2026 onwards.</div>
                     </div>
                     <div id="loader" style="display:none; padding:100px; text-align:center;"><div class="loader" style="margin:auto"></div></div>
@@ -4155,6 +4152,7 @@ def nexus_dashboard():
             if(viewType === 'view-ops') loadOpsCommander();
         }
 
+        // --- 1. MATRIX SEARCH ENGINE ---
         async function searchOrders() {
             const q = document.getElementById('searchInput').value; if(!q) return;
             document.getElementById('tracking-results').innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
@@ -4165,7 +4163,7 @@ def nexus_dashboard():
                 if(allTrackingData.length > 0) document.getElementById('bulkBtn').style.display = 'flex';
                 renderCards();
             } catch(e) {
-                document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:#EF4444; padding:20px;">⚠️ Network error. Please click "Sync Live Data" first.</div>';
+                document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:#EF4444; padding:20px;">⚠️ Please click the green "Sync Live Data" button first!</div>';
             }
         }
 
@@ -4360,7 +4358,7 @@ def nexus_dashboard():
             document.getElementById('modalTitle').innerText = `${src} [${typeStr}]`;
             
             const table = document.getElementById('detailTable');
-            let thead = '<thead><tr><th>Date</th><th>Order</th><th>Boxes</th><th>Weight</th><th>Vendor</th><th>Customer</th><th>Country</th><th>MAWB</th><th>Tracking ID</th></tr></thead>';
+            let thead = '<thead><tr><th>Date</th><th>Order</th><th>Boxes</th><th>Weight</th><th>Vendor Name</th><th>Customer Name</th><th>Country</th><th>MAWB</th><th>Tracking ID</th></tr></thead>';
             let tbody = '<tbody>' + activeDetails.map(r=>`<tr>
                 <td>${r['Date']}</td>
                 <td style="color:var(--accent); font-weight:700;">${r['Order']}</td>
