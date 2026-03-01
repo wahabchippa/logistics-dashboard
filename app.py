@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - COMPLETE FINAL CODE - ALL SHEETS FIXED
+# 🛰️ TID OPERATIONS HUB (NEXUS) - AUTO-SYNC FINAL EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -3683,7 +3683,7 @@ def fetch_with_proxy(url):
     try:
         print(f"📡 Fetching: {url[:60]}...")
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=20) as res:
+        with urllib.request.urlopen(req, timeout=30) as res:
             raw = res.read().decode('utf-8').splitlines()
             data = list(csv.reader(raw))
             if not data:
@@ -3696,13 +3696,13 @@ def fetch_with_proxy(url):
     except Exception as e:
         print(f"⚠️ Direct failed: {e}")
     
-    # Proxy attempt
+    # Proxy attempt (cors-anywhere)
     try:
         import urllib.parse
-        proxy_url = f"https://api.allorigins.win/raw?url={urllib.parse.quote(url)}"
+        proxy_url = f"https://cors-anywhere.herokuapp.com/{url}"
         print(f"📡 Trying proxy: {proxy_url[:60]}...")
         req = urllib.request.Request(proxy_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=20) as res:
+        with urllib.request.urlopen(req, timeout=30) as res:
             raw = res.read().decode('utf-8').splitlines()
             data = list(csv.reader(raw))
             if not data:
@@ -3800,6 +3800,7 @@ def inject_nexus_button(response):
 @app.route('/api/nexus/refresh', methods=['POST'])
 @login_required
 def api_nexus_refresh():
+    print("🔥🔥🔥 REFRESH API CALLED 🔥🔥🔥")
     force_sync_all_databases()
     return jsonify({"success": True})
 
@@ -4015,7 +4016,7 @@ def api_nexus_ops_commander():
     })
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND (COMPLETE)
+# 4. FRONTEND (COMPLETE WITH AUTO-SYNC)
 # ------------------------------------------------------------------------------
 @app.route('/nexus')
 @login_required
@@ -4595,20 +4596,30 @@ def nexus_dashboard():
             const overlay = document.getElementById('syncOverlay');
             overlay.style.display = 'flex';
             try {
-                const response = await fetch('/api/nexus/refresh', {method: 'POST'});
+                console.log("🔄 Sending refresh request...");
+                const response = await fetch('/api/nexus/refresh', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
                 const data = await response.json();
+                console.log("✅ Refresh response:", data);
+                
                 if(data.success) {
                     radarData = null;
                     if(document.getElementById('view-radar').style.display === 'block') await loadRadar();
                     if(document.getElementById('view-ops').style.display === 'block') await loadOpsCommander();
-                    alert('✅ Sync completed! Check Vercel logs for details.');
                 }
             } catch(e) {
-                console.error("Sync failed", e);
-                alert('❌ Sync failed. Check Vercel logs.');
+                console.error("❌ Sync failed", e);
             }
             overlay.style.display = 'none';
         }
+
+        // --- AUTO SYNC ON PAGE LOAD ---
+        window.addEventListener('load', function() {
+            console.log("📄 Page loaded, auto-syncing...");
+            forceGlobalSync();
+        });
 
         // --- MATRIX SEARCH ---
         async function searchOrders() {
@@ -4629,7 +4640,7 @@ def nexus_dashboard():
                 if(allTrackingData.length > 0) {
                     document.getElementById('bulkBtn').style.display = 'flex';
                 } else {
-                    document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:#EF4444; padding:40px; border:1px dashed var(--border); border-radius:12px;">⚠️ No data found. Please click "Sync Live Data" first.</div>';
+                    document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:#EF4444; padding:40px; border:1px dashed var(--border); border-radius:12px;">⚠️ No data found. Check Vercel logs.</div>';
                     return;
                 }
                 renderCards();
