@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - SAFE APPEND EDITION (PREMIUM + SPLITTER)
+# 🛰️ TID OPERATIONS HUB - EXACT COLUMN EDITION (SAFE APPEND)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3609,8 +3609,7 @@ import json
 import os
 import concurrent.futures
 from datetime import datetime
-from flask import jsonify, request, session, render_template_string, redirect
-from functools import wraps
+from flask import jsonify, request, render_template_string
 
 # ------------------------------------------------------------------------------
 # 1. CORE DATA SOURCES
@@ -3626,24 +3625,22 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. DATA ENGINE (50-Column Scan & Exact Overrides)
+# 2. 🚨 EXACT COLUMN MAPPING (Based exactly on your list, 0-indexed)
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
-FILTER_DATE = datetime(2026, 1, 1)
 
-HEADER_VARIANTS = {
-    'order': ['order', 'fleekid', 'orderid'],
-    'date': ['fleekhandoverdate', 'airporthandoverdate', 'date', 'handoverdate', 'qcdate'],
-    'boxes': ['noofboxes', 'numberofboxes', 'boxcount', 'boxes', 'box', 'qty'],
-    'weight': ['chargeableweightkg', 'chargeableweight', 'actualweight', 'noofpieces', 'pieces', 'weight', 'kg'],
-    'vendor': ['vendorname', 'vendor', 'seller'],
-    'customer': ['customername', 'customer', 'consignee', 'receiver'],
-    'country': ['country', 'destination', 'dest'],
-    'tid': ['trackingid', 'tracking', 'tid', 'awbnumber', 'couriertrackingid'],
-    'mawb': ['kerrymawbnumber', 'mawbflight', 'mawb', 'masterawb', 'master']
+# Your provided column numbers minus 1 (because code starts counting from 0)
+# Example: Kerry Tracking is 32 in sheet, so it is 31 in code.
+SHEET_CONFIG = {
+    "Kerry":         {"o": 0, "b": 0, "d": 1, "w": 7, "v": 14, "c": 17, "cn": 21, "ma": 30, "t": 31},
+    "APX":           {"o": 0, "b": 0, "d": 1, "w": 6, "v": 11, "c": 14, "cn": 18, "ma": 32, "t": 27},
+    "ECL QC Center": {"o": 0, "b": 0, "d": 1, "w": 6, "v": 10, "c": 13, "cn": 17, "ma": 27, "t": 25},
+    "ECL Zone":      {"o": 0, "b": 0, "d": 1, "w": 8, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 28},
+    "GE QC Center":  {"o": 0, "b": 0, "d": 1, "w": 6, "v": 12, "c": 15, "cn": 19, "ma": 31, "t": 28},
+    "GE Zone":       {"o": 0, "b": 0, "d": 1, "w": 6, "v": 12, "c": 15, "cn": 19, "ma": 31, "t": 28}
 }
 
-def fetch_sheet_data(url, src_name):
+def fetch_sheet_data(url, name):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=20) as res:
@@ -3651,59 +3648,42 @@ def fetch_sheet_data(url, src_name):
             data = list(csv.reader(raw))
             if not data: return []
 
-            header_idx = -1
-            col_map = {}
-            
+            # Find where the data starts (Header row)
+            start_row = 1
             for i, row in enumerate(data[:30]):
                 if not row: continue
-                c_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
-                
-                has_order = any(o in c_row for o in HEADER_VARIANTS['order'])
-                has_other = any(o in c_row for o in HEADER_VARIANTS['vendor'] + HEADER_VARIANTS['tid'] + HEADER_VARIANTS['mawb'])
-                
-                if has_order and has_other:
-                    header_idx = i
-                    for j, cell in enumerate(c_row):
-                        for key, variants in HEADER_VARIANTS.items():
-                            if cell in variants and key not in col_map:
-                                col_map[key] = j
-                                break
+                c = re.sub(r'[^a-z0-9]', '', str(row[0]).lower())
+                if 'order' in c or 'fleekid' in c:
+                    start_row = i + 1
                     break
-                    
-            if header_idx == -1: return []
-
-            # 🚨 APPLYING YOUR EXACT COLUMN OVERRIDES 🚨
-            # Note: Python index starts at 0, so Col 2 = Index 1, Col 14 = Index 13
-            if src_name == "GE Zone":
-                col_map['date'] = 1     # Date is Column 2
-            elif src_name == "ECL Zone":
-                col_map['date'] = 1     # Date is Column 2
-                col_map['vendor'] = 13  # Vendor is Column 14
-            elif src_name == "Kerry":
-                col_map['weight'] = 7   # Weight is Column 8
-                col_map['mawb'] = 30    # MAWB is Column 31
+            
+            col_map = SHEET_CONFIG.get(name)
+            if not col_map: return []
 
             processed = []
-            for row in data[header_idx+1:]:
-                if not row or not any(str(x).strip() for x in row): continue
-                
-                row_padded = row + [''] * max(0, 50 - len(row))
-                order_col_idx = col_map.get('order')
-                if order_col_idx is None: continue
-                
-                o_val = str(row_padded[order_col_idx]).strip()
-                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a', '-']: continue
+            for row in data[start_row:]:
+                if not row or not str(row[0]).strip(): continue
+                o_val = str(row[0]).strip()
+                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a']: continue
 
-                r_dict = {}
-                for key in HEADER_VARIANTS.keys():
-                    idx = col_map.get(key)
-                    if idx is not None and idx < len(row_padded):
-                        val = str(row_padded[idx]).strip()
-                        r_dict[key] = val if val and val.lower() not in ['n/a', 'nan', '#n/a', '-'] else "N/A"
-                    else:
-                        r_dict[key] = "N/A"
-                        
-                processed.append(r_dict)
+                # Pad row to 50 columns to reach MAWB/Tracking safely
+                p = row + [''] * max(0, 50 - len(row))
+                
+                def get_val(idx):
+                    val = str(p[idx]).strip()
+                    return val if val and val.lower() not in ['n/a', 'nan', '-', '#n/a'] else "N/A"
+
+                processed.append({
+                    'order': get_val(col_map['o']),
+                    'date': get_val(col_map['d']),
+                    'boxes': get_val(col_map['b']),
+                    'weight': get_val(col_map['w']),
+                    'vendor': get_val(col_map['v']),
+                    'customer': get_val(col_map['c']),
+                    'country': get_val(col_map['cn']),
+                    'tid': get_val(col_map['t']),
+                    'mawb': get_val(col_map['ma'])
+                })
             return processed
     except Exception as e:
         return []
@@ -3730,42 +3710,26 @@ def fetch_kerry_status(url):
             
             s_map = {}
             for row in data[header_idx+1:]:
-                row_padded = row + [''] * max(0, 50 - len(row))
-                o = str(row_padded[order_col]).strip().lower()
-                s = str(row_padded[status_col]).strip().upper()
+                p = row + [''] * max(0, 50 - len(row))
+                o = str(p[order_col]).strip().lower()
+                s = str(p[status_col]).strip().upper()
                 if o and o != 'n/a': s_map[o] = s
             return s_map
-    except: 
+    except:
         return {}
 
-def parse_date(date_str):
-    if not date_str or date_str == 'N/A': return None
-    try:
-        for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%b-%y', '%Y/%m/%d', '%d-%m-%Y'):
-            try: return datetime.strptime(date_str.split(' ')[0], fmt)
-            except: continue
-    except: pass
-    if '2026' in date_str or '26' in date_str: return datetime(2026, 1, 1)
-    return datetime(1970, 1, 1)
-
-# ------------------------------------------------------------------------------
-# 🚨 MASHED TID SPLITTER (Splits without Commas/Spaces!) 🚨
-# ------------------------------------------------------------------------------
+# 🚨 MASHED TID SPLITTER (Auto-Splits glued IDs) 🚨
 def clean_tids(raw_tid):
     raw_tid = str(raw_tid).strip()
     if raw_tid.lower() in ['pending', 'none', 'n/a', '']: return []
     
     parts = []
-    # If there are separators, split normally
     if any(delim in raw_tid for delim in [',', '/', ' ', '\n', '\t']):
         parts = [t.strip() for t in re.split(r'[\n,\/\s]+', raw_tid) if t.strip()]
     else:
-        # If string is long and has no separators (Mashed TIDs)
         if len(raw_tid) > 15:
-            # Splits AFTER every letter
             if re.search(r'[A-Za-z]', raw_tid):
                 parts = [p for p in re.split(r'(?<=[a-zA-Z])', raw_tid) if p.strip()]
-            # Or if it's a multiple of 15 digits
             elif len(raw_tid) % 15 == 0:
                 parts = [raw_tid[i:i+15] for i in range(0, len(raw_tid), 15)]
             else:
@@ -3804,19 +3768,7 @@ def force_sync_all_databases():
     GLOBAL_DB_CACHE['loaded'] = True
 
 # ------------------------------------------------------------------------------
-# 3. FLOATING BUTTON INJECTOR
-# ------------------------------------------------------------------------------
-@app.after_request
-def inject_nexus_button(response):
-    if response.content_type and response.content_type.startswith('text/html'):
-        if request.endpoint != 'nexus_dashboard':
-            html = response.get_data(as_text=True)
-            btn = """<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #111, #000); color:#fff; border:1px solid #333; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); font-family:sans-serif;">🚀 TID Hub</a>"""
-            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
-    return response
-
-# ------------------------------------------------------------------------------
-# 4. BACKEND API ROUTES
+# 3. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
@@ -3887,8 +3839,7 @@ def api_nexus_radar_data():
     for src, rows in GLOBAL_DB_CACHE['sheets'].items():
         for r in rows:
             dt_str = r['date']
-            dt_obj = parse_date(dt_str)
-            if dt_obj and dt_obj < FILTER_DATE: continue
+            if dt_str == 'N/A': continue
             
             oid = r['order']
             if oid == 'N/A': continue
@@ -3918,28 +3869,26 @@ def api_nexus_ops_commander():
     for src, rows in GLOBAL_DB_CACHE['sheets'].items():
         for r in rows:
             dt_str = r['date']
-            dt_obj = parse_date(dt_str)
-            if not dt_obj or dt_obj < FILTER_DATE: continue
+            if dt_str == 'N/A': continue
             
             oid = r['order']
             if oid == 'N/A': continue
             
             kerry_stat = GLOBAL_DB_CACHE['kerry'].get(oid.lower(), "PENDING")
             has_tid = len(clean_tids(r['tid'])) > 0 and r['tid'].lower() not in ['pending', 'none', 'n/a']
-            days_aging = (datetime.now() - dt_obj).days
-
-            if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and not has_tid and days_aging > 1:
-                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Missing TID", "aging": f"{days_aging} Days", "blame": "Kerry Logistics"})
+            
+            if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and not has_tid:
+                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Missing TID", "aging": "Action Required", "blame": "Kerry Logistics"})
                 missing_text += f"{count}. Order: {oid.upper()} | Date: {dt_str} | Source: {src}\n"
                 count += 1
-            elif kerry_stat in ["QC PENDING", "CREATED", "ACCEPTED"] and days_aging > 2:
-                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Stuck in QC", "aging": f"{days_aging} Days", "blame": f"{src} Operations"})
+            elif kerry_stat in ["QC PENDING", "CREATED", "ACCEPTED"]:
+                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Stuck in QC", "aging": "Action Required", "blame": f"{src} Operations"})
 
     if count == 1: missing_text = "All good! No missing TIDs currently."
-    return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
+    return jsonify({"blame_radar": blame_radar, "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 5. FRONTEND HTML
+# 4. FRONTEND HTML
 # ------------------------------------------------------------------------------
 @app.route('/nexus')
 def nexus_dashboard():
@@ -4031,8 +3980,6 @@ def nexus_dashboard():
                 <button class="nav-item" onclick="nav('direct')">🚢 Direct Track</button>
                 <button class="nav-item" onclick="nav('radar')">📦 Handed Over</button>
                 <button class="nav-item" onclick="nav('ops')" style="color:#F59E0B;">⚡ Ops Commander</button>
-                <div style="flex:1"></div>
-                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none;">🚪 Exit Hub</a>
             </aside>
             <main class="viewport" style="position:relative;">
                 <div class="sync-overlay" id="syncOverlay">
@@ -4077,7 +4024,7 @@ def nexus_dashboard():
                     <div id="ops-loader" style="display:none; padding:50px; text-align:center;"><div class="loader" style="width:30px;height:30px;"></div></div>
                     <div class="ops-grid" id="ops-content">
                         <div class="card">
-                            <h3 style="margin-top:0;">🚨 The Blame Game (Aging Radar)</h3>
+                            <h3 style="margin-top:0;">🚨 The Blame Game</h3>
                             <div style="max-height:400px; overflow-y:auto; border:1px solid var(--border); border-radius:8px;">
                                 <table class="blame-table" id="blameTable"></table>
                             </div>
@@ -4354,7 +4301,6 @@ def nexus_dashboard():
     </script>
     </body></html>
     ''')
-
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
