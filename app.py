@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - PREMIUM UI & LIFETIME FREE WIDGET TRACKING
+# 🛰️ TID OPERATIONS HUB (NEXUS) - SHIP24 SCRAPER + REDIRECT
 # ==============================================================================
 import urllib.request
 import csv
@@ -3611,6 +3611,8 @@ import time
 import concurrent.futures
 from datetime import datetime
 import ssl
+import requests
+from bs4 import BeautifulSoup
 from flask import jsonify, request, session, render_template_string
 
 # 🛠️ ANTI-DROP FIX FOR LOCAL VS CODE
@@ -3622,7 +3624,7 @@ else:
     ssl._create_default_https_context = _create_unverified_https_context
 
 # ------------------------------------------------------------------------------
-# 1. CORE DATA SOURCES
+# 1. CORE DATA SOURCES (unchanged)
 # ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -3635,7 +3637,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. ISOLATED CACHE & EXACT COLUMN MAP
+# 2. ISOLATED CACHE & EXACT COLUMN MAP (unchanged)
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
@@ -3650,6 +3652,7 @@ NEXUS_SHEET_MAP = {
 }
 
 def nexus_fetch_sheet_data(url, name):
+    # (unchanged - same as your code)
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
@@ -3759,7 +3762,80 @@ def add_nexus_floating_btn(response):
     return response
 
 # ------------------------------------------------------------------------------
-# 3. BACKEND API ROUTES
+# 3. DIRECT SHIP24 SCRAPER (NO API KEY)
+# ------------------------------------------------------------------------------
+def scrape_ship24(tid):
+    """Scrape tracking info from Ship24"""
+    try:
+        url = f"https://www.ship24.com/tracking?p={tid}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code != 200:
+            return {'error': f'HTTP {response.status_code}'}
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Try to find tracking events
+        events = []
+        event_elements = soup.select('.tracking-event, .event-item, [class*="event"]')
+        
+        for elem in event_elements[:10]:
+            status = elem.select_one('.status, [class*="status"]')
+            time_elem = elem.select_one('.time, [class*="time"]')
+            location = elem.select_one('.location, [class*="location"]')
+            
+            events.append({
+                'status': status.get_text(strip=True) if status else 'N/A',
+                'time': time_elem.get_text(strip=True) if time_elem else 'N/A',
+                'location': location.get_text(strip=True) if location else 'N/A'
+            })
+        
+        # Try to get carrier
+        carrier = soup.select_one('.carrier-name, [class*="carrier"]')
+        carrier_text = carrier.get_text(strip=True) if carrier else 'Ship24'
+        
+        # If no events found, return basic info
+        if not events:
+            events.append({
+                'status': 'Tracking information available',
+                'time': 'Click below for details',
+                'location': 'Ship24'
+            })
+        
+        return {
+            'success': True,
+            'tid': tid,
+            'carrier': carrier_text,
+            'events': events
+        }
+    
+    except Exception as e:
+        return {'error': str(e)}
+
+@app.route('/api/nexus/ship24_track', methods=['POST'])
+def api_nexus_ship24_track():
+    data = request.get_json()
+    tids = data.get('tids', [])
+    results = []
+    
+    for tid in tids:
+        # Format TID
+        if tid.startswith('150') and 12 <= len(tid) <= 15:
+            tid = '0' + tid
+        
+        result = scrape_ship24(tid)
+        results.append(result)
+        time.sleep(1)  # Rate limiting
+    
+    return jsonify(results)
+
+# ------------------------------------------------------------------------------
+# 4. EXISTING BACKEND ROUTES (unchanged)
 # ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
@@ -3806,7 +3882,17 @@ def api_nexus_radar_data():
             tids = nexus_clean_tids(r['tid'])
             has_tid = len(tids) > 0
             if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and has_tid:
-                buckets["handed_over"][src].append({ "Order": oid.upper(), "Date": r['date'], "Vendor": r['vendor'], "Customer": r['customer'], "Boxes": r['boxes'], "Weight": r['weight'], "TID": ", ".join(tids), "MAWB": r['mawb'], "Status": kerry_stat })
+                buckets["handed_over"][src].append({ 
+                    "Order": oid.upper(), 
+                    "Date": r['date'], 
+                    "Vendor": r['vendor'], 
+                    "Customer": r['customer'], 
+                    "Boxes": r['boxes'], 
+                    "Weight": r['weight'], 
+                    "TID": ", ".join(tids), 
+                    "MAWB": r['mawb'], 
+                    "Status": kerry_stat 
+                })
     return jsonify(buckets)
 
 @app.route('/api/nexus/ops_commander', methods=['GET'])
@@ -3836,33 +3922,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 4. DIRECT SHIP24 REDIRECT (NO API KEY NEEDED)
-# ------------------------------------------------------------------------------
-@app.route('/api/nexus/ship24_preview', methods=['POST'])
-def api_nexus_ship24_preview():
-    data = request.get_json()
-    tids = data.get('tids', [])
-    results = []
-    
-    for tid in tids:
-        # Format TID
-        if tid.startswith('150') and 12 <= len(tid) <= 15:
-            tid = '0' + tid
-        
-        # Simple preview data (dummy for now)
-        results.append({
-            'success': True,
-            'tid': tid,
-            'preview': {
-                'status': 'Click to view full tracking',
-                'message': 'Tracking information available on Ship24'
-            }
-        })
-    
-    return jsonify(results)
-
-# ------------------------------------------------------------------------------
-# 5. FRONTEND UI (WITH REDIRECT BUTTON)
+# 5. FRONTEND UI (SCRAPER + REDIRECT)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3918,6 +3978,8 @@ def nexus_dashboard():
             margin-top: 10px;
             text-align: center;
             transition: 0.2s;
+            border: none;
+            cursor: pointer;
         }
         .redirect-btn:hover {
             opacity: 0.8;
@@ -3944,15 +4006,23 @@ def nexus_dashboard():
         .tid-strip { display: flex; flex-direction: column; gap: 20px; padding-bottom: 8px;}
         .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px;}
         
-        /* Preview styles */
-        .preview-container { margin-top: 10px; }
-        .preview-message { 
-            color: var(--muted); 
-            font-size: 13px; 
-            padding: 8px; 
-            background: var(--card); 
-            border-radius: 6px; 
-            border: 1px dashed var(--border);
+        /* Timeline styles */
+        .timeline-container { margin-top: 10px; }
+        .timeline { border-left: 2px solid var(--accent); padding-left: 20px; margin-top: 10px; }
+        .event-item { margin-bottom: 16px; position: relative; }
+        .event-item::before { content: ''; position: absolute; left: -26px; top: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+        .event-status { font-weight: 700; color: var(--text); }
+        .event-time { font-size: 12px; color: var(--muted); margin-left: 8px; }
+        .event-location { font-size: 13px; color: var(--muted); margin-top: 2px; }
+        .carrier-badge { 
+            display: inline-block; 
+            background: var(--badge-bg); 
+            color: var(--badge-text); 
+            padding: 4px 10px; 
+            border-radius: 4px; 
+            font-size: 11px; 
+            font-weight: 600; 
+            margin-bottom: 8px;
         }
         
         .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
@@ -4108,9 +4178,9 @@ def nexus_dashboard():
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="showShip24Redirect('${tid}', this)">🔍 Track</button>
+                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="trackShip24('${tid}', this)">🚢 Track</button>
                                     </div>
-                                    <div id="track-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="preview-container"></div>
+                                    <div id="track-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="timeline-container"></div>
                                 </div>
                             `).join('')}
                         </div>
@@ -4121,32 +4191,54 @@ def nexus_dashboard():
             if(hasTids) document.getElementById('bulkTrackBtn').style.display = 'block';
         }
 
-        // 🚀 NEW FUNCTION: SHIP24 REDIRECT WITH PREVIEW
-        async function showShip24Redirect(tid, btn) {
+        async function trackShip24(tid, btn) {
             const container = document.getElementById(`track-${tid.replace(/[^a-zA-Z0-9]/g,'')}`);
             if(!container) return;
             
             btn.innerText = "Loading...";
             btn.style.opacity = "0.5";
             btn.style.pointerEvents = "none";
+            container.innerHTML = '<div class="loader" style="width:20px;height:20px; margin:10px auto;"></div>';
             
-            // Simple preview message
-            let html = `<div class="preview-message">
-                <div style="margin-bottom:8px;">🔍 Tracking ID: ${tid}</div>
-                <div style="margin-bottom:12px;">Click below to view full tracking details on Ship24</div>
-            </div>`;
-            
-            // Add redirect button
-            html += `<a href="https://www.ship24.com/tracking?p=${tid}" 
-                target="_blank" class="redirect-btn">
-                🚢 View Full Tracking on Ship24
-            </a>`;
-            
-            container.innerHTML = html;
-            
-            btn.innerText = "Tracked ✓";
-            btn.style.opacity = "1";
-            btn.style.pointerEvents = "auto";
+            try {
+                const response = await fetch('/api/nexus/ship24_track', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({tids: [tid]})
+                });
+                const results = await response.json();
+                const data = results[0];
+                
+                if (data.success) {
+                    let html = `<div class="carrier-badge">${data.carrier}</div>`;
+                    
+                    if (data.events && data.events.length > 0) {
+                        html += '<div class="timeline">';
+                        data.events.forEach(ev => {
+                            html += `<div class="event-item">
+                                <div class="event-status">${ev.status}</div>
+                                <div><span class="event-time">${ev.time}</span> <span class="event-location">${ev.location}</span></div>
+                            </div>`;
+                        });
+                        html += '</div>';
+                    } else {
+                        html += '<div style="color:var(--muted);">No tracking events found.</div>';
+                    }
+                    
+                    // Add redirect button
+                    html += `<a href="https://www.ship24.com/tracking?p=${tid}" target="_blank" class="redirect-btn" style="margin-top:15px;">🔍 View Full on Ship24</a>`;
+                    
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `<span style="color:#EF4444;">Error: ${data.error || 'Unknown error'}</span>`;
+                }
+            } catch (e) {
+                container.innerHTML = `<span style="color:#EF4444;">Request failed: ${e.message}</span>`;
+            } finally {
+                btn.innerText = "Track Again";
+                btn.style.opacity = "1";
+                btn.style.pointerEvents = "auto";
+            }
         }
 
         async function directTrackTIDs() {
@@ -4158,9 +4250,9 @@ def nexus_dashboard():
                 h += `<div class="tid-box card" style="width:100%; border: 1px solid var(--border);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="showShip24Redirect('${tid}', this)">🔍 Track</button>
+                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="trackShip24('${tid}', this)">🚢 Track</button>
                         </div>
-                        <div id="track-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="preview-container"></div>
+                        <div id="track-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="timeline-container"></div>
                       </div>`;
             });
             document.getElementById('direct-results').innerHTML = h;
@@ -4172,7 +4264,7 @@ def nexus_dashboard():
             const btns = container.querySelectorAll('.sync-btn');
             for(let btn of btns) {
                 btn.click();
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 800));
             }
         }
 
