@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - PURE BLACK & STRICT OPERATIONS EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% EXACT DATA MATCH & ALL TABS EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -3610,10 +3610,25 @@ import os
 import time
 import concurrent.futures
 from datetime import datetime
-from flask import jsonify, request, session, render_template_string
+from flask import Flask, jsonify, request, session, render_template_string, redirect
+from functools import wraps
+
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'nexus_ultra_secure_9988')
 
 # ------------------------------------------------------------------------------
-# 1. CORE DATA SOURCES
+# 1. SECURITY / LOGIN DECORATOR
+# ------------------------------------------------------------------------------
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'role' not in session:
+            return redirect('/')
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ------------------------------------------------------------------------------
+# 2. CORE DATA SOURCES
 # ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -3626,22 +3641,27 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. CACHE ENGINE & ALIASES
+# 3. CACHE ENGINE & AGGRESSIVE ALIAS MATCHER
 # ------------------------------------------------------------------------------
-GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': []}
+GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
+def clean_header(h):
+    """ Strips all spaces, dots, brackets, and hashes to make matching 100% bulletproof """
+    return re.sub(r'[^a-z0-9]', '', str(h).lower())
+
+# 🚨 THE FIX: These aliases are matched against the aggressive cleaned headers
 STRICT_ALIASES = {
-    'order': ['order', 'fleek id', 'order num', 'order id', 'shipment id'], 
-    'date': ['fleek handover date', 'handover date', 'date', 'created at', 'qc date'], 
-    'boxes': ['no. of boxes', 'no of boxes', 'box_count', 'total boxes', 'boxes', 'box', 'qty'], 
-    'weight': ['chargeable weight (kg)', 'chargeable weight', 'weight', 'kg', 'net weight'], 
-    'vendor': ['vendor name', 'vendor', 'seller', 'supplier'], 
-    'customer': ['customer name', 'consignee', 'customer', 'receiver'], 
-    'country': ['country', 'destination', 'city', 'lane'], 
-    'tid': ['tracking id', 'trackingid', 'courier_tracking', 'tid', 'tracking', 'awb number'], 
-    'mawb': ['mawb/flight', 'mawb', 'master awb', 'awb', 'master'], 
-    'status': ['latest status', 'latest_status', 'status', 'kerry status']
+    'order': ['order', 'fleekid', 'ordernum'], 
+    'date': ['fleekhandoverdate', 'handoverdate', 'date', 'createdat', 'qcdate'], 
+    'boxes': ['noofboxes', 'numberofboxes', 'boxcount', 'boxes', 'box', 'qty'], 
+    'weight': ['chargeableweight', 'weight', 'netweight'], 
+    'vendor': ['vendorname', 'vendor', 'seller'], 
+    'customer': ['customername', 'customer', 'consignee'], 
+    'country': ['country', 'destination'], 
+    'tid': ['trackingid', 'tracking', 'awbnumber', 'tid'], 
+    'mawb': ['mawbflight', 'mawb', 'masterawb', 'master'], 
+    'status': ['lateststatus', 'status']
 }
 
 def fetch_single_csv(url):
@@ -3651,13 +3671,12 @@ def fetch_single_csv(url):
             raw = res.read().decode('utf-8').splitlines()
             data = list(csv.reader(raw))
             if not data: return []
-            headers = [str(h).lower().strip() for h in data[0]]
-            return [dict(zip(headers, row)) for row in data[1:]]
+            return [dict(zip(data[0], row)) for row in data[1:]] # Don't lower headers here yet
     except: return []
 
 def get_alias_val(row, aliases):
     for k, v in row.items():
-        clean_k = k.strip().lower()
+        clean_k = clean_header(k)
         for alias in aliases:
             if alias in clean_k:
                 val = str(v).strip()
@@ -3679,10 +3698,8 @@ def clean_and_pad_tids(raw_tid):
     parts = [t.strip() for t in re.split(r'[\n,\/]+', str(raw_tid)) if t.strip() and t.strip()!='N/A']
     cleaned = []
     for t in parts:
-        if t.startswith('150') and 12 <= len(t) <= 15:
-            cleaned.append('0' + t)
-        else:
-            cleaned.append(t)
+        if t.startswith('150') and 12 <= len(t) <= 15: cleaned.append('0' + t)
+        else: cleaned.append(t)
     return cleaned
 
 def force_sync_all_databases():
@@ -3696,7 +3713,14 @@ def force_sync_all_databases():
             try: results[name] = future.result()
             except: results[name] = []
 
-    GLOBAL_DB_CACHE['kerry'] = results.pop("KERRY_MASTER", [])
+    kerry_raw = results.pop("KERRY_MASTER", [])
+    s_map = {}
+    for r in kerry_raw:
+        oid = get_alias_val(r, STRICT_ALIASES['order'])
+        stat = get_alias_val(r, STRICT_ALIASES['status'])
+        if oid != 'N/A': s_map[oid.lower()] = stat.upper()
+
+    GLOBAL_DB_CACHE['kerry'] = s_map
     GLOBAL_DB_CACHE['sheets'] = results
     GLOBAL_DB_CACHE['loaded'] = True
 
@@ -3705,12 +3729,12 @@ def inject_nexus_button(response):
     if response.content_type and response.content_type.startswith('text/html'):
         if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
             html = response.get_data(as_text=True)
-            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#000; color:#fff; border:1px solid #333; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:600; font-family:'Inter',sans-serif; box-shadow:0 4px 15px rgba(0,0,0,0.5); z-index:9999;">📊 TID Operations Hub</a>"""
+            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #18181b, #09090b); color:#fff; border:1px solid #27272a; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; font-family:'Inter',sans-serif; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); transition:0.3s;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">🚀 TID Operations Hub</a>"""
             if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
 # ------------------------------------------------------------------------------
-# 3. BACKEND API ROUTES
+# 4. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
@@ -3722,7 +3746,9 @@ def api_nexus_refresh():
 @app.route('/api/nexus/search', methods=['POST'])
 @login_required
 def api_nexus_search():
-    if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
+    if not GLOBAL_DB_CACHE['loaded']: 
+        return jsonify({"error": "NOT_SYNCED"}), 400
+
     queries = [x.strip() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
     results = []
     
@@ -3737,7 +3763,7 @@ def api_nexus_search():
                 tid_raw = get_alias_val(row, STRICT_ALIASES['tid']).lower()
                 
                 if q_lower in oid or q_lower in tid_raw or q_lower_alt in tid_raw:
-                    k_stat = next((str(r.get('latest_status', 'N/A')).strip() for r in GLOBAL_DB_CACHE['kerry'] if str(r.get('fleek_id','')).strip().lower() == oid), "N/A")
+                    k_stat = GLOBAL_DB_CACHE['kerry'].get(oid, "N/A")
                     results.append({
                         "order_id": oid.upper(), "source": src, "status": k_stat, 
                         "date": get_alias_val(row, STRICT_ALIASES['date']), 
@@ -3763,7 +3789,7 @@ def api_nexus_ship24():
         if tid.startswith('150') and 12 <= len(tid) <= 15: tid = '0' + tid
             
         if ship24_key == 'MOCK':
-            responses.append({"tid": tid, "success": True, "courier": "CARRIER", "current_status": "Transit", "progress": 60, "eta": "2-3 Days", "events": [{"statusMilestone":"transit", "status": "Processed", "time": "2026-03-01", "location": "Hub"}]})
+            responses.append({"tid": tid, "success": True, "courier": "Ship24", "current_status": "Transit", "progress": 60, "eta": "In 3 Days", "events": [{"statusMilestone":"transit", "status": "Arrival at Hub", "time": "2026-03-01", "location": "Gateway"}]})
         else:
             try:
                 req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
@@ -3790,10 +3816,10 @@ def api_nexus_ship24():
 @app.route('/api/nexus/radar_data', methods=['GET'])
 @login_required
 def api_nexus_radar_data():
-    if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
+    if not GLOBAL_DB_CACHE['loaded']:
+        return jsonify({"error": "NOT_SYNCED"}), 400
         
     buckets = { src: {"with_tid": [], "missing_tid": []} for src in NEXUS_SOURCES.keys() }
-    s_map = {str(r.get('fleek_id', '')).strip().lower(): str(r.get('latest_status', 'N/A')).strip().upper() for r in GLOBAL_DB_CACHE['kerry']}
     
     for src, rows in GLOBAL_DB_CACHE['sheets'].items():
         for row in rows:
@@ -3804,7 +3830,7 @@ def api_nexus_radar_data():
             oid = get_alias_val(row, STRICT_ALIASES['order'])
             if oid == 'N/A': continue
             
-            kerry_stat = s_map.get(oid.lower(), "PENDING")
+            kerry_stat = GLOBAL_DB_CACHE['kerry'].get(oid.lower(), "PENDING")
             if kerry_stat != "HANDED OVER TO LOGISTICS PARTNER": continue
             
             tid_raw = get_alias_val(row, STRICT_ALIASES['tid'])
@@ -3826,12 +3852,12 @@ def api_nexus_radar_data():
 @app.route('/api/nexus/ops_commander', methods=['GET'])
 @login_required
 def api_nexus_ops_commander():
-    if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
+    if not GLOBAL_DB_CACHE['loaded']:
+        return jsonify({"error": "NOT_SYNCED"}), 400
+
     blame_radar = []
     missing_tid_text = "Hi Kerry Team,\nThe following orders have been Handed Over but are missing Tracking IDs. Kindly update ASAP:\n\n"
     count = 1
-
-    s_map = {str(r.get('fleek_id', '')).strip().lower(): str(r.get('latest_status', 'N/A')).strip().upper() for r in GLOBAL_DB_CACHE['kerry']}
 
     for src, rows in GLOBAL_DB_CACHE['sheets'].items():
         for row in rows:
@@ -3842,7 +3868,7 @@ def api_nexus_ops_commander():
             oid = get_alias_val(row, STRICT_ALIASES['order'])
             if oid == 'N/A': continue
             
-            kerry_stat = s_map.get(oid.lower(), "PENDING")
+            kerry_stat = GLOBAL_DB_CACHE['kerry'].get(oid.lower(), "PENDING")
             tid_raw = get_alias_val(row, STRICT_ALIASES['tid'])
             has_tid = len(clean_and_pad_tids(tid_raw)) > 0 and tid_raw.lower() not in ['pending', 'none', 'n/a']
             
@@ -3859,7 +3885,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_tid_text})
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI & UX
+# 5. FRONTEND UI & UX
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3914,6 +3940,9 @@ def nexus_dashboard():
         
         textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--text); font-family: 'Inter', monospace; font-size: 15px; outline: none; resize: vertical; min-height: 100px; transition: 0.2s;}
         textarea:focus { border-color: var(--accent); }
+        
+        /* ERROR BOX */
+        .error-box { background: rgba(239, 68, 68, 0.1); border: 1px dashed #EF4444; color: #EF4444; padding: 20px; border-radius: 12px; text-align: center; font-weight: 600;}
 
         /* TRACKING RESULTS */
         .track-card { border-radius: 16px; padding: 0; overflow: hidden; margin-bottom: 30px; border: 1px solid var(--border); background: var(--card);}
@@ -3961,6 +3990,7 @@ def nexus_dashboard():
         .blame-table td { padding: 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
         .blame-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239,68,68,0.3);}
 
+        /* TABLE MODAL */
         .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); z-index: 100; display: none; padding: 40px; overflow-y: auto; backdrop-filter: blur(5px);}
         .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
@@ -3973,6 +4003,7 @@ def nexus_dashboard():
     </style></head>
     <body>
     <div class="app-container">
+        
         <header class="topbar">
             <div class="brand">🛰️ TID Operations Hub</div>
             <div class="topbar-actions">
@@ -3980,21 +4011,23 @@ def nexus_dashboard():
                 <button class="btn-outline" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
             </div>
         </header>
+        
         <div class="main-wrapper">
             <aside class="sidebar">
                 <div style="font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 10px;">Menu</div>
-                <button class="nav-item active" onclick="navSwitch('view-track', this)">🔍 Matrix Search</button>
-                <button class="nav-item" onclick="navSwitch('view-direct', this)">🚢 Direct TID Track</button>
-                <button class="nav-item" onclick="navSwitch('view-radar', this)">📦 Handed Over</button>
-                <button class="nav-item" onclick="navSwitch('view-ops', this)" style="color:#F59E0B;">⚡ Ops Commander</button>
+                <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Matrix Search</button>
+                <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct TID Track</button>
+                <button class="nav-item" onclick="navSwitch(this, 'view-radar')">📦 Handed Over</button>
+                <button class="nav-item" onclick="navSwitch(this, 'view-ops')" style="color:#F59E0B;">⚡ Ops Commander</button>
                 <div style="flex:1"></div>
                 <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none;">🚪 Exit Hub</a>
             </aside>
+            
             <main class="viewport">
                 <div class="sync-overlay" id="syncOverlay">
                     <div class="loader" style="width: 50px; height: 50px; margin-bottom:20px;"></div>
-                    <h2 style="margin:0;">Synchronizing Database</h2>
-                    <p style="color:var(--muted); margin-top:10px;">Pulling live data from sheets...</p>
+                    <h2 style="margin:0; font-size:24px;">Synchronizing Database</h2>
+                    <p style="color:var(--muted); margin-top:10px;">Pulling live data safely... Please wait.</p>
                 </div>
 
                 <div id="view-track" class="view-pane active">
@@ -4064,7 +4097,7 @@ def nexus_dashboard():
                 <h2 id="modalTitle" style="margin:0; font-size:24px; font-weight:800;"></h2>
                 <div style="display:flex; gap:12px;">
                     <button class="btn-outline" onclick="downloadCSV()">Export CSV</button>
-                    <button class="btn" style="background:#EF4444;" onclick="document.getElementById('detailPanel').style.display='none'">Close</button>
+                    <button class="btn" style="background:#EF4444;" onclick="document.getElementById('detailPanel').style.display='none'">Close Window</button>
                 </div>
             </div>
             <div style="overflow-x:auto; border:1px solid var(--border); border-radius:12px;"><table id="detailTable"></table></div>
@@ -4093,46 +4126,57 @@ def nexus_dashboard():
         let radarData = null;
         let allTrackingData = [];
 
+        // 🛡️ ANTI-TIMEOUT FETCH
         async function forceGlobalSync() {
             const overlay = document.getElementById('syncOverlay');
             overlay.style.display = 'flex';
             try {
-                await fetch('/api/nexus/refresh', {method: 'POST'});
+                const res = await fetch('/api/nexus/refresh', {method: 'POST'});
+                if(!res.ok) throw new Error("Sync failed");
                 radarData = null; 
                 if(document.getElementById('view-radar').style.display === 'block') await loadRadar();
                 if(document.getElementById('view-ops').style.display === 'block') await loadOpsCommander();
-            } catch(e) {}
-            overlay.style.display = 'none';
+            } catch(e) {
+                alert("⚠️ Request timed out. System is safe, please hit Sync again.");
+            } finally {
+                overlay.style.display = 'none';
+            }
         }
 
-        function navSwitch(viewId, btn) {
-            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        function navSwitch(btn, viewType) {
+            document.querySelectorAll('.nav-item').forEach(l=>l.classList.remove('active'));
             btn.classList.add('active');
-            document.querySelectorAll('.view-pane').forEach(v => v.style.display = 'none');
-            document.getElementById(viewId).style.display = 'block';
-            
-            if(viewId === 'view-radar') loadRadar();
-            if(viewId === 'view-ops') loadOpsCommander();
+            document.querySelectorAll('.view-pane').forEach(v=>v.style.display='none');
+            document.getElementById(viewType).style.display = 'block';
+            if(viewType === 'view-radar') loadRadar();
+            if(viewType === 'view-ops') loadOpsCommander();
         }
 
+        // --- 1. MATRIX SEARCH ENGINE ---
         async function searchOrders() {
             const q = document.getElementById('searchInput').value; if(!q) return;
-            document.getElementById('tracking-results').innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
+            const resBox = document.getElementById('tracking-results');
+            resBox.innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
             document.getElementById('bulkBtn').style.display = 'none';
+            
             try {
                 const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
+                if(r.status === 400) {
+                    resBox.innerHTML = '<div class="error-box">⚠️ Please click the green "Sync Live Data" button at the top right first!</div>';
+                    return;
+                }
                 allTrackingData = await r.json(); 
                 if(allTrackingData.length > 0) document.getElementById('bulkBtn').style.display = 'flex';
                 renderCards();
-            } catch(e) {
-                document.getElementById('tracking-results').innerHTML = '<div style="color:#EF4444;text-align:center;padding:20px;border:1px solid #EF4444;border-radius:8px;">⚠️ Please click the green "Sync Live Data" button first!</div>';
+            } catch (e) {
+                resBox.innerHTML = '<div class="error-box">⚠️ Network error occurred. Please try again.</div>';
             }
         }
 
         function renderCards() {
             let h = '';
             if(allTrackingData.length === 0) {
-                document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:var(--muted); padding:40px; border:1px dashed var(--border); border-radius:12px;">Not found. Sync data and try again!</div>';
+                document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:var(--muted); padding:40px; border:1px dashed var(--border); border-radius:12px;">Not found in sheet. Try "Direct TID Track" tab instead!</div>';
                 return;
             }
             allTrackingData.forEach(item => {
@@ -4160,23 +4204,20 @@ def nexus_dashboard():
                                     <div class="tid-head">
                                         <div>
                                             <div style="font-family:monospace; font-size:15px; font-weight:700; color:var(--text);">${tid}</div>
-                                            <div id="courier-${tid.replace(/[\\s\\/]+/g,'')}" style="font-size:11px; font-weight:700; color:var(--accent); margin-top:4px;"></div>
+                                            <div id="courier-${tid.replace(/[\s\/]+/g,'')}" style="font-size:11px; font-weight:700; color:var(--accent); margin-top:4px;"></div>
                                         </div>
                                         <div style="text-align:right;">
                                             <button class="btn-outline" style="padding:6px 12px; font-size:11px; margin-bottom:8px;" onclick="syncShip24('${tid}')">Track Carrier</button>
-                                            <div id="eta-${tid.replace(/[\\s\\/]+/g,'')}" style="font-size:11px; font-weight:700; color:var(--muted);">ETA: Checking...</div>
                                         </div>
                                     </div>
-                                    
-                                    <div class="subway-map" id="subway-${tid.replace(/[\\s\\/]+/g,'')}">
+                                    <div class="subway-map" id="subway-${tid.replace(/[\s\/]+/g,'')}">
                                         <div class="subway-node"><div class="sub-dot"></div><div class="sub-label">Pickup</div></div>
                                         <div class="subway-node"><div class="sub-dot"></div><div class="sub-label">Transit</div></div>
                                         <div class="subway-node"><div class="sub-dot"></div><div class="sub-label">Customs</div></div>
                                         <div class="subway-node"><div class="sub-dot"></div><div class="sub-label">Delivered</div></div>
                                     </div>
-
-                                    <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/[\\s\\/]+/g,'')}"></div></div>
-                                    <div class="timeline" id="log-${tid.replace(/[\\s\\/]+/g,'')}"></div>
+                                    <div id="eta-${tid.replace(/[\s\/]+/g,'')}" style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:10px;">ETA: Pending...</div>
+                                    <div class="timeline" id="log-${tid.replace(/[\s\/]+/g,'')}"></div>
                                 </div>
                             `).join('')}
                         </div>
@@ -4206,7 +4247,7 @@ def nexus_dashboard():
 
         async function syncShip24(tid, isDirect = false) {
             const prefix = isDirect ? 'dt-' : '';
-            const sid = tid.replace(/[\\s\\/]+/g,'');
+            const sid = tid.replace(/[\s\/]+/g,'');
             const log = document.getElementById(`${prefix}log-${sid}`); 
             log.innerHTML = '<div class="loader" style="width:16px;height:16px; margin:10px 0;"></div>';
             
@@ -4215,7 +4256,6 @@ def nexus_dashboard():
                 const d = (await r.json())[0];
                 
                 if(d.success) {
-                    document.getElementById(`${prefix}prog-${sid}`).style.width = d.progress + '%';
                     document.getElementById(`${prefix}courier-${sid}`).innerText = d.courier;
                     if(!isDirect) updateSubwayMap(sid, d.current_status);
                     
@@ -4234,7 +4274,7 @@ def nexus_dashboard():
                     log.innerHTML = '<span style="color:#EF4444; font-size:13px; font-weight:600;">Tracking API Error.</span>';
                 }
             } catch(e) {
-                log.innerHTML = '<span style="color:#EF4444; font-size:13px; font-weight:600;">Network Error.</span>';
+                log.innerHTML = '<span style="color:#EF4444; font-size:13px; font-weight:600;">Network Error. Try again.</span>';
             }
         }
 
@@ -4247,10 +4287,11 @@ def nexus_dashboard():
             btn.innerText = "⚡ Bulk Sync Complete"; btn.style.pointerEvents = 'auto'; btn.style.opacity = '1';
         }
 
+        // --- 2. DIRECT TID TRACKING ENGINE ---
         async function directTrackTIDs() {
             let val = document.getElementById('directInput').value;
             if(!val) return;
-            let tids = val.split(/[\\n,\\t \\/]+/).map(t => t.trim()).filter(Boolean);
+            let tids = val.split(/[\n,\t \/]+/).map(t => t.trim()).filter(Boolean);
             tids = tids.map(t => (t.startsWith('150') && t.length >= 12 && t.length <= 15) ? '0' + t : t);
 
             let h = '<div class="tid-area" style="border-radius:12px; border:1px solid var(--border);"><div class="tid-grid">';
@@ -4260,28 +4301,33 @@ def nexus_dashboard():
                     <div class="tid-head">
                         <div>
                             <div style="font-family:monospace; font-size:15px; font-weight:700; color:var(--text);">${tid}</div>
-                            <div id="dt-courier-${tid.replace(/[\\s\\/]+/g,'')}" style="font-size:11px; font-weight:700; color:var(--accent); margin-top:4px;">Fetching...</div>
+                            <div id="dt-courier-${tid.replace(/[\s\/]+/g,'')}" style="font-size:11px; font-weight:700; color:var(--accent); margin-top:4px;">Fetching...</div>
                         </div>
                         <div style="text-align:right;">
-                            <div id="dt-eta-${tid.replace(/[\\s\\/]+/g,'')}" style="font-size:11px; font-weight:700; color:var(--muted);">ETA: Checking...</div>
+                            <div id="dt-eta-${tid.replace(/[\s\/]+/g,'')}" style="font-size:11px; font-weight:700; color:var(--muted);">ETA: Checking...</div>
                         </div>
                     </div>
-                    <div class="progress"><div class="progress-bar" id="dt-prog-${tid.replace(/[\\s\\/]+/g,'')}"></div></div>
-                    <div class="timeline" id="dt-log-${tid.replace(/[\\s\\/]+/g,'')}"></div>
+                    <div class="timeline" id="dt-log-${tid.replace(/[\s\/]+/g,'')}"></div>
                 </div>`;
             });
             h += '</div></div>';
             document.getElementById('direct-results').innerHTML = h;
+
             for(let tid of tids) { await syncShip24(tid, true); }
         }
 
+        // --- 3. RADAR ENGINE ---
         async function loadRadar() {
             const container = document.getElementById('radar-container');
-            container.innerHTML = ''; 
-            document.getElementById('loader').style.display = 'block';
+            const loader = document.getElementById('loader');
+            container.innerHTML = ''; loader.style.display = 'block';
             
             try {
                 const r = await fetch('/api/nexus/radar_data');
+                if(r.status === 400) {
+                    container.innerHTML = '<div class="error-box">⚠️ Please click the green "Sync Live Data" button at the top right first!</div>';
+                    loader.style.display = 'none'; return;
+                }
                 radarData = await r.json();
                 
                 const sources = ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"];
@@ -4294,21 +4340,21 @@ def nexus_dashboard():
                             <div class="source-header">${src}</div>
                             <div class="split-box">
                                 <div class="split-btn" onclick="showDetails('${src}', 'with_tid')">
-                                    <div class="split-val">${withTid.length}</div>
-                                    <div class="split-lbl lbl-green">With TID</div>
+                                    <div class="split-val" style="color:#10B981">${withTid.length}</div>
+                                    <div class="split-lbl">With TID</div>
                                 </div>
                                 <div class="split-btn" onclick="showDetails('${src}', 'missing_tid')">
-                                    <div class="split-val">${missTid.length}</div>
-                                    <div class="split-lbl lbl-red">Missing TID</div>
+                                    <div class="split-val" style="color:#EF4444">${missTid.length}</div>
+                                    <div class="split-lbl">Missing TID</div>
                                 </div>
                             </div>
                         </div>
                     `;
                 });
             } catch(e) {
-                container.innerHTML = '<div style="color:#EF4444; text-align:center;">⚠️ Failed to load Radar Data. Click "Sync Live Data".</div>';
+                container.innerHTML = '<div class="error-box">⚠️ Network error. Please try again.</div>';
             }
-            document.getElementById('loader').style.display = 'none';
+            loader.style.display = 'none';
         }
 
         function showDetails(src, type) {
@@ -4337,12 +4383,17 @@ def nexus_dashboard():
             document.getElementById('detailPanel').style.display = 'block';
         }
         
+        // --- 4. OPS COMMANDER ENGINE ---
         async function loadOpsCommander() {
             document.getElementById('ops-content').style.display = 'none';
             document.getElementById('ops-loader').style.display = 'block';
             
             try {
                 const r = await fetch('/api/nexus/ops_commander');
+                if(r.status === 400) {
+                    document.getElementById('ops-loader').innerHTML = '<div class="error-box">⚠️ Please click the green "Sync Live Data" button at the top right first!</div>';
+                    return;
+                }
                 const data = await r.json();
                 
                 document.getElementById('followupText').value = data.missing_text;
@@ -4356,7 +4407,7 @@ def nexus_dashboard():
                 document.getElementById('ops-loader').style.display = 'none';
                 document.getElementById('ops-content').style.display = 'grid';
             } catch(e) {
-                document.getElementById('ops-loader').innerHTML = '<div style="color:#EF4444;">⚠️ Please click "Sync Live Data" first.</div>';
+                document.getElementById('ops-loader').innerHTML = '<div class="error-box">⚠️ Network error. Please try again.</div>';
             }
         }
 
