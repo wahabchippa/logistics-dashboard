@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - PREMIUM UI, ALL TABS & EXACT COLUMNS
+# 🛰️ TID OPERATIONS HUB (NEXUS) - PREMIUM UI, ALL TABS, EXACT COLUMNS & BULK TRACK
 # ==============================================================================
 import urllib.request
 import csv
@@ -3864,7 +3864,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI (PURE BLACK DESIGN + TABS + ICONS)
+# 4. FRONTEND UI (PURE BLACK DESIGN + BULK TRACK + TABS + ICONS)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3964,7 +3964,8 @@ def nexus_dashboard():
                         <textarea id="searchInput" placeholder="Paste Order IDs or TIDs here (e.g. 129027_34)..."></textarea>
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="searchOrders()">Scan Matrix</button>
-                            <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML='';">Clear</button>
+                            <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
+                            <button class="btn" id="bulkTrackBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('tracking-results')">⚡ Bulk Track All</button>
                         </div>
                     </div>
                     <div id="tracking-results"></div>
@@ -3974,8 +3975,9 @@ def nexus_dashboard():
                     <div class="card" style="margin-bottom: 30px;">
                         <textarea id="directInput" placeholder="Paste multiple Carrier TIDs here directly..."></textarea>
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
-                            <button class="btn" onclick="directTrackTIDs()">Track TIDs Now</button>
-                            <button class="btn outline" onclick="document.getElementById('directInput').value=''; document.getElementById('direct-results').innerHTML='';">Clear</button>
+                            <button class="btn" onclick="directTrackTIDs()">Extract TIDs</button>
+                            <button class="btn outline" onclick="document.getElementById('directInput').value=''; document.getElementById('direct-results').innerHTML=''; document.getElementById('bulkDirectBtn').style.display='none';">Clear</button>
+                            <button class="btn" id="bulkDirectBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('direct-results')">⚡ Bulk Track All</button>
                         </div>
                     </div>
                     <div id="direct-results" style="display:flex; flex-direction:column; gap:16px;"></div>
@@ -4052,14 +4054,17 @@ def nexus_dashboard():
         async function searchOrders() {
             const q = document.getElementById('searchInput').value; if(!q) return;
             document.getElementById('tracking-results').innerHTML = '<div style="padding:60px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
+            document.getElementById('bulkTrackBtn').style.display = 'none';
             const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
             const data = await r.json(); renderCards(data);
         }
 
         function renderCards(data) {
             let h = '';
+            let hasTids = false;
             data.forEach(item => {
                 const isDelivered = item.status.toLowerCase().includes('delivered');
+                if(item.tids.length > 0) hasTids = true;
                 h += `<div class="card track-card">
                     <div class="track-header">
                         <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:800; font-size: 16px; color: var(--accent);">${item.order_id}</span></div>
@@ -4078,7 +4083,7 @@ def nexus_dashboard():
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                                        <button class="btn outline" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}')">🚢 Track API</button>
+                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}', this)">🚢 Track API</button>
                                     </div>
                                     <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
                                     <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted); font-weight: 600;">Pending API Call...</div>
@@ -4089,6 +4094,7 @@ def nexus_dashboard():
                 </div>`;
             });
             document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted); font-weight:600; padding: 40px; border: 1px dashed var(--border); border-radius: 12px;">No matching records found.</div>';
+            if(hasTids) document.getElementById('bulkTrackBtn').style.display = 'block';
         }
 
         async function directTrackTIDs() {
@@ -4097,19 +4103,38 @@ def nexus_dashboard():
             tids = tids.map(t => (t.startsWith('150') && t.length >= 12 && t.length <= 15) ? '0' + t : t);
             let h = '';
             tids.forEach(tid => {
-                h += `<div class="tid-box" style="width:100%;">
+                h += `<div class="tid-box card" style="width:100%; border: 1px solid var(--border);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                            <button class="btn outline" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}')">🚢 Track API</button>
+                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}', this)">🚢 Track API</button>
                         </div>
                         <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
                         <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted); font-weight: 600;">Pending API Call...</div>
                       </div>`;
             });
             document.getElementById('direct-results').innerHTML = h;
+            if(tids.length > 0) document.getElementById('bulkDirectBtn').style.display = 'block';
         }
 
-        async function syncShip24(tid) {
+        // NEW: Bulk Track Logic with slight delay to prevent rate-limiting
+        async function bulkTrackAll(containerId) {
+            const container = document.getElementById(containerId);
+            const btns = container.querySelectorAll('.sync-btn');
+            for(let btn of btns) {
+                if(btn.innerText !== 'Syncing...') {
+                    btn.click();
+                    // Slight delay so the Ship24 API isn't overloaded
+                    await new Promise(r => setTimeout(r, 400));
+                }
+            }
+        }
+
+        async function syncShip24(tid, btnElement) {
+            if(btnElement) {
+                btnElement.innerText = "Syncing...";
+                btnElement.style.opacity = "0.5";
+                btnElement.style.pointerEvents = "none";
+            }
             const sid = tid.replace(/\\s/g,'');
             const log = document.getElementById(`log-${sid}`); log.innerHTML = '<div class="loader" style="width:16px;height:16px; border-width:2px;"></div>';
             const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids:[tid]})});
@@ -4117,6 +4142,10 @@ def nexus_dashboard():
             if(d.success) {
                 document.getElementById(`prog-${sid}`).style.width = d.progress + '%';
                 log.innerHTML = d.events.map(e => `<div style="margin-bottom:10px; padding-left:12px; border-left:2px solid #fff;"><b style="color:var(--text);">${e.status}</b><br><span style="color:var(--muted); font-size:11px;">${e.time}</span></div>`).join('');
+                if(btnElement) { btnElement.innerText = "Tracked ✅"; btnElement.style.borderColor = "#10B981"; btnElement.style.color = "#10B981"; }
+            } else {
+                log.innerHTML = `<span style="color:#EF4444">Tracking failed or ID not found.</span>`;
+                if(btnElement) { btnElement.innerText = "Failed ❌"; btnElement.style.borderColor = "#EF4444"; btnElement.style.color = "#EF4444"; }
             }
         }
 
