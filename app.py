@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% HARDCODED COLUMNS & FIXED TRACKING
+# 🛰️ TID OPERATIONS HUB (NEXUS) - PREMIUM UI & LIFETIME FREE WIDGET TRACKING
 # ==============================================================================
 import urllib.request
 import csv
@@ -3635,7 +3635,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. EXACT COLUMNS (NO SMART GUESSING, 100% YOUR LIST)
+# 2. ISOLATED CACHE & EXACT COLUMN MAP
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
@@ -3651,9 +3651,7 @@ NEXUS_SHEET_MAP = {
 
 def nexus_fetch_sheet_data(url, name):
     try:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
         with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
             raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
@@ -3661,16 +3659,23 @@ def nexus_fetch_sheet_data(url, name):
             col = NEXUS_SHEET_MAP.get(name)
             if not col or not data: return []
 
+            start_row, order_idx = 1, 0
+            for i, row in enumerate(data[:20]):
+                if not row: continue
+                c = [re.sub(r'[^a-z0-9]', '', str(x).lower()) for x in row]
+                if 'order' in c or 'fleekid' in c or 'orderid' in c or 'shipmentid' in c:
+                    start_row = i + 1
+                    for j, cell in enumerate(c):
+                        if cell in ['order', 'fleekid', 'orderid', 'shipmentid']: order_idx = j; break
+                    break
+
             processed = []
-            # 🚨 MERA FIX YAHAN HAI: Koi Header Guess nahi. Direct poori sheet scan hogi.
-            for row in data:
+            for row in data[start_row:]:
                 if not row: continue
                 p = row + [''] * 60 
-                o_val = str(p[col['o'] - 1]).strip()
+                o_val = str(p[order_idx]).strip()
                 
-                # Agar pehle column me Number hai, tou data utha lo!
-                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: 
-                    continue
+                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan']: continue
 
                 def get_v(col_num):
                     v = str(p[col_num - 1]).strip()
@@ -3682,7 +3687,7 @@ def nexus_fetch_sheet_data(url, name):
                     'country': get_v(col['cn']), 'tid': get_v(col['t']), 'mawb': get_v(col['ma'])
                 })
             return processed
-    except Exception as e: return []
+    except: return []
 
 def nexus_clean_tids(raw):
     raw = str(raw).strip()
@@ -3696,9 +3701,7 @@ def nexus_clean_tids(raw):
 
 def nexus_fetch_kerry_status(url):
     try:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
         with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
             raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
@@ -3717,7 +3720,7 @@ def nexus_fetch_kerry_status(url):
                     o = str(p[0]).strip().lower()
                     if o: s_map[o] = str(p[s_col]).strip().upper()
             return s_map
-    except Exception as e: return {}
+    except: return {}
 
 def nexus_parse_date(date_str):
     try:
@@ -3788,33 +3791,6 @@ def api_nexus_search():
             if found: break
     return jsonify(results)
 
-@app.route('/api/nexus/ship24', methods=['POST'])
-def api_nexus_ship24():
-    tids = request.json.get('tids', [])
-    ship24_key = os.environ.get('SHIP24_API_KEY', 'MOCK').strip()
-    responses = []
-    for tid in tids:
-        # 🚨 THE FIX: Bulletproof Fallback. Never fails UI.
-        if not ship24_key or ship24_key == 'MOCK':
-            responses.append({
-                "tid": tid, 
-                "success": True, 
-                "current_status": "Transit", 
-                "progress": 60, 
-                "events": [{"status": "Processed at Gateway Facility", "time": datetime.now().strftime("%Y-%m-%d %H:%M")}]
-            })
-        else:
-            try:
-                req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
-                with urllib.request.urlopen(req) as res:
-                    tr = json.loads(res.read().decode()).get('data',{}).get('trackings',[{}])[0]
-                    evs = tr.get('events',[])
-                    st = evs[0].get('statusMilestone','Transit') if evs else 'Pending'
-                    responses.append({"tid": tid, "success": True, "courier": evs[0].get('courierCode','Carrier').upper() if evs else 'CARRIER', "current_status": st.lower(), "events": [{"status": e.get('statusMilestone', e.get('status', 'Update')), "time": e.get('datetime', 'N/A')} for e in evs]})
-            except:
-                responses.append({"tid": tid, "success": True, "current_status": "Transit", "progress": 60, "events": [{"status": "API Timeout - Last Scanned at Gateway", "time": datetime.now().strftime("%Y-%m-%d %H:%M")}]})
-    return jsonify(responses)
-
 @app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
     sheets_data, kerry_data = nexus_sync_db()
@@ -3823,14 +3799,12 @@ def api_nexus_radar_data():
         for r in rows:
             dt_obj = nexus_parse_date(r['date'])
             if dt_obj and dt_obj < NEXUS_FILTER_DATE: continue
-            
             oid = r['order']
             if oid == 'N/A': continue
             
             kerry_stat = kerry_data.get(oid.lower(), "PENDING")
             tids = nexus_clean_tids(r['tid'])
             has_tid = len(tids) > 0
-            
             if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and has_tid:
                 buckets["handed_over"][src].append({ "Order": oid.upper(), "Date": r['date'], "Vendor": r['vendor'], "Customer": r['customer'], "Boxes": r['boxes'], "Weight": r['weight'], "TID": ", ".join(tids), "MAWB": r['mawb'], "Status": kerry_stat })
     return jsonify(buckets)
@@ -3846,7 +3820,6 @@ def api_nexus_ops_commander():
         for r in rows:
             dt_obj = nexus_parse_date(r['date'])
             if not dt_obj or dt_obj < NEXUS_FILTER_DATE: continue
-            
             oid = r['order']
             k_stat = kerry_data.get(oid.lower(), "PENDING")
             has_tid = len(nexus_clean_tids(r['tid'])) > 0
@@ -3863,7 +3836,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI
+# 4. FRONTEND UI (WITH LIFETIME FREE WIDGET)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3871,6 +3844,7 @@ def nexus_dashboard():
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
     <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
+    <script type="text/javascript" src="//www.17track.net/externalcall.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
@@ -3924,10 +3898,11 @@ def nexus_dashboard():
         .meta-val { font-size: 14px; font-weight: 600;}
         
         .tid-area { padding: 30px; background: var(--card);}
-        .tid-strip { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 8px;}
-        .tid-box { min-width: 350px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px;}
-        .progress { height: 6px; background: #111; border-radius: 6px; overflow: hidden; }
-        .progress-bar { height: 100%; background: #fff; width: 0%; transition: width 0.5s ease; }
+        .tid-strip { display: flex; flex-direction: column; gap: 20px; padding-bottom: 8px;}
+        .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px;}
+        
+        /* 17Track Widget Styles */
+        .widget-container { width: 100%; background: #fff; border-radius: 8px; overflow: hidden; display: none; }
         
         .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
         .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; }
@@ -3942,7 +3917,7 @@ def nexus_dashboard():
     <body>
     <div class="app-container">
         <header class="topbar">
-            <div class="brand">🛰️ Fleek TID Hub</div>
+            <div class="brand">🛰️ NEXUS HUB</div>
             <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
         </header>
         <div class="main-wrapper">
@@ -3956,11 +3931,11 @@ def nexus_dashboard():
                 <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
             </aside>
             <main class="viewport">
-                <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Fleek TID Hub</h1>
+                <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Global Tracking Matrix</h1>
                 
                 <div id="view-track" class="view-pane active">
                     <div class="card" style="margin-bottom: 30px;">
-                        <textarea id="searchInput" placeholder="Search IDs or TIDs here ..."></textarea>
+                        <textarea id="searchInput" placeholder="Paste Order IDs or TIDs here (e.g. 129027_34)..."></textarea>
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="searchOrders()">Scan Matrix</button>
                             <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
@@ -4035,7 +4010,7 @@ def nexus_dashboard():
             
             if(viewType === 'view-track') {
                 document.getElementById('view-track').style.display = 'block';
-                document.getElementById('view-title').innerText = "Fleek TID Hub";
+                document.getElementById('view-title').innerText = "Global Tracking Matrix";
             } else if(viewType === 'view-direct') {
                 document.getElementById('view-direct').style.display = 'block';
                 document.getElementById('view-title').innerText = "Direct TID Tracker";
@@ -4082,10 +4057,9 @@ def nexus_dashboard():
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}', this)">🚢 Track API</button>
+                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadFreeWidget('${tid}', this)">🚢 Free Track Native</button>
                                     </div>
-                                    <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/[^a-zA-Z0-9]/g,'')}"></div></div>
-                                    <div id="log-${tid.replace(/[^a-zA-Z0-9]/g,'')}" style="font-size:12px; color:var(--muted); font-weight: 600;">Ready to Scan...</div>
+                                    <div id="widget-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="widget-container"></div>
                                 </div>
                             `).join('')}
                         </div>
@@ -4105,10 +4079,9 @@ def nexus_dashboard():
                 h += `<div class="tid-box card" style="width:100%; border: 1px solid var(--border);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}', this)">🚢 Track API</button>
+                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadFreeWidget('${tid}', this)">🚢 Free Track Native</button>
                         </div>
-                        <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/[^a-zA-Z0-9]/g,'')}"></div></div>
-                        <div id="log-${tid.replace(/[^a-zA-Z0-9]/g,'')}" style="font-size:12px; color:var(--muted); font-weight: 600;">Ready to Scan...</div>
+                        <div id="widget-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="widget-container"></div>
                       </div>`;
             });
             document.getElementById('direct-results').innerHTML = h;
@@ -4119,37 +4092,36 @@ def nexus_dashboard():
             const container = document.getElementById(containerId);
             const btns = container.querySelectorAll('.sync-btn');
             for(let btn of btns) {
-                if(btn.innerText !== 'Syncing...' && btn.innerText !== 'Tracked ✅') {
+                if(btn.innerText !== 'Tracking...') {
                     btn.click();
-                    await new Promise(r => setTimeout(r, 300));
+                    await new Promise(r => setTimeout(r, 500)); // Thora delay diya hai taake widget crash na kare
                 }
             }
         }
 
-        async function syncShip24(tid, btnElement) {
+        // 🚨 YAHAN HAI MAGIC: API KEY KI ZAROORAT NAHI! 17Track Widget UI ke andar hi khulega!
+        function loadFreeWidget(tid, btnElement) {
             if(btnElement) {
-                btnElement.innerText = "Syncing...";
+                btnElement.innerText = "Tracking...";
                 btnElement.style.opacity = "0.5";
                 btnElement.style.pointerEvents = "none";
             }
             const sid = tid.replace(/[^a-zA-Z0-9]/g,'');
-            const log = document.getElementById(`log-${sid}`); 
-            if(!log) return;
-            log.innerHTML = '<div class="loader" style="width:16px;height:16px; border-width:2px;"></div>';
+            const container = document.getElementById(`widget-${sid}`);
+            container.style.display = "block";
             
             try {
-                const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids:[tid]})});
-                const d = (await r.json())[0];
-                if(d.success) {
-                    document.getElementById(`prog-${sid}`).style.width = '100%';
-                    log.innerHTML = d.events.map(e => `<div style="margin-bottom:10px; padding-left:12px; border-left:2px solid #fff;"><b style="color:var(--text);">${e.status}</b><br><span style="color:var(--muted); font-size:11px;">${e.time}</span></div>`).join('');
-                    if(btnElement) { btnElement.innerText = "Tracked ✅"; btnElement.style.borderColor = "#10B981"; btnElement.style.color = "#10B981"; btnElement.style.opacity="1"; }
-                } else {
-                    log.innerHTML = `<span style="color:#EF4444; font-weight:600;">Tracking failed or unavailable.</span>`;
-                    if(btnElement) { btnElement.innerText = "Failed ❌"; btnElement.style.borderColor = "#EF4444"; btnElement.style.color = "#EF4444"; btnElement.style.opacity="1"; btnElement.style.pointerEvents="auto";}
-                }
+                // Call 17Track function from the script loaded in <head>
+                YQV5.trackSingle({
+                    YQ_ContainerId: `widget-${sid}`,
+                    YQ_Height: 350,
+                    YQ_Fc: "0",
+                    YQ_Lang: "en",
+                    YQ_Num: tid
+                });
+                if(btnElement) { btnElement.innerText = "Data Loaded ✅"; btnElement.style.borderColor = "#10B981"; btnElement.style.color = "#10B981"; btnElement.style.opacity="1"; }
             } catch(e) {
-                log.innerHTML = `<span style="color:#EF4444">Network Error.</span>`;
+                container.innerHTML = `<span style="color:#EF4444; padding:20px; display:block;">Please check your internet connection or disable ad-blocker.</span>`;
                 if(btnElement) { btnElement.innerText = "Failed ❌"; btnElement.style.opacity="1"; btnElement.style.pointerEvents="auto";}
             }
         }
