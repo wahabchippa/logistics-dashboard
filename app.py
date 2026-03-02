@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - MASHED TIDs FIX & PREMIUM UI
+# 🛰️ TID OPERATIONS HUB - STANDALONE EDITION (FIXED COLUMNS & MASHED TIDs)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3609,21 +3609,14 @@ import json
 import os
 import concurrent.futures
 from datetime import datetime
-from flask import jsonify, request, session, render_template_string, redirect
-from functools import wraps
+from flask import Flask, jsonify, request, render_template_string
+
+# Initialize Flask App
+app = Flask(__name__)
+app.secret_key = 'nexus_secure_key_123'
 
 # ------------------------------------------------------------------------------
-# 1. SECURITY / LOGIN DECORATOR 
-# ------------------------------------------------------------------------------
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'role' not in session: return redirect('/')
-        return f(*args, **kwargs)
-    return decorated_function
-
-# ------------------------------------------------------------------------------
-# 2. CORE DATA SOURCES
+# 1. CORE DATA SOURCES
 # ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -3636,24 +3629,24 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 3. 🚨 EXACT INDEX FINDER (Working Logic Maintained) 🚨
+# 2. DATA ENGINE (50-Column Scan & Overrides)
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
-COL_ALIASES = {
-    'order': ['order', 'fleekid'],
-    'date': ['fleekhandoverdate', 'airporthandoverdate', 'date'],
-    'boxes': ['noofboxes', 'qty', 'box'],
-    'weight': ['chargeableweight', 'chargeableweightkg', 'noofpieces', 'weight'],
-    'vendor': ['vendorname', 'vendor'],
-    'customer': ['customername', 'customer'],
-    'country': ['country'],
-    'tid': ['trackingid', 'tracking'],
-    'mawb': ['mawb', 'mawbflight', 'kerrymawbnumber']
+HEADER_VARIANTS = {
+    'order': ['order', 'fleekid', 'orderid'],
+    'date': ['fleekhandoverdate', 'airporthandoverdate', 'date', 'handoverdate', 'qcdate'],
+    'boxes': ['noofboxes', 'numberofboxes', 'boxcount', 'boxes', 'box', 'qty'],
+    'weight': ['chargeableweightkg', 'chargeableweight', 'actualweight', 'noofpieces', 'pieces', 'weight', 'kg'],
+    'vendor': ['vendorname', 'vendor', 'seller'],
+    'customer': ['customername', 'customer', 'consignee', 'receiver'],
+    'country': ['country', 'destination', 'dest'],
+    'tid': ['trackingid', 'tracking', 'tid', 'awbnumber', 'couriertrackingid'],
+    'mawb': ['kerrymawbnumber', 'mawbflight', 'mawb', 'masterawb', 'master']
 }
 
-def fetch_and_map_csv(url):
+def fetch_sheet_data(url, src_name):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=20) as res:
@@ -3661,42 +3654,59 @@ def fetch_and_map_csv(url):
             data = list(csv.reader(raw))
             if not data: return []
 
-            cleaned_data = []
-            for row in data:
-                cleaned_data.append([re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row])
-            
             header_idx = -1
             col_map = {}
             
-            for i, c_row in enumerate(cleaned_data[:50]):
-                if 'order' in c_row and ('vendorname' in c_row or 'trackingid' in c_row or 'customername' in c_row):
+            for i, row in enumerate(data[:30]):
+                if not row: continue
+                c_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
+                
+                has_order = any(o in c_row for o in HEADER_VARIANTS['order'])
+                has_other = any(o in c_row for o in HEADER_VARIANTS['vendor'] + HEADER_VARIANTS['tid'] + HEADER_VARIANTS['mawb'])
+                
+                if has_order and has_other:
                     header_idx = i
                     for j, cell in enumerate(c_row):
-                        for key, aliases in COL_ALIASES.items():
-                            if cell in aliases:
+                        for key, variants in HEADER_VARIANTS.items():
+                            if cell in variants and key not in col_map:
                                 col_map[key] = j
+                                break
                     break
                     
             if header_idx == -1: return []
 
+            # 🚨 MANUAL OVERRIDES FOR SPECIFIC COLUMNS 🚨
+            # Python uses 0-based indexing (so Column 2 is Index 1, Column 14 is Index 13)
+            if src_name == "GE Zone":
+                col_map['date'] = 1     # Column 2
+            elif src_name == "ECL Zone":
+                col_map['date'] = 1     # Column 2
+                col_map['vendor'] = 13  # Column 14
+            elif src_name == "Kerry":
+                col_map['weight'] = 7   # Column 8
+                col_map['mawb'] = 30    # Column 31
+
             processed = []
             for row in data[header_idx+1:]:
-                if not any(str(x).strip() for x in row): continue
+                if not row or not any(str(x).strip() for x in row): continue
                 
-                row_padded = row + [''] * 30 
+                row_padded = row + [''] * max(0, 50 - len(row))
+                order_col_idx = col_map.get('order')
+                if order_col_idx is None: continue
+                
+                o_val = str(row_padded[order_col_idx]).strip()
+                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a', '-']: continue
+
                 r_dict = {}
-                
-                for key in COL_ALIASES.keys():
+                for key in HEADER_VARIANTS.keys():
                     idx = col_map.get(key)
-                    if idx is not None:
+                    if idx is not None and idx < len(row_padded):
                         val = str(row_padded[idx]).strip()
                         r_dict[key] = val if val and val.lower() not in ['n/a', 'nan', '#n/a', '-'] else "N/A"
                     else:
                         r_dict[key] = "N/A"
-                
-                if r_dict['order'] != "N/A":
-                    processed.append(r_dict)
-                    
+                        
+                processed.append(r_dict)
             return processed
     except Exception as e:
         return []
@@ -3712,22 +3722,23 @@ def fetch_kerry_status(url):
             header_idx, order_col, status_col = -1, -1, -1
             for i, row in enumerate(data[:20]):
                 c_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
-                if 'order' in c_row and ('lateststatus' in c_row or 'status' in c_row):
+                if 'order' in c_row or 'fleekid' in c_row:
                     header_idx = i
-                    order_col = c_row.index('order')
-                    status_col = c_row.index('lateststatus') if 'lateststatus' in c_row else c_row.index('status')
+                    for j, c in enumerate(c_row):
+                        if c in ['order', 'fleekid']: order_col = j
+                        elif 'status' in c or 'lateststatus' in c: status_col = j
                     break
                     
-            if header_idx == -1: return {}
+            if header_idx == -1 or order_col == -1 or status_col == -1: return {}
             
             s_map = {}
             for row in data[header_idx+1:]:
-                row_padded = row + [''] * 30
+                row_padded = row + [''] * max(0, 50 - len(row))
                 o = str(row_padded[order_col]).strip().lower()
                 s = str(row_padded[status_col]).strip().upper()
                 if o and o != 'n/a': s_map[o] = s
             return s_map
-    except:
+    except: 
         return {}
 
 def parse_date(date_str):
@@ -3740,33 +3751,37 @@ def parse_date(date_str):
     if '2026' in date_str or '26' in date_str: return datetime(2026, 1, 1)
     return datetime(1970, 1, 1)
 
-# 🚨 MAGIC FIX: Splits TIDs even if they are mashed together without spaces/commas!
+# ------------------------------------------------------------------------------
+# 🚨 MASHED TID SPLITTER (Handles TIDs without commas/spaces)
+# ------------------------------------------------------------------------------
 def clean_tids(raw_tid):
     raw_tid = str(raw_tid).strip()
     if raw_tid.lower() in ['pending', 'none', 'n/a', '']: return []
     
     parts = []
-    # Agar delimiters hain tou normal split karo
+    # If there are actual separators, split normally
     if any(delim in raw_tid for delim in [',', '/', ' ', '\n', '\t']):
         parts = [t.strip() for t in re.split(r'[\n,\/\s]+', raw_tid) if t.strip()]
     else:
-        # Agar chipkay hue hain aur lambay hain (e.g. 15503235454815U15503235454816S)
+        # If string is long and has no separators (Mashed TIDs)
         if len(raw_tid) > 15:
-            # Har ABCD letter ke baad isko kaat do
+            # Check if there are English letters (like U, S, Q) to split on
             if re.search(r'[A-Za-z]', raw_tid):
+                # Splits AFTER every letter
                 parts = [p for p in re.split(r'(?<=[a-zA-Z])', raw_tid) if p.strip()]
-            elif len(raw_tid) % 15 == 0: # Ya 15-15 ke hissay kar do
+            # Else, if it's an exact multiple of 15 digits
+            elif len(raw_tid) % 15 == 0:
                 parts = [raw_tid[i:i+15] for i in range(0, len(raw_tid), 15)]
             else:
                 parts = [raw_tid]
         else:
             parts = [raw_tid]
 
-    # Final padding (150 add karna)
     final_tids = []
     for t in parts:
         t = re.sub(r'[^a-zA-Z0-9]', '', t)
         if not t: continue
+        # APX Carrier specific 0-padding rule
         if t.startswith('150') and 12 <= len(t) <= 15: 
             final_tids.append('0' + t)
         else: 
@@ -3778,7 +3793,8 @@ def force_sync_all_databases():
     global GLOBAL_DB_CACHE
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        f_to_name = {executor.submit(fetch_and_map_csv, url): name for name, url in NEXUS_SOURCES.items()}
+        # Pass src_name to fetch_sheet_data so overrides work correctly
+        f_to_name = {executor.submit(fetch_sheet_data, url, name): name for name, url in NEXUS_SOURCES.items()}
         f_kerry = executor.submit(fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
         
         for future in concurrent.futures.as_completed(f_to_name):
@@ -3794,29 +3810,14 @@ def force_sync_all_databases():
     GLOBAL_DB_CACHE['loaded'] = True
 
 # ------------------------------------------------------------------------------
-# 4. FLOATING BUTTON INJECTOR
+# 3. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
-@app.after_request
-def inject_nexus_button(response):
-    if response.content_type and response.content_type.startswith('text/html'):
-        if request.endpoint != 'nexus_dashboard':
-            html = response.get_data(as_text=True)
-            btn = """<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #111, #000); color:#fff; border:1px solid #333; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); font-family:sans-serif;">🚀 TID Hub</a>"""
-            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
-    return response
-
-# ------------------------------------------------------------------------------
-# 5. BACKEND API ROUTES
-# ------------------------------------------------------------------------------
-
 @app.route('/api/nexus/refresh', methods=['POST'])
-@login_required
 def api_nexus_refresh():
     force_sync_all_databases()
     return jsonify({"success": True})
 
 @app.route('/api/nexus/search', methods=['POST'])
-@login_required
 def api_nexus_search():
     if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
 
@@ -3844,7 +3845,6 @@ def api_nexus_search():
     return jsonify(results)
 
 @app.route('/api/nexus/ship24', methods=['POST'])
-@login_required
 def api_nexus_ship24():
     tids = request.json.get('tids', [])
     ship24_key = os.environ.get('SHIP24_API_KEY', 'MOCK')
@@ -3853,7 +3853,7 @@ def api_nexus_ship24():
         if tid.startswith('150') and 12 <= len(tid) <= 15: tid = '0' + tid
             
         if ship24_key == 'MOCK':
-            responses.append({"tid": tid, "success": True, "courier": "CARRIER", "current_status": "transit", "progress": 60, "eta": "In 3 Days", "events": [{"statusMilestone":"transit", "status": "Processed at Hub", "time": "2026-03-01", "location": "Gateway"}]})
+            responses.append({"tid": tid, "success": True, "courier": "CARRIER", "current_status": "transit", "progress": 60, "eta": "In 3 Days", "events": [{"statusMilestone":"transit", "status": "Processed at Gateway", "time": "2026-03-01", "location": "Hub"}]})
         else:
             try:
                 req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
@@ -3874,7 +3874,6 @@ def api_nexus_ship24():
     return jsonify(responses)
 
 @app.route('/api/nexus/radar_data', methods=['GET'])
-@login_required
 def api_nexus_radar_data():
     if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
     buckets = { src: {"with_tid": [], "missing_tid": []} for src in NEXUS_SOURCES.keys() }
@@ -3904,7 +3903,6 @@ def api_nexus_radar_data():
     return jsonify(buckets)
 
 @app.route('/api/nexus/ops_commander', methods=['GET'])
-@login_required
 def api_nexus_ops_commander():
     if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
     blame_radar = []
@@ -3935,10 +3933,9 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 6. FRONTEND HTML (Premium UI + Bulk Track + Icons)
+# 4. FRONTEND HTML
 # ------------------------------------------------------------------------------
-@app.route('/nexus')
-@login_required
+@app.route('/')
 def nexus_dashboard():
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="light">
@@ -3982,7 +3979,6 @@ def nexus_dashboard():
         .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s;}
         .btn-outline:hover { background: var(--border); }
         
-        /* PREMIUM TRACK CARD */
         .track-card { border-radius: 16px; overflow: hidden; margin-bottom: 24px; border: 1px solid var(--border); background: var(--card); box-shadow: var(--shadow);}
         .track-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--input-bg);}
         
@@ -4029,14 +4025,12 @@ def nexus_dashboard():
                 <button class="nav-item" onclick="nav('direct')">🚢 Direct Track</button>
                 <button class="nav-item" onclick="nav('radar')">📦 Handed Over</button>
                 <button class="nav-item" onclick="nav('ops')" style="color:#F59E0B;">⚡ Ops Commander</button>
-                <div style="flex:1"></div>
-                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none;">🚪 Exit Hub</a>
             </aside>
             <main class="viewport" style="position:relative;">
                 <div class="sync-overlay" id="syncOverlay">
                     <div class="loader" style="width: 50px; height: 50px; margin-bottom:20px; border-top-color:#fff;"></div>
                     <h2 style="margin:0;">Fetching Live Data...</h2>
-                    <p style="color:#aaa; margin-top:10px;">Scanning all columns. Please wait 5-8 seconds.</p>
+                    <p style="color:#aaa; margin-top:10px;">Mapping Exact Columns. Please wait 5-8 seconds.</p>
                 </div>
 
                 <div id="view-track">
@@ -4351,9 +4345,9 @@ def nexus_dashboard():
     </body></html>
     ''')
 
-# ==============================================================================
-# KEEP THIS AT THE VERY END OF YOUR ENTIRE FILE
-# ==============================================================================
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
