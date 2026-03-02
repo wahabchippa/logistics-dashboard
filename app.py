@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - PREMIUM UI & BULK TRACK EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 50-COLUMN SCANNER & PREMIUM UI EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -3618,7 +3618,8 @@ from functools import wraps
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'role' not in session: return redirect('/')
+        if 'role' not in session:
+            return redirect('/')
         return f(*args, **kwargs)
     return decorated_function
 
@@ -3636,24 +3637,24 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 3. 🚨 EXACT INDEX FINDER (Working Logic Maintained) 🚨
+# 3. 🚨 50-COLUMN SMART MAPPER (Finds Kerry MAWB at Col 31 easily) 🚨
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
-COL_ALIASES = {
-    'order': ['order'],
-    'date': ['fleekhandoverdate', 'airporthandoverdate'],
-    'boxes': ['noofboxes'],
-    'weight': ['chargeableweight', 'chargeableweightkg', 'noofpieces'],
-    'vendor': ['vendorname'],
-    'customer': ['customername'],
-    'country': ['country'],
-    'tid': ['trackingid'],
-    'mawb': ['mawb', 'mawbflight', 'kerrymawbnumber']
+HEADER_VARIANTS = {
+    'order': ['order', 'fleekid', 'orderid'],
+    'date': ['fleekhandoverdate', 'airporthandoverdate', 'date', 'handoverdate', 'qcdate'],
+    'boxes': ['noofboxes', 'numberofboxes', 'boxcount', 'boxes', 'box', 'qty'],
+    'weight': ['chargeableweightkg', 'chargeableweight', 'actualweight', 'noofpieces', 'pieces', 'weight', 'kg'],
+    'vendor': ['vendorname', 'vendor', 'seller'],
+    'customer': ['customername', 'customer', 'consignee', 'receiver'],
+    'country': ['country', 'destination', 'dest'],
+    'tid': ['trackingid', 'tracking', 'tid', 'awbnumber', 'couriertrackingid'],
+    'mawb': ['kerrymawbnumber', 'mawbflight', 'mawb', 'masterawb', 'master']
 }
 
-def fetch_and_map_csv(url):
+def fetch_sheet_data(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=20) as res:
@@ -3661,42 +3662,54 @@ def fetch_and_map_csv(url):
             data = list(csv.reader(raw))
             if not data: return []
 
-            cleaned_data = []
-            for row in data:
-                cleaned_data.append([re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row])
-            
             header_idx = -1
             col_map = {}
             
-            for i, c_row in enumerate(cleaned_data[:50]):
-                if 'order' in c_row and ('vendorname' in c_row or 'trackingid' in c_row):
+            # Scan first 30 rows to find header
+            for i, row in enumerate(data[:30]):
+                if not row: continue
+                c_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
+                
+                # Header must have 'order' and at least one other major field
+                has_order = any(o in c_row for o in HEADER_VARIANTS['order'])
+                has_other = any(o in c_row for o in HEADER_VARIANTS['vendor'] + HEADER_VARIANTS['tid'] + HEADER_VARIANTS['mawb'])
+                
+                if has_order and has_other:
                     header_idx = i
                     for j, cell in enumerate(c_row):
-                        for key, aliases in COL_ALIASES.items():
-                            if cell in aliases:
+                        for key, variants in HEADER_VARIANTS.items():
+                            if cell in variants and key not in col_map:
                                 col_map[key] = j
+                                break
                     break
                     
             if header_idx == -1: return []
 
             processed = []
             for row in data[header_idx+1:]:
-                if not any(str(x).strip() for x in row): continue
+                # Ignore completely empty rows
+                if not row or not any(str(x).strip() for x in row): continue
                 
-                row_padded = row + [''] * 30 
+                # 🚨 FIX FOR KERRY: Pad the row to 50 columns so Col 31 (MAWB) doesn't cause an error
+                row_padded = row + [''] * max(0, 50 - len(row))
+                
+                # Verify Order ID exists
+                order_col_idx = col_map.get('order')
+                if order_col_idx is None: continue
+                
+                o_val = str(row_padded[order_col_idx]).strip()
+                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a', '-']: continue
+
                 r_dict = {}
-                
-                for key in COL_ALIASES.keys():
+                for key in HEADER_VARIANTS.keys():
                     idx = col_map.get(key)
-                    if idx is not None:
+                    if idx is not None and idx < len(row_padded):
                         val = str(row_padded[idx]).strip()
                         r_dict[key] = val if val and val.lower() not in ['n/a', 'nan', '#n/a', '-'] else "N/A"
                     else:
                         r_dict[key] = "N/A"
-                
-                if r_dict['order'] != "N/A":
-                    processed.append(r_dict)
-                    
+                        
+                processed.append(r_dict)
             return processed
     except Exception as e:
         return []
@@ -3712,22 +3725,24 @@ def fetch_kerry_status(url):
             header_idx, order_col, status_col = -1, -1, -1
             for i, row in enumerate(data[:20]):
                 c_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
-                if 'order' in c_row and ('lateststatus' in c_row or 'status' in c_row):
+                if 'order' in c_row or 'fleekid' in c_row:
                     header_idx = i
-                    order_col = c_row.index('order')
-                    status_col = c_row.index('lateststatus') if 'lateststatus' in c_row else c_row.index('status')
+                    for j, c in enumerate(c_row):
+                        if c in ['order', 'fleekid']: order_col = j
+                        elif 'status' in c or 'lateststatus' in c: status_col = j
                     break
                     
-            if header_idx == -1: return {}
+            if header_idx == -1 or order_col == -1 or status_col == -1: return {}
             
             s_map = {}
             for row in data[header_idx+1:]:
-                row_padded = row + [''] * 30
+                # Pad to 50 to avoid out of index error
+                row_padded = row + [''] * max(0, 50 - len(row))
                 o = str(row_padded[order_col]).strip().lower()
                 s = str(row_padded[status_col]).strip().upper()
                 if o and o != 'n/a': s_map[o] = s
             return s_map
-    except:
+    except: 
         return {}
 
 def parse_date(date_str):
@@ -3748,7 +3763,7 @@ def force_sync_all_databases():
     global GLOBAL_DB_CACHE
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        f_to_name = {executor.submit(fetch_and_map_csv, url): name for name, url in NEXUS_SOURCES.items()}
+        f_to_name = {executor.submit(fetch_sheet_data, url): name for name, url in NEXUS_SOURCES.items()}
         f_kerry = executor.submit(fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
         
         for future in concurrent.futures.as_completed(f_to_name):
@@ -3823,7 +3838,7 @@ def api_nexus_ship24():
         if tid.startswith('150') and 12 <= len(tid) <= 15: tid = '0' + tid
             
         if ship24_key == 'MOCK':
-            responses.append({"tid": tid, "success": True, "courier": "CARRIER", "current_status": "Transit", "progress": 60, "eta": "In 3 Days", "events": [{"statusMilestone":"transit", "status": "Processed", "time": "2026-03-01", "location": "Hub"}]})
+            responses.append({"tid": tid, "success": True, "courier": "CARRIER", "current_status": "transit", "progress": 60, "eta": "In 3 Days", "events": [{"statusMilestone":"transit", "status": "Processed at Hub", "time": "2026-03-01", "location": "Gateway"}]})
         else:
             try:
                 req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
@@ -3905,7 +3920,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 6. FRONTEND HTML (PREMIUM UI)
+# 6. FRONTEND HTML (Premium UI + Bulk Track + Icons)
 # ------------------------------------------------------------------------------
 @app.route('/nexus')
 @login_required
@@ -3967,7 +3982,6 @@ def nexus_dashboard():
         .loader { width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; vertical-align:middle;}
         @keyframes spin { to { transform: rotate(360deg); } }
         
-        /* RADAR & OPS */
         .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px;}
         .source-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display:flex; flex-direction:column; gap:16px;}
         .split-box { display: flex; gap: 12px; }
@@ -4007,7 +4021,7 @@ def nexus_dashboard():
                 <div class="sync-overlay" id="syncOverlay">
                     <div class="loader" style="width: 50px; height: 50px; margin-bottom:20px; border-top-color:#fff;"></div>
                     <h2 style="margin:0;">Fetching Live Data...</h2>
-                    <p style="color:#aaa; margin-top:10px;">Please wait 5-8 seconds.</p>
+                    <p style="color:#aaa; margin-top:10px;">Scanning all columns. Please wait 5-8 seconds.</p>
                 </div>
 
                 <div id="view-track">
@@ -4016,7 +4030,7 @@ def nexus_dashboard():
                         <textarea id="sInp" placeholder="Enter Order ID (e.g. 100577) or Carrier TID..."></textarea>
                         <div style="margin-top:15px; display:flex; gap:10px; align-items:center;">
                             <button class="btn" id="sBtn" onclick="runSearch()">🔍 Scan Sheets Live</button>
-                            <button class="btn-outline" onclick="document.getElementById('sInp').value=''; document.getElementById('results').innerHTML='';">Clear</button>
+                            <button class="btn-outline" onclick="document.getElementById('sInp').value=''; document.getElementById('results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
                             <button class="btn" id="bulkTrackBtn" style="background:#10B981; display:none; margin-left:auto;" onclick="trackAllVisible()">⚡ Bulk Track All TIDs</button>
                         </div>
                     </div>
@@ -4105,6 +4119,18 @@ def nexus_dashboard():
             if(v === 'ops') loadOps();
         }
 
+        // Add icons for event timeline tracking
+        function getIcon(status) {
+            let s = status.toLowerCase();
+            if (s.includes('deliver')) return '✅';
+            if (s.includes('transit') || s.includes('depart') || s.includes('arriv') || s.includes('flight') || s.includes('hub')) return '✈️';
+            if (s.includes('pick') || s.includes('collect')) return '📦';
+            if (s.includes('custom') || s.includes('clear')) return '🛂';
+            if (s.includes('out for delivery') || s.includes('courier')) return '🚚';
+            if (s.includes('cancel') || s.includes('fail') || s.includes('exception')) return '❌';
+            return '🔹';
+        }
+
         async function runSearch() {
             const q = document.getElementById('sInp').value; if(!q) return;
             const btn = document.getElementById('sBtn');
@@ -4178,18 +4204,17 @@ def nexus_dashboard():
                 if(d.success) {
                     let h = `<div style="padding:10px; background:var(--bg); border-radius:8px; margin-bottom:10px;">
                                 <span style="font-size:11px; color:var(--muted); text-transform:uppercase;">Current Status</span><br>
-                                <b style="color:#10B981; font-size:15px;">${d.current_status.toUpperCase()}</b>
+                                <b style="color:#10B981; font-size:15px;">${getIcon(d.current_status)} ${d.current_status.toUpperCase()}</b>
                              </div>`;
-                    h += d.events.map(e => `<div style="margin-bottom:6px;">• <b>${e.status}</b> <span style="color:var(--muted); font-size:11px;">(${e.time})</span></div>`).join('');
+                    h += d.events.map(e => `<div style="margin-bottom:6px;">${getIcon(e.status)} <b>${e.status}</b> <span style="color:var(--muted); font-size:11px;">(${e.time})</span></div>`).join('');
                     if(d.signed_by) h += `<div style="margin-top:10px; color:#3B82F6; font-weight:600;">✍️ Signed By: ${d.signed_by}</div>`;
                     log.innerHTML = h;
                 } else {
-                    log.innerHTML = '<span style="color:#EF4444">Tracking failed.</span>';
+                    log.innerHTML = '<span style="color:#EF4444">❌ Tracking failed. API may be down.</span>';
                 }
             } catch(e) { btn.innerHTML = 'ERROR'; }
         }
 
-        // NEW: BULK TRACK FEATURE
         async function trackAllVisible() {
             const btns = document.querySelectorAll('.track-action-btn');
             for(let btn of btns) {
@@ -4311,6 +4336,9 @@ def nexus_dashboard():
     </body></html>
     ''')
 
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
