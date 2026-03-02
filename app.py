@@ -3600,14 +3600,16 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB - 100% COMPLETE STANDALONE (1-BASED INDEXING)
+# 🛰️ TID OPERATIONS HUB - THE FINAL BULLETPROOF EDITION
 # ==============================================================================
-import urllib.request, csv, re, json, os, concurrent.futures
+import urllib.request
+import csv
+import re
+import json
+import os
+import concurrent.futures
 from datetime import datetime
-from flask import Flask, jsonify, request, render_template_string
-
-app = Flask(__name__)
-app.secret_key = 'nexus_secure_key_123'
+from flask import jsonify, request, render_template_string
 
 # ------------------------------------------------------------------------------
 # 1. CORE DATA SOURCES
@@ -3625,16 +3627,16 @@ NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLy
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 
 # ------------------------------------------------------------------------------
-# 2. EXACT 1-BASED COLUMN MAPPING (Exactly from your provided list)
+# 2. EXACT 0-BASED COLUMN MAPPING (FIXED BOXES & ALL SHEETS)
 # ------------------------------------------------------------------------------
-# In Python index is (Column - 1). The get_val() function will handle the -1 for you.
+# o=Order(Col 1), d=Date(Col 2), b=Boxes(Col 3), w=Weight, v=Vendor, c=Customer, cn=Country, ma=MAWB, t=Tracking
 SHEET_MAP = {
-    "Kerry":         {"b": 1, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
-    "APX":           {"b": 1, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
-    "ECL QC Center": {"b": 1, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
-    "ECL Zone":      {"b": 1, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
-    "GE QC Center":  {"b": 1, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
-    "GE Zone":       {"b": 1, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
+    "Kerry":         {"o": 0, "d": 1, "b": 2, "w": 7, "v": 14, "c": 17, "cn": 21, "ma": 30, "t": 31},
+    "APX":           {"o": 0, "d": 1, "b": 2, "w": 6, "v": 11, "c": 14, "cn": 18, "ma": 32, "t": 27},
+    "ECL QC Center": {"o": 0, "d": 1, "b": 2, "w": 6, "v": 10, "c": 13, "cn": 17, "ma": 27, "t": 25},
+    "ECL Zone":      {"o": 0, "d": 1, "b": 2, "w": 8, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 28},
+    "GE QC Center":  {"o": 0, "d": 1, "b": 2, "w": 6, "v": 12, "c": 15, "cn": 19, "ma": 31, "t": 28},
+    "GE Zone":       {"o": 0, "d": 1, "b": 2, "w": 6, "v": 12, "c": 15, "cn": 19, "ma": 31, "t": 28}
 }
 
 def fetch_sheet_data(url, name):
@@ -3644,31 +3646,21 @@ def fetch_sheet_data(url, name):
             data = list(csv.reader(res.read().decode('utf-8').splitlines()))
             if not data: return []
             
-            # Find Header Row & Order ID dynamically
-            start_row, order_idx = 1, 0
-            for i, row in enumerate(data[:30]):
-                if not row: continue
-                c = [re.sub(r'[^a-z0-9]', '', str(x).lower()) for x in row]
-                if 'order' in c or 'fleekid' in c:
-                    start_row = i + 1
-                    order_idx = c.index('order') if 'order' in c else c.index('fleekid')
-                    break
-            
             col = SHEET_MAP.get(name)
             if not col: return []
 
             processed = []
-            for row in data[start_row:]:
+            # SKIP HEADER DYNAMIC SEARCH. JUST READ EVERY ROW.
+            for row in data:
                 if not row or not str(row[0]).strip(): continue
-                # Pad row to 50 columns safely
                 p = row + [''] * max(0, 50 - len(row))
                 
-                o_val = str(p[order_idx]).strip()
-                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a']: continue
+                o_val = str(p[col['o']]).strip()
+                # Automatically skips Header rows by checking if Order ID is just words
+                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a', 'order', 'orderid', 'order id', 'fleekid', 'shipmentid']: 
+                    continue
 
-                # Function subtracts 1 to convert your 1-based column to 0-based index
-                def get_val(col_num):
-                    idx = col_num - 1 
+                def get_val(idx):
                     val = str(p[idx]).strip()
                     return val if val and val.lower() not in ['n/a', 'nan', '-', '#n/a'] else "N/A"
 
@@ -3711,7 +3703,7 @@ def fetch_kerry_status(url):
             s_col, h_idx = 1, -1
             for i, row in enumerate(data[:15]):
                 c = [str(x).lower().replace(' ', '') for x in row]
-                if 'order' in c or 'fleekid' in c:
+                if 'order' in c or 'fleekid' in c or 'orderid' in c:
                     h_idx = i
                     if 'lateststatus' in c: s_col = c.index('lateststatus')
                     elif 'status' in c: s_col = c.index('status')
@@ -3725,16 +3717,6 @@ def fetch_kerry_status(url):
                     if o and o != 'n/a': s_map[o] = str(p[s_col]).strip().upper()
             return s_map
     except: return {}
-
-def parse_date(date_str):
-    if not date_str or date_str == 'N/A': return None
-    try:
-        for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%b-%y', '%Y/%m/%d', '%d-%m-%Y'):
-            try: return datetime.strptime(date_str.split(' ')[0], fmt)
-            except: continue
-    except: pass
-    if '2026' in date_str or '26' in date_str: return datetime(2026, 1, 1)
-    return datetime(1970, 1, 1)
 
 def force_sync_all_databases():
     global GLOBAL_DB_CACHE
@@ -3753,7 +3735,8 @@ def force_sync_all_databases():
 # ------------------------------------------------------------------------------
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
-    force_sync_all_databases(); return jsonify({"success": True})
+    force_sync_all_databases()
+    return jsonify({"success": True})
 
 @app.route('/api/nexus/search', methods=['POST'])
 def api_nexus_search():
@@ -3832,7 +3815,6 @@ def api_nexus_ops_commander():
 # ------------------------------------------------------------------------------
 # 4. FRONTEND HTML
 # ------------------------------------------------------------------------------
-@app.route('/')
 @app.route('/nexus')
 def nexus_dashboard():
     return render_template_string('''
@@ -3843,7 +3825,7 @@ def nexus_dashboard():
         :root { --bg: #000; --card: #0a0a0a; --border: #1a1a1a; --accent: #fff; --text: #fafafa; --muted: #71717a; }
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; }
         .nav { padding: 20px 40px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-        .nav-links { display:flex; gap:15px; }
+        .nav-links { display:flex; gap:15px; align-items:center;}
         .nav-links button { background:transparent; border:none; color:var(--muted); font-size:15px; font-weight:600; cursor:pointer; }
         .nav-links button.active { color:var(--accent); border-bottom: 2px solid var(--accent); padding-bottom: 5px;}
         .container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
@@ -3873,13 +3855,14 @@ def nexus_dashboard():
         td { padding: 16px; font-size: 14px; border-bottom: 1px solid var(--border);}
     </style></head>
     <body>
-    <div id="loader" class="loader-overlay"><div class="spin"></div><h2 style="margin-top:20px">Scanning 50 Columns...</h2></div>
+    <div id="loader" class="loader-overlay"><div class="spin"></div><h2 style="margin-top:20px">Scanning Exact Columns...</h2></div>
     <div class="nav">
         <b style="font-size:20px">🛰️ NEXUS HUB</b>
         <div class="nav-links">
             <button class="active" onclick="nav('track', this)">🔍 Matrix</button>
             <button onclick="nav('radar', this)">📦 Radar</button>
             <button onclick="nav('ops', this)" style="color:#F59E0B">⚡ Ops</button>
+            <a href="/" class="btn" style="background:#ef4444; color:#fff; padding:8px 16px; margin:0 0 0 20px; text-decoration:none; border-radius:8px;">⬅️ Back to Main Dashboard</a>
         </div>
     </div>
     
@@ -3987,11 +3970,11 @@ def nexus_dashboard():
                 btn.innerText = d.courier || 'TRACKED';
                 log.style.display = 'block';
                 let evs = d.events.map(e => `• ${e.status} (${e.time})`).join('<br>');
-                log.innerHTML = `<b style="font-size:14px">${d.current_status.toUpperCase()}</b><br><br>${evs}`;
+                log.innerHTML = `<b style="font-size:14px; color:#10b981">${d.current_status.toUpperCase()}</b><br><br>${evs}`;
             } else {
                 btn.innerText = 'Error';
                 log.style.display = 'block';
-                log.innerHTML = '<span style="color:#ef4444">Tracking failed via API.</span>';
+                log.innerHTML = '<span style="color:#ef4444">Tracking info not found. API Key invalid or limits reached.</span>';
             }
         }
 
@@ -4046,10 +4029,6 @@ def nexus_dashboard():
     </script>
     </body></html>
     ''')
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
