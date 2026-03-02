@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - SHIP24 SCRAPER + REDIRECT
+# 🛰️ TID OPERATIONS HUB (NEXUS) - DIRECT SHIP24 SCRAPER (NO API)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3624,7 +3624,7 @@ else:
     ssl._create_default_https_context = _create_unverified_https_context
 
 # ------------------------------------------------------------------------------
-# 1. CORE DATA SOURCES (unchanged)
+# 1. CORE DATA SOURCES
 # ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -3637,7 +3637,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. ISOLATED CACHE & EXACT COLUMN MAP (unchanged)
+# 2. CACHE & COLUMN MAP (unchanged)
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
@@ -3652,7 +3652,6 @@ NEXUS_SHEET_MAP = {
 }
 
 def nexus_fetch_sheet_data(url, name):
-    # (unchanged - same as your code)
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
@@ -3762,80 +3761,149 @@ def add_nexus_floating_btn(response):
     return response
 
 # ------------------------------------------------------------------------------
-# 3. DIRECT SHIP24 SCRAPER (NO API KEY)
+# 3. ✅ DIRECT SHIP24 SCRAPER (NO API KEY) - FIXED VERSION
 # ------------------------------------------------------------------------------
-def scrape_ship24(tid):
-    """Scrape tracking info from Ship24"""
+def scrape_ship24_direct(tid):
+    """Direct Ship24 scrape with browser headers to avoid 403"""
     try:
-        url = f"https://www.ship24.com/tracking?p={tid}"
+        # Professional browser headers to avoid 403
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Cache-Control': 'max-age=0'
         }
         
+        url = f"https://www.ship24.com/tracking?p={tid}"
+        
+        # Add delay to avoid rate limiting
+        time.sleep(1.5)
+        
+        # Make request with timeout
         response = requests.get(url, headers=headers, timeout=15)
+        
+        # If still 403, return redirect fallback
         if response.status_code != 200:
-            return {'error': f'HTTP {response.status_code}'}
+            return {
+                'fallback': True,
+                'tid': tid,
+                'url': url,
+                'message': f'Direct tracking unavailable (HTTP {response.status_code})'
+            }
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Try to find tracking events
+        # Try multiple selectors for events (Ship24 structure)
         events = []
-        event_elements = soup.select('.tracking-event, .event-item, [class*="event"]')
+        event_selectors = [
+            '.tracking-event',
+            '.event-item',
+            '[class*="event"]',
+            '.MuiTimelineItem-root',
+            'tr.event',
+            '.timeline-item'
+        ]
         
-        for elem in event_elements[:10]:
-            status = elem.select_one('.status, [class*="status"]')
-            time_elem = elem.select_one('.time, [class*="time"]')
-            location = elem.select_one('.location, [class*="location"]')
+        event_elements = []
+        for selector in event_selectors:
+            event_elements = soup.select(selector)
+            if event_elements:
+                break
+        
+        for elem in event_elements[:15]:
+            # Try different possible selectors for status, time, location
+            status = (
+                elem.select_one('.status') or 
+                elem.select_one('[class*="status"]') or 
+                elem.select_one('.MuiTimelineContent-root') or
+                elem.select_one('strong') or
+                elem.select_one('b')
+            )
             
-            events.append({
-                'status': status.get_text(strip=True) if status else 'N/A',
-                'time': time_elem.get_text(strip=True) if time_elem else 'N/A',
-                'location': location.get_text(strip=True) if location else 'N/A'
-            })
+            time_elem = (
+                elem.select_one('.time') or 
+                elem.select_one('[class*="time"]') or 
+                elem.select_one('.MuiTypography-caption') or
+                elem.select_one('.date') or
+                elem.select_one('span:not([class])')
+            )
+            
+            location = (
+                elem.select_one('.location') or 
+                elem.select_one('[class*="location"]') or 
+                elem.select_one('.MuiTypography-body2') or
+                elem.select_one('.city')
+            )
+            
+            if status and status.get_text(strip=True):
+                events.append({
+                    'status': status.get_text(strip=True)[:100],
+                    'time': time_elem.get_text(strip=True) if time_elem else 'N/A',
+                    'location': location.get_text(strip=True) if location else 'N/A'
+                })
         
         # Try to get carrier
-        carrier = soup.select_one('.carrier-name, [class*="carrier"]')
-        carrier_text = carrier.get_text(strip=True) if carrier else 'Ship24'
+        carrier_selectors = [
+            '.carrier-name',
+            '[class*="carrier"]',
+            '.MuiTypography-h6',
+            '.courier-name'
+        ]
         
-        # If no events found, return basic info
-        if not events:
-            events.append({
-                'status': 'Tracking information available',
-                'time': 'Click below for details',
-                'location': 'Ship24'
-            })
+        carrier = 'Ship24'
+        for selector in carrier_selectors:
+            elem = soup.select_one(selector)
+            if elem:
+                carrier = elem.get_text(strip=True)
+                break
         
+        # If events found, return them
+        if events:
+            return {
+                'success': True,
+                'tid': tid,
+                'carrier': carrier,
+                'events': events
+            }
+        
+        # No events found, return fallback
         return {
-            'success': True,
+            'fallback': True,
             'tid': tid,
-            'carrier': carrier_text,
-            'events': events
+            'url': url,
+            'message': 'No tracking events found, click to view on Ship24'
         }
-    
+        
     except Exception as e:
-        return {'error': str(e)}
+        return {
+            'fallback': True,
+            'tid': tid,
+            'url': f"https://www.ship24.com/tracking?p={tid}",
+            'message': f'Error: {str(e)[:50]}'
+        }
 
-@app.route('/api/nexus/ship24_track', methods=['POST'])
-def api_nexus_ship24_track():
+@app.route('/api/nexus/ship24_direct', methods=['POST'])
+def api_nexus_ship24_direct():
     data = request.get_json()
     tids = data.get('tids', [])
     results = []
     
     for tid in tids:
-        # Format TID
         if tid.startswith('150') and 12 <= len(tid) <= 15:
             tid = '0' + tid
-        
-        result = scrape_ship24(tid)
-        results.append(result)
-        time.sleep(1)  # Rate limiting
+        results.append(scrape_ship24_direct(tid))
     
     return jsonify(results)
 
 # ------------------------------------------------------------------------------
-# 4. EXISTING BACKEND ROUTES (unchanged)
+# 4. BACKEND ROUTES (unchanged)
 # ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
@@ -3922,7 +3990,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 5. FRONTEND UI (SCRAPER + REDIRECT)
+# 5. FRONTEND UI (Ship24 Direct + Redirect Fallback)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3968,13 +4036,13 @@ def nexus_dashboard():
         
         .redirect-btn {
             display: inline-block;
-            background: var(--accent);
-            color: var(--btn-text);
-            padding: 8px 16px;
+            background: #10B981;
+            color: white;
+            padding: 10px 16px;
             border-radius: 6px;
             text-decoration: none;
             font-weight: 600;
-            font-size: 12px;
+            font-size: 13px;
             margin-top: 10px;
             text-align: center;
             transition: 0.2s;
@@ -3982,7 +4050,7 @@ def nexus_dashboard():
             cursor: pointer;
         }
         .redirect-btn:hover {
-            opacity: 0.8;
+            opacity: 0.9;
             transform: translateY(-1px);
         }
         
@@ -4023,6 +4091,13 @@ def nexus_dashboard():
             font-size: 11px; 
             font-weight: 600; 
             margin-bottom: 8px;
+        }
+        .fallback-message {
+            color: #F59E0B;
+            padding: 8px;
+            border: 1px dashed #F59E0B;
+            border-radius: 4px;
+            font-size: 13px;
         }
         
         .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
@@ -4201,7 +4276,7 @@ def nexus_dashboard():
             container.innerHTML = '<div class="loader" style="width:20px;height:20px; margin:10px auto;"></div>';
             
             try {
-                const response = await fetch('/api/nexus/ship24_track', {
+                const response = await fetch('/api/nexus/ship24_direct', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({tids: [tid]})
@@ -4210,30 +4285,36 @@ def nexus_dashboard():
                 const data = results[0];
                 
                 if (data.success) {
+                    // Show carrier and events
                     let html = `<div class="carrier-badge">${data.carrier}</div>`;
-                    
-                    if (data.events && data.events.length > 0) {
-                        html += '<div class="timeline">';
-                        data.events.forEach(ev => {
-                            html += `<div class="event-item">
-                                <div class="event-status">${ev.status}</div>
-                                <div><span class="event-time">${ev.time}</span> <span class="event-location">${ev.location}</span></div>
-                            </div>`;
-                        });
-                        html += '</div>';
-                    } else {
-                        html += '<div style="color:var(--muted);">No tracking events found.</div>';
-                    }
-                    
-                    // Add redirect button
-                    html += `<a href="https://www.ship24.com/tracking?p=${tid}" target="_blank" class="redirect-btn" style="margin-top:15px;">🔍 View Full on Ship24</a>`;
-                    
+                    html += '<div class="timeline">';
+                    data.events.forEach(ev => {
+                        html += `<div class="event-item">
+                            <div class="event-status">${ev.status}</div>
+                            <div><span class="event-time">${ev.time}</span> <span class="event-location">${ev.location}</span></div>
+                        </div>`;
+                    });
+                    html += '</div>';
                     container.innerHTML = html;
+                    
+                } else if (data.fallback) {
+                    // Show fallback with redirect button
+                    container.innerHTML = `
+                        <div class="fallback-message">${data.message}</div>
+                        <a href="${data.url}" target="_blank" class="redirect-btn">🔍 View Full on Ship24</a>
+                    `;
                 } else {
-                    container.innerHTML = `<span style="color:#EF4444;">Error: ${data.error || 'Unknown error'}</span>`;
+                    // Show error fallback
+                    container.innerHTML = `
+                        <div class="fallback-message">Error tracking this shipment</div>
+                        <a href="https://www.ship24.com/tracking?p=${tid}" target="_blank" class="redirect-btn">🔍 View on Ship24</a>
+                    `;
                 }
             } catch (e) {
-                container.innerHTML = `<span style="color:#EF4444;">Request failed: ${e.message}</span>`;
+                container.innerHTML = `
+                    <div class="fallback-message">Network error</div>
+                    <a href="https://www.ship24.com/tracking?p=${tid}" target="_blank" class="redirect-btn">🔍 View on Ship24</a>
+                `;
             } finally {
                 btn.innerText = "Track Again";
                 btn.style.opacity = "1";
