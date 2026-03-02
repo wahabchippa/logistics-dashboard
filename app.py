@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% SAFE, ALL FIELDS UI & SMART SCANNER
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% SAFE, PURE BLACK UI & EXACT COLUMNS
 # ==============================================================================
 import urllib.request
 import csv
@@ -3635,19 +3635,18 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. ISOLATED CACHE & EXACT COLUMN MAP
+# 2. ISOLATED CACHE & EXACT COLUMN MAP (KERRY BOXES FIXED TO COL 5)
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
 
-# YEH RAHI AAPKI EXACT LIST: Boxes(4), Date(2) waghera...
 NEXUS_SHEET_MAP = {
-    "Kerry":         {"b": 4, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
-    "APX":           {"b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
-    "ECL QC Center": {"b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
-    "ECL Zone":      {"b": 4, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
-    "GE QC Center":  {"b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
-    "GE Zone":       {"b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
+    "Kerry":         {"o": 1, "b": 5, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32}, # Fixed Col 5
+    "APX":           {"o": 1, "b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
+    "ECL QC Center": {"o": 1, "b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
+    "ECL Zone":      {"o": 1, "b": 4, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
+    "GE QC Center":  {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
+    "GE Zone":       {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
 }
 
 def nexus_fetch_sheet_data(url, name):
@@ -3662,7 +3661,6 @@ def nexus_fetch_sheet_data(url, name):
             col = NEXUS_SHEET_MAP.get(name)
             if not col or not data: return []
 
-            # 🚨 SMART SCANNER BACK ONLINE: Finds where the actual data starts ignoring blank lines
             start_row = 1
             order_idx = 0
             for i, row in enumerate(data[:20]):
@@ -3773,7 +3771,7 @@ def nexus_sync_db(force=False):
 def add_nexus_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
         html = response.get_data(as_text=True)
-        btn = '<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:#3B82F6; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:600; font-family:sans-serif; z-index:99999; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">📊 TID Operations</a>'
+        btn = '<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:#fff; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub</a>'
         if '</body>' in html:
             response.set_data(html.replace('</body>', btn + '</body>'))
     return response
@@ -3860,103 +3858,116 @@ def api_nexus_radar_data():
     return jsonify(buckets)
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI 
+# 4. FRONTEND UI (PURE BLACK DESIGN)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
 def nexus_dashboard():
     return render_template_string('''
-    <!DOCTYPE html><html lang="en" data-theme="dark">
-    <head><meta charset="UTF-8"><title>TID Operations Hub</title>
+    <!DOCTYPE html><html lang="en">
+    <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        
         :root { 
-            --bg: #0F172A; --card: #1E293B; --border: #334155; --text: #F1F5F9; --muted: #94A3B8; 
-            --accent: #3B82F6; --btn-bg: #3B82F6; --btn-text: #FFFFFF;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
-            --badge-bg: rgba(59, 130, 246, 0.1); --badge-text: #60A5FA; --input-bg: #0F172A;
-            --table-row-hover: rgba(255,255,255,0.03);
+            --bg: #000000; 
+            --card: #0A0A0A; 
+            --border: #1A1A1A; 
+            --text: #FAFAFA; 
+            --muted: #71717A; 
+            --accent: #FFFFFF; 
+            --btn-bg: #FFFFFF;
+            --btn-text: #000000;
+            --shadow: 0 10px 30px -10px rgba(0,0,0,0.8);
+            --badge-bg: #1A1A1A;
+            --badge-text: #FAFAFA;
+            --input-bg: #050505;
         }
-        [data-theme="light"] { 
-            --bg: #F8F9FB; --card: #FFFFFF; --border: #E5E7EB; --text: #111827; --muted: #6B7280; 
-            --accent: #111827; --btn-bg: #111827; --btn-text: #FFFFFF;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            --badge-bg: #F3F4F6; --badge-text: #111827; --input-bg: #FFFFFF;
-            --table-row-hover: #F8F9FB;
-        }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; overflow: hidden;}
+
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; overflow: hidden;}
         * { box-sizing: border-box; }
+        
         .app-container { display: flex; height: 100vh; width: 100vw; flex-direction: column; }
-        .topbar { height: 64px; background: var(--card); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 24px; z-index: 10;}
-        .brand { font-size: 16px; font-weight: 700;}
-        .theme-toggle { background: var(--input-bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;}
+        .topbar { height: 64px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; z-index: 10;}
+        .brand { font-size: 18px; font-weight: 800; letter-spacing: -0.5px;}
+        
         .main-wrapper { display: flex; flex: 1; overflow: hidden; }
-        .sidebar { width: 240px; background: var(--card); border-right: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 4px;}
-        .nav-item { padding: 12px 16px; border-radius: 8px; color: var(--muted); font-size: 13px; cursor: pointer; border: none; background: transparent; text-align: left; }
-        .nav-item:hover { background: var(--input-bg); color: var(--text); }
-        .nav-item.active { background: var(--badge-bg); color: var(--accent); font-weight: 600; }
-        .viewport { flex: 1; padding: 32px 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); }
-        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; cursor: pointer;}
+        .sidebar { width: 250px; background: var(--bg); border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; gap: 8px;}
+        .nav-item { padding: 14px 18px; border-radius: 8px; color: var(--muted); font-weight: 600; font-size: 13px; cursor: pointer; border: none; background: transparent; text-align: left; transition: 0.2s;}
+        .nav-item:hover { color: var(--text); }
+        .nav-item.active { background: var(--card); color: var(--accent); border: 1px solid var(--border); }
+        
+        .viewport { flex: 1; padding: 40px 50px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: var(--shadow); }
+        .card.hoverable:hover { border-color: #333; cursor: pointer;}
+        
+        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; transition: 0.2s;}
+        .btn:hover { opacity: 0.8; transform: translateY(-1px);}
         .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-        textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; color: var(--text); font-family: monospace; outline: none; min-height: 80px; }
-        .badge { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--badge-bg); color: var(--badge-text); }
-        .badge.success { background: rgba(16, 185, 129, 0.1); color: #10B981; }
-        .radar-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1000px;}
-        .stat-value { font-size: 32px; font-weight: 700; color: var(--text); margin-bottom: 4px;}
-        .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase;}
+        .btn.outline:hover { background: var(--border); }
         
-        .track-card { border-radius: 12px; overflow: hidden; margin-bottom: 24px; padding: 0;}
-        .track-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 16px;}
-        .meta-col { display: flex; flex-direction: column; gap: 4px; }
-        .meta-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600;}
-        .meta-val { font-size: 13px; font-weight: 500;}
+        textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--text); font-family: monospace; font-size: 15px; outline: none; resize: vertical; min-height: 100px; transition: 0.2s;}
+        textarea:focus { border-color: #444; }
         
-        .tid-area { padding: 20px 24px; }
-        .tid-strip { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px;}
-        .tid-box { min-width: 320px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px;}
-        .progress { height: 4px; background: var(--border); border-radius: 4px; overflow: hidden; }
-        .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.5s ease; }
-        .modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
-        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 32px; max-width: 1200px; margin: auto; }
+        .badge { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--badge-bg); color: var(--badge-text); text-transform: uppercase; letter-spacing: 0.5px;}
+        .badge.success { background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3);}
+        
+        .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;}
+        .stat-value { font-size: 40px; font-weight: 800; color: var(--text); margin-bottom: 4px; letter-spacing: -1px;}
+        .stat-label { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 1px;}
+        
+        .track-card { border-radius: 16px; overflow: hidden; margin-bottom: 24px; padding: 0; border: 1px solid var(--border);}
+        .track-header { padding: 24px 30px; border-bottom: 1px solid var(--border); background: var(--input-bg); display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 20px;}
+        .meta-col { display: flex; flex-direction: column; gap: 6px; }
+        .meta-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; font-weight: 800; letter-spacing: 1px;}
+        .meta-val { font-size: 14px; font-weight: 600;}
+        
+        .tid-area { padding: 30px; background: var(--card);}
+        .tid-strip { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 8px;}
+        .tid-box { min-width: 350px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px;}
+        .progress { height: 6px; background: #111; border-radius: 6px; overflow: hidden; }
+        .progress-bar { height: 100%; background: #fff; width: 0%; transition: width 0.5s ease; }
+        
+        .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
+        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
-        th { padding: 12px 16px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--border);}
-        td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
-        tr:hover { background: var(--table-row-hover); }
-        .loader { width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        th { padding: 16px 20px; font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 800; border-bottom: 1px solid var(--border); letter-spacing: 1px;}
+        td { padding: 16px 20px; font-size: 14px; border-bottom: 1px solid var(--border); font-weight: 500;}
+        tr:hover { background: #111; }
+        
+        .loader { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style></head>
     <body>
     <div class="app-container">
         <header class="topbar">
-            <div class="brand">TID Operations Hub</div>
-            <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
+            <div class="brand">🛰️ NEXUS HUB</div>
         </header>
         <div class="main-wrapper">
             <aside class="sidebar">
-                <div style="font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; margin: 16px 0 8px 16px;">Menu</div>
-                <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🚀 Track & Sync</button>
+                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Operations</div>
+                <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Track & Sync</button>
                 <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over</button>
                 <button class="nav-item" onclick="navSwitch(this, 'tid_pending')">⚠️ Missing TIDs</button>
                 <button class="nav-item" onclick="navSwitch(this, 'qc_not_approved')">⏳ QC Not Approved</button>
                 <button class="nav-item" onclick="navSwitch(this, 'qc_approved')">✅ QC Approved</button>
                 <div style="flex:1"></div>
-                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none;">🚪 Back to Dashboard</a>
+                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to 3PL Dashboard</a>
             </aside>
             <main class="viewport">
-                <h1 id="view-title" style="margin: 0; font-size: 20px;">Global Tracking Matrix</h1>
+                <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Global Tracking Matrix</h1>
                 <div id="view-track" class="view-pane active">
-                    <div class="card" style="margin-bottom: 24px;">
-                        <textarea id="searchInput" placeholder="Paste multiple order IDs here..."></textarea>
-                        <div style="margin-top: 16px; display: flex; gap: 12px;">
+                    <div class="card" style="margin-bottom: 30px;">
+                        <textarea id="searchInput" placeholder="Paste order IDs or carrier TIDs here..."></textarea>
+                        <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="searchOrders()">Scan Matrix</button>
-                            <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML='';">Clear Results</button>
+                            <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML='';">Clear</button>
                         </div>
                     </div>
                     <div id="tracking-results"></div>
                 </div>
                 <div id="view-radar" class="view-pane" style="display:none;">
-                    <div id="loader" style="display:none; padding:40px; text-align:center;"><div class="loader" style="margin:auto"></div></div>
+                    <div id="loader" style="display:none; padding:60px; text-align:center;"><div class="loader" style="margin:auto"></div></div>
                     <div id="radar-container" class="radar-grid"></div>
                 </div>
             </main>
@@ -3965,30 +3976,19 @@ def nexus_dashboard():
 
     <div id="detailPanel" class="modal" onclick="if(event.target==this)this.style.display='none'">
         <div class="modal-content">
-            <div style="display:flex; justify-content:space-between; margin-bottom:24px">
-                <h2 id="modalTitle" style="margin:0; font-size:18px;">Details</h2>
-                <div style="display:flex; gap:12px;">
+            <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:30px">
+                <h2 id="modalTitle" style="margin:0; font-size:24px; font-weight: 800;">Details</h2>
+                <div style="display:flex; gap:16px;">
                     <button class="btn outline" onclick="downloadCSV()">Export CSV</button>
-                    <button class="btn" style="background:#EF4444;" onclick="document.getElementById('detailPanel').style.display='none'">Close</button>
+                    <button class="btn" style="background:#EF4444; border:none; color:white;" onclick="document.getElementById('detailPanel').style.display='none'">Close</button>
                 </div>
             </div>
-            <div style="overflow-x:auto; max-height: 60vh;"><table id="detailTable"></table></div>
+            <div style="overflow-x:auto; max-height: 65vh; border: 1px solid var(--border); border-radius: 12px;"><table id="detailTable"></table></div>
         </div>
     </div>
 
     <script>
-        function toggleTheme() {
-            const root = document.documentElement;
-            const isDark = root.getAttribute('data-theme') === 'dark';
-            const target = isDark ? 'light' : 'dark';
-            root.setAttribute('data-theme', target);
-            localStorage.setItem('nexus_theme', target);
-            document.getElementById('themeBtn').innerText = isDark ? '🌙 Dark Mode' : '☀️ Light Mode';
-        }
-        const savedTheme = localStorage.getItem('nexus_theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
-
+        // Force background refresh to ensure fresh data
         window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
 
         let activeBucket = ''; let activeDetails = []; let radarData = null;
@@ -4000,7 +4000,7 @@ def nexus_dashboard():
             
             if(viewType === 'view-track') {
                 document.getElementById('view-track').style.display = 'block';
-                document.getElementById('view-title').innerText = "Track & Sync";
+                document.getElementById('view-title').innerText = "Global Tracking Matrix";
             } else {
                 document.getElementById('view-radar').style.display = 'block';
                 document.getElementById('view-title').innerText = btn.innerText;
@@ -4010,7 +4010,7 @@ def nexus_dashboard():
 
         async function searchOrders() {
             const q = document.getElementById('searchInput').value; if(!q) return;
-            document.getElementById('tracking-results').innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
+            document.getElementById('tracking-results').innerHTML = '<div style="padding:60px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
             const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
             const data = await r.json(); renderCards(data);
         }
@@ -4019,10 +4019,9 @@ def nexus_dashboard():
             let h = '';
             data.forEach(item => {
                 const isDelivered = item.status.toLowerCase().includes('delivered');
-                // 🚨 DEKHEIN: Yahan par aapke saaray fields wapas add kar diye hain
                 h += `<div class="card track-card">
                     <div class="track-header">
-                        <div class="meta-col"><span class="meta-lbl">Order</span><span class="meta-val" style="color:var(--accent); font-weight:600;">${item.order_id}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">Order</span><span class="meta-val" style="font-weight:800; font-size: 16px;">${item.order_id}</span></div>
                         <div class="meta-col"><span class="meta-lbl">Date</span><span class="meta-val">${item.date}</span></div>
                         <div class="meta-col"><span class="meta-lbl">Source</span><span class="meta-val">${item.source}</span></div>
                         <div class="meta-col"><span class="meta-lbl">Vendor</span><span class="meta-val">${item.vendor}</span></div>
@@ -4037,28 +4036,28 @@ def nexus_dashboard():
                             ${item.tids.map(tid => `
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                                        <span style="font-family:monospace; font-weight:600; font-size:13px;">${tid}</span>
-                                        <button class="btn outline" style="padding:4px 10px; font-size:11px;" onclick="syncShip24('${tid}')">Sync</button>
+                                        <span style="font-family:monospace; font-weight:700; font-size:16px;">${tid}</span>
+                                        <button class="btn outline" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}')">Sync Data</button>
                                     </div>
                                     <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
-                                    <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted)">Pending API Call...</div>
+                                    <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted); font-weight: 500;">Pending Ship24 Call...</div>
                                 </div>
                             `).join('')}
                         </div>
                     </div>
                 </div>`;
             });
-            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted);">No matching orders found.</div>';
+            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted); font-weight:600; padding: 40px; border: 1px dashed var(--border); border-radius: 12px;">No matching records found.</div>';
         }
 
         async function syncShip24(tid) {
             const sid = tid.replace(/\\s/g,'');
-            const log = document.getElementById(`log-${sid}`); log.innerHTML = '<div class="loader" style="width:14px;height:14px"></div>';
+            const log = document.getElementById(`log-${sid}`); log.innerHTML = '<div class="loader" style="width:16px;height:16px; border-width:2px;"></div>';
             const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids:[tid]})});
             const d = (await r.json())[0];
             if(d.success) {
                 document.getElementById(`prog-${sid}`).style.width = d.progress + '%';
-                log.innerHTML = d.events.map(e => `<div style="margin-bottom:8px; padding-left:10px; border-left:2px solid var(--accent);"><b>${e.status}</b><br><span style="color:var(--muted); font-size:11px;">${e.time}</span></div>`).join('');
+                log.innerHTML = d.events.map(e => `<div style="margin-bottom:10px; padding-left:12px; border-left:2px solid #fff;"><b style="color:#fff;">${e.status}</b><br><span style="color:var(--muted); font-size:11px;">${e.time}</span></div>`).join('');
             }
         }
 
@@ -4071,8 +4070,8 @@ def nexus_dashboard():
             order.forEach(src => {
                 const arr = radarData[activeBucket][src] || [];
                 container.innerHTML += `
-                    <div class="card hoverable" onclick="showDetails('${src}')" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-                        <div style="font-weight:600; font-size:14px; text-transform:uppercase;">${src}</div>
+                    <div class="card hoverable" onclick="showDetails('${src}')" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-weight:800; font-size:16px; text-transform:uppercase;">${src}</div>
                         <div style="text-align:right;"><div class="stat-value">${arr.length}</div><div class="stat-label">Orders</div></div>
                     </div>
                 `;
