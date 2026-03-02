@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - CLEAN UI, ICONS & EXACT COLUMNS
+# 🛰️ TID OPERATIONS HUB (NEXUS) - PREMIUM UI, ALL TABS & EXACT COLUMNS
 # ==============================================================================
 import urllib.request
 import csv
@@ -3641,7 +3641,7 @@ NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
 
 NEXUS_SHEET_MAP = {
-    "Kerry":         {"o": 1, "b": 5, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
+    "Kerry":         {"o": 1, "b": 5, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32}, # Kerry box is col 5
     "APX":           {"o": 1, "b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
     "ECL QC Center": {"o": 1, "b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
     "ECL Zone":      {"o": 1, "b": 4, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
@@ -3669,9 +3669,7 @@ def nexus_fetch_sheet_data(url, name):
                 if 'order' in c or 'fleekid' in c or 'orderid' in c or 'shipmentid' in c:
                     start_row = i + 1
                     for j, cell in enumerate(c):
-                        if cell in ['order', 'fleekid', 'orderid', 'shipmentid']:
-                            order_idx = j
-                            break
+                        if cell in ['order', 'fleekid', 'orderid', 'shipmentid']: order_idx = j; break
                     break
 
             processed = []
@@ -3680,7 +3678,7 @@ def nexus_fetch_sheet_data(url, name):
                 p = row + [''] * 60 
                 o_val = str(p[order_idx]).strip()
                 
-                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', '#n/a', 'order', 'orderid']: 
+                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan']: 
                     continue
 
                 def get_v(col_num):
@@ -3688,18 +3686,12 @@ def nexus_fetch_sheet_data(url, name):
                     return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
 
                 processed.append({
-                    'order': o_val, 
-                    'date': get_v(col['d']), 
-                    'boxes': get_v(col['b']),
-                    'weight': get_v(col['w']), 
-                    'vendor': get_v(col['v']), 
-                    'customer': get_v(col['c']),
-                    'country': get_v(col['cn']), 
-                    'tid': get_v(col['t']), 
-                    'mawb': get_v(col['ma'])
+                    'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
+                    'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
+                    'country': get_v(col['cn']), 'tid': get_v(col['t']), 'mawb': get_v(col['ma'])
                 })
             return processed
-    except Exception as e: return []
+    except: return []
 
 def nexus_clean_tids(raw):
     raw = str(raw).strip()
@@ -3734,7 +3726,7 @@ def nexus_fetch_kerry_status(url):
                     o = str(p[0]).strip().lower()
                     if o: s_map[o] = str(p[s_col]).strip().upper()
             return s_map
-    except Exception as e: return {}
+    except: return {}
 
 def nexus_parse_date(date_str):
     try:
@@ -3827,13 +3819,10 @@ def api_nexus_ship24():
 @app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
     sheets_data, kerry_data = nexus_sync_db()
-    # SIRF HANDED OVER KA BUCKET RAKHA HAI TAQAY FAST CHALAY
     buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES} }
-    
     for src, rows in sheets_data.items():
         for r in rows:
-            dt_str = r['date']
-            dt_obj = nexus_parse_date(dt_str)
+            dt_obj = nexus_parse_date(r['date'])
             if dt_obj and dt_obj < NEXUS_FILTER_DATE: continue
             
             oid = r['order']
@@ -3843,21 +3832,45 @@ def api_nexus_radar_data():
             tids = nexus_clean_tids(r['tid'])
             has_tid = len(tids) > 0
             
-            r_d = { "Order": oid.upper(), "Date": dt_str, "Vendor": r['vendor'], "Customer": r['customer'], "Boxes": r['boxes'], "Weight": r['weight'], "TID": ", ".join(tids) if has_tid else "MISSING", "MAWB": r['mawb'], "Status": kerry_stat }
-            
             if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and has_tid:
-                buckets["handed_over"][src].append(r_d)
-            
+                buckets["handed_over"][src].append({ "Order": oid.upper(), "Date": r['date'], "Vendor": r['vendor'], "Customer": r['customer'], "Boxes": r['boxes'], "Weight": r['weight'], "TID": ", ".join(tids), "MAWB": r['mawb'], "Status": kerry_stat })
     return jsonify(buckets)
 
+@app.route('/api/nexus/ops_commander', methods=['GET'])
+def api_nexus_ops_commander():
+    sheets_data, kerry_data = nexus_sync_db()
+    blame_radar = []
+    missing_text = "Hi Kerry Team,\nThe following orders have been Handed Over but are missing Tracking IDs. Kindly update ASAP:\n\n"
+    count = 1
+    
+    for src, rows in sheets_data.items():
+        for r in rows:
+            dt_obj = nexus_parse_date(r['date'])
+            if not dt_obj or dt_obj < NEXUS_FILTER_DATE: continue
+            
+            oid = r['order']
+            k_stat = kerry_data.get(oid.lower(), "PENDING")
+            has_tid = len(nexus_clean_tids(r['tid'])) > 0
+            days = (datetime.now() - dt_obj).days if dt_obj else 0
+            
+            if k_stat == "HANDED OVER TO LOGISTICS PARTNER" and not has_tid and days > 1:
+                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Missing TID", "aging": f"{days} Days", "blame": "Kerry Logistics"})
+                missing_text += f"{count}. Order: {oid.upper()} | Date: {r['date']} | Source: {src}\n"
+                count += 1
+            elif k_stat in ["QC PENDING", "CREATED", "ACCEPTED"] and days > 2:
+                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Stuck in QC", "aging": f"{days} Days", "blame": f"{src} Operations"})
+    
+    if count == 1: missing_text = "All good! No missing TIDs currently."
+    return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
+
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI (BEAUTIFIED & CLEANED UP)
+# 4. FRONTEND UI (PURE BLACK DESIGN + TABS + ICONS)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
 def nexus_dashboard():
     return render_template_string('''
-    <!DOCTYPE html><html lang="en">
+    <!DOCTYPE html><html lang="en" data-theme="dark">
     <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -3867,6 +3880,11 @@ def nexus_dashboard():
             --accent: #FFFFFF; --btn-bg: #FFFFFF; --btn-text: #000000;
             --shadow: 0 10px 30px -10px rgba(0,0,0,0.8); --badge-bg: #1A1A1A; --badge-text: #FAFAFA; --input-bg: #050505;
         }
+        [data-theme="light"] { 
+            --bg: #F8F9FB; --card: #FFFFFF; --border: #E5E7EB; --text: #111827; --muted: #6B7280; 
+            --accent: #111827; --btn-bg: #111827; --btn-text: #FFFFFF;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); --badge-bg: #F3F4F6; --badge-text: #111827; --input-bg: #FFFFFF;
+        }
 
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; overflow: hidden;}
         * { box-sizing: border-box; }
@@ -3874,16 +3892,16 @@ def nexus_dashboard():
         .app-container { display: flex; height: 100vh; width: 100vw; flex-direction: column; }
         .topbar { height: 64px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; z-index: 10;}
         .brand { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px;}
+        .theme-toggle { background: var(--input-bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.2s;}
         
         .main-wrapper { display: flex; flex: 1; overflow: hidden; }
         .sidebar { width: 260px; background: var(--bg); border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; gap: 8px;}
-        .nav-item { padding: 14px 18px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; border: none; background: transparent; text-align: left; transition: 0.2s; display: flex; align-items: center; gap: 12px;}
+        .nav-item { padding: 14px 18px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; border: none; background: transparent; text-align: left; transition: 0.2s; display: flex; align-items: center;}
         .nav-item:hover { color: var(--text); background: var(--card); }
         .nav-item.active { background: var(--card); color: var(--accent); border: 1px solid var(--border); }
         
         .viewport { flex: 1; padding: 40px 50px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: var(--shadow); }
-        .card.hoverable:hover { border-color: #333; cursor: pointer;}
         
         .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; transition: 0.2s;}
         .btn:hover { opacity: 0.8; transform: translateY(-1px);}
@@ -3903,7 +3921,7 @@ def nexus_dashboard():
         .track-card { border-radius: 16px; overflow: hidden; margin-bottom: 24px; padding: 0; border: 1px solid var(--border);}
         .track-header { padding: 24px 30px; border-bottom: 1px solid var(--border); background: var(--input-bg); display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 20px;}
         .meta-col { display: flex; flex-direction: column; gap: 6px; }
-        .meta-lbl { font-size: 11px; color: var(--muted); font-weight: 600; display:flex; align-items:center; gap: 6px;}
+        .meta-lbl { font-size: 11px; color: var(--muted); font-weight: 700; display:flex; align-items:center; gap: 6px; text-transform:uppercase;}
         .meta-val { font-size: 14px; font-weight: 600;}
         
         .tid-area { padding: 30px; background: var(--card);}
@@ -3926,13 +3944,15 @@ def nexus_dashboard():
     <div class="app-container">
         <header class="topbar">
             <div class="brand">🛰️ NEXUS HUB</div>
-            <div style="font-size: 12px; color: var(--muted); font-weight: 600;">Operations Tracker</div>
+            <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
         </header>
         <div class="main-wrapper">
             <aside class="sidebar">
-                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Menu</div>
+                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Operations</div>
                 <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
+                <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct Track</button>
                 <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over</button>
+                <button class="nav-item" onclick="navSwitch(this, 'view-ops')">⚡ Ops Commander</button>
                 <div style="flex:1"></div>
                 <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
             </aside>
@@ -3949,10 +3969,29 @@ def nexus_dashboard():
                     </div>
                     <div id="tracking-results"></div>
                 </div>
+
+                <div id="view-direct" class="view-pane" style="display:none;">
+                    <div class="card" style="margin-bottom: 30px;">
+                        <textarea id="directInput" placeholder="Paste multiple Carrier TIDs here directly..."></textarea>
+                        <div style="margin-top: 20px; display: flex; gap: 16px;">
+                            <button class="btn" onclick="directTrackTIDs()">Track TIDs Now</button>
+                            <button class="btn outline" onclick="document.getElementById('directInput').value=''; document.getElementById('direct-results').innerHTML='';">Clear</button>
+                        </div>
+                    </div>
+                    <div id="direct-results" style="display:flex; flex-direction:column; gap:16px;"></div>
+                </div>
                 
                 <div id="view-radar" class="view-pane" style="display:none;">
                     <div id="loader" style="display:none; padding:60px; text-align:center;"><div class="loader" style="margin:auto"></div></div>
                     <div id="radar-container" class="radar-grid"></div>
+                </div>
+
+                <div id="view-ops" class="view-pane" style="display:none;">
+                    <div id="ops-loader" style="display:none; padding:60px; text-align:center;"><div class="loader" style="margin:auto"></div></div>
+                    <div id="ops-content" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; display:none;">
+                        <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">🚨 Aging Blame</h3><div style="max-height:400px; overflow-y:auto"><table id="blameTable"></table></div></div>
+                        <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">📲 Follow-up Bot</h3><textarea id="followupText" style="min-height:300px; border:none; background:var(--bg);" readonly></textarea><button class="btn" style="width:100%; margin-top:16px;" onclick="copyFollowup()">Copy Text</button></div>
+                    </div>
                 </div>
             </main>
         </div>
@@ -3972,7 +4011,20 @@ def nexus_dashboard():
     </div>
 
     <script>
+        function toggleTheme() {
+            const root = document.documentElement;
+            const isDark = root.getAttribute('data-theme') === 'dark';
+            const target = isDark ? 'light' : 'dark';
+            root.setAttribute('data-theme', target);
+            localStorage.setItem('nexus_theme', target);
+            document.getElementById('themeBtn').innerText = isDark ? '🌙 Dark Mode' : '☀️ Light Mode';
+        }
+        const savedTheme = localStorage.getItem('nexus_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+
         window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
+
         let activeBucket = ''; let activeDetails = []; let radarData = null;
 
         function navSwitch(btn, viewType) {
@@ -3983,6 +4035,13 @@ def nexus_dashboard():
             if(viewType === 'view-track') {
                 document.getElementById('view-track').style.display = 'block';
                 document.getElementById('view-title').innerText = "Global Tracking Matrix";
+            } else if(viewType === 'view-direct') {
+                document.getElementById('view-direct').style.display = 'block';
+                document.getElementById('view-title').innerText = "Direct TID Tracker";
+            } else if(viewType === 'view-ops') {
+                document.getElementById('view-ops').style.display = 'block';
+                document.getElementById('view-title').innerText = "Ops Commander";
+                loadOps();
             } else {
                 document.getElementById('view-radar').style.display = 'block';
                 document.getElementById('view-title').innerText = btn.innerText.replace('📦 ', '');
@@ -4001,17 +4060,16 @@ def nexus_dashboard():
             let h = '';
             data.forEach(item => {
                 const isDelivered = item.status.toLowerCase().includes('delivered');
-                // ICONS ADDED TO ALL FIELDS!
                 h += `<div class="card track-card">
                     <div class="track-header">
-                        <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:800; font-size: 16px;">${item.order_id}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:800; font-size: 16px; color: var(--accent);">${item.order_id}</span></div>
                         <div class="meta-col"><span class="meta-lbl">📅 Date</span><span class="meta-val">${item.date}</span></div>
                         <div class="meta-col"><span class="meta-lbl">🏢 Source</span><span class="meta-val">${item.source}</span></div>
                         <div class="meta-col"><span class="meta-lbl">🏭 Vendor</span><span class="meta-val">${item.vendor}</span></div>
                         <div class="meta-col"><span class="meta-lbl">👤 Customer</span><span class="meta-val">${item.customer}</span></div>
                         <div class="meta-col"><span class="meta-lbl">🌍 Country</span><span class="meta-val">${item.country}</span></div>
                         <div class="meta-col"><span class="meta-lbl">📦 Boxes/Wgt</span><span class="meta-val">${item.boxes} / ${item.weight}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">✈️ MAWB</span><span class="meta-val">${item.mawb}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">✈️ MAWB</span><span class="meta-val" style="font-family:monospace;">${item.mawb}</span></div>
                         <div class="meta-col"><span class="meta-lbl">🚦 Status</span><span class="badge ${isDelivered?'success':''}">${item.status}</span></div>
                     </div>
                     <div class="tid-area">
@@ -4019,11 +4077,11 @@ def nexus_dashboard():
                             ${item.tids.map(tid => `
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                                        <span style="font-family:monospace; font-weight:700; font-size:16px;">${tid}</span>
+                                        <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
                                         <button class="btn outline" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}')">🚢 Track API</button>
                                     </div>
                                     <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
-                                    <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted); font-weight: 500;">Pending API Call...</div>
+                                    <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted); font-weight: 600;">Pending API Call...</div>
                                 </div>
                             `).join('')}
                         </div>
@@ -4033,6 +4091,24 @@ def nexus_dashboard():
             document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted); font-weight:600; padding: 40px; border: 1px dashed var(--border); border-radius: 12px;">No matching records found.</div>';
         }
 
+        async function directTrackTIDs() {
+            let val = document.getElementById('directInput').value; if(!val) return;
+            let tids = val.split(/[\\n,\\t \\/]+/).map(t => t.trim()).filter(Boolean);
+            tids = tids.map(t => (t.startsWith('150') && t.length >= 12 && t.length <= 15) ? '0' + t : t);
+            let h = '';
+            tids.forEach(tid => {
+                h += `<div class="tid-box" style="width:100%;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
+                            <button class="btn outline" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}')">🚢 Track API</button>
+                        </div>
+                        <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
+                        <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted); font-weight: 600;">Pending API Call...</div>
+                      </div>`;
+            });
+            document.getElementById('direct-results').innerHTML = h;
+        }
+
         async function syncShip24(tid) {
             const sid = tid.replace(/\\s/g,'');
             const log = document.getElementById(`log-${sid}`); log.innerHTML = '<div class="loader" style="width:16px;height:16px; border-width:2px;"></div>';
@@ -4040,7 +4116,7 @@ def nexus_dashboard():
             const d = (await r.json())[0];
             if(d.success) {
                 document.getElementById(`prog-${sid}`).style.width = d.progress + '%';
-                log.innerHTML = d.events.map(e => `<div style="margin-bottom:10px; padding-left:12px; border-left:2px solid #fff;"><b style="color:#fff;">${e.status}</b><br><span style="color:var(--muted); font-size:11px;">${e.time}</span></div>`).join('');
+                log.innerHTML = d.events.map(e => `<div style="margin-bottom:10px; padding-left:12px; border-left:2px solid #fff;"><b style="color:var(--text);">${e.status}</b><br><span style="color:var(--muted); font-size:11px;">${e.time}</span></div>`).join('');
             }
         }
 
@@ -4060,6 +4136,21 @@ def nexus_dashboard():
                 `;
             });
         }
+
+        async function loadOps() {
+            document.getElementById('ops-content').style.display = 'none';
+            document.getElementById('ops-loader').style.display = 'block';
+            const r = await fetch('/api/nexus/ops_commander'); const data = await r.json();
+            document.getElementById('followupText').value = data.missing_text;
+            let t = '<thead><tr><th>Order</th><th>Source</th><th>Issue</th><th>Aging</th></tr></thead><tbody>';
+            if(!data.blame_radar.length) t += '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--muted)">All Good! 🎉</td></tr>';
+            else data.blame_radar.forEach(b => t += `<tr><td><b>${b.order}</b></td><td>${b.source}</td><td>${b.issue}</td><td style="color:#ef4444; font-weight:700">${b.aging}</td></tr>`);
+            document.getElementById('blameTable').innerHTML = t + '</tbody>';
+            document.getElementById('ops-content').style.display = 'grid';
+            document.getElementById('ops-loader').style.display = 'none';
+        }
+        
+        function copyFollowup() { navigator.clipboard.writeText(document.getElementById('followupText').value); alert("Copied to clipboard!"); }
 
         function showDetails(src) {
             activeDetails = radarData[activeBucket][src]; if(!activeDetails || activeDetails.length === 0) return;
