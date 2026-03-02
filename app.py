@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% COMPLETE & UNBREAKABLE EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% UNBREAKABLE SUBSTRING EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -3613,8 +3613,15 @@ from flask import jsonify, request, session, render_template_string, redirect
 from functools import wraps
 
 # ------------------------------------------------------------------------------
-# 1. CORE DATA SOURCES
+# 1. SECURITY & DATA SOURCES
 # ------------------------------------------------------------------------------
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'role' not in session: return redirect('/')
+        return f(*args, **kwargs)
+    return decorated_function
+
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
     "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
@@ -3626,24 +3633,10 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. THE MATHEMATICAL HEADER ENGINE (Fix for GE Zone & ALL Sheets)
+# 2. BULLETPROOF DATA ENGINE
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
-
-# EXACT headers map (Includes GE Zone 'noofpieces' & APX/Kerry variations)
-EXACT_MAP = {
-    'order': ['order', 'fleekid', 'orderid'],
-    'date': ['fleekhandoverdate', 'airporthandoverdate', 'date', 'qcdate', 'handoverdate'],
-    'boxes': ['noofboxes', 'numberofboxes', 'boxcount', 'boxes', 'box', 'qty'],
-    'weight': ['chargeableweight', 'chargeableweightkg', 'noofpieces', 'pieces', 'weight', 'actualweight'],
-    'vendor': ['vendorname', 'vendor'],
-    'customer': ['customername', 'customer', 'consignee'],
-    'country': ['country', 'destination'],
-    'tid': ['trackingid', 'tracking', 'tid', 'awbnumber'],
-    'mawb': ['mawb', 'mawbflight', 'kerrymawbnumber', 'masterawb'],
-    'status': ['lateststatus', 'status']
-}
 
 def fetch_and_map_csv(url):
     try:
@@ -3653,55 +3646,70 @@ def fetch_and_map_csv(url):
             data = list(csv.reader(raw))
             if not data: return []
 
-            # 🚨 ULTRA-SMART HEADER DETECTOR (Scans first 30 rows dynamically)
+            # Find real headers by scanning first 15 rows
             header_idx = 0
-            max_score = 0
-            valid_keywords = [word for sublist in EXACT_MAP.values() for word in sublist]
-
-            for i, row in enumerate(data[:30]):
-                norm_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
-                score = sum(1 for c in norm_row if c in valid_keywords)
-                if score > max_score:
-                    max_score = score
+            for i, row in enumerate(data[:15]):
+                row_str = " ".join(str(x).lower() for x in row)
+                if 'order' in row_str and ('vendor' in row_str or 'customer' in row_str or 'tracking' in row_str):
                     header_idx = i
+                    break
 
-            if max_score < 3: return [] # Failsafe
-
-            headers = [re.sub(r'[^a-z0-9]', '', str(h).lower()) for h in data[header_idx]]
+            headers = data[header_idx]
             processed = []
             
             for row in data[header_idx+1:]:
                 if not any(str(x).strip() for x in row): continue
                 
-                r_dict = {k: "N/A" for k in EXACT_MAP.keys()}
+                r_dict = {'order':'N/A', 'date':'N/A', 'boxes':'N/A', 'weight':'N/A', 'vendor':'N/A', 'customer':'N/A', 'country':'N/A', 'tid':'N/A', 'mawb':'N/A', 'status':'N/A'}
                 row_padded = row + [''] * max(0, len(headers) - len(row))
                 
                 for h_idx, h in enumerate(headers):
                     val = str(row_padded[h_idx]).strip()
                     if not val or val.lower() in ['n/a', 'nan', '#n/a', '-']: continue
                     
-                    for key, variations in EXACT_MAP.items():
-                        if h in variations and r_dict[key] == "N/A":
-                            r_dict[key] = val
-                            break
-                            
+                    # Indestructible Substring Matching!
+                    h_clean = re.sub(r'[^a-z0-9]', '', str(h).lower())
+                    if not h_clean: continue
+                    
+                    if 'order' in h_clean or 'fleekid' in h_clean:
+                        if r_dict['order'] == 'N/A': r_dict['order'] = val
+                    elif 'date' in h_clean:
+                        if r_dict['date'] == 'N/A': r_dict['date'] = val
+                    elif 'box' in h_clean or 'qty' in h_clean:
+                        if r_dict['boxes'] == 'N/A': r_dict['boxes'] = val
+                    elif 'weight' in h_clean or 'kg' in h_clean or 'pieces' in h_clean:
+                        if r_dict['weight'] == 'N/A': r_dict['weight'] = val
+                    elif 'vendor' in h_clean or 'seller' in h_clean:
+                        if r_dict['vendor'] == 'N/A': r_dict['vendor'] = val
+                    elif 'customer' in h_clean or 'consignee' in h_clean:
+                        if r_dict['customer'] == 'N/A': r_dict['customer'] = val
+                    elif 'country' in h_clean or 'dest' in h_clean:
+                        if r_dict['country'] == 'N/A': r_dict['country'] = val
+                    elif 'tracking' in h_clean or 'tid' in h_clean or 'awbnumber' in h_clean:
+                        if r_dict['tid'] == 'N/A': r_dict['tid'] = val
+                    elif 'mawb' in h_clean or 'master' in h_clean:
+                        if r_dict['mawb'] == 'N/A': r_dict['mawb'] = val
+                    elif 'status' in h_clean:
+                        if r_dict['status'] == 'N/A': r_dict['status'] = val
+                        
                 processed.append(r_dict)
             return processed
-    except Exception as e:
+    except:
         return []
 
 def parse_date(date_str):
     if not date_str or date_str == 'N/A': return None
     try:
+        d_str = date_str.split(' ')[0]
         for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%b-%y', '%Y/%m/%d', '%d-%m-%Y'):
-            try: return datetime.strptime(date_str.split(' ')[0], fmt)
+            try: return datetime.strptime(d_str, fmt)
             except: continue
     except: pass
     if '2026' in date_str or '26' in date_str: return datetime(2026, 1, 1)
     return datetime(1970, 1, 1)
 
 def clean_tids(raw_tid):
-    parts = [t.strip() for t in re.split(r'[\n,\/]+', str(raw_tid)) if t.strip() and t.strip()!='N/A']
+    parts = [t.strip() for t in re.split(r'[\n,\/]+', str(raw_tid)) if t.strip() and t.strip().lower()!='n/a']
     return ['0' + t if (t.startswith('150') and 12 <= len(t) <= 15) else t for t in parts]
 
 def force_sync_all_databases():
@@ -3723,7 +3731,7 @@ def force_sync_all_databases():
     GLOBAL_DB_CACHE['loaded'] = True
 
 # ------------------------------------------------------------------------------
-# 3. FLOATING BUTTON INJECTOR FOR MAIN DASHBOARD
+# 3. FLOATING BUTTON INJECTOR
 # ------------------------------------------------------------------------------
 @app.after_request
 def inject_nexus_button(response):
@@ -3934,7 +3942,7 @@ def nexus_dashboard():
                 <div class="sync-overlay" id="syncOverlay">
                     <div class="loader" style="width: 50px; height: 50px; margin-bottom:20px;"></div>
                     <h2 style="margin:0;">Fetching Live Data...</h2>
-                    <p style="color:var(--muted); margin-top:10px;">Please wait.</p>
+                    <p style="color:var(--muted); margin-top:10px;">Please wait 5-8 seconds.</p>
                 </div>
 
                 <div id="view-track">
@@ -4079,7 +4087,7 @@ def nexus_dashboard():
         async function syncShip24(tid, btn) {
             const sid = tid.replace(/[\\s\\/]+/g,'');
             const log = document.getElementById(`log-${sid}`) || btn.nextElementSibling; 
-            btn.innerHTML = '...';
+            btn.innerHTML = '<div class="loader" style="width:12px;height:12px;border-top-color:#fff;"></div>';
             
             try {
                 const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids:[tid]})});
@@ -4197,11 +4205,10 @@ def nexus_dashboard():
     ''')
 
 # ==============================================================================
-# IMPORTANT: DO NOT ADD app.run() OR app = Flask(__name__) DOWN HERE IF YOU 
-# ALREADY HAVE IT AT THE BOTTOM OF YOUR ORIGINAL 3000 LINE CODE! 
-# IF YOUR ORIGINAL CODE DOES NOT HAVE IT, UNCOMMENT THE 2 LINES BELOW:
+# KEEP THIS AT THE VERY END OF YOUR ENTIRE FILE
 # ==============================================================================
-# if __name__ == '__main__':
-#     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), debug=True)
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
 if __name__ == '__main__':
     app.run(debug=True)
