@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 50-COLUMN SCANNER & PREMIUM UI EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - MASHED TIDs FIX & PREMIUM UI
 # ==============================================================================
 import urllib.request
 import csv
@@ -3618,8 +3618,7 @@ from functools import wraps
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'role' not in session:
-            return redirect('/')
+        if 'role' not in session: return redirect('/')
         return f(*args, **kwargs)
     return decorated_function
 
@@ -3637,24 +3636,24 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 3. 🚨 50-COLUMN SMART MAPPER (Finds Kerry MAWB at Col 31 easily) 🚨
+# 3. 🚨 EXACT INDEX FINDER (Working Logic Maintained) 🚨
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
-HEADER_VARIANTS = {
-    'order': ['order', 'fleekid', 'orderid'],
-    'date': ['fleekhandoverdate', 'airporthandoverdate', 'date', 'handoverdate', 'qcdate'],
-    'boxes': ['noofboxes', 'numberofboxes', 'boxcount', 'boxes', 'box', 'qty'],
-    'weight': ['chargeableweightkg', 'chargeableweight', 'actualweight', 'noofpieces', 'pieces', 'weight', 'kg'],
-    'vendor': ['vendorname', 'vendor', 'seller'],
-    'customer': ['customername', 'customer', 'consignee', 'receiver'],
-    'country': ['country', 'destination', 'dest'],
-    'tid': ['trackingid', 'tracking', 'tid', 'awbnumber', 'couriertrackingid'],
-    'mawb': ['kerrymawbnumber', 'mawbflight', 'mawb', 'masterawb', 'master']
+COL_ALIASES = {
+    'order': ['order', 'fleekid'],
+    'date': ['fleekhandoverdate', 'airporthandoverdate', 'date'],
+    'boxes': ['noofboxes', 'qty', 'box'],
+    'weight': ['chargeableweight', 'chargeableweightkg', 'noofpieces', 'weight'],
+    'vendor': ['vendorname', 'vendor'],
+    'customer': ['customername', 'customer'],
+    'country': ['country'],
+    'tid': ['trackingid', 'tracking'],
+    'mawb': ['mawb', 'mawbflight', 'kerrymawbnumber']
 }
 
-def fetch_sheet_data(url):
+def fetch_and_map_csv(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=20) as res:
@@ -3662,54 +3661,42 @@ def fetch_sheet_data(url):
             data = list(csv.reader(raw))
             if not data: return []
 
+            cleaned_data = []
+            for row in data:
+                cleaned_data.append([re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row])
+            
             header_idx = -1
             col_map = {}
             
-            # Scan first 30 rows to find header
-            for i, row in enumerate(data[:30]):
-                if not row: continue
-                c_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
-                
-                # Header must have 'order' and at least one other major field
-                has_order = any(o in c_row for o in HEADER_VARIANTS['order'])
-                has_other = any(o in c_row for o in HEADER_VARIANTS['vendor'] + HEADER_VARIANTS['tid'] + HEADER_VARIANTS['mawb'])
-                
-                if has_order and has_other:
+            for i, c_row in enumerate(cleaned_data[:50]):
+                if 'order' in c_row and ('vendorname' in c_row or 'trackingid' in c_row or 'customername' in c_row):
                     header_idx = i
                     for j, cell in enumerate(c_row):
-                        for key, variants in HEADER_VARIANTS.items():
-                            if cell in variants and key not in col_map:
+                        for key, aliases in COL_ALIASES.items():
+                            if cell in aliases:
                                 col_map[key] = j
-                                break
                     break
                     
             if header_idx == -1: return []
 
             processed = []
             for row in data[header_idx+1:]:
-                # Ignore completely empty rows
-                if not row or not any(str(x).strip() for x in row): continue
+                if not any(str(x).strip() for x in row): continue
                 
-                # 🚨 FIX FOR KERRY: Pad the row to 50 columns so Col 31 (MAWB) doesn't cause an error
-                row_padded = row + [''] * max(0, 50 - len(row))
-                
-                # Verify Order ID exists
-                order_col_idx = col_map.get('order')
-                if order_col_idx is None: continue
-                
-                o_val = str(row_padded[order_col_idx]).strip()
-                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a', '-']: continue
-
+                row_padded = row + [''] * 30 
                 r_dict = {}
-                for key in HEADER_VARIANTS.keys():
+                
+                for key in COL_ALIASES.keys():
                     idx = col_map.get(key)
-                    if idx is not None and idx < len(row_padded):
+                    if idx is not None:
                         val = str(row_padded[idx]).strip()
                         r_dict[key] = val if val and val.lower() not in ['n/a', 'nan', '#n/a', '-'] else "N/A"
                     else:
                         r_dict[key] = "N/A"
-                        
-                processed.append(r_dict)
+                
+                if r_dict['order'] != "N/A":
+                    processed.append(r_dict)
+                    
             return processed
     except Exception as e:
         return []
@@ -3725,24 +3712,22 @@ def fetch_kerry_status(url):
             header_idx, order_col, status_col = -1, -1, -1
             for i, row in enumerate(data[:20]):
                 c_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
-                if 'order' in c_row or 'fleekid' in c_row:
+                if 'order' in c_row and ('lateststatus' in c_row or 'status' in c_row):
                     header_idx = i
-                    for j, c in enumerate(c_row):
-                        if c in ['order', 'fleekid']: order_col = j
-                        elif 'status' in c or 'lateststatus' in c: status_col = j
+                    order_col = c_row.index('order')
+                    status_col = c_row.index('lateststatus') if 'lateststatus' in c_row else c_row.index('status')
                     break
                     
-            if header_idx == -1 or order_col == -1 or status_col == -1: return {}
+            if header_idx == -1: return {}
             
             s_map = {}
             for row in data[header_idx+1:]:
-                # Pad to 50 to avoid out of index error
-                row_padded = row + [''] * max(0, 50 - len(row))
+                row_padded = row + [''] * 30
                 o = str(row_padded[order_col]).strip().lower()
                 s = str(row_padded[status_col]).strip().upper()
                 if o and o != 'n/a': s_map[o] = s
             return s_map
-    except: 
+    except:
         return {}
 
 def parse_date(date_str):
@@ -3755,15 +3740,45 @@ def parse_date(date_str):
     if '2026' in date_str or '26' in date_str: return datetime(2026, 1, 1)
     return datetime(1970, 1, 1)
 
+# 🚨 MAGIC FIX: Splits TIDs even if they are mashed together without spaces/commas!
 def clean_tids(raw_tid):
-    parts = [t.strip() for t in re.split(r'[\n,\/]+', str(raw_tid)) if t.strip() and t.strip().lower() != 'n/a']
-    return ['0' + t if (t.startswith('150') and 12 <= len(t) <= 15) else t for t in parts]
+    raw_tid = str(raw_tid).strip()
+    if raw_tid.lower() in ['pending', 'none', 'n/a', '']: return []
+    
+    parts = []
+    # Agar delimiters hain tou normal split karo
+    if any(delim in raw_tid for delim in [',', '/', ' ', '\n', '\t']):
+        parts = [t.strip() for t in re.split(r'[\n,\/\s]+', raw_tid) if t.strip()]
+    else:
+        # Agar chipkay hue hain aur lambay hain (e.g. 15503235454815U15503235454816S)
+        if len(raw_tid) > 15:
+            # Har ABCD letter ke baad isko kaat do
+            if re.search(r'[A-Za-z]', raw_tid):
+                parts = [p for p in re.split(r'(?<=[a-zA-Z])', raw_tid) if p.strip()]
+            elif len(raw_tid) % 15 == 0: # Ya 15-15 ke hissay kar do
+                parts = [raw_tid[i:i+15] for i in range(0, len(raw_tid), 15)]
+            else:
+                parts = [raw_tid]
+        else:
+            parts = [raw_tid]
+
+    # Final padding (150 add karna)
+    final_tids = []
+    for t in parts:
+        t = re.sub(r'[^a-zA-Z0-9]', '', t)
+        if not t: continue
+        if t.startswith('150') and 12 <= len(t) <= 15: 
+            final_tids.append('0' + t)
+        else: 
+            final_tids.append(t)
+            
+    return final_tids
 
 def force_sync_all_databases():
     global GLOBAL_DB_CACHE
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        f_to_name = {executor.submit(fetch_sheet_data, url): name for name, url in NEXUS_SOURCES.items()}
+        f_to_name = {executor.submit(fetch_and_map_csv, url): name for name, url in NEXUS_SOURCES.items()}
         f_kerry = executor.submit(fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
         
         for future in concurrent.futures.as_completed(f_to_name):
@@ -4336,9 +4351,9 @@ def nexus_dashboard():
     </body></html>
     ''')
 
+# ==============================================================================
+# KEEP THIS AT THE VERY END OF YOUR ENTIRE FILE
+# ==============================================================================
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
