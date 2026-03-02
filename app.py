@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - FIXED 404, EXACT COLUMNS & TID SPLITTER
+# 🛰️ TID OPERATIONS HUB (NEXUS) - SAFE APPEND EDITION (WON'T BREAK MAIN APP)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3610,6 +3610,7 @@ import os
 import concurrent.futures
 from datetime import datetime
 from flask import jsonify, request, session, render_template_string, redirect
+from functools import wraps
 
 # ------------------------------------------------------------------------------
 # 1. CORE DATA SOURCES
@@ -3625,7 +3626,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. 🚨 HARDCODED EXACT COLUMN ENGINE (No Guesswork!) 🚨
+# 2. 🚨 HARDCODED EXACT COLUMN ENGINE 🚨
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
@@ -3638,6 +3639,7 @@ def fetch_sheet_data(url, src_name):
             data = list(csv.reader(raw))
             if not data: return []
 
+            # Find the header row
             header_idx = -1
             for i, row in enumerate(data[:50]):
                 if not row: continue
@@ -3648,13 +3650,13 @@ def fetch_sheet_data(url, src_name):
                     
             if header_idx == -1: return []
 
-            # Default Index (0-based)
+            # Default Column mapping (0-based Index)
             col_map = {
                 'order': 0, 'date': 1, 'boxes': 2, 'weight': 3, 'vendor': 4,
                 'customer': 5, 'country': 6, 'tid': 7, 'mawb': 8
             }
 
-            # 🚨 AAPKE BATAYE GAYE EXACT COLUMN NUMBERS 🚨
+            # 🚨 YOUR SPECIFIC COLUMN OVERRIDES 🚨
             if src_name == "GE Zone":
                 col_map['date'] = 1      # Column 2
             elif src_name == "ECL Zone":
@@ -3671,7 +3673,7 @@ def fetch_sheet_data(url, src_name):
                 o_val = str(row[0]).strip()
                 if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a', '-']: continue
 
-                # Pad row to 50 columns to prevent "Index Out of Range"
+                # Pad row to prevent Index Out of Range error
                 row_padded = row + [''] * max(0, 50 - len(row))
                 
                 def get_val(key):
@@ -3735,24 +3737,22 @@ def parse_date(date_str):
     return datetime(1970, 1, 1)
 
 # ------------------------------------------------------------------------------
-# 🚨 CHIPKI HUI TIDs KA AI SPLITTER 🚨
+# 🚨 MASHED TID SPLITTER 🚨
 # ------------------------------------------------------------------------------
 def clean_tids(raw_tid):
     raw_tid = str(raw_tid).strip()
     if raw_tid.lower() in ['pending', 'none', 'n/a', '']: return []
     
     parts = []
-    # Agar comma ya slash hai tou normal split
+    # Regular split if comma/spaces exist
     if any(delim in raw_tid for delim in [',', '/', ' ', '\n', '\t']):
         parts = [t.strip() for t in re.split(r'[\n,\/\s]+', raw_tid) if t.strip()]
     else:
-        # Agar chipki hui hain (Mashed), tou usko todna hai
+        # Split glued/mashed TIDs automatically based on Letters
         if len(raw_tid) > 15:
             if re.search(r'[A-Za-z]', raw_tid):
-                # Har English letter ke baad tod do (jaise 1550...U ko alag)
                 parts = [p for p in re.split(r'(?<=[a-zA-Z])', raw_tid) if p.strip()]
             elif len(raw_tid) % 15 == 0:
-                # Agar sirf numbers hain tou 15-15 ke hissay kar do
                 parts = [raw_tid[i:i+15] for i in range(0, len(raw_tid), 15)]
             else:
                 parts = [raw_tid]
@@ -3790,7 +3790,7 @@ def force_sync_all_databases():
     GLOBAL_DB_CACHE['loaded'] = True
 
 # ------------------------------------------------------------------------------
-# 3. FLOATING BUTTON INJECTOR FOR MAIN DASHBOARD
+# 3. FLOATING BUTTON INJECTOR
 # ------------------------------------------------------------------------------
 @app.after_request
 def inject_nexus_button(response):
@@ -3804,6 +3804,7 @@ def inject_nexus_button(response):
 # ------------------------------------------------------------------------------
 # 4. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
+
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
     force_sync_all_databases()
@@ -3925,7 +3926,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 5. FRONTEND HTML (Hosted at "/nexus")
+# 5. FRONTEND HTML (Hosted securely at /nexus to protect your main app)
 # ------------------------------------------------------------------------------
 @app.route('/nexus')
 def nexus_dashboard():
@@ -4024,7 +4025,7 @@ def nexus_dashboard():
                 <div class="sync-overlay" id="syncOverlay">
                     <div class="loader" style="width: 50px; height: 50px; margin-bottom:20px; border-top-color:#fff;"></div>
                     <h2 style="margin:0;">Fetching Live Data...</h2>
-                    <p style="color:#aaa; margin-top:10px;">Loading exact columns. Please wait 5-8 seconds.</p>
+                    <p style="color:#aaa; margin-top:10px;">Scanning exact columns. Please wait 5-8 seconds.</p>
                 </div>
 
                 <div id="view-track">
