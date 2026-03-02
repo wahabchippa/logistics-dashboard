@@ -3836,7 +3836,33 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI (WITH LIFETIME FREE WIDGET)
+# 4. DIRECT SHIP24 REDIRECT (NO API KEY NEEDED)
+# ------------------------------------------------------------------------------
+@app.route('/api/nexus/ship24_preview', methods=['POST'])
+def api_nexus_ship24_preview():
+    data = request.get_json()
+    tids = data.get('tids', [])
+    results = []
+    
+    for tid in tids:
+        # Format TID
+        if tid.startswith('150') and 12 <= len(tid) <= 15:
+            tid = '0' + tid
+        
+        # Simple preview data (dummy for now)
+        results.append({
+            'success': True,
+            'tid': tid,
+            'preview': {
+                'status': 'Click to view full tracking',
+                'message': 'Tracking information available on Ship24'
+            }
+        })
+    
+    return jsonify(results)
+
+# ------------------------------------------------------------------------------
+# 5. FRONTEND UI (WITH REDIRECT BUTTON)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3844,7 +3870,6 @@ def nexus_dashboard():
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
     <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
-    <script type="text/javascript" src="//www.17track.net/externalcall.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
@@ -3881,6 +3906,24 @@ def nexus_dashboard():
         .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
         .btn.outline:hover { background: var(--border); }
         
+        .redirect-btn {
+            display: inline-block;
+            background: var(--accent);
+            color: var(--btn-text);
+            padding: 8px 16px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 12px;
+            margin-top: 10px;
+            text-align: center;
+            transition: 0.2s;
+        }
+        .redirect-btn:hover {
+            opacity: 0.8;
+            transform: translateY(-1px);
+        }
+        
         textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--text); font-family: monospace; font-size: 15px; outline: none; resize: vertical; min-height: 100px; transition: 0.2s;}
         textarea:focus { border-color: #444; }
         
@@ -3901,8 +3944,16 @@ def nexus_dashboard():
         .tid-strip { display: flex; flex-direction: column; gap: 20px; padding-bottom: 8px;}
         .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px;}
         
-        /* 17Track Widget Styles */
-        .widget-container { width: 100%; background: #fff; border-radius: 8px; overflow: hidden; display: none; }
+        /* Preview styles */
+        .preview-container { margin-top: 10px; }
+        .preview-message { 
+            color: var(--muted); 
+            font-size: 13px; 
+            padding: 8px; 
+            background: var(--card); 
+            border-radius: 6px; 
+            border: 1px dashed var(--border);
+        }
         
         .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
         .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; }
@@ -4057,9 +4108,9 @@ def nexus_dashboard():
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadFreeWidget('${tid}', this)">🚢 Free Track Native</button>
+                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="showShip24Redirect('${tid}', this)">🔍 Track</button>
                                     </div>
-                                    <div id="widget-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="widget-container"></div>
+                                    <div id="track-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="preview-container"></div>
                                 </div>
                             `).join('')}
                         </div>
@@ -4068,6 +4119,34 @@ def nexus_dashboard():
             });
             document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted); font-weight:600; padding: 40px; border: 1px dashed var(--border); border-radius: 12px;">No matching records found.</div>';
             if(hasTids) document.getElementById('bulkTrackBtn').style.display = 'block';
+        }
+
+        // 🚀 NEW FUNCTION: SHIP24 REDIRECT WITH PREVIEW
+        async function showShip24Redirect(tid, btn) {
+            const container = document.getElementById(`track-${tid.replace(/[^a-zA-Z0-9]/g,'')}`);
+            if(!container) return;
+            
+            btn.innerText = "Loading...";
+            btn.style.opacity = "0.5";
+            btn.style.pointerEvents = "none";
+            
+            // Simple preview message
+            let html = `<div class="preview-message">
+                <div style="margin-bottom:8px;">🔍 Tracking ID: ${tid}</div>
+                <div style="margin-bottom:12px;">Click below to view full tracking details on Ship24</div>
+            </div>`;
+            
+            // Add redirect button
+            html += `<a href="https://www.ship24.com/tracking?p=${tid}" 
+                target="_blank" class="redirect-btn">
+                🚢 View Full Tracking on Ship24
+            </a>`;
+            
+            container.innerHTML = html;
+            
+            btn.innerText = "Tracked ✓";
+            btn.style.opacity = "1";
+            btn.style.pointerEvents = "auto";
         }
 
         async function directTrackTIDs() {
@@ -4079,9 +4158,9 @@ def nexus_dashboard():
                 h += `<div class="tid-box card" style="width:100%; border: 1px solid var(--border);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadFreeWidget('${tid}', this)">🚢 Free Track Native</button>
+                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="showShip24Redirect('${tid}', this)">🔍 Track</button>
                         </div>
-                        <div id="widget-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="widget-container"></div>
+                        <div id="track-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="preview-container"></div>
                       </div>`;
             });
             document.getElementById('direct-results').innerHTML = h;
@@ -4092,37 +4171,8 @@ def nexus_dashboard():
             const container = document.getElementById(containerId);
             const btns = container.querySelectorAll('.sync-btn');
             for(let btn of btns) {
-                if(btn.innerText !== 'Tracking...') {
-                    btn.click();
-                    await new Promise(r => setTimeout(r, 500)); // Thora delay diya hai taake widget crash na kare
-                }
-            }
-        }
-
-        // 🚨 YAHAN HAI MAGIC: API KEY KI ZAROORAT NAHI! 17Track Widget UI ke andar hi khulega!
-        function loadFreeWidget(tid, btnElement) {
-            if(btnElement) {
-                btnElement.innerText = "Tracking...";
-                btnElement.style.opacity = "0.5";
-                btnElement.style.pointerEvents = "none";
-            }
-            const sid = tid.replace(/[^a-zA-Z0-9]/g,'');
-            const container = document.getElementById(`widget-${sid}`);
-            container.style.display = "block";
-            
-            try {
-                // Call 17Track function from the script loaded in <head>
-                YQV5.trackSingle({
-                    YQ_ContainerId: `widget-${sid}`,
-                    YQ_Height: 350,
-                    YQ_Fc: "0",
-                    YQ_Lang: "en",
-                    YQ_Num: tid
-                });
-                if(btnElement) { btnElement.innerText = "Data Loaded ✅"; btnElement.style.borderColor = "#10B981"; btnElement.style.color = "#10B981"; btnElement.style.opacity="1"; }
-            } catch(e) {
-                container.innerHTML = `<span style="color:#EF4444; padding:20px; display:block;">Please check your internet connection or disable ad-blocker.</span>`;
-                if(btnElement) { btnElement.innerText = "Failed ❌"; btnElement.style.opacity="1"; btnElement.style.pointerEvents="auto";}
+                btn.click();
+                await new Promise(r => setTimeout(r, 500));
             }
         }
 
