@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% HARDCODED COLUMNS & ZERO INTERFERENCE
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% ISOLATED & EXACT COLUMNS
 # ==============================================================================
 import urllib.request
 import csv
@@ -3626,14 +3626,13 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. VERCEL-SAFE CACHE & EXACT COLUMN MAP (From your EXACT List)
+# 2. ISOLATED CACHE & EXACT COLUMN MAP
 # ------------------------------------------------------------------------------
-GLOBAL_DB_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
-FILTER_DATE = datetime(2026, 1, 1)
+NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
+NEXUS_FILTER_DATE = datetime(2026, 1, 1)
 
-# BHAI YEH RAHI AAPKI EXACT LIST: 
-# o=Order, b=Boxes, d=Date, w=Weight, v=Vendor, c=Customer, cn=Country, ma=MAWB, t=Tracking
-SHEET_MAP = {
+# EXACT 1-BASED COLUMNS (Jo list aapne bheji wahi)
+NEXUS_SHEET_MAP = {
     "Kerry":         {"o": 1, "b": 4, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
     "APX":           {"o": 1, "b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
     "ECL QC Center": {"o": 1, "b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
@@ -3642,30 +3641,27 @@ SHEET_MAP = {
     "GE Zone":       {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
 }
 
-def fetch_sheet_data(url, name):
+# Functions renamed so they DO NOT overwrite your dashboard's functions!
+def nexus_fetch_sheet_data(url, name):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=10) as res:
             data = list(csv.reader(res.read().decode('utf-8').splitlines()))
-            col = SHEET_MAP.get(name)
+            col = NEXUS_SHEET_MAP.get(name)
             if not col or not data: return []
 
             processed = []
-            # Ab koi header search nahi. Seedha loop chalega!
-            for row in data:
+            for row in data[1:]: # Skip header row
                 if not row: continue
-                p = row + [''] * 45 # Line ko lamba kar dia taake error na aaye
+                p = row + [''] * 45 
                 
-                # -1 isliye kia kyunke Python 0 se ginta hai. Apka Col 1, Python ka 0 hota hai.
                 o_val = str(p[col['o'] - 1]).strip()
-                
-                # Skip headers and empty rows
-                if not o_val or o_val.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id', 'fleekid']: 
+                if not o_val or o_val.lower() in ['n/a', 'nan', 'order', 'orderid', 'fleekid']: 
                     continue
 
                 def get_v(col_num):
                     v = str(p[col_num - 1]).strip()
-                    return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
+                    return v if v and v.lower() not in ['n/a', 'nan', '-'] else "N/A"
 
                 processed.append({
                     'order': o_val, 
@@ -3679,13 +3675,11 @@ def fetch_sheet_data(url, name):
                     'mawb': get_v(col['ma'])
                 })
             return processed
-    except Exception as e: 
-        return []
+    except: return []
 
-def clean_tids(raw):
+def nexus_clean_tids(raw):
     raw = str(raw).strip()
     if not raw or raw.lower() in ['pending','none','n/a']: return []
-    # Splitting Mashed TIDs (150...U150...S)
     if not any(x in raw for x in [',','/',' ']) and len(raw) > 15:
         if re.search(r'[A-Za-z]', raw): parts = [p for p in re.split(r'(?<=[a-zA-Z])', raw) if p.strip()]
         elif len(raw) % 15 == 0: parts = [raw[i:i+15] for i in range(0, len(raw), 15)]
@@ -3693,7 +3687,7 @@ def clean_tids(raw):
     else: parts = [t.strip() for t in re.split(r'[,\/\s]+', raw) if t.strip()]
     return ['0'+t if (t.startswith('150') and 12<=len(t)<=15) else t for t in parts]
 
-def fetch_kerry_status(url):
+def nexus_fetch_kerry_status(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=10) as res:
@@ -3702,9 +3696,8 @@ def fetch_kerry_status(url):
             s_col, h_idx = 1, -1
             for i, row in enumerate(data[:10]):
                 c = [str(x).lower().replace(' ', '') for x in row]
-                if 'order' in c or 'fleekid' in c or 'orderid' in c:
-                    h_idx = i
-                    s_col = c.index('lateststatus') if 'lateststatus' in c else c.index('status')
+                if 'order' in c or 'fleekid' in c:
+                    h_idx, s_col = i, c.index('lateststatus') if 'lateststatus' in c else c.index('status')
                     break
             s_map = {}
             if h_idx != -1:
@@ -3715,7 +3708,7 @@ def fetch_kerry_status(url):
             return s_map
     except: return {}
 
-def parse_date(date_str):
+def nexus_parse_date(date_str):
     try:
         for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%Y/%m/%d'):
             try: return datetime.strptime(date_str.split(' ')[0], fmt)
@@ -3723,26 +3716,34 @@ def parse_date(date_str):
     except: pass
     return None
 
-def sync_all_databases():
-    global GLOBAL_DB_CACHE
+def nexus_sync_db():
+    global NEXUS_GLOBAL_CACHE
     now = time.time()
-    # 10 Min Cache - Makes Dashboard Fast
-    if now - GLOBAL_DB_CACHE['time'] < 600 and GLOBAL_DB_CACHE['sheets']:
-        return GLOBAL_DB_CACHE['sheets'], GLOBAL_DB_CACHE['kerry']
+    if now - NEXUS_GLOBAL_CACHE['time'] < 600 and NEXUS_GLOBAL_CACHE['sheets']:
+        return NEXUS_GLOBAL_CACHE['sheets'], NEXUS_GLOBAL_CACHE['kerry']
 
     res = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
-        f_sheets = {exe.submit(fetch_sheet_data, url, name): name for name, url in NEXUS_SOURCES.items()}
-        f_kerry = exe.submit(fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
+        f_sheets = {exe.submit(nexus_fetch_sheet_data, url, name): name for name, url in NEXUS_SOURCES.items()}
+        f_kerry = exe.submit(nexus_fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
         for f in concurrent.futures.as_completed(f_sheets):
             res[f_sheets[f]] = f.result()
         try: k_map = f_kerry.result()
         except: k_map = {}
         
-    GLOBAL_DB_CACHE['time'] = now
-    GLOBAL_DB_CACHE['sheets'] = res
-    GLOBAL_DB_CACHE['kerry'] = k_map
+    NEXUS_GLOBAL_CACHE['time'] = now
+    NEXUS_GLOBAL_CACHE['sheets'] = res
+    NEXUS_GLOBAL_CACHE['kerry'] = k_map
     return res, k_map
+
+@app.after_request
+def inject_nexus_button(response):
+    if response.content_type and response.content_type.startswith('text/html'):
+        if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
+            html = response.get_data(as_text=True)
+            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#111827; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:600; font-family:'Inter',sans-serif; box-shadow:0 10px 15px -3px rgba(0,0,0,0.2); transition:transform 0.2s ease; z-index:9999;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">📊 TID Operations</a>"""
+            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
+    return response
 
 # ------------------------------------------------------------------------------
 # 3. BACKEND API ROUTES
@@ -3750,14 +3751,14 @@ def sync_all_databases():
 
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
-    sync_all_databases()
+    nexus_sync_db()
     return jsonify({"success": True})
 
 @app.route('/api/nexus/search', methods=['POST'])
 def api_nexus_search():
     order_ids = [x.strip().lower() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
     results = []
-    sheets_data, kerry_data = sync_all_databases()
+    sheets_data, kerry_data = nexus_sync_db()
     
     for q in order_ids:
         q_alt = '0' + q if (q.startswith('150') and 12 <= len(q) <= 15) else q
@@ -3771,7 +3772,7 @@ def api_nexus_search():
                         "order_id": r['order'].upper(), "source": src, "status": k_stat, 
                         "date": r['date'], "boxes": r['boxes'], "weight": r['weight'], 
                         "vendor": r['vendor'], "customer": r['customer'], "country": r['country'], 
-                        "tids": clean_tids(r['tid']), "mawb": r['mawb']
+                        "tids": nexus_clean_tids(r['tid']), "mawb": r['mawb']
                     })
                     found = True; break
             if found: break
@@ -3784,7 +3785,7 @@ def api_nexus_ship24():
     responses = []
     for tid in tids:
         if ship24_key == 'MOCK':
-            responses.append({"tid": tid, "success": True, "current_status": "Transit", "progress": 60, "events": [{"status": "Processed at Gateway", "time": "2026-03-02"}]})
+            responses.append({"tid": tid, "success": True, "current_status": "Transit", "progress": 60, "events": [{"status": "Processed at Hub", "time": "2026-03-02"}]})
         else:
             try:
                 req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
@@ -3798,24 +3799,24 @@ def api_nexus_ship24():
 
 @app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
-    sheets_data, kerry_data = sync_all_databases()
+    sheets_data, kerry_data = nexus_sync_db()
     buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES}, "tid_pending": {s: [] for s in NEXUS_SOURCES}, "qc_not_approved": {s: [] for s in NEXUS_SOURCES}, "qc_approved": {s: [] for s in NEXUS_SOURCES} }
     qc_not_list = ["ACCEPTED", "CREATED", "PICKUP READY", "PICKUP SUCCESSFUL", "PICKUP SUCCESSFULL", "QC PENDING", "QC HOLD", "CANCELLED"]
     
     for src, rows in sheets_data.items():
         for r in rows:
             dt_str = r['date']
-            dt_obj = parse_date(dt_str)
-            if dt_obj and dt_obj < FILTER_DATE: continue
+            dt_obj = nexus_parse_date(dt_str)
+            if dt_obj and dt_obj < NEXUS_FILTER_DATE: continue
             
             oid = r['order']
             if oid == 'N/A': continue
             
             kerry_stat = kerry_data.get(oid.lower(), "PENDING")
-            tids = clean_tids(r['tid'])
+            tids = nexus_clean_tids(r['tid'])
             has_tid = len(tids) > 0
             
-            r_d = { "Order": oid.upper(), "Date": dt_str, "Vendor": r['vendor'], "Customer": r['customer'], "Boxes": r['boxes'], "Weight": r['weight'], "TID": ", ".join(tids) if has_tid else "MISSING", "Status": kerry_stat, "MAWB": r['mawb'] }
+            r_d = { "Order": oid.upper(), "Date": dt_str, "Vendor": r['vendor'], "Customer": r['customer'], "Boxes": r['boxes'], "Weight": r['weight'], "TID": ", ".join(tids) if has_tid else "MISSING", "MAWB": r['mawb'], "Status": kerry_stat }
             
             if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER":
                 if has_tid: buckets["handed_over"][src].append(r_d)
@@ -3826,7 +3827,7 @@ def api_nexus_radar_data():
     return jsonify(buckets)
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI & UX
+# 4. FRONTEND UI
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3836,7 +3837,6 @@ def nexus_dashboard():
     <head><meta charset="UTF-8"><title>TID Operations Hub</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        
         :root { 
             --bg: #0F172A; --card: #1E293B; --border: #334155; --text: #F1F5F9; --muted: #94A3B8; 
             --accent: #3B82F6; --btn-bg: #3B82F6; --btn-text: #FFFFFF;
@@ -3844,7 +3844,6 @@ def nexus_dashboard():
             --badge-bg: rgba(59, 130, 246, 0.1); --badge-text: #60A5FA; --input-bg: #0F172A;
             --table-row-hover: rgba(255,255,255,0.03);
         }
-        
         [data-theme="light"] { 
             --bg: #F8F9FB; --card: #FFFFFF; --border: #E5E7EB; --text: #111827; --muted: #6B7280; 
             --accent: #111827; --btn-bg: #111827; --btn-text: #FFFFFF;
@@ -3852,89 +3851,65 @@ def nexus_dashboard():
             --badge-bg: #F3F4F6; --badge-text: #111827; --input-bg: #FFFFFF;
             --table-row-hover: #F8F9FB;
         }
-
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; overflow: hidden;}
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; overflow: hidden;}
         * { box-sizing: border-box; }
-        
         .app-container { display: flex; height: 100vh; width: 100vw; flex-direction: column; }
         .topbar { height: 64px; background: var(--card); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 24px; z-index: 10;}
-        .brand { font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center;}
-        .topbar-actions { display: flex; align-items: center; gap: 16px; }
-        .theme-toggle { background: var(--input-bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-weight: 500; font-size: 13px; cursor: pointer; transition: 0.2s;}
-        
+        .brand { font-size: 16px; font-weight: 700;}
+        .theme-toggle { background: var(--input-bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;}
         .main-wrapper { display: flex; flex: 1; overflow: hidden; }
         .sidebar { width: 240px; background: var(--card); border-right: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 4px;}
-        .nav-item { padding: 12px 16px; border-radius: 8px; color: var(--muted); font-weight: 500; font-size: 13px; cursor: pointer; border: none; background: transparent; text-align: left; }
+        .nav-item { padding: 12px 16px; border-radius: 8px; color: var(--muted); font-size: 13px; cursor: pointer; border: none; background: transparent; text-align: left; }
         .nav-item:hover { background: var(--input-bg); color: var(--text); }
         .nav-item.active { background: var(--badge-bg); color: var(--accent); font-weight: 600; }
-        
         .viewport { flex: 1; padding: 32px 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); }
-        .card.hoverable:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); border-color: var(--accent); cursor: pointer;}
-        
-        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 10px 20px; border-radius: 8px; font-weight: 500; font-size: 13px; cursor: pointer;}
+        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; cursor: pointer;}
         .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-        textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; outline: none; resize: vertical; min-height: 80px; }
-        
-        .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--badge-bg); color: var(--badge-text); }
+        textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; color: var(--text); font-family: monospace; outline: none; min-height: 80px; }
+        .badge { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--badge-bg); color: var(--badge-text); }
         .badge.success { background: rgba(16, 185, 129, 0.1); color: #10B981; }
-        
         .radar-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1000px;}
-        .stat-value { font-size: 32px; font-weight: 700; color: var(--text); line-height: 1; margin-bottom: 4px;}
-        .stat-label { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase;}
-        
+        .stat-value { font-size: 32px; font-weight: 700; color: var(--text); margin-bottom: 4px;}
+        .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase;}
         .track-card { border-radius: 12px; overflow: hidden; margin-bottom: 24px; padding: 0;}
         .track-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 16px;}
         .meta-col { display: flex; flex-direction: column; gap: 4px; }
         .meta-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600;}
-        .meta-val { font-size: 13px; font-weight: 500; color: var(--text);}
-        
+        .meta-val { font-size: 13px; font-weight: 500;}
         .tid-area { padding: 20px 24px; }
         .tid-strip { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px;}
         .tid-box { min-width: 320px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px;}
         .progress { height: 4px; background: var(--border); border-radius: 4px; overflow: hidden; }
         .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.5s ease; }
-        
         .modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
-        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 32px; max-width: 1200px; margin: auto; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 32px; max-width: 1200px; margin: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
-        th { padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--border);}
-        td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text); }
+        th { padding: 12px 16px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--border);}
+        td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
         tr:hover { background: var(--table-row-hover); }
-        
         .loader { width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style></head>
     <body>
     <div class="app-container">
-        
         <header class="topbar">
             <div class="brand">TID Operations Hub</div>
-            <div class="topbar-actions">
-                <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
-            </div>
+            <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
         </header>
-        
         <div class="main-wrapper">
             <aside class="sidebar">
-                <div style="font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; margin: 16px 0 8px 16px; letter-spacing: 1px;">Menu</div>
+                <div style="font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; margin: 16px 0 8px 16px;">Menu</div>
                 <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🚀 Track & Sync</button>
                 <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over</button>
                 <button class="nav-item" onclick="navSwitch(this, 'tid_pending')">⚠️ Missing TIDs</button>
                 <button class="nav-item" onclick="navSwitch(this, 'qc_not_approved')">⏳ QC Not Approved</button>
                 <button class="nav-item" onclick="navSwitch(this, 'qc_approved')">✅ QC Approved</button>
                 <div style="flex:1"></div>
-                <a href="/" class="nav-item" style="color: #EF4444; margin-bottom:16px; text-decoration:none;">⬅️ Back to Dashboard</a>
+                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none;">🚪 Back to Dashboard</a>
             </aside>
-            
             <main class="viewport">
-                <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom:8px;">
-                    <div>
-                        <h1 id="view-title" style="margin: 0 0 4px 0; font-size: 20px; font-weight: 700;">Global Tracking Matrix</h1>
-                        <div id="view-subtitle" style="font-size: 13px; color: var(--muted);">Paste orders below to initiate scan.</div>
-                    </div>
-                </div>
-                
+                <h1 id="view-title" style="margin: 0; font-size: 20px;">Global Tracking Matrix</h1>
                 <div id="view-track" class="view-pane active">
                     <div class="card" style="margin-bottom: 24px;">
                         <textarea id="searchInput" placeholder="Paste multiple order IDs here..."></textarea>
@@ -3945,9 +3920,8 @@ def nexus_dashboard():
                     </div>
                     <div id="tracking-results"></div>
                 </div>
-                
                 <div id="view-radar" class="view-pane" style="display:none;">
-                    <div id="loader" style="display:none; padding:40px; text-align:center;"><div class="loader" style="margin:auto"></div><p style="color:var(--muted); font-size:13px; margin-top:12px;">Fetching from sheets...</p></div>
+                    <div id="loader" style="display:none; padding:40px; text-align:center;"><div class="loader" style="margin:auto"></div></div>
                     <div id="radar-container" class="radar-grid"></div>
                 </div>
             </main>
@@ -3956,7 +3930,7 @@ def nexus_dashboard():
 
     <div id="detailPanel" class="modal" onclick="if(event.target==this)this.style.display='none'">
         <div class="modal-content">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px">
+            <div style="display:flex; justify-content:space-between; margin-bottom:24px">
                 <h2 id="modalTitle" style="margin:0; font-size:18px;">Details</h2>
                 <div style="display:flex; gap:12px;">
                     <button class="btn outline" onclick="downloadCSV()">Export CSV</button>
@@ -3976,18 +3950,13 @@ def nexus_dashboard():
             localStorage.setItem('nexus_theme', target);
             document.getElementById('themeBtn').innerText = isDark ? '🌙 Dark Mode' : '☀️ Light Mode';
         }
-        
-        // Init theme
         const savedTheme = localStorage.getItem('nexus_theme') || 'dark';
         document.documentElement.setAttribute('data-theme', savedTheme);
         document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
 
-        // Fast Load Cache
         window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
 
-        let activeBucket = '';
-        let activeDetails = [];
-        let radarData = null;
+        let activeBucket = ''; let activeDetails = []; let radarData = null;
 
         function navSwitch(btn, viewType) {
             document.querySelectorAll('.nav-item').forEach(l=>l.classList.remove('active'));
@@ -3997,19 +3966,16 @@ def nexus_dashboard():
             if(viewType === 'view-track') {
                 document.getElementById('view-track').style.display = 'block';
                 document.getElementById('view-title').innerText = "Track & Sync";
-                document.getElementById('view-subtitle').innerText = "Paste orders below to initiate scan.";
             } else {
                 document.getElementById('view-radar').style.display = 'block';
                 document.getElementById('view-title').innerText = btn.innerText;
-                document.getElementById('view-subtitle').innerText = "Data filtered strictly from 1st Jan 2026 onwards.";
-                activeBucket = viewType;
-                loadRadar();
+                activeBucket = viewType; loadRadar();
             }
         }
 
         async function searchOrders() {
             const q = document.getElementById('searchInput').value; if(!q) return;
-            document.getElementById('tracking-results').innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div><p style="color:var(--muted); font-size:12px; margin-top:10px;">Scanning exact columns...</p></div>';
+            document.getElementById('tracking-results').innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
             const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
             const data = await r.json(); renderCards(data);
         }
@@ -4025,6 +3991,7 @@ def nexus_dashboard():
                         <div class="meta-col"><span class="meta-lbl">Customer</span><span class="meta-val">${item.customer}</span></div>
                         <div class="meta-col"><span class="meta-lbl">Boxes</span><span class="meta-val">${item.boxes}</span></div>
                         <div class="meta-col"><span class="meta-lbl">Status</span><span class="badge ${isDelivered?'success':''}">${item.status}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">MAWB</span><span class="meta-val">${item.mawb}</span></div>
                     </div>
                     <div class="tid-area">
                         <div class="tid-strip">
@@ -4057,39 +4024,28 @@ def nexus_dashboard():
         }
 
         async function loadRadar() {
-            const container = document.getElementById('radar-container');
-            container.innerHTML = ''; 
+            const container = document.getElementById('radar-container'); container.innerHTML = ''; 
             document.getElementById('loader').style.display = 'block';
-            
-            const r = await fetch('/api/nexus/radar_data');
-            radarData = await r.json();
+            const r = await fetch('/api/nexus/radar_data'); radarData = await r.json();
             document.getElementById('loader').style.display = 'none';
-            
-            const bucketData = radarData[activeBucket];
             const order = ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"];
-            
             order.forEach(src => {
-                const arr = bucketData[src] || [];
+                const arr = radarData[activeBucket][src] || [];
                 container.innerHTML += `
-                    <div class="card hoverable" onclick="showDetails('${src}')" style="display:flex; justify-content:space-between; align-items:center;">
-                        <div style="font-weight:600; font-size:14px; text-transform:uppercase; letter-spacing:0.5px;">${src}</div>
-                        <div style="text-align:right;">
-                            <div class="stat-value">${arr.length}</div>
-                            <div class="stat-label">Orders</div>
-                        </div>
+                    <div class="card hoverable" onclick="showDetails('${src}')" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
+                        <div style="font-weight:600; font-size:14px; text-transform:uppercase;">${src}</div>
+                        <div style="text-align:right;"><div class="stat-value">${arr.length}</div><div class="stat-label">Orders</div></div>
                     </div>
                 `;
             });
         }
 
         function showDetails(src) {
-            activeDetails = radarData[activeBucket][src];
-            if(!activeDetails || activeDetails.length === 0) return;
+            activeDetails = radarData[activeBucket][src]; if(!activeDetails || activeDetails.length === 0) return;
             document.getElementById('modalTitle').innerText = src;
-            const table = document.getElementById('detailTable');
             let thead = '<thead><tr>' + Object.keys(activeDetails[0]).map(k=>`<th>${k}</th>`).join('') + '</tr></thead>';
             let tbody = '<tbody>' + activeDetails.map(r=>'<tr>' + Object.values(r).map(v=>`<td>${v}</td>`).join('') + '</tr>').join('') + '</tbody>';
-            table.innerHTML = thead + tbody;
+            document.getElementById('detailTable').innerHTML = thead + tbody;
             document.getElementById('detailPanel').style.display = 'block';
         }
 
@@ -4097,11 +4053,9 @@ def nexus_dashboard():
             if(!activeDetails.length) return;
             const headers = Object.keys(activeDetails[0]).join(',');
             const rows = activeDetails.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\\n');
-            const csvContent = "data:text/csv;charset=utf-8," + headers + "\\n" + rows;
             const link = document.createElement("a");
-            link.setAttribute("href", encodeURI(csvContent));
-            link.setAttribute("download", `nexus_${activeBucket}_export.csv`);
-            link.click();
+            link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + headers + "\\n" + rows));
+            link.setAttribute("download", `nexus_${activeBucket}_export.csv`); link.click();
         }
     </script>
     </body></html>
