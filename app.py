@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% ISOLATED, FULL UI & ANTI-DROP
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% SAFE, ALL FIELDS UI & SMART SCANNER
 # ==============================================================================
 import urllib.request
 import csv
@@ -3613,7 +3613,7 @@ from datetime import datetime
 import ssl
 from flask import jsonify, request, session, render_template_string
 
-# 🛠️ ANTI-DROP FIX FOR SHEETS FETCHING
+# 🛠️ ANTI-DROP FIX FOR LOCAL VS CODE
 try:
     _create_unverified_https_context = ssl._create_unverified_context
 except AttributeError:
@@ -3640,13 +3640,14 @@ NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLy
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
 
+# YEH RAHI AAPKI EXACT LIST: Boxes(4), Date(2) waghera...
 NEXUS_SHEET_MAP = {
-    "Kerry":         {"o": 1, "b": 4, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
-    "APX":           {"o": 1, "b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
-    "ECL QC Center": {"o": 1, "b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
-    "ECL Zone":      {"o": 1, "b": 4, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
-    "GE QC Center":  {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
-    "GE Zone":       {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
+    "Kerry":         {"b": 4, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
+    "APX":           {"b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
+    "ECL QC Center": {"b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
+    "ECL Zone":      {"b": 4, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
+    "GE QC Center":  {"b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
+    "GE Zone":       {"b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
 }
 
 def nexus_fetch_sheet_data(url, name):
@@ -3661,13 +3662,27 @@ def nexus_fetch_sheet_data(url, name):
             col = NEXUS_SHEET_MAP.get(name)
             if not col or not data: return []
 
+            # 🚨 SMART SCANNER BACK ONLINE: Finds where the actual data starts ignoring blank lines
+            start_row = 1
+            order_idx = 0
+            for i, row in enumerate(data[:20]):
+                if not row: continue
+                c = [re.sub(r'[^a-z0-9]', '', str(x).lower()) for x in row]
+                if 'order' in c or 'fleekid' in c or 'orderid' in c or 'shipmentid' in c:
+                    start_row = i + 1
+                    for j, cell in enumerate(c):
+                        if cell in ['order', 'fleekid', 'orderid', 'shipmentid']:
+                            order_idx = j
+                            break
+                    break
+
             processed = []
-            for row in data:
+            for row in data[start_row:]:
                 if not row: continue
                 p = row + [''] * 60 
-                o_val = str(p[col['o'] - 1]).strip()
                 
-                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan']: 
+                o_val = str(p[order_idx]).strip()
+                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a', 'order', 'orderid']: 
                     continue
 
                 def get_v(col_num):
@@ -3702,7 +3717,9 @@ def nexus_clean_tids(raw):
 
 def nexus_fetch_kerry_status(url):
     try:
-        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
         with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
             raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
@@ -3751,6 +3768,15 @@ def nexus_sync_db(force=False):
     NEXUS_GLOBAL_CACHE['sheets'] = res
     NEXUS_GLOBAL_CACHE['kerry'] = k_map
     return res, k_map
+
+@app.after_request
+def add_nexus_floating_btn(response):
+    if request.path == '/' and response.content_type and 'text/html' in response.content_type:
+        html = response.get_data(as_text=True)
+        btn = '<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:#3B82F6; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:600; font-family:sans-serif; z-index:99999; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">📊 TID Operations</a>'
+        if '</body>' in html:
+            response.set_data(html.replace('</body>', btn + '</body>'))
+    return response
 
 # ------------------------------------------------------------------------------
 # 3. BACKEND API ROUTES
@@ -3834,7 +3860,7 @@ def api_nexus_radar_data():
     return jsonify(buckets)
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI (Mera asal jurm yahan tha - Ab saaray fields show honge!)
+# 4. FRONTEND UI 
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3881,11 +3907,11 @@ def nexus_dashboard():
         .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase;}
         
         .track-card { border-radius: 12px; overflow: hidden; margin-bottom: 24px; padding: 0;}
-        .track-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 16px;}
-        
+        .track-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 16px;}
         .meta-col { display: flex; flex-direction: column; gap: 4px; }
         .meta-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600;}
         .meta-val { font-size: 13px; font-weight: 500;}
+        
         .tid-area { padding: 20px 24px; }
         .tid-strip { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 8px;}
         .tid-box { min-width: 320px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px;}
@@ -3963,7 +3989,6 @@ def nexus_dashboard():
         document.documentElement.setAttribute('data-theme', savedTheme);
         document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
 
-        // Force background refresh to avoid missing data from sleep
         window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
 
         let activeBucket = ''; let activeDetails = []; let radarData = null;
@@ -3994,7 +4019,7 @@ def nexus_dashboard():
             let h = '';
             data.forEach(item => {
                 const isDelivered = item.status.toLowerCase().includes('delivered');
-                // SAARAY FIELDS AAGAY HAIN YAHAN: Date, Vendor, Country sab shamil!
+                // 🚨 DEKHEIN: Yahan par aapke saaray fields wapas add kar diye hain
                 h += `<div class="card track-card">
                     <div class="track-header">
                         <div class="meta-col"><span class="meta-lbl">Order</span><span class="meta-val" style="color:var(--accent); font-weight:600;">${item.order_id}</span></div>
@@ -4023,7 +4048,7 @@ def nexus_dashboard():
                     </div>
                 </div>`;
             });
-            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted);">No matching orders found. (Try clicking Search again)</div>';
+            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted);">No matching orders found.</div>';
         }
 
         async function syncShip24(tid) {
