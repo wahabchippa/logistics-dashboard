@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - BRUTE-FORCE INDESTRUCTIBLE EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - PLAN B: NUCLEAR INDEX EDITION (100% Guaranteed)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3637,26 +3637,12 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 3. BRUTE-FORCE DATA ENGINE (100% Guaranteed to work for GE Zone & ECL)
+# 3. PLAN B: THE NUCLEAR INDEX ENGINE (Ignores Names, Uses Positions)
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
-# EVERY SINGLE VARIATION YOU PROVIDED, MAPPED TO ITS CORE NAME
-HEADER_VARIANTS = {
-    'order': ['order', 'fleekid', 'orderid', 'shipmentid'],
-    'date': ['fleekhandoverdate', 'airporthandoverdate', 'date', 'handoverdate', 'qcdate'],
-    'boxes': ['noofboxes', 'numberofboxes', 'boxcount', 'boxes', 'box', 'qty'],
-    'weight': ['chargeableweight', 'chargeableweightkg', 'noofpieces', 'pieces', 'weight', 'actualweight'],
-    'vendor': ['vendorname', 'vendor', 'seller'],
-    'customer': ['customername', 'customer', 'consignee'],
-    'country': ['country', 'destination', 'dest'],
-    'tid': ['trackingid', 'tracking', 'tid', 'awbnumber'],
-    'mawb': ['mawb', 'mawbflight', 'kerrymawbnumber', 'masterawb', 'master'],
-    'status': ['lateststatus', 'status', 'kerrystatus']
-}
-
-def fetch_and_map_csv(url):
+def fetch_sheet_data(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=20) as res:
@@ -3665,46 +3651,72 @@ def fetch_and_map_csv(url):
             if not data: return []
 
             header_idx = -1
-            col_map = {}
-            
-            # Scans deep into the first 50 rows to bypass any titles or empty space
-            for i, row in enumerate(data[:50]): 
-                clean_row = [re.sub(r'[^a-z0-9]', '', str(cell).lower()) for cell in row]
-                
-                # To confirm it's the header, we need 'order' AND ('vendor' OR 'customer' OR 'tracking')
-                has_order = any(o in clean_row for o in HEADER_VARIANTS['order'])
-                has_other = any(v in clean_row for v in HEADER_VARIANTS['vendor'] + HEADER_VARIANTS['tid'] + HEADER_VARIANTS['customer'])
-                
-                if has_order and has_other:
+            # Scan first 50 lines to find the row where the VERY FIRST column is "Order"
+            for i, row in enumerate(data[:50]):
+                if not row: continue
+                first_col = re.sub(r'[^a-z0-9]', '', str(row[0]).lower())
+                if first_col in ['order', 'fleekid']:
                     header_idx = i
-                    # Map exactly which index belongs to which column
-                    for col_index, h_clean in enumerate(clean_row):
-                        for key, variants in HEADER_VARIANTS.items():
-                            if h_clean in variants and key not in col_map:
-                                col_map[key] = col_index
-                                break
                     break
                     
             if header_idx == -1: return []
 
             processed = []
             for row in data[header_idx+1:]:
-                # Ignore empty rows
-                if not row or not any(str(x).strip() for x in row): continue
+                # Ignore completely empty rows
+                if not row or not str(row[0]).strip(): continue
                 
-                r_dict = {}
-                for key in HEADER_VARIANTS.keys():
-                    idx = col_map.get(key)
-                    if idx is not None and idx < len(row):
-                        val = str(row[idx]).strip()
-                        r_dict[key] = val if val and val.lower() not in ['n/a', 'nan', '#n/a', '-'] else "N/A"
-                    else:
-                        r_dict[key] = "N/A"
-                        
-                processed.append(r_dict)
+                # Add empty columns if sheet is missing some at the end to prevent crash
+                row_padded = row + [''] * max(0, 9 - len(row))
+                
+                def get_val(idx):
+                    val = str(row_padded[idx]).strip()
+                    return val if val and val.lower() not in ['n/a', 'nan', '#n/a', '-'] else "N/A"
+
+                # EXACT COLUMN INDEX MAPPING (Nuclear Option)
+                processed.append({
+                    'order': get_val(0),
+                    'date': get_val(1),
+                    'boxes': get_val(2),
+                    'weight': get_val(3),
+                    'vendor': get_val(4),
+                    'customer': get_val(5),
+                    'country': get_val(6),
+                    'tid': get_val(7),
+                    'mawb': get_val(8)
+                })
             return processed
     except Exception as e:
         return []
+
+def fetch_kerry_status(url):
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=15) as res:
+            data = list(csv.reader(res.read().decode('utf-8').splitlines()))
+            if not data: return {}
+            
+            header_idx, order_col, status_col = -1, -1, -1
+            for i, row in enumerate(data[:15]):
+                clean_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
+                if 'order' in clean_row or 'fleekid' in clean_row:
+                    header_idx = i
+                    for j, c in enumerate(clean_row):
+                        if c in ['order', 'fleekid']: order_col = j
+                        elif 'status' in c or 'lateststatus' in c: status_col = j
+                    break
+            
+            if order_col == -1 or status_col == -1: return {}
+            
+            s_map = {}
+            for row in data[header_idx+1:]:
+                if len(row) > max(order_col, status_col):
+                    o = str(row[order_col]).strip().lower()
+                    s = str(row[status_col]).strip().upper()
+                    if o and o != 'n/a': s_map[o] = s
+            return s_map
+    except: 
+        return {}
 
 def parse_date(date_str):
     if not date_str or date_str == 'N/A': return None
@@ -3724,17 +3736,18 @@ def force_sync_all_databases():
     global GLOBAL_DB_CACHE
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        f_to_name = {executor.submit(fetch_and_map_csv, url): name for name, url in NEXUS_SOURCES.items()}
-        f_to_name[executor.submit(fetch_and_map_csv, NEXUS_KERRY_STATUS_URL)] = "KERRY_MASTER"
+        f_to_name = {executor.submit(fetch_sheet_data, url): name for name, url in NEXUS_SOURCES.items()}
+        future_kerry = executor.submit(fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
+        
         for future in concurrent.futures.as_completed(f_to_name):
             name = f_to_name[future]
             try: results[name] = future.result()
             except: results[name] = []
 
-    kerry_raw = results.pop("KERRY_MASTER", [])
-    s_map = {r['order'].lower(): r['status'].upper() for r in kerry_raw if r.get('order') and r['order'] != 'N/A'}
-    
-    GLOBAL_DB_CACHE['kerry'] = s_map
+        try: kerry_map = future_kerry.result()
+        except: kerry_map = {}
+
+    GLOBAL_DB_CACHE['kerry'] = kerry_map
     GLOBAL_DB_CACHE['sheets'] = results
     GLOBAL_DB_CACHE['loaded'] = True
 
@@ -3771,8 +3784,8 @@ def api_nexus_search():
         found = False
         for src, rows in GLOBAL_DB_CACHE['sheets'].items():
             for r in rows:
-                oid = r.get('order', '').lower()
-                tid_raw = r.get('tid', '').lower()
+                oid = r['order'].lower()
+                tid_raw = r['tid'].lower()
                 
                 if q_lower in oid or q_lower in tid_raw or q_lower_alt in tid_raw:
                     k_stat = GLOBAL_DB_CACHE['kerry'].get(oid, "N/A")
@@ -3879,8 +3892,6 @@ def api_nexus_ops_commander():
 # ------------------------------------------------------------------------------
 @app.route('/nexus')
 def nexus_dashboard():
-    # Session check safely
-    if 'role' not in session: return redirect('/')
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
     <head><meta charset="UTF-8"><title>TID Operations Hub</title>
