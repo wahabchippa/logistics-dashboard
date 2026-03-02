@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% ISOLATED & EXACT COLUMNS
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% ISOLATED & BULLETPROOF SEARCH
 # ==============================================================================
 import urllib.request
 import csv
@@ -3626,12 +3626,11 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. ISOLATED CACHE & EXACT COLUMN MAP
+# 2. ISOLATED CACHE & EXACT COLUMN MAP (From your EXACT List)
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
 
-# EXACT 1-BASED COLUMNS (Jo list aapne bheji wahi)
 NEXUS_SHEET_MAP = {
     "Kerry":         {"o": 1, "b": 4, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
     "APX":           {"o": 1, "b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
@@ -3641,27 +3640,28 @@ NEXUS_SHEET_MAP = {
     "GE Zone":       {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
 }
 
-# Functions renamed so they DO NOT overwrite your dashboard's functions!
 def nexus_fetch_sheet_data(url, name):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as res:
+        with urllib.request.urlopen(req, timeout=15) as res:
             data = list(csv.reader(res.read().decode('utf-8').splitlines()))
             col = NEXUS_SHEET_MAP.get(name)
             if not col or not data: return []
 
             processed = []
-            for row in data[1:]: # Skip header row
+            for row in data:
                 if not row: continue
                 p = row + [''] * 45 
                 
                 o_val = str(p[col['o'] - 1]).strip()
-                if not o_val or o_val.lower() in ['n/a', 'nan', 'order', 'orderid', 'fleekid']: 
+                
+                # YEH HAI WOH MAGIC FIX: Agar Order ID mein koi number hai, tou usko pakar lo.
+                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan']: 
                     continue
 
                 def get_v(col_num):
                     v = str(p[col_num - 1]).strip()
-                    return v if v and v.lower() not in ['n/a', 'nan', '-'] else "N/A"
+                    return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
 
                 processed.append({
                     'order': o_val, 
@@ -3694,9 +3694,9 @@ def nexus_fetch_kerry_status(url):
             data = list(csv.reader(res.read().decode('utf-8').splitlines()))
             if not data: return {}
             s_col, h_idx = 1, -1
-            for i, row in enumerate(data[:10]):
+            for i, row in enumerate(data[:15]):
                 c = [str(x).lower().replace(' ', '') for x in row]
-                if 'order' in c or 'fleekid' in c:
+                if 'order' in c or 'fleekid' in c or 'orderid' in c:
                     h_idx, s_col = i, c.index('lateststatus') if 'lateststatus' in c else c.index('status')
                     break
             s_map = {}
@@ -3716,10 +3716,11 @@ def nexus_parse_date(date_str):
     except: pass
     return None
 
-def nexus_sync_db():
+def nexus_sync_db(force=False):
     global NEXUS_GLOBAL_CACHE
     now = time.time()
-    if now - NEXUS_GLOBAL_CACHE['time'] < 600 and NEXUS_GLOBAL_CACHE['sheets']:
+    # Cache clear on force refresh so you always get fresh data
+    if not force and now - NEXUS_GLOBAL_CACHE['time'] < 300 and NEXUS_GLOBAL_CACHE['sheets']:
         return NEXUS_GLOBAL_CACHE['sheets'], NEXUS_GLOBAL_CACHE['kerry']
 
     res = {}
@@ -3736,22 +3737,14 @@ def nexus_sync_db():
     NEXUS_GLOBAL_CACHE['kerry'] = k_map
     return res, k_map
 
-@app.after_request
-def inject_nexus_button(response):
-    if response.content_type and response.content_type.startswith('text/html'):
-        if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
-            html = response.get_data(as_text=True)
-            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#111827; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:600; font-family:'Inter',sans-serif; box-shadow:0 10px 15px -3px rgba(0,0,0,0.2); transition:transform 0.2s ease; z-index:9999;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">📊 TID Operations</a>"""
-            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
-    return response
-
 # ------------------------------------------------------------------------------
 # 3. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
-    nexus_sync_db()
+    # Forces a direct fetch from google sheets
+    nexus_sync_db(force=True)
     return jsonify({"success": True})
 
 @app.route('/api/nexus/search', methods=['POST'])
@@ -3954,6 +3947,7 @@ def nexus_dashboard():
         document.documentElement.setAttribute('data-theme', savedTheme);
         document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
 
+        // Force Clear cache when opening tool to ensure fresh data
         window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
 
         let activeBucket = ''; let activeDetails = []; let radarData = null;
