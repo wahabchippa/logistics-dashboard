@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% SAFE, PURE BLACK UI & EXACT COLUMNS
+# 🛰️ TID OPERATIONS HUB (NEXUS) - CLEAN UI, ICONS & EXACT COLUMNS
 # ==============================================================================
 import urllib.request
 import csv
@@ -3635,13 +3635,13 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. ISOLATED CACHE & EXACT COLUMN MAP (KERRY BOXES FIXED TO COL 5)
+# 2. ISOLATED CACHE & EXACT COLUMN MAP
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
 
 NEXUS_SHEET_MAP = {
-    "Kerry":         {"o": 1, "b": 5, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32}, # Fixed Col 5
+    "Kerry":         {"o": 1, "b": 5, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
     "APX":           {"o": 1, "b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
     "ECL QC Center": {"o": 1, "b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
     "ECL Zone":      {"o": 1, "b": 4, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
@@ -3678,9 +3678,9 @@ def nexus_fetch_sheet_data(url, name):
             for row in data[start_row:]:
                 if not row: continue
                 p = row + [''] * 60 
-                
                 o_val = str(p[order_idx]).strip()
-                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a', 'order', 'orderid']: 
+                
+                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', '#n/a', 'order', 'orderid']: 
                     continue
 
                 def get_v(col_num):
@@ -3699,9 +3699,7 @@ def nexus_fetch_sheet_data(url, name):
                     'mawb': get_v(col['ma'])
                 })
             return processed
-    except Exception as e:
-        print(f"🚨 [NEXUS ERROR] Fetch Failed for {name}: {e}")
-        return []
+    except Exception as e: return []
 
 def nexus_clean_tids(raw):
     raw = str(raw).strip()
@@ -3736,8 +3734,7 @@ def nexus_fetch_kerry_status(url):
                     o = str(p[0]).strip().lower()
                     if o: s_map[o] = str(p[s_col]).strip().upper()
             return s_map
-    except Exception as e: 
-        return {}
+    except Exception as e: return {}
 
 def nexus_parse_date(date_str):
     try:
@@ -3772,8 +3769,7 @@ def add_nexus_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
         html = response.get_data(as_text=True)
         btn = '<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:#fff; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub</a>'
-        if '</body>' in html:
-            response.set_data(html.replace('</body>', btn + '</body>'))
+        if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
 # ------------------------------------------------------------------------------
@@ -3831,8 +3827,8 @@ def api_nexus_ship24():
 @app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
     sheets_data, kerry_data = nexus_sync_db()
-    buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES}, "tid_pending": {s: [] for s in NEXUS_SOURCES}, "qc_not_approved": {s: [] for s in NEXUS_SOURCES}, "qc_approved": {s: [] for s in NEXUS_SOURCES} }
-    qc_not_list = ["ACCEPTED", "CREATED", "PICKUP READY", "PICKUP SUCCESSFUL", "PICKUP SUCCESSFULL", "QC PENDING", "QC HOLD", "CANCELLED"]
+    # SIRF HANDED OVER KA BUCKET RAKHA HAI TAQAY FAST CHALAY
+    buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES} }
     
     for src, rows in sheets_data.items():
         for r in rows:
@@ -3849,16 +3845,13 @@ def api_nexus_radar_data():
             
             r_d = { "Order": oid.upper(), "Date": dt_str, "Vendor": r['vendor'], "Customer": r['customer'], "Boxes": r['boxes'], "Weight": r['weight'], "TID": ", ".join(tids) if has_tid else "MISSING", "MAWB": r['mawb'], "Status": kerry_stat }
             
-            if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER":
-                if has_tid: buckets["handed_over"][src].append(r_d)
-                else: buckets["tid_pending"][src].append(r_d)
-            elif kerry_stat in qc_not_list: buckets["qc_not_approved"][src].append(r_d)
-            elif kerry_stat == "QC APPROVED": buckets["qc_approved"][src].append(r_d)
+            if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and has_tid:
+                buckets["handed_over"][src].append(r_d)
             
     return jsonify(buckets)
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI (PURE BLACK DESIGN)
+# 4. FRONTEND UI (BEAUTIFIED & CLEANED UP)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3870,18 +3863,9 @@ def nexus_dashboard():
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
         :root { 
-            --bg: #000000; 
-            --card: #0A0A0A; 
-            --border: #1A1A1A; 
-            --text: #FAFAFA; 
-            --muted: #71717A; 
-            --accent: #FFFFFF; 
-            --btn-bg: #FFFFFF;
-            --btn-text: #000000;
-            --shadow: 0 10px 30px -10px rgba(0,0,0,0.8);
-            --badge-bg: #1A1A1A;
-            --badge-text: #FAFAFA;
-            --input-bg: #050505;
+            --bg: #000000; --card: #0A0A0A; --border: #1A1A1A; --text: #FAFAFA; --muted: #71717A; 
+            --accent: #FFFFFF; --btn-bg: #FFFFFF; --btn-text: #000000;
+            --shadow: 0 10px 30px -10px rgba(0,0,0,0.8); --badge-bg: #1A1A1A; --badge-text: #FAFAFA; --input-bg: #050505;
         }
 
         body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; overflow: hidden;}
@@ -3889,12 +3873,12 @@ def nexus_dashboard():
         
         .app-container { display: flex; height: 100vh; width: 100vw; flex-direction: column; }
         .topbar { height: 64px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; z-index: 10;}
-        .brand { font-size: 18px; font-weight: 800; letter-spacing: -0.5px;}
+        .brand { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px;}
         
         .main-wrapper { display: flex; flex: 1; overflow: hidden; }
-        .sidebar { width: 250px; background: var(--bg); border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; gap: 8px;}
-        .nav-item { padding: 14px 18px; border-radius: 8px; color: var(--muted); font-weight: 600; font-size: 13px; cursor: pointer; border: none; background: transparent; text-align: left; transition: 0.2s;}
-        .nav-item:hover { color: var(--text); }
+        .sidebar { width: 260px; background: var(--bg); border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; gap: 8px;}
+        .nav-item { padding: 14px 18px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; border: none; background: transparent; text-align: left; transition: 0.2s; display: flex; align-items: center; gap: 12px;}
+        .nav-item:hover { color: var(--text); background: var(--card); }
         .nav-item.active { background: var(--card); color: var(--accent); border: 1px solid var(--border); }
         
         .viewport { flex: 1; padding: 40px 50px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
@@ -3919,7 +3903,7 @@ def nexus_dashboard():
         .track-card { border-radius: 16px; overflow: hidden; margin-bottom: 24px; padding: 0; border: 1px solid var(--border);}
         .track-header { padding: 24px 30px; border-bottom: 1px solid var(--border); background: var(--input-bg); display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 20px;}
         .meta-col { display: flex; flex-direction: column; gap: 6px; }
-        .meta-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; font-weight: 800; letter-spacing: 1px;}
+        .meta-lbl { font-size: 11px; color: var(--muted); font-weight: 600; display:flex; align-items:center; gap: 6px;}
         .meta-val { font-size: 14px; font-weight: 600;}
         
         .tid-area { padding: 30px; background: var(--card);}
@@ -3942,23 +3926,22 @@ def nexus_dashboard():
     <div class="app-container">
         <header class="topbar">
             <div class="brand">🛰️ NEXUS HUB</div>
+            <div style="font-size: 12px; color: var(--muted); font-weight: 600;">Operations Tracker</div>
         </header>
         <div class="main-wrapper">
             <aside class="sidebar">
-                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Operations</div>
-                <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Track & Sync</button>
+                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Menu</div>
+                <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
                 <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over</button>
-                <button class="nav-item" onclick="navSwitch(this, 'tid_pending')">⚠️ Missing TIDs</button>
-                <button class="nav-item" onclick="navSwitch(this, 'qc_not_approved')">⏳ QC Not Approved</button>
-                <button class="nav-item" onclick="navSwitch(this, 'qc_approved')">✅ QC Approved</button>
                 <div style="flex:1"></div>
-                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to 3PL Dashboard</a>
+                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
             </aside>
             <main class="viewport">
                 <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Global Tracking Matrix</h1>
+                
                 <div id="view-track" class="view-pane active">
                     <div class="card" style="margin-bottom: 30px;">
-                        <textarea id="searchInput" placeholder="Paste order IDs or carrier TIDs here..."></textarea>
+                        <textarea id="searchInput" placeholder="Paste Order IDs or TIDs here (e.g. 129027_34)..."></textarea>
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="searchOrders()">Scan Matrix</button>
                             <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML='';">Clear</button>
@@ -3966,6 +3949,7 @@ def nexus_dashboard():
                     </div>
                     <div id="tracking-results"></div>
                 </div>
+                
                 <div id="view-radar" class="view-pane" style="display:none;">
                     <div id="loader" style="display:none; padding:60px; text-align:center;"><div class="loader" style="margin:auto"></div></div>
                     <div id="radar-container" class="radar-grid"></div>
@@ -3988,9 +3972,7 @@ def nexus_dashboard():
     </div>
 
     <script>
-        // Force background refresh to ensure fresh data
         window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
-
         let activeBucket = ''; let activeDetails = []; let radarData = null;
 
         function navSwitch(btn, viewType) {
@@ -4003,7 +3985,7 @@ def nexus_dashboard():
                 document.getElementById('view-title').innerText = "Global Tracking Matrix";
             } else {
                 document.getElementById('view-radar').style.display = 'block';
-                document.getElementById('view-title').innerText = btn.innerText;
+                document.getElementById('view-title').innerText = btn.innerText.replace('📦 ', '');
                 activeBucket = viewType; loadRadar();
             }
         }
@@ -4019,17 +4001,18 @@ def nexus_dashboard():
             let h = '';
             data.forEach(item => {
                 const isDelivered = item.status.toLowerCase().includes('delivered');
+                // ICONS ADDED TO ALL FIELDS!
                 h += `<div class="card track-card">
                     <div class="track-header">
-                        <div class="meta-col"><span class="meta-lbl">Order</span><span class="meta-val" style="font-weight:800; font-size: 16px;">${item.order_id}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">Date</span><span class="meta-val">${item.date}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">Source</span><span class="meta-val">${item.source}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">Vendor</span><span class="meta-val">${item.vendor}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">Customer</span><span class="meta-val">${item.customer}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">Country</span><span class="meta-val">${item.country}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">Boxes / Wgt</span><span class="meta-val">${item.boxes} / ${item.weight}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">MAWB</span><span class="meta-val">${item.mawb}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">Status</span><span class="badge ${isDelivered?'success':''}">${item.status}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:800; font-size: 16px;">${item.order_id}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">📅 Date</span><span class="meta-val">${item.date}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">🏢 Source</span><span class="meta-val">${item.source}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">🏭 Vendor</span><span class="meta-val">${item.vendor}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">👤 Customer</span><span class="meta-val">${item.customer}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">🌍 Country</span><span class="meta-val">${item.country}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">📦 Boxes/Wgt</span><span class="meta-val">${item.boxes} / ${item.weight}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">✈️ MAWB</span><span class="meta-val">${item.mawb}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">🚦 Status</span><span class="badge ${isDelivered?'success':''}">${item.status}</span></div>
                     </div>
                     <div class="tid-area">
                         <div class="tid-strip">
@@ -4037,10 +4020,10 @@ def nexus_dashboard():
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <span style="font-family:monospace; font-weight:700; font-size:16px;">${tid}</span>
-                                        <button class="btn outline" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}')">Sync Data</button>
+                                        <button class="btn outline" style="padding:6px 14px; font-size:11px;" onclick="syncShip24('${tid}')">🚢 Track API</button>
                                     </div>
                                     <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
-                                    <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted); font-weight: 500;">Pending Ship24 Call...</div>
+                                    <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted); font-weight: 500;">Pending API Call...</div>
                                 </div>
                             `).join('')}
                         </div>
