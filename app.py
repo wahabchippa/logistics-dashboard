@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - VERCEL SAFE & PRO SAAS UI (EXACT COLUMNS)
+# 🛰️ TID OPERATIONS HUB (NEXUS) - VERCEL SAFE & PRO SAAS UI (FAST ENGINE)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3608,6 +3608,7 @@ import re
 import json
 import os
 import time
+import concurrent.futures
 from datetime import datetime
 from flask import jsonify, request, session, render_template_string
 
@@ -3625,106 +3626,78 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. VERCEL-SAFE CACHE ENGINE & EXACT COLUMN MATCHING
+# 2. VERCEL-SAFE CACHE & EXACT COLUMN MAP
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
-# Exact 0-based column mapping derived from your list
+# EXACT 1-BASED COLUMNS (From your list) 
+# Note: 'o' is Order ID (Col 1), 'd' is Date (Col 2), 'b' is Boxes (Col 3)
 SHEET_MAP = {
-    "Kerry":         {"o": 0, "b": 1, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
-    "APX":           {"o": 0, "b": 1, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
-    "ECL QC Center": {"o": 0, "b": 1, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
-    "ECL Zone":      {"o": 0, "b": 1, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
-    "GE QC Center":  {"o": 0, "b": 1, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
-    "GE Zone":       {"o": 0, "b": 1, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
+    "Kerry":         {"o": 1, "d": 2, "b": 3, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
+    "APX":           {"o": 1, "d": 2, "b": 3, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
+    "ECL QC Center": {"o": 1, "d": 2, "b": 3, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
+    "ECL Zone":      {"o": 1, "d": 2, "b": 3, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
+    "GE QC Center":  {"o": 1, "d": 2, "b": 3, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
+    "GE Zone":       {"o": 1, "d": 2, "b": 3, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
 }
 
-def fetch_single_csv(url, name):
+def fetch_sheet_data(url, name):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15) as res:
+        with urllib.request.urlopen(req, timeout=10) as res:
             data = list(csv.reader(res.read().decode('utf-8').splitlines()))
-            if not data: return []
-            
-            # Find header row dynamically
-            start_row, order_idx = 1, 0
-            for i, row in enumerate(data[:30]):
-                if not row: continue
-                c = [re.sub(r'[^a-z0-9]', '', str(x).lower()) for x in row]
-                found = False
-                for j, cell in enumerate(c):
-                    if cell in ['order', 'fleekid', 'orderid', 'shipmentid']:
-                        start_row = i + 1
-                        order_idx = j
-                        found = True
-                        break
-                if found: break
-            
             col = SHEET_MAP.get(name)
-            if not col: return []
+            if not col or not data: return []
 
             processed = []
-            for row in data[start_row:]:
+            for row in data[1:]: # Skip row 1 (headers)
                 if not row: continue
-                p = row + [''] * max(0, 50 - len(row))
+                p = row + [''] * 45 # Pad safe
                 
-                o_val = str(p[order_idx]).strip()
-                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a']: continue
+                o_val = str(p[col['o'] - 1]).strip()
+                if not o_val or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
 
                 def get_v(col_num):
-                    idx = col_num - 1 # Subtract 1 to convert 1-based to 0-based
-                    val = str(p[idx]).strip()
-                    return val if val and val.lower() not in ['n/a', 'nan', '-', '#n/a'] else "N/A"
+                    v = str(p[col_num - 1]).strip()
+                    return v if v and v.lower() not in ['n/a', 'nan', '-'] else "N/A"
 
                 processed.append({
-                    'order': o_val,
-                    'date': get_v(col['d']),
-                    'boxes': get_v(col['b']),
-                    'weight': get_v(col['w']),
-                    'vendor': get_v(col['v']),
-                    'customer': get_v(col['c']),
-                    'country': get_v(col['cn']),
-                    'tid': get_v(col['t']),
-                    'mawb': get_v(col['ma'])
+                    'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
+                    'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
+                    'country': get_v(col['cn']), 'tid': get_v(col['t']), 'mawb': get_v(col['ma'])
                 })
             return processed
-    except Exception as e:
-        return []
+    except: return []
 
 def clean_tids(raw):
     raw = str(raw).strip()
     if not raw or raw.lower() in ['pending','none','n/a']: return []
     if not any(x in raw for x in [',','/',' ']) and len(raw) > 15:
-        if re.search(r'[A-Za-z]', raw):
-            parts = [p for p in re.split(r'(?<=[a-zA-Z])', raw) if p.strip()]
-        elif len(raw) % 15 == 0:
-            parts = [raw[i:i+15] for i in range(0, len(raw), 15)]
-        else:
-            parts = [raw]
-    else:
-        parts = [t.strip() for t in re.split(r'[,\/\s]+', raw) if t.strip()]
+        if re.search(r'[A-Za-z]', raw): parts = [p for p in re.split(r'(?<=[a-zA-Z])', raw) if p.strip()]
+        elif len(raw) % 15 == 0: parts = [raw[i:i+15] for i in range(0, len(raw), 15)]
+        else: parts = [raw]
+    else: parts = [t.strip() for t in re.split(r'[,\/\s]+', raw) if t.strip()]
     return ['0'+t if (t.startswith('150') and 12<=len(t)<=15) else t for t in parts]
 
 def fetch_kerry_status(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15) as res:
+        with urllib.request.urlopen(req, timeout=10) as res:
             data = list(csv.reader(res.read().decode('utf-8').splitlines()))
+            if not data: return {}
             s_col, h_idx = 1, -1
-            for i, row in enumerate(data[:15]):
+            for i, row in enumerate(data[:10]):
                 c = [str(x).lower().replace(' ', '') for x in row]
-                if 'order' in c or 'fleekid' in c or 'orderid' in c:
-                    h_idx = i
-                    if 'lateststatus' in c: s_col = c.index('lateststatus')
-                    elif 'status' in c: s_col = c.index('status')
+                if 'order' in c or 'fleekid' in c:
+                    h_idx, s_col = i, c.index('lateststatus') if 'lateststatus' in c else c.index('status')
                     break
             s_map = {}
             if h_idx != -1:
                 for row in data[h_idx+1:]:
                     p = row + [''] * 40
                     o = str(p[0]).strip().lower()
-                    if o and o != 'n/a': s_map[o] = str(p[s_col]).strip().upper()
+                    if o: s_map[o] = str(p[s_col]).strip().upper()
             return s_map
     except: return {}
 
@@ -3739,23 +3712,28 @@ def parse_date(date_str):
 def sync_all_databases():
     global GLOBAL_DB_CACHE
     now = time.time()
+    # 10 Min Cache - Makes UI load instantly after first click!
     if now - GLOBAL_DB_CACHE['time'] < 600 and GLOBAL_DB_CACHE['sheets']:
         return GLOBAL_DB_CACHE['sheets'], GLOBAL_DB_CACHE['kerry']
 
-    sheets_data = {}
-    for name, url in NEXUS_SOURCES.items():
-        sheets_data[name] = fetch_single_csv(url, name)
-    
-    kerry_data = fetch_kerry_status(NEXUS_KERRY_STATUS_URL)
-
+    res = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
+        f_sheets = {exe.submit(fetch_sheet_data, url, name): name for name, url in NEXUS_SOURCES.items()}
+        f_kerry = exe.submit(fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
+        for f in concurrent.futures.as_completed(f_sheets):
+            res[f_sheets[f]] = f.result()
+        try: k_map = f_kerry.result()
+        except: k_map = {}
+        
     GLOBAL_DB_CACHE['time'] = now
-    GLOBAL_DB_CACHE['sheets'] = sheets_data
-    GLOBAL_DB_CACHE['kerry'] = kerry_data
-    return sheets_data, kerry_data
+    GLOBAL_DB_CACHE['sheets'] = res
+    GLOBAL_DB_CACHE['kerry'] = k_map
+    return res, k_map
 
 @app.after_request
 def inject_nexus_button(response):
     if response.content_type and response.content_type.startswith('text/html'):
+        # Sirf admin ko button dikhega, dashboard crash nahi hoga
         if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
             html = response.get_data(as_text=True)
             btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:#111827; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:600; font-family:'Inter',sans-serif; box-shadow:0 10px 15px -3px rgba(0,0,0,0.2); transition:transform 0.2s ease; z-index:9999;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">📊 TID Operations</a>"""
@@ -3767,7 +3745,6 @@ def inject_nexus_button(response):
 # ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/search', methods=['POST'])
-# @login_required (Commented out if you don't use strict login for testing)
 def api_nexus_search():
     order_ids = [x.strip().lower() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
     results = []
@@ -3778,9 +3755,7 @@ def api_nexus_search():
         found = False
         for src, rows in sheets_data.items():
             for r in rows:
-                oid = r['order'].lower()
-                tid_raw = r['tid'].lower()
-                
+                oid, tid_raw = r['order'].lower(), r['tid'].lower()
                 if q in oid or q in tid_raw or q_alt in tid_raw:
                     k_stat = kerry_data.get(oid, "N/A")
                     results.append({
@@ -3794,14 +3769,13 @@ def api_nexus_search():
     return jsonify(results)
 
 @app.route('/api/nexus/ship24', methods=['POST'])
-# @login_required
 def api_nexus_ship24():
     tids = request.json.get('tids', [])
     ship24_key = os.environ.get('SHIP24_API_KEY', 'MOCK')
     responses = []
     for tid in tids:
         if ship24_key == 'MOCK':
-            responses.append({"tid": tid, "success": True, "current_status": "Transit", "progress": 60, "eta": "Calculating...", "events": [{"status": "Processed", "time": "2026-03-01", "location": "Hub"}]})
+            responses.append({"tid": tid, "success": True, "current_status": "Transit", "progress": 60, "events": [{"status": "Processed at Gateway", "time": "2026-03-02"}]})
         else:
             try:
                 req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
@@ -3809,12 +3783,11 @@ def api_nexus_ship24():
                     tr = json.loads(res.read().decode()).get('data',{}).get('trackings',[{}])[0]
                     evs = tr.get('events',[])
                     st = evs[0].get('statusMilestone','Transit') if evs else 'Pending'
-                    responses.append({"tid": tid, "success": True, "current_status": st, "progress": 100 if st.lower()=='delivered' else 60, "eta": "Live", "events": [{"status": e.get('statusMilestone', e.get('status', 'Update')), "time": e.get('datetime', 'N/A'), "location": e.get('location', '')} for e in evs]})
+                    responses.append({"tid": tid, "success": True, "current_status": st, "progress": 100 if st.lower()=='delivered' else 60, "events": [{"status": e.get('statusMilestone', e.get('status', 'Update')), "time": e.get('datetime', 'N/A')} for e in evs]})
             except: responses.append({"tid": tid, "success": False})
     return jsonify(responses)
 
 @app.route('/api/nexus/radar_data', methods=['GET'])
-# @login_required
 def api_nexus_radar_data():
     sheets_data, kerry_data = sync_all_databases()
     buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES}, "tid_pending": {s: [] for s in NEXUS_SOURCES}, "qc_not_approved": {s: [] for s in NEXUS_SOURCES}, "qc_approved": {s: [] for s in NEXUS_SOURCES} }
@@ -3844,12 +3817,12 @@ def api_nexus_radar_data():
     return jsonify(buckets)
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI & UX (STRICT SAAS DESIGN)
+# 4. FRONTEND UI & UX (PRO SAAS DESIGN)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
-# @login_required
 def nexus_dashboard():
+    # Admin check removed for easy testing, you can uncomment below if needed
     # if session.get('role') != 'admin': return "Access Denied", 403
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
@@ -3857,99 +3830,56 @@ def nexus_dashboard():
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         
-        /* EXACT THEME VARIABLES FROM YOUR PROMPT */
         :root { 
-            --bg: #0F172A; 
-            --card: #1E293B; 
-            --border: #334155; 
-            --text: #F1F5F9; 
-            --muted: #94A3B8; 
-            --accent: #3B82F6; 
-            --btn-bg: #3B82F6;
-            --btn-text: #FFFFFF;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-            --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
-            --badge-bg: rgba(59, 130, 246, 0.1);
-            --badge-text: #60A5FA;
-            --input-bg: #0F172A;
+            --bg: #0F172A; --card: #1E293B; --border: #334155; --text: #F1F5F9; --muted: #94A3B8; 
+            --accent: #3B82F6; --btn-bg: #3B82F6; --btn-text: #FFFFFF;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+            --badge-bg: rgba(59, 130, 246, 0.1); --badge-text: #60A5FA; --input-bg: #0F172A;
             --table-row-hover: rgba(255,255,255,0.03);
         }
         
         [data-theme="light"] { 
-            --bg: #F8F9FB; 
-            --card: #FFFFFF; 
-            --border: #E5E7EB; 
-            --text: #111827; 
-            --muted: #6B7280; 
-            --accent: #111827; 
-            --btn-bg: #111827;
-            --btn-text: #FFFFFF;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            --badge-bg: #F3F4F6;
-            --badge-text: #111827;
-            --input-bg: #FFFFFF;
+            --bg: #F8F9FB; --card: #FFFFFF; --border: #E5E7EB; --text: #111827; --muted: #6B7280; 
+            --accent: #111827; --btn-bg: #111827; --btn-text: #FFFFFF;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            --badge-bg: #F3F4F6; --badge-text: #111827; --input-bg: #FFFFFF;
             --table-row-hover: #F8F9FB;
         }
 
-        /* GLOBALS */
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; transition: background-color 0.2s ease, color 0.2s ease; overflow: hidden;}
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; overflow: hidden;}
         * { box-sizing: border-box; }
         
-        /* LAYOUT */
         .app-container { display: flex; height: 100vh; width: 100vw; flex-direction: column; }
-        
-        /* TOP NAVBAR */
-        .topbar { height: 64px; background: var(--card); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 24px; flex-shrink: 0; z-index: 10;}
-        .brand { font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px;}
+        .topbar { height: 64px; background: var(--card); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 24px; z-index: 10;}
+        .brand { font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center;}
         .topbar-actions { display: flex; align-items: center; gap: 16px; }
+        .theme-toggle { background: var(--input-bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-weight: 500; font-size: 13px; cursor: pointer; transition: 0.2s;}
         
-        .theme-toggle { background: var(--input-bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-weight: 500; font-size: 13px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 6px;}
-        .theme-toggle:hover { border-color: var(--accent); }
-        
-        .profile-icon { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--btn-text); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px;}
-
-        /* MAIN AREA */
         .main-wrapper { display: flex; flex: 1; overflow: hidden; }
-        
-        /* SIDEBAR */
-        .sidebar { width: 240px; background: var(--card); border-right: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;}
-        .nav-item { padding: 12px 16px; border-radius: 8px; color: var(--muted); font-weight: 500; font-size: 13px; cursor: pointer; transition: all 0.2s ease-in-out; border: none; background: transparent; text-align: left; display: flex; align-items: center; gap: 10px; }
+        .sidebar { width: 240px; background: var(--card); border-right: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 4px;}
+        .nav-item { padding: 12px 16px; border-radius: 8px; color: var(--muted); font-weight: 500; font-size: 13px; cursor: pointer; border: none; background: transparent; text-align: left; }
         .nav-item:hover { background: var(--input-bg); color: var(--text); }
         .nav-item.active { background: var(--badge-bg); color: var(--accent); font-weight: 600; }
         
-        /* CONTENT PORT */
         .viewport { flex: 1; padding: 32px 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
-        
-        /* UI COMPONENTS */
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); transition: all 0.2s ease-in-out; }
-        
-        /* 2px LIFT TRICK */
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); }
         .card.hoverable:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); border-color: var(--accent); cursor: pointer;}
         
-        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 10px 20px; border-radius: 8px; font-weight: 500; font-size: 13px; cursor: pointer; transition: all 0.2s ease-in-out; }
-        .btn:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: var(--shadow); }
+        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 10px 20px; border-radius: 8px; font-weight: 500; font-size: 13px; cursor: pointer;}
         .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-        .btn.outline:hover { border-color: var(--text); }
+        textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; outline: none; resize: vertical; min-height: 80px; }
         
-        textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; outline: none; transition: 0.2s; resize: vertical; min-height: 80px; }
-        textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--badge-bg); }
-        
-        /* SOFT BADGES */
         .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--badge-bg); color: var(--badge-text); }
         .badge.success { background: rgba(16, 185, 129, 0.1); color: #10B981; }
-        .badge.warning { background: rgba(245, 158, 11, 0.1); color: #F59E0B; }
         
-        /* DISCIPLINED GRID (Exactly 2 per row) */
         .radar-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1000px;}
         .stat-value { font-size: 32px; font-weight: 700; color: var(--text); line-height: 1; margin-bottom: 4px;}
-        .stat-label { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;}
+        .stat-label { font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase;}
         
-        /* TRACKING CARDS */
         .track-card { border-radius: 12px; overflow: hidden; margin-bottom: 24px; padding: 0;}
         .track-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 16px;}
         .meta-col { display: flex; flex-direction: column; gap: 4px; }
-        .meta-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;}
+        .meta-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600;}
         .meta-val { font-size: 13px; font-weight: 500; color: var(--text);}
         
         .tid-area { padding: 20px 24px; }
@@ -3958,11 +3888,10 @@ def nexus_dashboard():
         .progress { height: 4px; background: var(--border); border-radius: 4px; overflow: hidden; }
         .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.5s ease; }
         
-        /* TABLE MODAL */
         .modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
         .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 32px; max-width: 1200px; margin: auto; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
         table { width: 100%; border-collapse: collapse; text-align: left; }
-        th { padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--border); white-space: nowrap; letter-spacing: 0.5px;}
+        th { padding: 12px 16px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--border);}
         td { padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text); }
         tr:hover { background: var(--table-row-hover); }
         
@@ -3976,7 +3905,6 @@ def nexus_dashboard():
             <div class="brand">TID Operations Hub</div>
             <div class="topbar-actions">
                 <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
-                <div class="profile-icon">AD</div>
             </div>
         </header>
         
@@ -3989,7 +3917,7 @@ def nexus_dashboard():
                 <button class="nav-item" onclick="navSwitch(this, 'qc_not_approved')">⏳ QC Not Approved</button>
                 <button class="nav-item" onclick="navSwitch(this, 'qc_approved')">✅ QC Approved</button>
                 <div style="flex:1"></div>
-                <a href="/" class="nav-item" style="color: #EF4444; margin-bottom:16px;">🚪 Exit Dashboard</a>
+                <a href="/" class="nav-item" style="color: #EF4444; margin-bottom:16px;">🚪 Back to Main Dashboard</a>
             </aside>
             
             <main class="viewport">
@@ -4047,6 +3975,9 @@ def nexus_dashboard():
         document.documentElement.setAttribute('data-theme', savedTheme);
         document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
 
+        // Background Preload Cache to make UI instant
+        window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
+
         let activeBucket = '';
         let activeDetails = [];
         let radarData = null;
@@ -4071,7 +4002,7 @@ def nexus_dashboard():
 
         async function searchOrders() {
             const q = document.getElementById('searchInput').value; if(!q) return;
-            document.getElementById('tracking-results').innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
+            document.getElementById('tracking-results').innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div><p style="color:var(--muted); font-size:12px; margin-top:10px;">Scanning records...</p></div>';
             const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
             const data = await r.json(); renderCards(data);
         }
@@ -4094,17 +4025,17 @@ def nexus_dashboard():
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <span style="font-family:monospace; font-weight:600; font-size:13px;">${tid}</span>
-                                        <button class="btn outline" style="padding:4px 10px; font-size:11px;" onclick="syncShip24('${tid}')">Sync</button>
+                                        <button class="btn outline" style="padding:4px 10px; font-size:11px;" onclick="syncShip24('${tid}')">Sync API</button>
                                     </div>
                                     <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/\\s/g,'')}"></div></div>
-                                    <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted)">Pending API Call...</div>
+                                    <div id="log-${tid.replace(/\\s/g,'')}" style="font-size:12px; color:var(--muted)">Pending status check...</div>
                                 </div>
                             `).join('')}
                         </div>
                     </div>
                 </div>`;
             });
-            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted);">No records found.</div>';
+            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted);">No matching orders found.</div>';
         }
 
         async function syncShip24(tid) {
@@ -4128,7 +4059,6 @@ def nexus_dashboard():
             document.getElementById('loader').style.display = 'none';
             
             const bucketData = radarData[activeBucket];
-            // STRICT ORDERING FOR GRID
             const order = ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"];
             
             order.forEach(src => {
