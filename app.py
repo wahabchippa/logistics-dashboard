@@ -3609,8 +3609,23 @@ import json
 import os
 import concurrent.futures
 from datetime import datetime
-from flask import jsonify, request, session, render_template_string
+from flask import jsonify, request, session, render_template_string, redirect
+from functools import wraps
 
+# ------------------------------------------------------------------------------
+# 1. SECURITY / LOGIN DECORATOR (Aapke login system ke liye)
+# ------------------------------------------------------------------------------
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'role' not in session:
+            return redirect('/')
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ------------------------------------------------------------------------------
+# 2. CORE DATA SOURCES
+# ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
     "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
@@ -3621,10 +3636,13 @@ NEXUS_SOURCES = {
 }
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
+# ------------------------------------------------------------------------------
+# 3. THE MATHEMATICAL HEADER ENGINE (Fix for GE & ECL)
+# ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
-# PERFECT MATCHING MAP BASED ON YOUR LIST
+# Aapke bataye gaye EXACT headers ka map
 EXACT_MAP = {
     'order': ['order', 'fleekid', 'orderid'],
     'date': ['fleekhandoverdate', 'airporthandoverdate', 'date', 'qcdate', 'handoverdate'],
@@ -3641,12 +3659,12 @@ EXACT_MAP = {
 def fetch_and_map_csv(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=12) as res:
+        with urllib.request.urlopen(req, timeout=15) as res:
             raw = res.read().decode('utf-8').splitlines()
             data = list(csv.reader(raw))
             if not data: return []
 
-            # 🚨 THE MATHEMATICAL SCORE ENGINE (Never misses the header row)
+            # Auto-detect real header row (bypasses titles in row 1)
             header_idx = 0
             max_score = 0
             for i, row in enumerate(data[:15]):
@@ -3713,18 +3731,20 @@ def force_sync_all_databases():
     GLOBAL_DB_CACHE['sheets'] = results
     GLOBAL_DB_CACHE['loaded'] = True
 
+# ------------------------------------------------------------------------------
+# THE FLOATING BUTTON INJECTOR (Now 100% visible)
+# ------------------------------------------------------------------------------
 @app.after_request
 def inject_nexus_button(response):
     if response.content_type and response.content_type.startswith('text/html'):
         if request.endpoint != 'nexus_dashboard':
             html = response.get_data(as_text=True)
-            # Dials button to 100% visibility for any user who loads a dashboard page
             btn = """<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #18181b, #09090b); color:#fff; border:1px solid #27272a; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5);">🚀 TID Operations Hub</a>"""
             if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
 # ------------------------------------------------------------------------------
-# API ROUTES
+# 4. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
@@ -3851,6 +3871,7 @@ def api_nexus_ops_commander():
 # FRONTEND HTML
 # ------------------------------------------------------------------------------
 @app.route('/nexus')
+@login_required
 def nexus_dashboard():
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
@@ -3863,12 +3884,11 @@ def nexus_dashboard():
         * { box-sizing: border-box; }
         .app-container { display: flex; height: 100vh; width: 100vw; flex-direction: column; }
         .topbar { height: 60px; background: var(--card); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 24px;}
-        .brand { font-size: 18px; font-weight: 900;}
+        .brand { font-size: 18px; font-weight: 900; letter-spacing: -0.5px;}
         .main-wrapper { display: flex; flex: 1; overflow: hidden; }
         .sidebar { width: 220px; background: var(--card); border-right: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 6px;}
         .nav-item { padding: 14px 16px; border-radius: 8px; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; border: none; background: transparent; text-align: left; transition:0.2s;}
         .nav-item.active { background: var(--accent); color: #fff;}
-        .nav-item:hover { background: var(--border); color: #fff;}
         .viewport { flex: 1; padding: 40px; overflow-y: auto;}
         .sync-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 50; display: none; flex-direction: column; justify-content: center; align-items: center; color: white;}
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom:20px;}
@@ -3882,7 +3902,7 @@ def nexus_dashboard():
         .meta-col span:last-child { font-size: 14px; font-weight: 600; }
         .tid-area { padding: 20px; background: var(--bg); }
         .tid-box { border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: var(--card); margin-bottom:15px;}
-        .loader { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; vertical-align:middle;}
+        .loader { width: 16px; height: 16px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; vertical-align:middle;}
         @keyframes spin { to { transform: rotate(360deg); } }
         
         .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px;}
@@ -3898,7 +3918,6 @@ def nexus_dashboard():
         .blame-table th { padding: 12px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--border); text-transform:uppercase;}
         .blame-table td { padding: 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
         .blame-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239,68,68,0.3);}
-
         .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); z-index: 100; display: none; padding: 40px; overflow-y: auto; backdrop-filter: blur(5px);}
         .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
@@ -3950,13 +3969,13 @@ def nexus_dashboard():
 
                 <div id="view-radar" style="display:none;">
                     <h1 style="margin-top:0;">Handed Over Operations</h1>
-                    <div id="radar-loader" style="display:none; padding:100px; text-align:center;"><div class="loader"></div></div>
+                    <div id="radar-loader" style="display:none; padding:100px; text-align:center;"><div class="loader" style="width:30px;height:30px;"></div></div>
                     <div id="radar-container" class="radar-grid"></div>
                 </div>
 
                 <div id="view-ops" style="display:none;">
                     <h1 style="margin-top:0; color:#F59E0B;">⚡ Operations Commander</h1>
-                    <div id="ops-loader" style="display:none; padding:50px; text-align:center;"><div class="loader"></div></div>
+                    <div id="ops-loader" style="display:none; padding:50px; text-align:center;"><div class="loader" style="width:30px;height:30px;"></div></div>
                     <div class="ops-grid" id="ops-content">
                         <div class="card">
                             <h3 style="margin-top:0;">🚨 The Blame Game (Aging Radar)</h3>
@@ -4062,14 +4081,14 @@ def nexus_dashboard():
                 `).join('');
             } catch(e) {
                 btn.innerHTML = '🔍 Scan Sheets Live';
-                resBox.innerHTML = '<div style="color:#EF4444; border:1px solid #EF4444; padding:20px; border-radius:8px;">Network Error. Vercel timeout. Refresh Page.</div>';
+                resBox.innerHTML = '<div style="color:#EF4444; border:1px solid #EF4444; padding:20px; border-radius:8px;">Network Error. Vercel timeout.</div>';
             }
         }
 
         async function syncShip24(tid, btn) {
             const sid = tid.replace(/[\\s\\/]+/g,'');
             const log = document.getElementById(`log-${sid}`) || btn.nextElementSibling; 
-            btn.innerHTML = '...';
+            btn.innerHTML = '<div class="loader" style="width:12px;height:12px;border-top-color:#fff;"></div>';
             
             try {
                 const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids:[tid]})});
@@ -4094,12 +4113,10 @@ def nexus_dashboard():
             
             let h = '';
             tids.forEach(tid => {
-                h += `<div class="card" style="margin-bottom:10px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <b style="font-family:monospace">${tid}</b>
-                            <button class="btn" style="padding:6px 12px; font-size:11px;" onclick="syncShip24('${tid}', this)">TRACK</button>
-                        </div>
-                        <div style="margin-top:10px; font-size:12px; color:var(--muted);"></div>
+                h += `<div class="card" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                        <b style="font-family:monospace">${tid}</b>
+                        <button class="btn" style="padding:6px 12px; font-size:11px;" onclick="syncShip24('${tid}', this)">TRACK</button>
+                        <div style="width:100%; margin-top:10px; font-size:12px; color:var(--muted); display:none;"></div>
                       </div>`;
             });
             document.getElementById('dRes').innerHTML = h;
@@ -4187,5 +4204,12 @@ def nexus_dashboard():
     </script>
     </body></html>
     ''')
+
+# ------------------------------------------------------------------------------
+# 6. APP START
+# ------------------------------------------------------------------------------
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
 if __name__ == '__main__':
     app.run(debug=True)
