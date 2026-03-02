@@ -3600,14 +3600,13 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - LIGHTNING FAST & SMART HEADER EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - SMART HEADER & LIGHTNING FAST EDITION
 # ==============================================================================
 import urllib.request
 import csv
 import re
 import json
 import os
-import time
 import concurrent.futures
 from datetime import datetime
 from flask import Flask, jsonify, request, session, render_template_string, redirect
@@ -3622,7 +3621,6 @@ app.secret_key = os.environ.get('SECRET_KEY', 'nexus_ultra_secure_9988')
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # NOTE: Agar testing ke doran login hat jaye toh isko comment out kar dein
         if 'role' not in session:
             return redirect('/')
         return f(*args, **kwargs)
@@ -3642,76 +3640,72 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 3. ULTRA-FAST PRE-PARSING ENGINE
+# 3. SMART HEADER ENGINE (FIX FOR ECL & GE)
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
-def clean_str(s):
-    # Removes everything except letters and numbers for a 100% exact match
-    return re.sub(r'[^a-z0-9]', '', str(s).lower())
-
-CLEAN_ALIASES = {
-    'order': ['order', 'fleek', 'shipment'], 
-    'date': ['date', 'created'], 
-    'boxes': ['box', 'qty'], 
-    'weight': ['weight', 'kg'], 
-    'vendor': ['vendor', 'seller', 'supplier'], 
-    'customer': ['customer', 'consignee', 'receiver'], 
-    'country': ['country', 'destination', 'city', 'lane'], 
-    'tid': ['tracking', 'tid', 'awbnumber', 'courier'], 
-    'mawb': ['mawb', 'master'], 
-    'status': ['status']
-}
-
-def get_alias_val(row_dict, alias_key):
-    aliases = CLEAN_ALIASES[alias_key]
-    for k, v in row_dict.items():
-        clean_k = clean_str(k)
-        if any(a in clean_k for a in aliases):
-            val = str(v).strip()
-            if val and val.lower() not in ['n/a', 'nan', 'none', '-']: 
-                return val
-    return "N/A"
-
 def fetch_and_process_csv(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as res:
+        with urllib.request.urlopen(req, timeout=12) as res:
             raw = res.read().decode('utf-8').splitlines()
             data = list(csv.reader(raw))
             if not data: return []
 
-            # 🚨 FIX 1: Smart Header Detection (For ECL Sheets)
+            # 🚨 FIX 1: SMART HEADER DETECTOR
+            # Code khud dhoondega ke headers asal mein kis line par hain (ECL ki wajah se)
             header_idx = 0
             for i, row in enumerate(data[:10]):
-                row_str = "".join(row).lower()
-                if 'order' in row_str or 'fleek' in row_str or 'tracking' in row_str:
+                row_clean = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
+                matches = sum(1 for c in row_clean if any(kw in c for kw in ['order', 'fleek', 'date', 'box', 'weight', 'track', 'customer', 'vendor', 'mawb', 'awb']))
+                if matches >= 3: 
                     header_idx = i
                     break
-                    
+
             headers = data[header_idx]
-            processed_data = []
             
-            # 🚨 FIX 2: Pre-Parse data so Search is Lightning Fast
+            # 🚨 FIX 2: EXACT COLUMN MAPPING
+            mapping = {}
+            for i, h in enumerate(headers):
+                c = re.sub(r'[^a-z0-9]', '', str(h).lower())
+                if not c: continue
+                if 'order' not in mapping and c in ['order', 'orderid', 'ordernum', 'fleekid', 'shipmentid']: mapping['order'] = i
+                elif 'date' not in mapping and c in ['date', 'handoverdate', 'createdat', 'qcdate', 'fleekhandoverdate']: mapping['date'] = i
+                elif 'boxes' not in mapping and c in ['box', 'boxes', 'qty', 'quantity', 'noofboxes', 'numberofboxes', 'boxcount', 'totalboxes']: mapping['boxes'] = i
+                elif 'weight' not in mapping and ('weight' in c or 'kg' in c): mapping['weight'] = i
+                elif 'vendor' not in mapping and ('vendor' in c or 'seller' in c): mapping['vendor'] = i
+                elif 'customer' not in mapping and ('customer' in c or 'consignee' in c or 'receiver' in c): mapping['customer'] = i
+                elif 'country' not in mapping and ('country' in c or 'dest' in c or 'lane' in c): mapping['country'] = i
+                elif 'mawb' not in mapping and ('mawb' in c or 'master' in c): mapping['mawb'] = i
+                elif 'tid' not in mapping and ('tracking' in c or 'tid' in c or 'awbnumber' in c or 'courier' in c): mapping['tid'] = i
+                elif 'status' not in mapping and 'status' in c: mapping['status'] = i
+
+            # Partial match fallbacks
+            for i, h in enumerate(headers):
+                c = re.sub(r'[^a-z0-9]', '', str(h).lower())
+                if 'order' not in mapping and ('order' in c or 'fleek' in c): mapping['order'] = i
+                if 'date' not in mapping and ('date' in c or 'handover' in c): mapping['date'] = i
+                if 'tid' not in mapping and ('track' in c or 'awb' in c): mapping['tid'] = i
+                if 'boxes' not in mapping and ('box' in c or 'qty' in c): mapping['boxes'] = i
+
+            processed_data = []
             for row in data[header_idx+1:]:
-                # Ignore completely empty rows
                 if not any(str(x).strip() for x in row): continue
-                
                 row_padded = row + [''] * max(0, len(headers) - len(row))
-                r_dict = dict(zip(headers, row_padded))
                 
+                def get_val(key):
+                    if key in mapping and mapping[key] < len(row_padded):
+                        v = str(row_padded[mapping[key]]).strip()
+                        return v if v and v.lower() not in ['n/a', 'nan', 'none', '-'] else "N/A"
+                    return "N/A"
+
                 processed_data.append({
-                    'order': get_alias_val(r_dict, 'order'),
-                    'date': get_alias_val(r_dict, 'date'),
-                    'boxes': get_alias_val(r_dict, 'boxes'),
-                    'weight': get_alias_val(r_dict, 'weight'),
-                    'vendor': get_alias_val(r_dict, 'vendor'),
-                    'customer': get_alias_val(r_dict, 'customer'),
-                    'country': get_alias_val(r_dict, 'country'),
-                    'tid': get_alias_val(r_dict, 'tid'),
-                    'mawb': get_alias_val(r_dict, 'mawb'),
-                    'status': get_alias_val(r_dict, 'status')
+                    'order': get_val('order'), 'date': get_val('date'),
+                    'boxes': get_val('boxes'), 'weight': get_val('weight'),
+                    'vendor': get_val('vendor'), 'customer': get_val('customer'),
+                    'country': get_val('country'), 'tid': get_val('tid'),
+                    'mawb': get_val('mawb'), 'status': get_val('status')
                 })
             return processed_data
     except Exception as e:
@@ -3761,7 +3755,7 @@ def inject_nexus_button(response):
     if response.content_type and response.content_type.startswith('text/html'):
         if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
             html = response.get_data(as_text=True)
-            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #18181b, #09090b); color:#fff; border:1px solid #27272a; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; font-family:'Inter',sans-serif; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); transition:0.3s;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">🚀 TID Operations Hub</a>"""
+            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #18181b, #09090b); color:#fff; border:1px solid #27272a; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; font-family:'Inter',sans-serif; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5);">🚀 TID Operations Hub</a>"""
             if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
@@ -3778,8 +3772,7 @@ def api_nexus_refresh():
 @app.route('/api/nexus/search', methods=['POST'])
 @login_required
 def api_nexus_search():
-    if not GLOBAL_DB_CACHE['loaded']: 
-        force_sync_all_databases()
+    if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
 
     queries = [x.strip().lower() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
     results = []
@@ -3788,7 +3781,6 @@ def api_nexus_search():
         q_lower_alt = '0' + q_lower if (q_lower.startswith('150') and 12 <= len(q_lower) <= 15) else q_lower
 
         found = False
-        # Because we pre-processed, this loop is now instantly fast!
         for src, rows in GLOBAL_DB_CACHE['sheets'].items():
             for row in rows:
                 oid = row['order'].lower()
@@ -3817,7 +3809,7 @@ def api_nexus_ship24():
         if tid.startswith('150') and 12 <= len(tid) <= 15: tid = '0' + tid
             
         if ship24_key == 'MOCK':
-            responses.append({"tid": tid, "success": True, "courier": "Ship24", "current_status": "Transit", "progress": 60, "eta": "In 3 Days", "events": [{"statusMilestone":"transit", "status": "Arrival at Hub", "time": "2026-03-01", "location": "Gateway"}]})
+            responses.append({"tid": tid, "success": True, "courier": "Carrier", "current_status": "Transit", "progress": 60, "eta": "In 3 Days", "events": [{"statusMilestone":"transit", "status": "Processed", "time": "2026-03-01", "location": "Hub"}]})
         else:
             try:
                 req = urllib.request.Request("https://api.ship24.com/public/v1/trackers/track", data=json.dumps({"trackingNumber": tid}).encode(), headers={"Authorization": f"Bearer {ship24_key}", "Content-Type": "application/json"}, method="POST")
@@ -3955,7 +3947,7 @@ def nexus_dashboard():
         .nav-item.active { background: var(--accent); color: white; font-weight: 600; }
         
         .viewport { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; position: relative;}
-        
+        .sync-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 50; display: none; flex-direction: column; justify-content: center; align-items: center; color: white;}
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: var(--shadow); }
         .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.2s; }
         .btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
@@ -4024,12 +4016,14 @@ def nexus_dashboard():
     </style></head>
     <body>
     <div class="app-container">
+        
         <header class="topbar">
             <div class="brand">🛰️ TID Operations Hub</div>
             <div class="topbar-actions">
                 <button class="btn-outline" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
             </div>
         </header>
+        
         <div class="main-wrapper">
             <aside class="sidebar">
                 <div style="font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 10px;">Menu</div>
@@ -4040,12 +4034,18 @@ def nexus_dashboard():
                 <div style="flex:1"></div>
                 <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none;">🚪 Exit Hub</a>
             </aside>
+            
             <main class="viewport">
+                <div class="sync-overlay" id="syncOverlay">
+                    <div class="loader" style="width: 50px; height: 50px; margin-bottom:20px;"></div>
+                    <h2 style="margin:0; font-size:24px;">Synchronizing Data...</h2>
+                    <p style="color:var(--muted); margin-top:10px;">Loading directly from servers.</p>
+                </div>
 
                 <div id="view-track" class="view-pane active">
                     <div style="margin-bottom:20px;">
                         <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 800;">Matrix Search</h1>
-                        <div style="font-size: 14px; color: var(--muted);">Search by Order ID or Carrier TID. Super-fast results.</div>
+                        <div style="font-size: 14px; color: var(--muted);">Search by Order ID or Carrier TID. Zero loading time!</div>
                     </div>
                     <div class="card" style="margin-bottom: 30px;">
                         <textarea id="searchInput" placeholder="Paste Order IDs or TIDs here..."></textarea>
@@ -4076,9 +4076,7 @@ def nexus_dashboard():
                     <div style="margin-bottom:20px;">
                         <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 800;">Handed Over Operations</h1>
                     </div>
-                    <div id="loader" style="display:none; padding:100px; text-align:center;">
-                        <div class="loader" style="margin:auto"></div><br><br><span style="color:var(--muted)">Loading Data... (First load takes a few secs)</span>
-                    </div>
+                    <div id="loader" style="display:none; padding:100px; text-align:center;"><div class="loader" style="margin:auto"></div></div>
                     <div id="radar-container" class="radar-grid"></div>
                 </div>
 
@@ -4086,9 +4084,7 @@ def nexus_dashboard():
                     <div style="margin-bottom:20px;">
                         <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 800; color:#F59E0B;">⚡ Operations Commander</h1>
                     </div>
-                    <div id="ops-loader" style="display:none; padding:50px; text-align:center;">
-                        <div class="loader" style="margin:auto"></div><br><br><span style="color:var(--muted)">Analyzing bottlenecks...</span>
-                    </div>
+                    <div id="ops-loader" style="display:none; padding:50px; text-align:center;"><div class="loader" style="margin:auto"></div></div>
                     <div class="ops-grid" id="ops-content">
                         <div class="card">
                             <h3 style="margin-top:0;">🚨 The Blame Game (Aging Radar)</h3>
@@ -4142,6 +4138,16 @@ def nexus_dashboard():
         let radarData = null;
         let allTrackingData = [];
 
+        // 🚀 AUTO-LOAD ON START
+        document.addEventListener("DOMContentLoaded", async () => {
+            const overlay = document.getElementById('syncOverlay');
+            overlay.style.display = 'flex';
+            try {
+                await fetch('/api/nexus/refresh', {method: 'POST'});
+            } catch(e) {}
+            overlay.style.display = 'none';
+        });
+
         function navSwitch(btn, viewType) {
             document.querySelectorAll('.nav-item').forEach(l=>l.classList.remove('active'));
             btn.classList.add('active');
@@ -4159,7 +4165,7 @@ def nexus_dashboard():
             const sBtn = document.getElementById('sBtn');
             
             resBox.innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
-            sBtn.innerHTML = '<div class="loader" style="width:12px;height:12px;border-top-color:#fff;"></div> Processing...';
+            sBtn.innerHTML = '<div class="loader" style="width:14px;height:14px;border-top-color:#fff;"></div> Processing...';
             document.getElementById('bulkBtn').style.display = 'none';
             
             try {
@@ -4178,7 +4184,7 @@ def nexus_dashboard():
         function renderCards() {
             let h = '';
             if(allTrackingData.length === 0) {
-                document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:var(--muted); padding:40px; border:1px dashed var(--border); border-radius:12px;">Not found in sheet. Try "Direct TID Track" tab instead!</div>';
+                document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:var(--muted); padding:40px; border:1px dashed var(--border); border-radius:12px;">Not found in any sheet. Please check the Order ID.</div>';
                 return;
             }
             allTrackingData.forEach(item => {
@@ -4215,14 +4221,12 @@ def nexus_dashboard():
                                             <div id="eta-${tid.replace(/[\\s\\/]+/g,'')}" style="font-size:11px; font-weight:700; color:var(--muted);">ETA: Checking...</div>
                                         </div>
                                     </div>
-                                    
                                     <div class="subway-map" id="subway-${tid.replace(/[\\s\\/]+/g,'')}">
                                         <div class="subway-node"><div class="sub-dot"></div><div class="sub-label">Pickup</div></div>
                                         <div class="subway-node"><div class="sub-dot"></div><div class="sub-label">Transit</div></div>
                                         <div class="subway-node"><div class="sub-dot"></div><div class="sub-label">Customs</div></div>
                                         <div class="subway-node"><div class="sub-dot"></div><div class="sub-label">Delivered</div></div>
                                     </div>
-
                                     <div class="progress"><div class="progress-bar" id="prog-${tid.replace(/[\\s\\/]+/g,'')}"></div></div>
                                     <div class="timeline" id="log-${tid.replace(/[\\s\\/]+/g,'')}"></div>
                                 </div>
@@ -4357,7 +4361,7 @@ def nexus_dashboard():
                     `;
                 });
             } catch(e) {
-                container.innerHTML = '<div class="error-box">⚠️ Network error. Please try clicking the button again.</div>';
+                container.innerHTML = '<div class="error-box">⚠️ Network error. Please refresh the page and try again.</div>';
             }
             loader.style.display = 'none';
         }
