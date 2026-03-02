@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB - SAFE APPEND EDITION (EXACT 0-BASED INDEXING)
+# 🛰️ TID OPERATIONS HUB - COMPLETE MEGA EDITION (SAFE APPEND)
 # ==============================================================================
 import urllib.request
 import csv
@@ -3611,7 +3611,9 @@ import concurrent.futures
 from datetime import datetime
 from flask import jsonify, request, render_template_string
 
+# ------------------------------------------------------------------------------
 # 1. CORE DATA SOURCES
+# ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
     "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
@@ -3623,10 +3625,13 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
+FILTER_DATE = datetime(2026, 1, 1)
 
-# 2. EXACT 0-BASED COLUMN MAPPING (Derived exactly from your list)
-# o=Order, b=Boxes, d=Date, w=Weight, v=Vendor, c=Customer, cn=Country, ma=MAWB, t=Tracking
-INDEX_MAP = {
+# ------------------------------------------------------------------------------
+# 2. EXACT 0-BASED COLUMN MAPPING
+# ------------------------------------------------------------------------------
+# (o=Order, b=Boxes, d=Date, w=Weight, v=Vendor, c=Customer, cn=Country, ma=MAWB, t=Tracking)
+SHEET_MAP = {
     "Kerry":         {"o": 0, "b": 1, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
     "APX":           {"o": 0, "b": 1, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
     "ECL QC Center": {"o": 0, "b": 1, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
@@ -3642,47 +3647,63 @@ def fetch_sheet_data(url, name):
             data = list(csv.reader(res.read().decode('utf-8').splitlines()))
             if not data: return []
             
-            col = INDEX_MAP.get(name)
-            if not col: return []
-
-            # Skip header rows automatically
-            start_row = 1
+            # FIX FOR APX & GE QC: Auto-detect header row containing "orderid"
+            start_row, order_idx = 1, 0
             for i, row in enumerate(data[:30]):
                 if not row: continue
                 c = [re.sub(r'[^a-z0-9]', '', str(x).lower()) for x in row]
-                if 'order' in c or 'fleekid' in c or 'orderid' in c or 'shipmentid' in c:
-                    start_row = i + 1
-                    break
+                found = False
+                for j, cell in enumerate(c):
+                    if cell in ['order', 'fleekid', 'orderid', 'shipmentid']:
+                        start_row = i + 1
+                        order_idx = j
+                        found = True
+                        break
+                if found: break
+            
+            col = SHEET_MAP.get(name)
+            if not col: return []
 
             processed = []
             for row in data[start_row:]:
                 if not row: continue
-                p = row + [''] * max(0, 45 - len(row))
+                # Pad row safely up to 50 columns
+                p = row + [''] * max(0, 50 - len(row))
                 
-                o_val = str(p[col['o']]).strip()
-                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a', 'order', 'orderid']: continue
+                o_val = str(p[order_idx]).strip()
+                if not o_val or o_val.lower() in ['n/a', 'nan', '#n/a']: continue
 
                 def get_v(idx):
-                    v = str(p[idx]).strip()
+                    # We subtract 1 here because your list was 1-based, and python is 0-based
+                    v = str(p[idx - 1]).strip()
                     return v if v and v.lower() not in ['n/a', 'nan', '-', '#n/a'] else "N/A"
 
                 processed.append({
-                    'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
-                    'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
-                    'country': get_v(col['cn']), 'tid': get_v(col['t']), 'mawb': get_v(col['ma'])
+                    'order': o_val,
+                    'date': get_v(col['d']),
+                    'boxes': get_v(col['b']),
+                    'weight': get_v(col['w']),
+                    'vendor': get_v(col['v']),
+                    'customer': get_v(col['c']),
+                    'country': get_v(col['cn']),
+                    'tid': get_v(col['t']),
+                    'mawb': get_v(col['ma'])
                 })
             return processed
-    except: return []
+    except Exception as e:
+        return []
 
 def clean_tids(raw):
     raw = str(raw).strip()
     if not raw or raw.lower() in ['pending','none','n/a']: return []
+    # Split glued TIDs automatically based on Capital Letters (U, S, Q)
     if not any(x in raw for x in [',','/',' ']) and len(raw) > 15:
         if re.search(r'[A-Za-z]', raw):
             parts = [p for p in re.split(r'(?<=[a-zA-Z])', raw) if p.strip()]
         elif len(raw) % 15 == 0:
             parts = [raw[i:i+15] for i in range(0, len(raw), 15)]
-        else: parts = [raw]
+        else:
+            parts = [raw]
     else:
         parts = [t.strip() for t in re.split(r'[,\/\s]+', raw) if t.strip()]
     return ['0'+t if (t.startswith('150') and 12<=len(t)<=15) else t for t in parts]
@@ -3709,6 +3730,16 @@ def fetch_kerry_status(url):
             return s_map
     except: return {}
 
+def parse_date(date_str):
+    if not date_str or date_str == 'N/A': return None
+    try:
+        for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%b-%y', '%Y/%m/%d', '%d-%m-%Y'):
+            try: return datetime.strptime(date_str.split(' ')[0], fmt)
+            except: continue
+    except: pass
+    if '2026' in date_str or '26' in date_str: return datetime(2026, 1, 1)
+    return datetime(1970, 1, 1)
+
 def force_sync_all_databases():
     global GLOBAL_DB_CACHE
     res = {}
@@ -3721,7 +3752,9 @@ def force_sync_all_databases():
         except: k_map = {}
     GLOBAL_DB_CACHE.update({'kerry': k_map, 'sheets': res, 'loaded': True})
 
+# ------------------------------------------------------------------------------
 # 3. BACKEND API ROUTES
+# ------------------------------------------------------------------------------
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
     force_sync_all_databases(); return jsonify({"success": True})
@@ -3763,6 +3796,46 @@ def api_nexus_ship24():
             except: responses.append({"tid": tid, "success": False})
     return jsonify(responses)
 
+@app.route('/api/nexus/radar_data', methods=['GET'])
+def api_nexus_radar_data():
+    if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
+    buckets = { src: {"with_tid": [], "missing_tid": []} for src in NEXUS_SOURCES.keys() }
+    for src, rows in GLOBAL_DB_CACHE['sheets'].items():
+        for r in rows:
+            if r['order'] == 'N/A' or r['date'] == 'N/A': continue
+            k_stat = GLOBAL_DB_CACHE['kerry'].get(r['order'].lower(), "PENDING")
+            if k_stat != "HANDED OVER TO LOGISTICS PARTNER": continue
+            tids = clean_tids(r['tid'])
+            has_tid = len(tids) > 0
+            rd = {"Date": r['date'], "Order": r['order'].upper(), "Boxes": r['boxes'], "Chargeable weight": r['weight'], "Vendor Name": r['vendor'], "Customer Name": r['customer'], "Country": r['country'], "Tracking ID": ", ".join(tids) if has_tid else "MISSING", "MAWB": r['mawb']}
+            if has_tid: buckets[src]["with_tid"].append(rd)
+            else: buckets[src]["missing_tid"].append(rd)
+    return jsonify(buckets)
+
+@app.route('/api/nexus/ops_commander', methods=['GET'])
+def api_nexus_ops_commander():
+    if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
+    blame_radar, missing_text, count = [], "Hi Kerry Team,\nThe following orders have been Handed Over but are missing Tracking IDs. Kindly update ASAP:\n\n", 1
+    for src, rows in GLOBAL_DB_CACHE['sheets'].items():
+        for r in rows:
+            dt_obj = parse_date(r['date'])
+            if not dt_obj or dt_obj < FILTER_DATE: continue
+            oid = r['order']
+            k_stat = GLOBAL_DB_CACHE['kerry'].get(oid.lower(), "PENDING")
+            has_tid = len(clean_tids(r['tid'])) > 0
+            days = (datetime.now() - dt_obj).days
+            if k_stat == "HANDED OVER TO LOGISTICS PARTNER" and not has_tid and days > 1:
+                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Missing TID", "aging": f"{days} Days", "blame": "Kerry Logistics"})
+                missing_text += f"{count}. Order: {oid.upper()} | Date: {r['date']} | Source: {src}\n"
+                count += 1
+            elif k_stat in ["QC PENDING", "CREATED", "ACCEPTED"] and days > 2:
+                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Stuck in QC", "aging": f"{days} Days", "blame": f"{src} Operations"})
+    if count == 1: missing_text = "All good! No missing TIDs currently."
+    return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
+
+# ------------------------------------------------------------------------------
+# 4. FRONTEND HTML (ALL FEATURES INCLUDED)
+# ------------------------------------------------------------------------------
 @app.route('/nexus')
 def nexus_dashboard():
     return render_template_string('''
@@ -3791,13 +3864,31 @@ def nexus_dashboard():
         .loader-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .spin { width: 40px; height: 40px; border: 3px solid #222; border-top-color: #fff; border-radius: 50%; animation: s 0.8s linear infinite; }
         @keyframes s { to { transform: rotate(360deg); } }
+        
+        /* RADAR & OPS STYLES */
+        .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px;}
+        .source-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display:flex; flex-direction:column; gap:16px;}
+        .split-box { display: flex; gap: 12px; }
+        .split-btn { flex: 1; background: #000; border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; }
+        .split-val { font-size: 32px; font-weight: 800; margin-bottom:4px;}
+        .split-lbl { font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--muted);}
+        
+        .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
+        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { padding: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--border);}
+        td { padding: 16px; font-size: 14px; border-bottom: 1px solid var(--border);}
     </style></head>
     <body>
-    <div id="loader" class="loader-overlay"><div class="spin"></div><h2 style="margin-top:20px">Scanning Exact Columns...</h2></div>
+    <div id="loader" class="loader-overlay"><div class="spin"></div><h2 style="margin-top:20px">Scanning All Sheets...</h2></div>
+    
     <div class="nav">
         <b style="font-size:20px">🛰️ NEXUS HUB</b>
         <div class="nav-links">
-            <button class="active" onclick="document.getElementById('view-track').style.display='block'">🔍 Matrix</button>
+            <button class="active" onclick="nav('track', this)">🔍 Matrix</button>
+            <button onclick="nav('direct', this)">🚢 Direct Track</button>
+            <button onclick="nav('radar', this)">📦 Radar</button>
+            <button onclick="nav('ops', this)" style="color:#F59E0B">⚡ Ops</button>
             <a href="/" class="btn" style="background:#ef4444; color:#fff; padding:8px 16px; margin:0 0 0 20px; text-decoration:none; border-radius:8px;">⬅️ Back to Main Dashboard</a>
         </div>
     </div>
@@ -3808,10 +3899,49 @@ def nexus_dashboard():
                 <textarea id="sInp" placeholder="Enter Order ID or Carrier TID (Paste multiple if needed)..."></textarea>
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <button class="btn" onclick="runSearch()">🔍 Scan Matrix Live</button>
-                    <button class="btn" id="bulkBtn" style="background:#10b981; display:none;" onclick="trackAll()">⚡ Bulk Track All</button>
+                    <button class="btn" id="bulkBtn" style="background:#10b981; display:none;" onclick="trackAllVisible()">⚡ Bulk Track All</button>
                 </div>
             </div>
             <div id="results"></div>
+        </div>
+
+        <div id="view-direct" style="display:none;">
+            <div class="search-card">
+                <textarea id="dInp" placeholder="Paste Carrier TIDs here directly..."></textarea>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <button class="btn" onclick="runDirectTrack()">🚢 Track Now</button>
+                    <button class="btn" style="background:#10b981;" onclick="trackAllDirect()">⚡ Bulk Track All</button>
+                </div>
+            </div>
+            <div id="dRes"></div>
+        </div>
+
+        <div id="view-radar" style="display:none;">
+            <h1 style="margin-top:0">Handed Over Radar</h1>
+            <div id="radar-loader" style="display:none; text-align:center; padding:50px"><div class="spin" style="margin:auto"></div></div>
+            <div id="radar-container" class="radar-grid"></div>
+        </div>
+
+        <div id="view-ops" style="display:none;">
+            <h1 style="margin-top:0; color:#F59E0B;">⚡ Ops Commander</h1>
+            <div id="ops-loader" style="display:none; text-align:center; padding:50px"><div class="spin" style="margin:auto"></div></div>
+            <div id="ops-content" style="display:grid; grid-template-columns:1fr 1fr; gap:20px; display:none;">
+                <div class="search-card" style="margin:0"><h3 style="margin-top:0">🚨 Aging Blame</h3><div style="max-height:400px; overflow-y:auto"><table id="blameTable"></table></div></div>
+                <div class="search-card" style="margin:0"><h3 style="margin-top:0">📲 Follow-up Bot</h3><textarea id="followupText" style="min-height:300px" readonly></textarea><button class="btn" style="width:100%; margin-top:10px;" onclick="copyFollowup()">Copy Text</button></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="detailPanel" class="modal" onclick="if(event.target==this)this.style.display='none'">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; margin-bottom:20px">
+                <h2 id="modalTitle" style="margin:0;"></h2>
+                <div>
+                    <button class="btn" style="background:#10b981; color:#fff; margin-right:10px;" onclick="downloadCSV()">Export CSV</button>
+                    <button class="btn" style="background:#ef4444; color:#fff" onclick="document.getElementById('detailPanel').style.display='none'">Close</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto; border:1px solid var(--border); border-radius:12px;"><table id="detailTable"></table></div>
         </div>
     </div>
 
@@ -3820,6 +3950,17 @@ def nexus_dashboard():
             try { await fetch('/api/nexus/refresh', {method: 'POST'}); } catch(e) {}
             document.getElementById('loader').style.display = 'none';
         };
+
+        function nav(v, btn) {
+            document.querySelectorAll('.nav-links button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('view-track').style.display = v==='track'?'block':'none';
+            document.getElementById('view-direct').style.display = v==='direct'?'block':'none';
+            document.getElementById('view-radar').style.display = v==='radar'?'block':'none';
+            document.getElementById('view-ops').style.display = v==='ops'?'block':'none';
+            if(v === 'radar') loadRadar();
+            if(v === 'ops') loadOps();
+        }
 
         async function runSearch() {
             const q = document.getElementById('sInp').value; if(!q) return;
@@ -3876,13 +4017,88 @@ def nexus_dashboard():
             } else {
                 btn.innerText = 'Error';
                 log.style.display = 'block';
-                log.innerHTML = '<span style="color:#ef4444">Tracking failed via API.</span>';
+                log.innerHTML = '<span style="color:#ef4444">Tracking info not found via API.</span>';
             }
         }
 
-        async function trackAll() {
+        async function trackAllVisible() {
             const btns = document.querySelectorAll('.track-btn');
             for(let b of btns) { await syncTID(b.getAttribute('data-tid'), b); }
+        }
+
+        async function runDirectTrack() {
+            let val = document.getElementById('dInp').value; if(!val) return;
+            let tids = val.split(/[\\n,\\t \\/]+/).map(t => t.trim()).filter(Boolean);
+            tids = tids.map(t => (t.startsWith('150') && t.length >= 12 && t.length <= 15) ? '0' + t : t);
+            let h = '';
+            tids.forEach(tid => {
+                h += `<div class="tid-box">
+                        <div class="tid-row"><b style="font-family:monospace; font-size:16px">${tid}</b><button class="btn direct-btn" data-tid="${tid}" onclick="syncTID('${tid}', this)" style="margin:0; padding:6px 12px; font-size:11px">Track</button></div>
+                        <div class="status-msg" style="display:none"></div>
+                      </div>`;
+            });
+            document.getElementById('dRes').innerHTML = h;
+        }
+
+        async function trackAllDirect() {
+            const btns = document.querySelectorAll('.direct-btn');
+            for(let b of btns) { await syncTID(b.getAttribute('data-tid'), b); }
+        }
+
+        let radarData = null;
+        let activeDetails = [];
+        async function loadRadar() {
+            document.getElementById('radar-loader').style.display = 'block';
+            document.getElementById('radar-container').innerHTML = '';
+            const r = await fetch('/api/nexus/radar_data'); radarData = await r.json();
+            let h = '';
+            ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"].forEach(src => {
+                const w = radarData[src] ? radarData[src].with_tid || [] : [];
+                const m = radarData[src] ? radarData[src].missing_tid || [] : [];
+                h += `<div class="source-card">
+                        <b style="font-size:14px; text-transform:uppercase">${src}</b>
+                        <div class="split-box">
+                            <div class="split-btn" onclick="showDetails('${src}', 'with_tid')"><div class="split-val" style="color:#10b981">${w.length}</div><div class="split-lbl">With TID</div></div>
+                            <div class="split-btn" onclick="showDetails('${src}', 'missing_tid')"><div class="split-val" style="color:#ef4444">${m.length}</div><div class="split-lbl">Missing TID</div></div>
+                        </div>
+                      </div>`;
+            });
+            document.getElementById('radar-container').innerHTML = h;
+            document.getElementById('radar-loader').style.display = 'none';
+        }
+
+        function showDetails(src, type) {
+            activeDetails = radarData[src][type];
+            if(!activeDetails || activeDetails.length === 0) return;
+            document.getElementById('modalTitle').innerText = `${src} - ${type === 'with_tid' ? 'WITH TID' : 'MISSING TID'}`;
+            let t = '<thead><tr><th>Date</th><th>Order</th><th>Boxes</th><th>Weight</th><th>Vendor</th><th>Customer</th><th>Country</th><th>TID</th><th>MAWB</th></tr></thead><tbody>';
+            activeDetails.forEach(r => t += `<tr><td>${r['Date']}</td><td><b>${r['Order']}</b></td><td>${r['Boxes']}</td><td>${r['Chargeable weight']}</td><td>${r['Vendor Name']}</td><td>${r['Customer Name']}</td><td>${r['Country']}</td><td style="font-family:monospace">${r['Tracking ID']}</td><td>${r['MAWB']}</td></tr>`);
+            document.getElementById('detailTable').innerHTML = t + '</tbody>';
+            document.getElementById('detailPanel').style.display = 'block';
+        }
+
+        async function loadOps() {
+            document.getElementById('ops-content').style.display = 'none';
+            document.getElementById('ops-loader').style.display = 'block';
+            const r = await fetch('/api/nexus/ops_commander'); const data = await r.json();
+            document.getElementById('followupText').value = data.missing_text;
+            let t = '<thead><tr><th>Order</th><th>Source</th><th>Issue</th><th>Aging</th></tr></thead><tbody>';
+            if(!data.blame_radar.length) t += '<tr><td colspan="4" style="text-align:center; padding:20px; color:#71717a">All Good! 🎉</td></tr>';
+            else data.blame_radar.forEach(b => t += `<tr><b>${b.order}</b><td>${b.source}</td><td>${b.issue}</td><td style="color:#ef4444; font-weight:700">${b.aging}</td></tr>`);
+            document.getElementById('blameTable').innerHTML = t + '</tbody>';
+            document.getElementById('ops-content').style.display = 'grid';
+            document.getElementById('ops-loader').style.display = 'none';
+        }
+        
+        function copyFollowup() { navigator.clipboard.writeText(document.getElementById('followupText').value); alert("Copied!"); }
+        
+        function downloadCSV() {
+            const headers = ["Date", "Order", "Boxes", "Chargeable weight", "Vendor Name", "Customer Name", "Country", "Tracking ID", "MAWB"];
+            const rows = activeDetails.map(r => headers.map(h => `"${String(r[h]).replace(/"/g, '""')}"`).join(',')).join('\\n');
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + headers.join(',') + "\\n" + rows));
+            link.setAttribute("download", `nexus_export.csv`);
+            link.click();
         }
     </script>
     </body></html>
