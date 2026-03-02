@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - PLAN B: NUCLEAR INDEX EDITION (100% Guaranteed)
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% PERFECT INDEX LOCATOR EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -3618,8 +3618,7 @@ from functools import wraps
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'role' not in session:
-            return redirect('/')
+        if 'role' not in session: return redirect('/')
         return f(*args, **kwargs)
     return decorated_function
 
@@ -3637,12 +3636,25 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 3. PLAN B: THE NUCLEAR INDEX ENGINE (Ignores Names, Uses Positions)
+# 3. 🚨 EXACT INDEX FINDER (Solves the "Aagay Peechay" Problem) 🚨
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
-def fetch_sheet_data(url):
+# Aapke diye gaye EXACT names ka Index Mapper
+COL_ALIASES = {
+    'order': ['order'],
+    'date': ['fleekhandoverdate', 'airporthandoverdate'],
+    'boxes': ['noofboxes'],
+    'weight': ['chargeableweight', 'chargeableweightkg', 'noofpieces'],
+    'vendor': ['vendorname'],
+    'customer': ['customername'],
+    'country': ['country'],
+    'tid': ['trackingid'],
+    'mawb': ['mawb', 'mawbflight', 'kerrymawbnumber']
+}
+
+def fetch_and_map_csv(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=20) as res:
@@ -3650,41 +3662,47 @@ def fetch_sheet_data(url):
             data = list(csv.reader(raw))
             if not data: return []
 
+            # Step 1: Saaf karein (Remove spaces/dots)
+            cleaned_data = []
+            for row in data:
+                cleaned_data.append([re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row])
+            
             header_idx = -1
-            # Scan first 50 lines to find the row where the VERY FIRST column is "Order"
-            for i, row in enumerate(data[:50]):
-                if not row: continue
-                first_col = re.sub(r'[^a-z0-9]', '', str(row[0]).lower())
-                if first_col in ['order', 'fleekid']:
+            col_map = {}
+            
+            # Step 2: Dhoondein ke konsa column kis index (0, 1, 2) par hai!
+            for i, c_row in enumerate(cleaned_data[:50]):
+                if 'order' in c_row and ('vendorname' in c_row or 'trackingid' in c_row):
                     header_idx = i
+                    for j, cell in enumerate(c_row):
+                        for key, aliases in COL_ALIASES.items():
+                            if cell in aliases:
+                                col_map[key] = j
                     break
                     
             if header_idx == -1: return []
 
+            # Step 3: Exact Index se data bahar nikalen
             processed = []
             for row in data[header_idx+1:]:
-                # Ignore completely empty rows
-                if not row or not str(row[0]).strip(): continue
+                if not any(str(x).strip() for x in row): continue
                 
-                # Add empty columns if sheet is missing some at the end to prevent crash
-                row_padded = row + [''] * max(0, 9 - len(row))
+                # Agar sheet aagay se khali ho tou crash na ho
+                row_padded = row + [''] * 30 
+                r_dict = {}
                 
-                def get_val(idx):
-                    val = str(row_padded[idx]).strip()
-                    return val if val and val.lower() not in ['n/a', 'nan', '#n/a', '-'] else "N/A"
-
-                # EXACT COLUMN INDEX MAPPING (Nuclear Option)
-                processed.append({
-                    'order': get_val(0),
-                    'date': get_val(1),
-                    'boxes': get_val(2),
-                    'weight': get_val(3),
-                    'vendor': get_val(4),
-                    'customer': get_val(5),
-                    'country': get_val(6),
-                    'tid': get_val(7),
-                    'mawb': get_val(8)
-                })
+                for key in COL_ALIASES.keys():
+                    idx = col_map.get(key)
+                    if idx is not None:
+                        val = str(row_padded[idx]).strip()
+                        r_dict[key] = val if val and val.lower() not in ['n/a', 'nan', '#n/a', '-'] else "N/A"
+                    else:
+                        r_dict[key] = "N/A"
+                
+                # Agar order number hai tou save karlo
+                if r_dict['order'] != "N/A":
+                    processed.append(r_dict)
+                    
             return processed
     except Exception as e:
         return []
@@ -3693,29 +3711,29 @@ def fetch_kerry_status(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=15) as res:
-            data = list(csv.reader(res.read().decode('utf-8').splitlines()))
+            raw = res.read().decode('utf-8').splitlines()
+            data = list(csv.reader(raw))
             if not data: return {}
             
             header_idx, order_col, status_col = -1, -1, -1
-            for i, row in enumerate(data[:15]):
-                clean_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
-                if 'order' in clean_row or 'fleekid' in clean_row:
+            for i, row in enumerate(data[:20]):
+                c_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
+                if 'order' in c_row and ('lateststatus' in c_row or 'status' in c_row):
                     header_idx = i
-                    for j, c in enumerate(clean_row):
-                        if c in ['order', 'fleekid']: order_col = j
-                        elif 'status' in c or 'lateststatus' in c: status_col = j
+                    order_col = c_row.index('order')
+                    status_col = c_row.index('lateststatus') if 'lateststatus' in c_row else c_row.index('status')
                     break
-            
-            if order_col == -1 or status_col == -1: return {}
+                    
+            if header_idx == -1: return {}
             
             s_map = {}
             for row in data[header_idx+1:]:
-                if len(row) > max(order_col, status_col):
-                    o = str(row[order_col]).strip().lower()
-                    s = str(row[status_col]).strip().upper()
-                    if o and o != 'n/a': s_map[o] = s
+                row_padded = row + [''] * 30
+                o = str(row_padded[order_col]).strip().lower()
+                s = str(row_padded[status_col]).strip().upper()
+                if o and o != 'n/a': s_map[o] = s
             return s_map
-    except: 
+    except:
         return {}
 
 def parse_date(date_str):
@@ -3736,15 +3754,15 @@ def force_sync_all_databases():
     global GLOBAL_DB_CACHE
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-        f_to_name = {executor.submit(fetch_sheet_data, url): name for name, url in NEXUS_SOURCES.items()}
-        future_kerry = executor.submit(fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
+        f_to_name = {executor.submit(fetch_and_map_csv, url): name for name, url in NEXUS_SOURCES.items()}
+        f_kerry = executor.submit(fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
         
         for future in concurrent.futures.as_completed(f_to_name):
             name = f_to_name[future]
             try: results[name] = future.result()
             except: results[name] = []
-
-        try: kerry_map = future_kerry.result()
+            
+        try: kerry_map = f_kerry.result()
         except: kerry_map = {}
 
     GLOBAL_DB_CACHE['kerry'] = kerry_map
@@ -3768,11 +3786,13 @@ def inject_nexus_button(response):
 # ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
+@login_required
 def api_nexus_refresh():
     force_sync_all_databases()
     return jsonify({"success": True})
 
 @app.route('/api/nexus/search', methods=['POST'])
+@login_required
 def api_nexus_search():
     if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
 
@@ -3800,6 +3820,7 @@ def api_nexus_search():
     return jsonify(results)
 
 @app.route('/api/nexus/ship24', methods=['POST'])
+@login_required
 def api_nexus_ship24():
     tids = request.json.get('tids', [])
     ship24_key = os.environ.get('SHIP24_API_KEY', 'MOCK')
@@ -3829,35 +3850,37 @@ def api_nexus_ship24():
     return jsonify(responses)
 
 @app.route('/api/nexus/radar_data', methods=['GET'])
+@login_required
 def api_nexus_radar_data():
     if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
     buckets = { src: {"with_tid": [], "missing_tid": []} for src in NEXUS_SOURCES.keys() }
     
     for src, rows in GLOBAL_DB_CACHE['sheets'].items():
         for r in rows:
-            dt_str = r.get('date', 'N/A')
+            dt_str = r['date']
             dt_obj = parse_date(dt_str)
             if dt_obj and dt_obj < FILTER_DATE: continue
             
-            oid = r.get('order', 'N/A')
+            oid = r['order']
             if oid == 'N/A': continue
             
             kerry_stat = GLOBAL_DB_CACHE['kerry'].get(oid.lower(), "PENDING")
             if kerry_stat != "HANDED OVER TO LOGISTICS PARTNER": continue
             
-            tids = clean_tids(r.get('tid', 'N/A'))
+            tids = clean_tids(r['tid'])
             has_tid = len(tids) > 0 and tids[0].lower() not in ['pending', 'none', 'n/a']
             
             r_d = { 
-                "Date": dt_str, "Order": oid.upper(), "Boxes": r.get('boxes', 'N/A'), "Chargeable weight": r.get('weight', 'N/A'), 
-                "Vendor Name": r.get('vendor', 'N/A'), "Customer Name": r.get('customer', 'N/A'), "Country": r.get('country', 'N/A'), 
-                "Tracking ID": ", ".join(tids) if has_tid else "MISSING", "MAWB": r.get('mawb', 'N/A') 
+                "Date": dt_str, "Order": oid.upper(), "Boxes": r['boxes'], "Chargeable weight": r['weight'], 
+                "Vendor Name": r['vendor'], "Customer Name": r['customer'], "Country": r['country'], 
+                "Tracking ID": ", ".join(tids) if has_tid else "MISSING", "MAWB": r['mawb'] 
             }
             if has_tid: buckets[src]["with_tid"].append(r_d)
             else: buckets[src]["missing_tid"].append(r_d)
     return jsonify(buckets)
 
 @app.route('/api/nexus/ops_commander', methods=['GET'])
+@login_required
 def api_nexus_ops_commander():
     if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
     blame_radar = []
@@ -3866,15 +3889,15 @@ def api_nexus_ops_commander():
 
     for src, rows in GLOBAL_DB_CACHE['sheets'].items():
         for r in rows:
-            dt_str = r.get('date', 'N/A')
+            dt_str = r['date']
             dt_obj = parse_date(dt_str)
             if not dt_obj or dt_obj < FILTER_DATE: continue
             
-            oid = r.get('order', 'N/A')
+            oid = r['order']
             if oid == 'N/A': continue
             
             kerry_stat = GLOBAL_DB_CACHE['kerry'].get(oid.lower(), "PENDING")
-            has_tid = len(clean_tids(r.get('tid', 'N/A'))) > 0 and r.get('tid', 'N/A').lower() not in ['pending', 'none', 'n/a']
+            has_tid = len(clean_tids(r['tid'])) > 0 and r['tid'].lower() not in ['pending', 'none', 'n/a']
             days_aging = (datetime.now() - dt_obj).days
 
             if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and not has_tid and days_aging > 1:
@@ -3891,6 +3914,7 @@ def api_nexus_ops_commander():
 # 6. FRONTEND HTML
 # ------------------------------------------------------------------------------
 @app.route('/nexus')
+@login_required
 def nexus_dashboard():
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
@@ -3963,7 +3987,7 @@ def nexus_dashboard():
                 <div class="sync-overlay" id="syncOverlay">
                     <div class="loader" style="width: 50px; height: 50px; margin-bottom:20px;"></div>
                     <h2 style="margin:0;">Fetching Live Data...</h2>
-                    <p style="color:var(--muted); margin-top:10px;">Please wait 5-8 seconds.</p>
+                    <p style="color:var(--muted); margin-top:10px;">Mapping Exact Columns. Please wait 5-8 seconds.</p>
                 </div>
 
                 <div id="view-track">
