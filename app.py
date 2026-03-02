@@ -3942,7 +3942,7 @@ def nexus_dashboard():
     <body>
     <div class="app-container">
         <header class="topbar">
-            <div class="brand">🛰️ NEXUS HUB</div>
+            <div class="brand">🛰️ Fleek TID Hub</div>
             <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
         </header>
         <div class="main-wrapper">
@@ -3956,11 +3956,11 @@ def nexus_dashboard():
                 <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
             </aside>
             <main class="viewport">
-                <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Global Tracking Matrix</h1>
+                <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Fleek TID Hub</h1>
                 
                 <div id="view-track" class="view-pane active">
                     <div class="card" style="margin-bottom: 30px;">
-                        <textarea id="searchInput" placeholder="Paste Order IDs or TIDs here (e.g. 129027_34)..."></textarea>
+                        <textarea id="searchInput" placeholder="Search IDs or TIDs here ..."></textarea>
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="searchOrders()">Scan Matrix</button>
                             <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
@@ -4035,7 +4035,7 @@ def nexus_dashboard():
             
             if(viewType === 'view-track') {
                 document.getElementById('view-track').style.display = 'block';
-                document.getElementById('view-title').innerText = "Global Tracking Matrix";
+                document.getElementById('view-title').innerText = "Fleek TID Hub";
             } else if(viewType === 'view-direct') {
                 document.getElementById('view-direct').style.display = 'block';
                 document.getElementById('view-title').innerText = "Direct TID Tracker";
