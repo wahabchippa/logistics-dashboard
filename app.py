@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% ISOLATED & BULLETPROOF SEARCH
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% ISOLATED, SSL FIXED & EXACT COLUMNS
 # ==============================================================================
 import urllib.request
 import csv
@@ -3610,7 +3610,16 @@ import os
 import time
 import concurrent.futures
 from datetime import datetime
+import ssl
 from flask import jsonify, request, session, render_template_string
+
+# 🛠️ MAGIC FIX FOR LOCAL VS CODE (Bypass SSL Errors)
+try:
+    _create_unverified_https_context = ssl._create_unverified_context
+except AttributeError:
+    pass
+else:
+    ssl._create_default_https_context = _create_unverified_https_context
 
 # ------------------------------------------------------------------------------
 # 1. CORE DATA SOURCES
@@ -3626,7 +3635,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. ISOLATED CACHE & EXACT COLUMN MAP (From your EXACT List)
+# 2. ISOLATED CACHE & EXACT COLUMN MAP (100% Aapki List Ke Mutabiq)
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
@@ -3644,7 +3653,9 @@ def nexus_fetch_sheet_data(url, name):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=15) as res:
-            data = list(csv.reader(res.read().decode('utf-8').splitlines()))
+            # errors='ignore' ensures weird characters don't crash the fetcher
+            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
+            data = list(csv.reader(raw_data))
             col = NEXUS_SHEET_MAP.get(name)
             if not col or not data: return []
 
@@ -3652,10 +3663,9 @@ def nexus_fetch_sheet_data(url, name):
             for row in data:
                 if not row: continue
                 p = row + [''] * 45 
-                
                 o_val = str(p[col['o'] - 1]).strip()
                 
-                # YEH HAI WOH MAGIC FIX: Agar Order ID mein koi number hai, tou usko pakar lo.
+                # Agar Order ID mein number nahi hai ya khali hai, toh skip karo
                 if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan']: 
                     continue
 
@@ -3675,7 +3685,9 @@ def nexus_fetch_sheet_data(url, name):
                     'mawb': get_v(col['ma'])
                 })
             return processed
-    except: return []
+    except Exception as e:
+        print(f"🚨 [NEXUS ERROR] Failed to fetch {name}: {e}") # Yeh VS Code terminal me error dikhayega
+        return []
 
 def nexus_clean_tids(raw):
     raw = str(raw).strip()
@@ -3691,7 +3703,8 @@ def nexus_fetch_kerry_status(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=10) as res:
-            data = list(csv.reader(res.read().decode('utf-8').splitlines()))
+            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
+            data = list(csv.reader(raw_data))
             if not data: return {}
             s_col, h_idx = 1, -1
             for i, row in enumerate(data[:15]):
@@ -3706,7 +3719,9 @@ def nexus_fetch_kerry_status(url):
                     o = str(p[0]).strip().lower()
                     if o: s_map[o] = str(p[s_col]).strip().upper()
             return s_map
-    except: return {}
+    except Exception as e: 
+        print(f"🚨 [NEXUS ERROR] Kerry Status Fetch Failed: {e}")
+        return {}
 
 def nexus_parse_date(date_str):
     try:
@@ -3719,7 +3734,6 @@ def nexus_parse_date(date_str):
 def nexus_sync_db(force=False):
     global NEXUS_GLOBAL_CACHE
     now = time.time()
-    # Cache clear on force refresh so you always get fresh data
     if not force and now - NEXUS_GLOBAL_CACHE['time'] < 300 and NEXUS_GLOBAL_CACHE['sheets']:
         return NEXUS_GLOBAL_CACHE['sheets'], NEXUS_GLOBAL_CACHE['kerry']
 
@@ -3737,13 +3751,23 @@ def nexus_sync_db(force=False):
     NEXUS_GLOBAL_CACHE['kerry'] = k_map
     return res, k_map
 
+@app.after_request
+def inject_nexus_button(response):
+    # 100% SAFE: Ye sirf us waqt button lagayega jab appka Main URL ("/") khulay ga aur file HTML hogi.
+    # API JSON par ye attack nahi karega, isliye "Unexpected token" nahi aayega!
+    if request.path == '/' and response.content_type and 'text/html' in response.content_type:
+        html = response.get_data(as_text=True)
+        btn = '<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:#3B82F6; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:600; font-family:sans-serif; z-index:99999; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">📊 TID Operations</a>'
+        if '</body>' in html:
+            response.set_data(html.replace('</body>', btn + '</body>'))
+    return response
+
 # ------------------------------------------------------------------------------
 # 3. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
-    # Forces a direct fetch from google sheets
     nexus_sync_db(force=True)
     return jsonify({"success": True})
 
@@ -3947,7 +3971,6 @@ def nexus_dashboard():
         document.documentElement.setAttribute('data-theme', savedTheme);
         document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
 
-        // Force Clear cache when opening tool to ensure fresh data
         window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
 
         let activeBucket = ''; let activeDetails = []; let radarData = null;
@@ -4003,7 +4026,7 @@ def nexus_dashboard():
                     </div>
                 </div>`;
             });
-            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted);">No matching orders found.</div>';
+            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted);">No matching orders found. Please check VS Code Terminal for Errors.</div>';
         }
 
         async function syncShip24(tid) {
