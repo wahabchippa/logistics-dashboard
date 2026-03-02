@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% ISOLATED, SSL FIXED & EXACT COLUMNS
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% ISOLATED, FULL UI & ANTI-DROP
 # ==============================================================================
 import urllib.request
 import csv
@@ -3613,7 +3613,7 @@ from datetime import datetime
 import ssl
 from flask import jsonify, request, session, render_template_string
 
-# 🛠️ MAGIC FIX FOR LOCAL VS CODE (Bypass SSL Errors)
+# 🛠️ ANTI-DROP FIX FOR SHEETS FETCHING
 try:
     _create_unverified_https_context = ssl._create_unverified_context
 except AttributeError:
@@ -3635,7 +3635,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. ISOLATED CACHE & EXACT COLUMN MAP (100% Aapki List Ke Mutabiq)
+# 2. ISOLATED CACHE & EXACT COLUMN MAP
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
@@ -3651,9 +3651,11 @@ NEXUS_SHEET_MAP = {
 
 def nexus_fetch_sheet_data(url, name):
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15) as res:
-            # errors='ignore' ensures weird characters don't crash the fetcher
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
             raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
             data = list(csv.reader(raw_data))
             col = NEXUS_SHEET_MAP.get(name)
@@ -3662,10 +3664,9 @@ def nexus_fetch_sheet_data(url, name):
             processed = []
             for row in data:
                 if not row: continue
-                p = row + [''] * 45 
+                p = row + [''] * 60 
                 o_val = str(p[col['o'] - 1]).strip()
                 
-                # Agar Order ID mein number nahi hai ya khali hai, toh skip karo
                 if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan']: 
                     continue
 
@@ -3686,7 +3687,7 @@ def nexus_fetch_sheet_data(url, name):
                 })
             return processed
     except Exception as e:
-        print(f"🚨 [NEXUS ERROR] Failed to fetch {name}: {e}") # Yeh VS Code terminal me error dikhayega
+        print(f"🚨 [NEXUS ERROR] Fetch Failed for {name}: {e}")
         return []
 
 def nexus_clean_tids(raw):
@@ -3701,8 +3702,9 @@ def nexus_clean_tids(raw):
 
 def nexus_fetch_kerry_status(url):
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as res:
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
             raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
             data = list(csv.reader(raw_data))
             if not data: return {}
@@ -3720,7 +3722,6 @@ def nexus_fetch_kerry_status(url):
                     if o: s_map[o] = str(p[s_col]).strip().upper()
             return s_map
     except Exception as e: 
-        print(f"🚨 [NEXUS ERROR] Kerry Status Fetch Failed: {e}")
         return {}
 
 def nexus_parse_date(date_str):
@@ -3750,17 +3751,6 @@ def nexus_sync_db(force=False):
     NEXUS_GLOBAL_CACHE['sheets'] = res
     NEXUS_GLOBAL_CACHE['kerry'] = k_map
     return res, k_map
-
-@app.after_request
-def inject_nexus_button(response):
-    # 100% SAFE: Ye sirf us waqt button lagayega jab appka Main URL ("/") khulay ga aur file HTML hogi.
-    # API JSON par ye attack nahi karega, isliye "Unexpected token" nahi aayega!
-    if request.path == '/' and response.content_type and 'text/html' in response.content_type:
-        html = response.get_data(as_text=True)
-        btn = '<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:#3B82F6; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:600; font-family:sans-serif; z-index:99999; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">📊 TID Operations</a>'
-        if '</body>' in html:
-            response.set_data(html.replace('</body>', btn + '</body>'))
-    return response
 
 # ------------------------------------------------------------------------------
 # 3. BACKEND API ROUTES
@@ -3844,7 +3834,7 @@ def api_nexus_radar_data():
     return jsonify(buckets)
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI
+# 4. FRONTEND UI (Mera asal jurm yahan tha - Ab saaray fields show honge!)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3889,8 +3879,10 @@ def nexus_dashboard():
         .radar-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1000px;}
         .stat-value { font-size: 32px; font-weight: 700; color: var(--text); margin-bottom: 4px;}
         .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase;}
+        
         .track-card { border-radius: 12px; overflow: hidden; margin-bottom: 24px; padding: 0;}
-        .track-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 16px;}
+        .track-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 16px;}
+        
         .meta-col { display: flex; flex-direction: column; gap: 4px; }
         .meta-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600;}
         .meta-val { font-size: 13px; font-weight: 500;}
@@ -3971,6 +3963,7 @@ def nexus_dashboard():
         document.documentElement.setAttribute('data-theme', savedTheme);
         document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
 
+        // Force background refresh to avoid missing data from sleep
         window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
 
         let activeBucket = ''; let activeDetails = []; let radarData = null;
@@ -4001,14 +3994,18 @@ def nexus_dashboard():
             let h = '';
             data.forEach(item => {
                 const isDelivered = item.status.toLowerCase().includes('delivered');
+                // SAARAY FIELDS AAGAY HAIN YAHAN: Date, Vendor, Country sab shamil!
                 h += `<div class="card track-card">
                     <div class="track-header">
                         <div class="meta-col"><span class="meta-lbl">Order</span><span class="meta-val" style="color:var(--accent); font-weight:600;">${item.order_id}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">Date</span><span class="meta-val">${item.date}</span></div>
                         <div class="meta-col"><span class="meta-lbl">Source</span><span class="meta-val">${item.source}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">Vendor</span><span class="meta-val">${item.vendor}</span></div>
                         <div class="meta-col"><span class="meta-lbl">Customer</span><span class="meta-val">${item.customer}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">Boxes</span><span class="meta-val">${item.boxes}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">Status</span><span class="badge ${isDelivered?'success':''}">${item.status}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">Country</span><span class="meta-val">${item.country}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">Boxes / Wgt</span><span class="meta-val">${item.boxes} / ${item.weight}</span></div>
                         <div class="meta-col"><span class="meta-lbl">MAWB</span><span class="meta-val">${item.mawb}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">Status</span><span class="badge ${isDelivered?'success':''}">${item.status}</span></div>
                     </div>
                     <div class="tid-area">
                         <div class="tid-strip">
@@ -4026,7 +4023,7 @@ def nexus_dashboard():
                     </div>
                 </div>`;
             });
-            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted);">No matching orders found. Please check VS Code Terminal for Errors.</div>';
+            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted);">No matching orders found. (Try clicking Search again)</div>';
         }
 
         async function syncShip24(tid) {
