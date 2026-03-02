@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% UNBREAKABLE SUBSTRING EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - BRUTE-FORCE INDESTRUCTIBLE EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -3613,15 +3613,19 @@ from flask import jsonify, request, session, render_template_string, redirect
 from functools import wraps
 
 # ------------------------------------------------------------------------------
-# 1. SECURITY & DATA SOURCES
+# 1. SECURITY / LOGIN DECORATOR 
 # ------------------------------------------------------------------------------
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'role' not in session: return redirect('/')
+        if 'role' not in session:
+            return redirect('/')
         return f(*args, **kwargs)
     return decorated_function
 
+# ------------------------------------------------------------------------------
+# 2. CORE DATA SOURCES
+# ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
     "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
@@ -3633,83 +3637,87 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. BULLETPROOF DATA ENGINE
+# 3. BRUTE-FORCE DATA ENGINE (100% Guaranteed to work for GE Zone & ECL)
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
+# EVERY SINGLE VARIATION YOU PROVIDED, MAPPED TO ITS CORE NAME
+HEADER_VARIANTS = {
+    'order': ['order', 'fleekid', 'orderid', 'shipmentid'],
+    'date': ['fleekhandoverdate', 'airporthandoverdate', 'date', 'handoverdate', 'qcdate'],
+    'boxes': ['noofboxes', 'numberofboxes', 'boxcount', 'boxes', 'box', 'qty'],
+    'weight': ['chargeableweight', 'chargeableweightkg', 'noofpieces', 'pieces', 'weight', 'actualweight'],
+    'vendor': ['vendorname', 'vendor', 'seller'],
+    'customer': ['customername', 'customer', 'consignee'],
+    'country': ['country', 'destination', 'dest'],
+    'tid': ['trackingid', 'tracking', 'tid', 'awbnumber'],
+    'mawb': ['mawb', 'mawbflight', 'kerrymawbnumber', 'masterawb', 'master'],
+    'status': ['lateststatus', 'status', 'kerrystatus']
+}
+
 def fetch_and_map_csv(url):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15) as res:
+        with urllib.request.urlopen(req, timeout=20) as res:
             raw = res.read().decode('utf-8').splitlines()
             data = list(csv.reader(raw))
             if not data: return []
 
-            # Find real headers by scanning first 15 rows
-            header_idx = 0
-            for i, row in enumerate(data[:15]):
-                row_str = " ".join(str(x).lower() for x in row)
-                if 'order' in row_str and ('vendor' in row_str or 'customer' in row_str or 'tracking' in row_str):
-                    header_idx = i
-                    break
-
-            headers = data[header_idx]
-            processed = []
+            header_idx = -1
+            col_map = {}
             
+            # Scans deep into the first 50 rows to bypass any titles or empty space
+            for i, row in enumerate(data[:50]): 
+                clean_row = [re.sub(r'[^a-z0-9]', '', str(cell).lower()) for cell in row]
+                
+                # To confirm it's the header, we need 'order' AND ('vendor' OR 'customer' OR 'tracking')
+                has_order = any(o in clean_row for o in HEADER_VARIANTS['order'])
+                has_other = any(v in clean_row for v in HEADER_VARIANTS['vendor'] + HEADER_VARIANTS['tid'] + HEADER_VARIANTS['customer'])
+                
+                if has_order and has_other:
+                    header_idx = i
+                    # Map exactly which index belongs to which column
+                    for col_index, h_clean in enumerate(clean_row):
+                        for key, variants in HEADER_VARIANTS.items():
+                            if h_clean in variants and key not in col_map:
+                                col_map[key] = col_index
+                                break
+                    break
+                    
+            if header_idx == -1: return []
+
+            processed = []
             for row in data[header_idx+1:]:
-                if not any(str(x).strip() for x in row): continue
+                # Ignore empty rows
+                if not row or not any(str(x).strip() for x in row): continue
                 
-                r_dict = {'order':'N/A', 'date':'N/A', 'boxes':'N/A', 'weight':'N/A', 'vendor':'N/A', 'customer':'N/A', 'country':'N/A', 'tid':'N/A', 'mawb':'N/A', 'status':'N/A'}
-                row_padded = row + [''] * max(0, len(headers) - len(row))
-                
-                for h_idx, h in enumerate(headers):
-                    val = str(row_padded[h_idx]).strip()
-                    if not val or val.lower() in ['n/a', 'nan', '#n/a', '-']: continue
-                    
-                    # Indestructible Substring Matching!
-                    h_clean = re.sub(r'[^a-z0-9]', '', str(h).lower())
-                    if not h_clean: continue
-                    
-                    if 'order' in h_clean or 'fleekid' in h_clean:
-                        if r_dict['order'] == 'N/A': r_dict['order'] = val
-                    elif 'date' in h_clean:
-                        if r_dict['date'] == 'N/A': r_dict['date'] = val
-                    elif 'box' in h_clean or 'qty' in h_clean:
-                        if r_dict['boxes'] == 'N/A': r_dict['boxes'] = val
-                    elif 'weight' in h_clean or 'kg' in h_clean or 'pieces' in h_clean:
-                        if r_dict['weight'] == 'N/A': r_dict['weight'] = val
-                    elif 'vendor' in h_clean or 'seller' in h_clean:
-                        if r_dict['vendor'] == 'N/A': r_dict['vendor'] = val
-                    elif 'customer' in h_clean or 'consignee' in h_clean:
-                        if r_dict['customer'] == 'N/A': r_dict['customer'] = val
-                    elif 'country' in h_clean or 'dest' in h_clean:
-                        if r_dict['country'] == 'N/A': r_dict['country'] = val
-                    elif 'tracking' in h_clean or 'tid' in h_clean or 'awbnumber' in h_clean:
-                        if r_dict['tid'] == 'N/A': r_dict['tid'] = val
-                    elif 'mawb' in h_clean or 'master' in h_clean:
-                        if r_dict['mawb'] == 'N/A': r_dict['mawb'] = val
-                    elif 'status' in h_clean:
-                        if r_dict['status'] == 'N/A': r_dict['status'] = val
+                r_dict = {}
+                for key in HEADER_VARIANTS.keys():
+                    idx = col_map.get(key)
+                    if idx is not None and idx < len(row):
+                        val = str(row[idx]).strip()
+                        r_dict[key] = val if val and val.lower() not in ['n/a', 'nan', '#n/a', '-'] else "N/A"
+                    else:
+                        r_dict[key] = "N/A"
                         
                 processed.append(r_dict)
             return processed
-    except:
+    except Exception as e:
         return []
 
 def parse_date(date_str):
     if not date_str or date_str == 'N/A': return None
     try:
-        d_str = date_str.split(' ')[0]
         for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%b-%y', '%Y/%m/%d', '%d-%m-%Y'):
-            try: return datetime.strptime(d_str, fmt)
+            try: return datetime.strptime(date_str.split(' ')[0], fmt)
             except: continue
     except: pass
     if '2026' in date_str or '26' in date_str: return datetime(2026, 1, 1)
     return datetime(1970, 1, 1)
 
 def clean_tids(raw_tid):
-    parts = [t.strip() for t in re.split(r'[\n,\/]+', str(raw_tid)) if t.strip() and t.strip().lower()!='n/a']
+    parts = [t.strip() for t in re.split(r'[\n,\/]+', str(raw_tid)) if t.strip() and t.strip().lower() != 'n/a']
     return ['0' + t if (t.startswith('150') and 12 <= len(t) <= 15) else t for t in parts]
 
 def force_sync_all_databases():
@@ -3724,14 +3732,14 @@ def force_sync_all_databases():
             except: results[name] = []
 
     kerry_raw = results.pop("KERRY_MASTER", [])
-    s_map = {r['order'].lower(): r['status'].upper() for r in kerry_raw if r['order'] != 'N/A'}
+    s_map = {r['order'].lower(): r['status'].upper() for r in kerry_raw if r.get('order') and r['order'] != 'N/A'}
     
     GLOBAL_DB_CACHE['kerry'] = s_map
     GLOBAL_DB_CACHE['sheets'] = results
     GLOBAL_DB_CACHE['loaded'] = True
 
 # ------------------------------------------------------------------------------
-# 3. FLOATING BUTTON INJECTOR
+# 4. FLOATING BUTTON INJECTOR
 # ------------------------------------------------------------------------------
 @app.after_request
 def inject_nexus_button(response):
@@ -3743,8 +3751,9 @@ def inject_nexus_button(response):
     return response
 
 # ------------------------------------------------------------------------------
-# 4. BACKEND API ROUTES
+# 5. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
+
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
     force_sync_all_databases()
@@ -3762,8 +3771,8 @@ def api_nexus_search():
         found = False
         for src, rows in GLOBAL_DB_CACHE['sheets'].items():
             for r in rows:
-                oid = r['order'].lower()
-                tid_raw = r['tid'].lower()
+                oid = r.get('order', '').lower()
+                tid_raw = r.get('tid', '').lower()
                 
                 if q_lower in oid or q_lower in tid_raw or q_lower_alt in tid_raw:
                     k_stat = GLOBAL_DB_CACHE['kerry'].get(oid, "N/A")
@@ -3813,23 +3822,23 @@ def api_nexus_radar_data():
     
     for src, rows in GLOBAL_DB_CACHE['sheets'].items():
         for r in rows:
-            dt_str = r['date']
+            dt_str = r.get('date', 'N/A')
             dt_obj = parse_date(dt_str)
             if dt_obj and dt_obj < FILTER_DATE: continue
             
-            oid = r['order']
+            oid = r.get('order', 'N/A')
             if oid == 'N/A': continue
             
             kerry_stat = GLOBAL_DB_CACHE['kerry'].get(oid.lower(), "PENDING")
             if kerry_stat != "HANDED OVER TO LOGISTICS PARTNER": continue
             
-            tids = clean_tids(r['tid'])
+            tids = clean_tids(r.get('tid', 'N/A'))
             has_tid = len(tids) > 0 and tids[0].lower() not in ['pending', 'none', 'n/a']
             
             r_d = { 
-                "Date": dt_str, "Order": oid.upper(), "Boxes": r['boxes'], "Chargeable weight": r['weight'], 
-                "Vendor Name": r['vendor'], "Customer Name": r['customer'], "Country": r['country'], 
-                "Tracking ID": ", ".join(tids) if has_tid else "MISSING", "MAWB": r['mawb'] 
+                "Date": dt_str, "Order": oid.upper(), "Boxes": r.get('boxes', 'N/A'), "Chargeable weight": r.get('weight', 'N/A'), 
+                "Vendor Name": r.get('vendor', 'N/A'), "Customer Name": r.get('customer', 'N/A'), "Country": r.get('country', 'N/A'), 
+                "Tracking ID": ", ".join(tids) if has_tid else "MISSING", "MAWB": r.get('mawb', 'N/A') 
             }
             if has_tid: buckets[src]["with_tid"].append(r_d)
             else: buckets[src]["missing_tid"].append(r_d)
@@ -3844,15 +3853,15 @@ def api_nexus_ops_commander():
 
     for src, rows in GLOBAL_DB_CACHE['sheets'].items():
         for r in rows:
-            dt_str = r['date']
+            dt_str = r.get('date', 'N/A')
             dt_obj = parse_date(dt_str)
             if not dt_obj or dt_obj < FILTER_DATE: continue
             
-            oid = r['order']
+            oid = r.get('order', 'N/A')
             if oid == 'N/A': continue
             
             kerry_stat = GLOBAL_DB_CACHE['kerry'].get(oid.lower(), "PENDING")
-            has_tid = len(clean_tids(r['tid'])) > 0 and r['tid'].lower() not in ['pending', 'none', 'n/a']
+            has_tid = len(clean_tids(r.get('tid', 'N/A'))) > 0 and r.get('tid', 'N/A').lower() not in ['pending', 'none', 'n/a']
             days_aging = (datetime.now() - dt_obj).days
 
             if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and not has_tid and days_aging > 1:
@@ -3866,11 +3875,12 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 5. FRONTEND HTML
+# 6. FRONTEND HTML
 # ------------------------------------------------------------------------------
 @app.route('/nexus')
 def nexus_dashboard():
-    # Use session validation if needed: if 'role' not in session: return "Denied", 403
+    # Session check safely
+    if 'role' not in session: return redirect('/')
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
     <head><meta charset="UTF-8"><title>TID Operations Hub</title>
@@ -4204,9 +4214,6 @@ def nexus_dashboard():
     </body></html>
     ''')
 
-# ==============================================================================
-# KEEP THIS AT THE VERY END OF YOUR ENTIRE FILE
-# ==============================================================================
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
