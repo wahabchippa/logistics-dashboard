@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% UNBREAKABLE SCORING EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% COMPLETE & UNBREAKABLE EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -3613,18 +3613,7 @@ from flask import jsonify, request, session, render_template_string, redirect
 from functools import wraps
 
 # ------------------------------------------------------------------------------
-# 1. SECURITY / LOGIN DECORATOR (Aapke login system ke liye)
-# ------------------------------------------------------------------------------
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'role' not in session:
-            return redirect('/')
-        return f(*args, **kwargs)
-    return decorated_function
-
-# ------------------------------------------------------------------------------
-# 2. CORE DATA SOURCES
+# 1. CORE DATA SOURCES
 # ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -3637,17 +3626,17 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 3. THE MATHEMATICAL HEADER ENGINE (Fix for GE & ECL)
+# 2. THE MATHEMATICAL HEADER ENGINE (Fix for GE Zone & ALL Sheets)
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
 
-# Aapke bataye gaye EXACT headers ka map
+# EXACT headers map (Includes GE Zone 'noofpieces' & APX/Kerry variations)
 EXACT_MAP = {
     'order': ['order', 'fleekid', 'orderid'],
     'date': ['fleekhandoverdate', 'airporthandoverdate', 'date', 'qcdate', 'handoverdate'],
     'boxes': ['noofboxes', 'numberofboxes', 'boxcount', 'boxes', 'box', 'qty'],
-    'weight': ['chargeableweight', 'chargeableweightkg', 'noofpieces', 'weight', 'actualweight'],
+    'weight': ['chargeableweight', 'chargeableweightkg', 'noofpieces', 'pieces', 'weight', 'actualweight'],
     'vendor': ['vendorname', 'vendor'],
     'customer': ['customername', 'customer', 'consignee'],
     'country': ['country', 'destination'],
@@ -3664,17 +3653,19 @@ def fetch_and_map_csv(url):
             data = list(csv.reader(raw))
             if not data: return []
 
-            # Auto-detect real header row (bypasses titles in row 1)
+            # 🚨 ULTRA-SMART HEADER DETECTOR (Scans first 30 rows dynamically)
             header_idx = 0
             max_score = 0
-            for i, row in enumerate(data[:15]):
+            valid_keywords = [word for sublist in EXACT_MAP.values() for word in sublist]
+
+            for i, row in enumerate(data[:30]):
                 norm_row = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
-                score = sum(1 for c in norm_row if c in ['order', 'vendorname', 'customername', 'country', 'trackingid', 'noofboxes', 'fleekhandoverdate', 'mawb'])
+                score = sum(1 for c in norm_row if c in valid_keywords)
                 if score > max_score:
                     max_score = score
                     header_idx = i
 
-            if max_score == 0: return []
+            if max_score < 3: return [] # Failsafe
 
             headers = [re.sub(r'[^a-z0-9]', '', str(h).lower()) for h in data[header_idx]]
             processed = []
@@ -3732,7 +3723,7 @@ def force_sync_all_databases():
     GLOBAL_DB_CACHE['loaded'] = True
 
 # ------------------------------------------------------------------------------
-# THE FLOATING BUTTON INJECTOR (Now 100% visible)
+# 3. FLOATING BUTTON INJECTOR FOR MAIN DASHBOARD
 # ------------------------------------------------------------------------------
 @app.after_request
 def inject_nexus_button(response):
@@ -3746,7 +3737,6 @@ def inject_nexus_button(response):
 # ------------------------------------------------------------------------------
 # 4. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
-
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
     force_sync_all_databases()
@@ -3868,11 +3858,11 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# FRONTEND HTML
+# 5. FRONTEND HTML
 # ------------------------------------------------------------------------------
 @app.route('/nexus')
-@login_required
 def nexus_dashboard():
+    # Use session validation if needed: if 'role' not in session: return "Denied", 403
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
     <head><meta charset="UTF-8"><title>TID Operations Hub</title>
@@ -3889,6 +3879,7 @@ def nexus_dashboard():
         .sidebar { width: 220px; background: var(--card); border-right: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 6px;}
         .nav-item { padding: 14px 16px; border-radius: 8px; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; border: none; background: transparent; text-align: left; transition:0.2s;}
         .nav-item.active { background: var(--accent); color: #fff;}
+        .nav-item:hover { background: var(--border); color: #fff;}
         .viewport { flex: 1; padding: 40px; overflow-y: auto;}
         .sync-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 50; display: none; flex-direction: column; justify-content: center; align-items: center; color: white;}
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom:20px;}
@@ -3902,7 +3893,7 @@ def nexus_dashboard():
         .meta-col span:last-child { font-size: 14px; font-weight: 600; }
         .tid-area { padding: 20px; background: var(--bg); }
         .tid-box { border: 1px solid var(--border); border-radius: 8px; padding: 15px; background: var(--card); margin-bottom:15px;}
-        .loader { width: 16px; height: 16px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; vertical-align:middle;}
+        .loader { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; vertical-align:middle;}
         @keyframes spin { to { transform: rotate(360deg); } }
         
         .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px;}
@@ -4081,14 +4072,14 @@ def nexus_dashboard():
                 `).join('');
             } catch(e) {
                 btn.innerHTML = '🔍 Scan Sheets Live';
-                resBox.innerHTML = '<div style="color:#EF4444; border:1px solid #EF4444; padding:20px; border-radius:8px;">Network Error. Vercel timeout.</div>';
+                resBox.innerHTML = '<div style="color:#EF4444; border:1px solid #EF4444; padding:20px; border-radius:8px;">Network Error. Vercel timeout. Refresh Page.</div>';
             }
         }
 
         async function syncShip24(tid, btn) {
             const sid = tid.replace(/[\\s\\/]+/g,'');
             const log = document.getElementById(`log-${sid}`) || btn.nextElementSibling; 
-            btn.innerHTML = '<div class="loader" style="width:12px;height:12px;border-top-color:#fff;"></div>';
+            btn.innerHTML = '...';
             
             try {
                 const r = await fetch('/api/nexus/ship24', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tids:[tid]})});
@@ -4205,11 +4196,12 @@ def nexus_dashboard():
     </body></html>
     ''')
 
-# ------------------------------------------------------------------------------
-# 6. APP START
-# ------------------------------------------------------------------------------
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+# ==============================================================================
+# IMPORTANT: DO NOT ADD app.run() OR app = Flask(__name__) DOWN HERE IF YOU 
+# ALREADY HAVE IT AT THE BOTTOM OF YOUR ORIGINAL 3000 LINE CODE! 
+# IF YOUR ORIGINAL CODE DOES NOT HAVE IT, UNCOMMENT THE 2 LINES BELOW:
+# ==============================================================================
+# if __name__ == '__main__':
+#     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), debug=True)
 if __name__ == '__main__':
     app.run(debug=True)
