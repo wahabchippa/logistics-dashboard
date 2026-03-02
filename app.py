@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - SMART HEADER & LIGHTNING FAST EDITION
+# 🛰️ TID OPERATIONS HUB (NEXUS) - EXACT HEADERS & AUTO-REFRESH EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -3640,10 +3640,27 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 3. SMART HEADER ENGINE (FIX FOR ECL & GE)
+# 3. SMART EXACT HEADER ENGINE
 # ------------------------------------------------------------------------------
 GLOBAL_DB_CACHE = {'loaded': False, 'sheets': {}, 'kerry': {}}
 FILTER_DATE = datetime(2026, 1, 1)
+
+def normalize_header(h):
+    """ Strips spaces, dots, and brackets to match exact text provided by user """
+    return re.sub(r'[^a-z0-9]', '', str(h).lower())
+
+# EXACT MAPPING ACCORDING TO YOUR LIST
+EXACT_ALIASES = {
+    'order': ['order'],
+    'date': ['fleekhandoverdate', 'airporthandoverdate', 'date'],
+    'boxes': ['noofboxes'],
+    'weight': ['chargeableweight', 'chargeableweightkg', 'noofpieces'], # noofpieces handled for GE Zone
+    'vendor': ['vendorname'],
+    'customer': ['customername'],
+    'country': ['country'],
+    'tid': ['trackingid'],
+    'mawb': ['mawb', 'mawbflight', 'kerrymawbnumber']
+}
 
 def fetch_and_process_csv(url):
     try:
@@ -3653,60 +3670,42 @@ def fetch_and_process_csv(url):
             data = list(csv.reader(raw))
             if not data: return []
 
-            # 🚨 FIX 1: SMART HEADER DETECTOR
-            # Code khud dhoondega ke headers asal mein kis line par hain (ECL ki wajah se)
+            # 🚨 FIX 1: Bypass ECL/GE Title Rows
             header_idx = 0
             for i, row in enumerate(data[:10]):
-                row_clean = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in row]
-                matches = sum(1 for c in row_clean if any(kw in c for kw in ['order', 'fleek', 'date', 'box', 'weight', 'track', 'customer', 'vendor', 'mawb', 'awb']))
-                if matches >= 3: 
+                norm_row = [normalize_header(c) for c in row]
+                # If row contains 'order' and 'vendorname', it IS the header row!
+                if 'order' in norm_row and ('vendorname' in norm_row or 'trackingid' in norm_row):
                     header_idx = i
                     break
 
-            headers = data[header_idx]
+            headers = [normalize_header(h) for h in data[header_idx]]
             
-            # 🚨 FIX 2: EXACT COLUMN MAPPING
-            mapping = {}
-            for i, h in enumerate(headers):
-                c = re.sub(r'[^a-z0-9]', '', str(h).lower())
-                if not c: continue
-                if 'order' not in mapping and c in ['order', 'orderid', 'ordernum', 'fleekid', 'shipmentid']: mapping['order'] = i
-                elif 'date' not in mapping and c in ['date', 'handoverdate', 'createdat', 'qcdate', 'fleekhandoverdate']: mapping['date'] = i
-                elif 'boxes' not in mapping and c in ['box', 'boxes', 'qty', 'quantity', 'noofboxes', 'numberofboxes', 'boxcount', 'totalboxes']: mapping['boxes'] = i
-                elif 'weight' not in mapping and ('weight' in c or 'kg' in c): mapping['weight'] = i
-                elif 'vendor' not in mapping and ('vendor' in c or 'seller' in c): mapping['vendor'] = i
-                elif 'customer' not in mapping and ('customer' in c or 'consignee' in c or 'receiver' in c): mapping['customer'] = i
-                elif 'country' not in mapping and ('country' in c or 'dest' in c or 'lane' in c): mapping['country'] = i
-                elif 'mawb' not in mapping and ('mawb' in c or 'master' in c): mapping['mawb'] = i
-                elif 'tid' not in mapping and ('tracking' in c or 'tid' in c or 'awbnumber' in c or 'courier' in c): mapping['tid'] = i
-                elif 'status' not in mapping and 'status' in c: mapping['status'] = i
-
-            # Partial match fallbacks
-            for i, h in enumerate(headers):
-                c = re.sub(r'[^a-z0-9]', '', str(h).lower())
-                if 'order' not in mapping and ('order' in c or 'fleek' in c): mapping['order'] = i
-                if 'date' not in mapping and ('date' in c or 'handover' in c): mapping['date'] = i
-                if 'tid' not in mapping and ('track' in c or 'awb' in c): mapping['tid'] = i
-                if 'boxes' not in mapping and ('box' in c or 'qty' in c): mapping['boxes'] = i
+            # Map Column Indexes exactly to our keys
+            col_map = {}
+            for key, possible_names in EXACT_ALIASES.items():
+                for i, h in enumerate(headers):
+                    if h in possible_names:
+                        col_map[key] = i
+                        break
 
             processed_data = []
             for row in data[header_idx+1:]:
+                # Skip empty rows
                 if not any(str(x).strip() for x in row): continue
-                row_padded = row + [''] * max(0, len(headers) - len(row))
                 
-                def get_val(key):
-                    if key in mapping and mapping[key] < len(row_padded):
-                        v = str(row_padded[mapping[key]]).strip()
-                        return v if v and v.lower() not in ['n/a', 'nan', 'none', '-'] else "N/A"
-                    return "N/A"
-
-                processed_data.append({
-                    'order': get_val('order'), 'date': get_val('date'),
-                    'boxes': get_val('boxes'), 'weight': get_val('weight'),
-                    'vendor': get_val('vendor'), 'customer': get_val('customer'),
-                    'country': get_val('country'), 'tid': get_val('tid'),
-                    'mawb': get_val('mawb'), 'status': get_val('status')
-                })
+                row_padded = row + [''] * max(0, len(headers) - len(row))
+                row_dict = {}
+                
+                for key in EXACT_ALIASES.keys():
+                    idx = col_map.get(key)
+                    if idx is not None and idx < len(row_padded):
+                        val = str(row_padded[idx]).strip()
+                        row_dict[key] = val if val and val.lower() not in ['n/a', 'nan', 'none', '-'] else "N/A"
+                    else:
+                        row_dict[key] = "N/A"
+                        
+                processed_data.append(row_dict)
             return processed_data
     except Exception as e:
         return []
@@ -3743,8 +3742,10 @@ def force_sync_all_databases():
     kerry_raw = results.pop("KERRY_MASTER", [])
     s_map = {}
     for r in kerry_raw:
-        oid = r['order']
-        if oid != 'N/A': s_map[oid.lower()] = r['status'].upper()
+        oid = r.get('order', 'N/A')
+        # Handle kerry status parsing safely
+        stat = next((str(v) for k, v in r.items() if 'status' in k), 'PENDING')
+        if oid != 'N/A': s_map[oid.lower()] = stat.upper()
 
     GLOBAL_DB_CACHE['kerry'] = s_map
     GLOBAL_DB_CACHE['sheets'] = results
@@ -3755,7 +3756,7 @@ def inject_nexus_button(response):
     if response.content_type and response.content_type.startswith('text/html'):
         if session.get('role') == 'admin' and request.endpoint != 'nexus_dashboard':
             html = response.get_data(as_text=True)
-            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #18181b, #09090b); color:#fff; border:1px solid #27272a; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; font-family:'Inter',sans-serif; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5);">🚀 TID Operations Hub</a>"""
+            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #18181b, #09090b); color:#fff; border:1px solid #27272a; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5);">🚀 TID Operations Hub</a>"""
             if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
@@ -3766,12 +3767,14 @@ def inject_nexus_button(response):
 @app.route('/api/nexus/refresh', methods=['POST'])
 @login_required
 def api_nexus_refresh():
+    # Called by JS on page load
     force_sync_all_databases()
     return jsonify({"success": True})
 
 @app.route('/api/nexus/search', methods=['POST'])
 @login_required
 def api_nexus_search():
+    # Failsafe if not loaded
     if not GLOBAL_DB_CACHE['loaded']: force_sync_all_databases()
 
     queries = [x.strip().lower() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
@@ -3947,15 +3950,15 @@ def nexus_dashboard():
         .nav-item.active { background: var(--accent); color: white; font-weight: 600; }
         
         .viewport { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; position: relative;}
+        
         .sync-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 50; display: none; flex-direction: column; justify-content: center; align-items: center; color: white;}
+        
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: var(--shadow); }
         .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.2s; }
         .btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
         
         textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--text); font-family: 'Inter', monospace; font-size: 15px; outline: none; resize: vertical; min-height: 100px; transition: 0.2s;}
         textarea:focus { border-color: var(--accent); }
-
-        .error-box { background: rgba(239, 68, 68, 0.1); border: 1px dashed #EF4444; color: #EF4444; padding: 20px; border-radius: 12px; text-align: center; font-weight: 600;}
 
         /* TRACKING RESULTS */
         .track-card { border-radius: 16px; padding: 0; overflow: hidden; margin-bottom: 30px; border: 1px solid var(--border); background: var(--card);}
@@ -4038,14 +4041,14 @@ def nexus_dashboard():
             <main class="viewport">
                 <div class="sync-overlay" id="syncOverlay">
                     <div class="loader" style="width: 50px; height: 50px; margin-bottom:20px;"></div>
-                    <h2 style="margin:0; font-size:24px;">Synchronizing Data...</h2>
-                    <p style="color:var(--muted); margin-top:10px;">Loading directly from servers.</p>
+                    <h2 style="margin:0;">Fetching Live Data...</h2>
+                    <p style="color:var(--muted); margin-top:10px;">Loading new orders from Google Sheets. Just a few seconds.</p>
                 </div>
 
                 <div id="view-track" class="view-pane active">
                     <div style="margin-bottom:20px;">
                         <h1 style="margin: 0 0 8px 0; font-size: 28px; font-weight: 800;">Matrix Search</h1>
-                        <div style="font-size: 14px; color: var(--muted);">Search by Order ID or Carrier TID. Zero loading time!</div>
+                        <div style="font-size: 14px; color: var(--muted);">Search by Order ID or Carrier TID to find details.</div>
                     </div>
                     <div class="card" style="margin-bottom: 30px;">
                         <textarea id="searchInput" placeholder="Paste Order IDs or TIDs here..."></textarea>
@@ -4138,7 +4141,7 @@ def nexus_dashboard():
         let radarData = null;
         let allTrackingData = [];
 
-        // 🚀 AUTO-LOAD ON START
+        // 🚨 AUTOMATIC REFRESH ON PAGE LOAD 🚨
         document.addEventListener("DOMContentLoaded", async () => {
             const overlay = document.getElementById('syncOverlay');
             overlay.style.display = 'flex';
@@ -4158,33 +4161,29 @@ def nexus_dashboard():
             if(viewType === 'view-ops') loadOpsCommander();
         }
 
-        // --- 1. MATRIX SEARCH ENGINE ---
         async function searchOrders() {
             const q = document.getElementById('searchInput').value; if(!q) return;
             const resBox = document.getElementById('tracking-results');
             const sBtn = document.getElementById('sBtn');
             
             resBox.innerHTML = '<div style="padding:40px;text-align:center"><div class="loader" style="margin:auto"></div></div>';
-            sBtn.innerHTML = '<div class="loader" style="width:14px;height:14px;border-top-color:#fff;"></div> Processing...';
             document.getElementById('bulkBtn').style.display = 'none';
             
             try {
                 const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
                 allTrackingData = await r.json(); 
-                sBtn.innerHTML = '🔍 Scan Matrix';
                 
                 if(allTrackingData.length > 0) document.getElementById('bulkBtn').style.display = 'flex';
                 renderCards();
             } catch (e) {
-                sBtn.innerHTML = '🔍 Scan Matrix';
-                resBox.innerHTML = '<div class="error-box">⚠️ Request timed out. Vercel is warming up, please click Search again!</div>';
+                resBox.innerHTML = '<div class="error-box">⚠️ Network Error. Please refresh the browser page.</div>';
             }
         }
 
         function renderCards() {
             let h = '';
             if(allTrackingData.length === 0) {
-                document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:var(--muted); padding:40px; border:1px dashed var(--border); border-radius:12px;">Not found in any sheet. Please check the Order ID.</div>';
+                document.getElementById('tracking-results').innerHTML = '<div style="text-align:center; color:var(--muted); padding:40px; border:1px dashed var(--border); border-radius:12px;">Order Not Found. Double check the ID.</div>';
                 return;
             }
             allTrackingData.forEach(item => {
@@ -4299,7 +4298,6 @@ def nexus_dashboard():
             btn.innerText = "⚡ Bulk Sync Complete"; btn.style.pointerEvents = 'auto'; btn.style.opacity = '1';
         }
 
-        // --- 2. DIRECT TID TRACKING ENGINE ---
         async function directTrackTIDs() {
             let val = document.getElementById('directInput').value;
             if(!val) return;
@@ -4329,7 +4327,6 @@ def nexus_dashboard():
             for(let tid of tids) { await syncShip24(tid, true); }
         }
 
-        // --- 3. RADAR ENGINE ---
         async function loadRadar() {
             const container = document.getElementById('radar-container');
             const loader = document.getElementById('loader');
@@ -4361,7 +4358,7 @@ def nexus_dashboard():
                     `;
                 });
             } catch(e) {
-                container.innerHTML = '<div class="error-box">⚠️ Network error. Please refresh the page and try again.</div>';
+                container.innerHTML = '<div class="error-box">⚠️ Network error. Please refresh the page.</div>';
             }
             loader.style.display = 'none';
         }
@@ -4392,7 +4389,6 @@ def nexus_dashboard():
             document.getElementById('detailPanel').style.display = 'block';
         }
         
-        // --- 4. OPS COMMANDER ENGINE ---
         async function loadOpsCommander() {
             document.getElementById('ops-content').style.display = 'none';
             document.getElementById('ops-loader').style.display = 'block';
@@ -4412,7 +4408,7 @@ def nexus_dashboard():
                 document.getElementById('ops-loader').style.display = 'none';
                 document.getElementById('ops-content').style.display = 'grid';
             } catch(e) {
-                document.getElementById('ops-loader').innerHTML = '<div class="error-box">⚠️ Network error. Please refresh the page and try again.</div>';
+                document.getElementById('ops-loader').innerHTML = '<div class="error-box">⚠️ Network error. Please refresh the page.</div>';
             }
         }
 
