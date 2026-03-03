@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - AI TID SPLITTER + SECURE NATIVE TRACKER
+# 🛰️ TID OPERATIONS HUB (NEXUS) - AUTO-ZERO + STRICT TID + HANDED OVER RADAR
 # ==============================================================================
 import urllib.request
 import urllib.parse
@@ -3658,7 +3658,6 @@ def nexus_fetch_sheet_data(url, name):
             data = list(csv.reader(raw_data))
             col = NEXUS_SHEET_MAP.get(name)
             if not col or not data: return []
-
             processed = []
             for row in data:
                 if not row: continue
@@ -3678,45 +3677,35 @@ def nexus_fetch_sheet_data(url, name):
 
 def nexus_clean_tids(raw):
     """
-    🚨 THE AI SMART SPLITTER 🚨
-    Handles normal splits, cleans colons/junk, AND auto-splits concatenated TIDs!
+    🚨 THE AI SMART SPLITTER & 150 ZERO RESTORER 🚨
     """
     raw = str(raw).strip()
-    if not raw or raw.lower() in ['pending','none','n/a', '-']: return []
+    # Faltu text filter out
+    if not raw or raw.lower() in ['pending','none','n/a', '-', 'tbd', 'tba']: return []
     
-    # Clean leading and trailing weird characters (like colons or spaces)
     raw = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', raw)
-    
     parts = []
-    # CONDITION 1: Obvious Delimiters exist
     if any(x in raw for x in [',', '/', ' ', ';', '\n', '\t']):
         parts = [t.strip() for t in re.split(r'[,\/\s;]+', raw) if t.strip()]
     else:
-        # CONDITION 2: No delimiters, but string is unusually long (Concatenated Data)
         if len(raw) > 20:
-            # AI Lookahead Split: Find '150', '155', '1Z', 'JD', 'YT' and split BEFORE them
-            split_by_prefix = [p for p in re.split(r'(?=15[05]\d|1Z|JD|YT)', raw) if p]
-            
-            if len(split_by_prefix) > 1:
-                parts = split_by_prefix
-            else:
-                # Fallback chunking: Split into chunks of 15 if prefix logic misses
-                parts = [raw[i:i+15] for i in range(0, len(raw), 15)]
+            split_by_prefix = [p for p in re.split(r'(?=15[05]\d|1Z|JD|YT|015)', raw) if p]
+            if len(split_by_prefix) > 1: parts = split_by_prefix
+            else: parts = [raw[i:i+15] for i in range(0, len(raw), 15)]
         else:
-            # Normal single TID
             parts = [raw]
 
-    # Clean and Format the resulting array
     cleaned = []
     for t in parts:
         t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
-        if len(t) > 5 and t.lower() not in ['tid', 'tracking', 'no', 'number']:
-            if t.startswith('150') and 12<=len(t)<=15:
+        # STRICT TID CHECK: Must be > 6 chars and contain numbers (Not random english words)
+        if len(t) > 6 and re.search(r'\d', t) and t.lower() not in ['tracking', 'number', 'pending']:
+            # 🚨 THE MISSING ZERO RESTORER (150/155 FIX) 🚨
+            if (t.startswith('150') or t.startswith('155')) and len(t) >= 12 and not t.startswith('0'):
                 cleaned.append('0' + t)
             else:
                 cleaned.append(t)
                 
-    # Remove duplicates but keep sequence
     return list(dict.fromkeys(cleaned))
 
 def nexus_fetch_kerry_status(url):
@@ -3803,20 +3792,18 @@ def api_nexus_search():
     sheets_data, kerry_data = nexus_sync_db()
     
     for q in order_ids:
-        q_alt_tid = '0' + q if (q.startswith('150') and 12 <= len(q) <= 15) else q
         q_slash = q.replace('_', '/')
         q_under = q.replace('/', '_')
+        q_with_zero = '0' + q if not q.startswith('0') else q
+        q_no_zero = q[1:] if q.startswith('0') else q
         
         found = False
         for src, rows in sheets_data.items():
             for r in rows:
                 oid, tid_raw = r['order'].lower(), r['tid'].lower()
-                
                 if (q in oid or q_slash in oid or q_under in oid or 
-                    q in tid_raw or q_alt_tid in tid_raw):
-                    
+                    q in tid_raw or q_with_zero in tid_raw or q_no_zero in tid_raw):
                     k_stat = kerry_data.get(oid, "N/A")
-                    
                     results.append({
                         "order_id": r['order'].upper(), "source": src, "status": k_stat, 
                         "date": r['date'], "boxes": r['boxes'], "weight": r['weight'], 
@@ -3870,21 +3857,36 @@ def api_track_real():
     except Exception as e: pass
     return jsonify({"success": False, "tid": tid})
 
+# 🚨 STRICT HANDED OVER RADAR ENGINE 🚨
 @app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
     sheets_data, kerry_data = nexus_sync_db()
     buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES} }
+    
     for src, rows in sheets_data.items():
         for r in rows:
-            dt_obj = nexus_parse_date(r['date'])
-            if dt_obj and dt_obj < NEXUS_FILTER_DATE: continue
             oid = r['order']
-            if oid == 'N/A': continue
+            if oid == 'N/A' or not oid: continue
+            
             kerry_stat = kerry_data.get(oid.lower(), "PENDING")
+            
+            # Use our strict TID cleaner to ensure it's a real TID and not fake text
             tids = nexus_clean_tids(r['tid'])
-            has_tid = len(tids) > 0
-            if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and has_tid:
-                buckets["handed_over"][src].append({ "Order": oid.upper(), "Date": r['date'], "Vendor": r['vendor'], "Customer": r['customer'], "Boxes": r['boxes'], "Weight": r['weight'], "TID": ", ".join(tids), "MAWB": r['mawb'], "Status": kerry_stat })
+            has_real_tid = len(tids) > 0
+            
+            # Check if Kerry Status confirms "HANDED OVER" and Sheet has a real TID
+            if "HANDED OVER" in kerry_stat and has_real_tid:
+                buckets["handed_over"][src].append({ 
+                    "Order": oid.upper(), 
+                    "Date": r['date'], 
+                    "Vendor": r['vendor'], 
+                    "Customer": r['customer'], 
+                    "Boxes": r['boxes'], 
+                    "TID": ", ".join(tids), 
+                    "MAWB": r['mawb'], 
+                    "Status": kerry_stat 
+                })
+                
     return jsonify(buckets)
 
 @app.route('/api/nexus/ops_commander', methods=['GET'])
@@ -3901,7 +3903,7 @@ def api_nexus_ops_commander():
             k_stat = kerry_data.get(oid.lower(), "PENDING")
             has_tid = len(nexus_clean_tids(r['tid'])) > 0
             days = (datetime.now() - dt_obj).days if dt_obj else 0
-            if k_stat == "HANDED OVER TO LOGISTICS PARTNER" and not has_tid and days > 1:
+            if "HANDED OVER" in k_stat and not has_tid and days > 1:
                 blame_radar.append({"order": oid.upper(), "source": src, "issue": "Missing TID", "aging": f"{days} Days", "blame": "Kerry Logistics"})
                 missing_text += f"{count}. Order: {oid.upper()} | Date: {r['date']} | Source: {src}\n"
                 count += 1
@@ -3911,7 +3913,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI 
+# 4. FRONTEND UI
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3953,6 +3955,8 @@ def nexus_dashboard():
         
         .viewport { flex: 1; padding: 40px 50px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: var(--shadow); }
+        .card.hoverable { cursor: pointer; transition: 0.2s; }
+        .card.hoverable:hover { transform: translateY(-4px); border-color: var(--muted); }
         
         .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; transition: 0.2s;}
         .btn:hover { opacity: 0.8; transform: translateY(-1px);}
@@ -4000,7 +4004,7 @@ def nexus_dashboard():
         td { padding: 16px 20px; font-size: 14px; border-bottom: 1px solid var(--border); font-weight: 500;}
         tr:hover { background: #111; }
         
-        .loader { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; vertical-align: middle; }
+        .loader { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; vertical-align: middle; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style></head>
@@ -4015,7 +4019,7 @@ def nexus_dashboard():
                 <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Operations</div>
                 <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
                 <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct Track</button>
-                <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over</button>
+                <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over Radar</button>
                 <button class="nav-item" onclick="navSwitch(this, 'view-ops')">⚡ Ops Commander</button>
                 <div style="flex:1"></div>
                 <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
@@ -4048,12 +4052,12 @@ def nexus_dashboard():
                 </div>
                 
                 <div id="view-radar" class="view-pane" style="display:none;">
-                    <div id="loader" style="display:none; padding:60px; text-align:center;"><div class="loader" style="width:30px; height:30px;"></div></div>
+                    <div id="loader" style="display:none; padding:60px; text-align:center;"><div class="loader"></div><div style="margin-top:15px; color:var(--muted)">Scanning Sources...</div></div>
                     <div id="radar-container" class="radar-grid"></div>
                 </div>
 
                 <div id="view-ops" class="view-pane" style="display:none;">
-                    <div id="ops-loader" style="display:none; padding:60px; text-align:center;"><div class="loader" style="width:30px; height:30px;"></div></div>
+                    <div id="ops-loader" style="display:none; padding:60px; text-align:center;"><div class="loader"></div></div>
                     <div id="ops-content" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; display:none;">
                         <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">🚨 Aging Blame</h3><div style="max-height:400px; overflow-y:auto"><table id="blameTable"></table></div></div>
                         <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">📲 Follow-up Bot</h3><textarea id="followupText" style="min-height:300px; border:none; background:var(--bg);" readonly></textarea><button class="btn" style="width:100%; margin-top:16px;" onclick="copyFollowup()">Copy Text</button></div>
@@ -4066,7 +4070,7 @@ def nexus_dashboard():
     <div id="detailPanel" class="modal" onclick="if(event.target==this)this.style.display='none'">
         <div class="modal-content">
             <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:30px">
-                <h2 id="modalTitle" style="margin:0; font-size:24px; font-weight: 800;">Details</h2>
+                <h2 id="modalTitle" style="margin:0; font-size:24px; font-weight: 800;">Handed Over Orders</h2>
                 <div style="display:flex; gap:16px;">
                     <button class="btn outline" onclick="downloadCSV()">Export CSV</button>
                     <button class="btn" style="background:#EF4444; border:none; color:white;" onclick="document.getElementById('detailPanel').style.display='none'">Close</button>
@@ -4117,7 +4121,7 @@ def nexus_dashboard():
 
         async function searchOrders() {
             const q = document.getElementById('searchInput').value; if(!q) return;
-            document.getElementById('tracking-results').innerHTML = '<div style="padding:60px;text-align:center"><div class="loader" style="width:30px; height:30px;"></div></div>';
+            document.getElementById('tracking-results').innerHTML = '<div style="padding:60px;text-align:center"><div class="loader"></div></div>';
             document.getElementById('bulkTrackBtn').style.display = 'none';
             const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
             const data = await r.json(); renderCards(data);
@@ -4165,7 +4169,7 @@ def nexus_dashboard():
         async function directTrackTIDs() {
             let val = document.getElementById('directInput').value; if(!val) return;
             let tids = val.split(/[\\n,\\t \\/]+/).map(t => t.trim()).filter(Boolean);
-            tids = tids.map(t => (t.startsWith('150') && t.length >= 12 && t.length <= 15) ? '0' + t : t);
+            tids = tids.map(t => ((t.startsWith('150') || t.startsWith('155')) && t.length >= 12 && !t.startsWith('0')) ? '0' + t : t);
             let h = '';
             tids.forEach(tid => {
                 const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
@@ -4205,7 +4209,7 @@ def nexus_dashboard():
                 return;
             }
 
-            btn.innerHTML = '<div class="loader"></div>';
+            btn.innerHTML = '<div class="loader" style="width:14px; height:14px; border-width:2px;"></div>';
             
             const r = await fetch('/api/nexus/track_real', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tid:tid})});
             const data = await r.json();
@@ -4242,6 +4246,7 @@ def nexus_dashboard():
             }
         }
 
+        // 🚨 HANDED OVER DASHBOARD LOGIC 🚨
         async function loadRadar() {
             const container = document.getElementById('radar-container'); container.innerHTML = ''; 
             document.getElementById('loader').style.display = 'block';
@@ -4249,11 +4254,11 @@ def nexus_dashboard():
             document.getElementById('loader').style.display = 'none';
             const order = ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"];
             order.forEach(src => {
-                const arr = radarData[activeBucket][src] || [];
+                const arr = radarData['handed_over'][src] || [];
                 container.innerHTML += `
                     <div class="card hoverable" onclick="showDetails('${src}')" style="display:flex; justify-content:space-between; align-items:center;">
                         <div style="font-weight:800; font-size:16px; text-transform:uppercase;">${src}</div>
-                        <div style="text-align:right;"><div class="stat-value">${arr.length}</div><div class="stat-label">Orders</div></div>
+                        <div style="text-align:right;"><div class="stat-value" style="color:var(--accent)">${arr.length}</div><div class="stat-label">Valid Orders</div></div>
                     </div>
                 `;
             });
@@ -4275,8 +4280,9 @@ def nexus_dashboard():
         function copyFollowup() { navigator.clipboard.writeText(document.getElementById('followupText').value); alert("Copied to clipboard!"); }
 
         function showDetails(src) {
-            activeDetails = radarData[activeBucket][src]; if(!activeDetails || activeDetails.length === 0) return;
-            document.getElementById('modalTitle').innerText = src;
+            activeDetails = radarData['handed_over'][src]; 
+            if(!activeDetails || activeDetails.length === 0) return;
+            document.getElementById('modalTitle').innerText = src + " (Handed Over)";
             let thead = '<thead><tr>' + Object.keys(activeDetails[0]).map(k=>`<th>${k}</th>`).join('') + '</tr></thead>';
             let tbody = '<tbody>' + activeDetails.map(r=>'<tr>' + Object.values(r).map(v=>`<td>${v}</td>`).join('') + '</tr>').join('') + '</tbody>';
             document.getElementById('detailTable').innerHTML = thead + tbody;
@@ -4289,7 +4295,7 @@ def nexus_dashboard():
             const rows = activeDetails.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\\n');
             const link = document.createElement("a");
             link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + headers + "\\n" + rows));
-            link.setAttribute("download", `nexus_${activeBucket}_export.csv`); link.click();
+            link.setAttribute("download", `nexus_handed_over_export.csv`); link.click();
         }
     </script>
     </body></html>
