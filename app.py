@@ -3600,9 +3600,10 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - BULLETPROOF FLOATING WINDOW TRACKER
+# 🛰️ TID OPERATIONS HUB (NEXUS) - ADMIN ONLY SECURE VERSION + NATIVE TRACKING
 # ==============================================================================
 import urllib.request
+import urllib.parse
 import csv
 import re
 import json
@@ -3610,14 +3611,19 @@ import time
 import concurrent.futures
 from datetime import datetime
 import ssl
-from flask import jsonify, request, session, render_template_string
+from flask import jsonify, request, session, render_template_string, redirect, url_for
 
-# 🛠️ ANTI-DROP FIX
+# 🛠️ ANTI-DROP FIX FOR LOCAL VS CODE
 try:
     _create_unverified_https_context = ssl._create_unverified_context
-except AttributeError: pass
-else: ssl._create_default_https_context = _create_unverified_https_context
+except AttributeError:
+    pass
+else:
+    ssl._create_default_https_context = _create_unverified_https_context
 
+# ------------------------------------------------------------------------------
+# 1. CORE DATA SOURCES
+# ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
     "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
@@ -3628,6 +3634,9 @@ NEXUS_SOURCES = {
 }
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
+# ------------------------------------------------------------------------------
+# 2. EXACT COLUMNS MAP
+# ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
 
@@ -3668,7 +3677,6 @@ def nexus_fetch_sheet_data(url, name):
     except: return []
 
 def nexus_clean_tids(raw):
-    # 🚨 STRICT TID SPLITTER: Sirf space aur comma se todega, Alphabets se nahi! UPS safe rahega.
     raw = str(raw).strip()
     if not raw or raw.lower() in ['pending','none','n/a', '-']: return []
     parts = [t.strip() for t in re.split(r'[,\/\s]+', raw) if t.strip()]
@@ -3725,13 +3733,25 @@ def nexus_sync_db(force=False):
     NEXUS_GLOBAL_CACHE['kerry'] = k_map
     return res, k_map
 
+# 🚨 ADMIN SECURITY CHECK: BUTTON INJECTION 🚨
 @app.after_request
 def add_nexus_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
-        html = response.get_data(as_text=True)
-        btn = '<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:#fff; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub</a>'
-        if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
+        
+        # Sirf tab show hoga jab admin login ho (Checking session keys)
+        user_val = session.get('username') or session.get('user') or session.get('role')
+        is_admin = (user_val and str(user_val).lower() == 'admin')
+        
+        if is_admin:
+            html = response.get_data(as_text=True)
+            btn = '<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:#fff; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub</a>'
+            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
+            
     return response
+
+# ------------------------------------------------------------------------------
+# 3. BACKEND API ROUTES
+# ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
@@ -3761,6 +3781,49 @@ def api_nexus_search():
                     found = True; break
             if found: break
     return jsonify(results)
+
+@app.route('/api/nexus/track_real', methods=['POST'])
+def api_track_real():
+    tid = request.json.get('tid', '')
+    if not tid: return jsonify({"success": False})
+
+    api_key = "8cbba2461aa13856fbaa27f4c26be113" 
+    target_url = f"https://www.ordertracker.com/track/{tid}"
+    scraper_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}"
+
+    try:
+        req = urllib.request.Request(scraper_url, headers={'User-Agent': 'Mozilla/5.0'})
+        html = urllib.request.urlopen(req, timeout=25).read().decode('utf-8')
+        match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html)
+        if match:
+            data = json.loads(match.group(1))
+            def find_events(node):
+                if isinstance(node, dict):
+                    if 'events' in node and isinstance(node['events'], list) and len(node['events']) > 0:
+                        if 'description' in node['events'][0] or 'status' in node['events'][0]:
+                            return node['events']
+                    for k, v in node.items():
+                        found = find_events(v)
+                        if found: return found
+                elif isinstance(node, list):
+                    for item in node:
+                        found = find_events(item)
+                        if found: return found
+                return None
+            
+            raw_events = find_events(data)
+            if raw_events:
+                events = []
+                for i, ev in enumerate(raw_events):
+                    events.append({
+                        "time": ev.get("date", "Unknown Time"),
+                        "status": ev.get("description", ev.get("status", "Update")),
+                        "loc": ev.get("location", ""),
+                        "active": i == 0 
+                    })
+                return jsonify({"success": True, "events": events})
+    except Exception as e: pass
+    return jsonify({"success": False, "tid": tid})
 
 @app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
@@ -3802,8 +3865,17 @@ def api_nexus_ops_commander():
     if count == 1: missing_text = "All good! No missing TIDs currently."
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
+# ------------------------------------------------------------------------------
+# 4. FRONTEND UI (NATIVE PURE CSS TIMELINE & ADMIN SECURE)
+# ------------------------------------------------------------------------------
+
 @app.route('/nexus')
 def nexus_dashboard():
+    # 🚨 ADMIN SECURITY CHECK: DIRECT LINK PROTECTION 🚨
+    user_val = session.get('username') or session.get('user') or session.get('role')
+    if not user_val or str(user_val).lower() != 'admin':
+        return "<div style='text-align:center; padding:100px; font-family:sans-serif;'><h2>⛔ Access Denied</h2><p>Only Admin users can access the TID Operations Hub.</p><a href='/'>Go Back</a></div>", 403
+
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
     <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
@@ -3861,8 +3933,68 @@ def nexus_dashboard():
         
         .tid-area { padding: 30px; background: var(--card);}
         .tid-strip { display: flex; flex-direction: column; gap: 20px; padding-bottom: 8px;}
-        .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; justify-content: space-between; align-items: center; transition: 0.3s;}
+        .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; transition: 0.3s;}
         
+        /* 🚀 THE BEAUTIFUL NATIVE TIMELINE (ZERO IFRAMES) 🚀 */
+        .native-timeline-box {
+            display: none;
+            background: #050505;
+            border: 1px solid #222;
+            border-radius: 12px;
+            padding: 30px;
+            margin-top: 10px;
+        }
+        .tl-container {
+            border-left: 2px solid #222;
+            padding-left: 25px;
+            margin-left: 10px;
+        }
+        .tl-item {
+            position: relative;
+            margin-bottom: 30px;
+            animation: fadeIn 0.4s ease forwards;
+        }
+        .tl-item:last-child { margin-bottom: 0; }
+        .tl-dot {
+            position: absolute;
+            left: -32px;
+            top: 4px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #222;
+            border: 3px solid #000;
+        }
+        .tl-dot.active {
+            background: #10B981;
+            box-shadow: 0 0 10px rgba(16,185,129,0.5);
+            border-color: #050505;
+        }
+        .tl-time { font-size: 12px; color: #888; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.5px; display:block;}
+        .tl-status { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; display:block;}
+        .tl-loc { font-size: 12px; color: #555; display:block;}
+        
+        .fallback-container {
+            text-align: center;
+            padding: 30px;
+            background: #080808;
+            border-radius: 12px;
+            border: 1px dashed #222;
+        }
+        .fallback-btn {
+            display: inline-block;
+            background: #fff;
+            color: #000;
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 13px;
+            text-decoration: none;
+            margin-top: 15px;
+            transition: 0.2s;
+        }
+        .fallback-btn:hover { opacity: 0.8; transform: translateY(-2px); }
+
         .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
         .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
@@ -3870,8 +4002,9 @@ def nexus_dashboard():
         td { padding: 16px 20px; font-size: 14px; border-bottom: 1px solid var(--border); font-weight: 500;}
         tr:hover { background: #111; }
         
-        .loader { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: auto;}
+        .loader { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; vertical-align: middle; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style></head>
     <body>
     <div class="app-container">
@@ -3897,7 +4030,8 @@ def nexus_dashboard():
                         <textarea id="searchInput" placeholder="Paste Order IDs or TIDs here (e.g. 1ZW599K16722861884)..."></textarea>
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="searchOrders()">Scan Matrix</button>
-                            <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML='';">Clear</button>
+                            <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
+                            <button class="btn" id="bulkTrackBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('tracking-results')">⚡ Bulk Track All</button>
                         </div>
                     </div>
                     <div id="tracking-results"></div>
@@ -3908,25 +4042,39 @@ def nexus_dashboard():
                         <textarea id="directInput" placeholder="Paste multiple Carrier TIDs here directly..."></textarea>
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="directTrackTIDs()">Extract TIDs</button>
-                            <button class="btn outline" onclick="document.getElementById('directInput').value=''; document.getElementById('direct-results').innerHTML='';">Clear</button>
+                            <button class="btn outline" onclick="document.getElementById('directInput').value=''; document.getElementById('direct-results').innerHTML=''; document.getElementById('bulkDirectBtn').style.display='none';">Clear</button>
+                            <button class="btn" id="bulkDirectBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('direct-results')">⚡ Bulk Track All</button>
                         </div>
                     </div>
                     <div id="direct-results" style="display:flex; flex-direction:column; gap:16px;"></div>
                 </div>
                 
                 <div id="view-radar" class="view-pane" style="display:none;">
-                    <div id="loader" style="display:none; padding:60px; text-align:center;"><div class="loader"></div></div>
+                    <div id="loader" style="display:none; padding:60px; text-align:center;"><div class="loader" style="width:30px; height:30px;"></div></div>
                     <div id="radar-container" class="radar-grid"></div>
                 </div>
 
                 <div id="view-ops" class="view-pane" style="display:none;">
-                    <div id="ops-loader" style="display:none; padding:60px; text-align:center;"><div class="loader"></div></div>
+                    <div id="ops-loader" style="display:none; padding:60px; text-align:center;"><div class="loader" style="width:30px; height:30px;"></div></div>
                     <div id="ops-content" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; display:none;">
                         <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">🚨 Aging Blame</h3><div style="max-height:400px; overflow-y:auto"><table id="blameTable"></table></div></div>
                         <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">📲 Follow-up Bot</h3><textarea id="followupText" style="min-height:300px; border:none; background:var(--bg);" readonly></textarea><button class="btn" style="width:100%; margin-top:16px;" onclick="copyFollowup()">Copy Text</button></div>
                     </div>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <div id="detailPanel" class="modal" onclick="if(event.target==this)this.style.display='none'">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:30px">
+                <h2 id="modalTitle" style="margin:0; font-size:24px; font-weight: 800;">Details</h2>
+                <div style="display:flex; gap:16px;">
+                    <button class="btn outline" onclick="downloadCSV()">Export CSV</button>
+                    <button class="btn" style="background:#EF4444; border:none; color:white;" onclick="document.getElementById('detailPanel').style.display='none'">Close</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto; max-height: 65vh; border: 1px solid var(--border); border-radius: 12px;"><table id="detailTable"></table></div>
         </div>
     </div>
 
@@ -3945,12 +4093,13 @@ def nexus_dashboard():
 
         window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
 
-        let activeBucket = ''; let radarData = null;
+        let activeBucket = ''; let activeDetails = []; let radarData = null;
 
         function navSwitch(btn, viewType) {
             document.querySelectorAll('.nav-item').forEach(l=>l.classList.remove('active'));
             btn.classList.add('active');
             document.querySelectorAll('.view-pane').forEach(v=>v.style.display='none');
+            
             if(viewType === 'view-track') {
                 document.getElementById('view-track').style.display = 'block';
                 document.getElementById('view-title').innerText = "Global Tracking Matrix";
@@ -3970,15 +4119,18 @@ def nexus_dashboard():
 
         async function searchOrders() {
             const q = document.getElementById('searchInput').value; if(!q) return;
-            document.getElementById('tracking-results').innerHTML = '<div style="padding:60px;text-align:center"><div class="loader"></div></div>';
+            document.getElementById('tracking-results').innerHTML = '<div style="padding:60px;text-align:center"><div class="loader" style="width:30px; height:30px;"></div></div>';
+            document.getElementById('bulkTrackBtn').style.display = 'none';
             const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
             const data = await r.json(); renderCards(data);
         }
 
         function renderCards(data) {
             let h = '';
+            let hasTids = false;
             data.forEach(item => {
                 const isDelivered = item.status.toLowerCase().includes('delivered');
+                if(item.tids.length > 0) hasTids = true;
                 h += `<div class="card track-card">
                     <div class="track-header">
                         <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:800; font-size: 16px; color: var(--accent);">${item.order_id}</span></div>
@@ -3993,17 +4145,23 @@ def nexus_dashboard():
                     </div>
                     <div class="tid-area">
                         <div class="tid-strip">
-                            ${item.tids.map(tid => `
+                            ${item.tids.map(tid => {
+                                const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
+                                return `
                                 <div class="tid-box">
-                                    <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                                    <button class="btn outline" style="padding:8px 18px; font-size:12px; background:var(--accent); color:var(--bg);" onclick="openFloatingTracker('${tid}', this)">🚢 Track Now</button>
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
+                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
+                                    </div>
+                                    <div id="native-${cleanId}" class="native-timeline-box"></div>
                                 </div>
-                            `).join('')}
+                            `}).join('')}
                         </div>
                     </div>
                 </div>`;
             });
             document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted); font-weight:600; padding: 40px; border: 1px dashed var(--border); border-radius: 12px;">No matching records found.</div>';
+            if(hasTids) document.getElementById('bulkTrackBtn').style.display = 'block';
         }
 
         async function directTrackTIDs() {
@@ -4012,29 +4170,79 @@ def nexus_dashboard():
             tids = tids.map(t => (t.startsWith('150') && t.length >= 12 && t.length <= 15) ? '0' + t : t);
             let h = '';
             tids.forEach(tid => {
+                const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
                 h += `<div class="tid-box card" style="width:100%; border: 1px solid var(--border);">
-                        <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                        <button class="btn outline" style="padding:8px 18px; font-size:12px; background:var(--accent); color:var(--bg);" onclick="openFloatingTracker('${tid}', this)">🚢 Track Now</button>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
+                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
+                        </div>
+                        <div id="native-${cleanId}" class="native-timeline-box"></div>
                       </div>`;
             });
             document.getElementById('direct-results').innerHTML = h;
+            if(tids.length > 0) document.getElementById('bulkDirectBtn').style.display = 'block';
         }
 
-        // 🚨 100% BULLETPROOF FREE TRACKING WINDOW (NO BLOCKS) 🚨
-        function openFloatingTracker(tid, btn) {
-            // Button animation so user knows it worked
-            btn.innerText = "Opened ✓";
-            btn.style.background = "#10B981";
-            btn.style.color = "#fff";
-            btn.style.borderColor = "#10B981";
-            setTimeout(() => { btn.innerText = "🚢 Track Now"; btn.style.background="var(--accent)"; btn.style.color="var(--bg)"; btn.style.borderColor="transparent";}, 3000);
+        async function bulkTrackAll(containerId) {
+            const container = document.getElementById(containerId);
+            const btns = container.querySelectorAll('.sync-btn');
+            for(let btn of btns) {
+                if(btn.innerText !== '✖ Close Tracker') {
+                    btn.click();
+                    await new Promise(r => setTimeout(r, 600)); 
+                }
+            }
+        }
 
-            // Opens a centered small window directly to ParcelsApp (Ad-Free link structure)
-            const w = 500;
-            const h = 750;
-            const left = (screen.width/2)-(w/2);
-            const top = (screen.height/2)-(h/2);
-            window.open(`https://parcelsapp.com/en/tracking/${tid}`, 'TrackerWindow', `width=${w},height=${h},top=${top},left=${left},toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes`);
+        // 🚨 ASLI NATIVE JSON PARSING WITH YOUR SCRAPERAPI KEY 🚨
+        async function loadNativeTimeline(tid, btn) {
+            const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
+            const box = document.getElementById('native-' + cleanId);
+
+            if(box.style.display === 'block') {
+                box.style.display = 'none';
+                btn.innerHTML = '🔍 Track Native';
+                btn.style.background = 'transparent';
+                btn.style.color = 'var(--text)';
+                btn.style.border = '1px solid var(--border)';
+                return;
+            }
+
+            btn.innerHTML = '<div class="loader"></div>';
+            
+            const r = await fetch('/api/nexus/track_real', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tid:tid})});
+            const data = await r.json();
+            
+            btn.innerHTML = '✖ Close Tracker';
+            btn.style.background = '#1A1A1A';
+            btn.style.color = '#fff';
+            btn.style.border = '1px solid #333';
+            box.style.display = 'block';
+
+            if(data.success && data.events.length > 0) {
+                let timelineHtml = '<div class="tl-container">';
+                data.events.forEach(e => {
+                    timelineHtml += `
+                        <div class="tl-item">
+                            <div class="tl-dot ${e.active ? 'active' : ''}"></div>
+                            <span class="tl-time">${e.time}</span>
+                            <span class="tl-status">${e.status}</span>
+                            <span class="tl-loc">${e.loc}</span>
+                        </div>
+                    `;
+                });
+                timelineHtml += '</div>';
+                box.innerHTML = timelineHtml;
+            } else {
+                box.innerHTML = `
+                    <div class="fallback-container">
+                        <div style="font-size: 30px; margin-bottom: 10px;">📦</div>
+                        <h3 style="margin: 0 0 5px 0; color: #fff;">Connect to Courier Gateway</h3>
+                        <p style="color: #666; font-size: 13px; margin: 0 0 15px 0;">To view live detailed data, open the secure tracking portal.</p>
+                        <button class="fallback-btn" onclick="window.open('https://parcelsapp.com/en/tracking/${tid}', '_blank', 'width=500,height=750,top=100,left=100,scrollbars=yes');">🚢 View on ParcelsApp ↗</button>
+                    </div>
+                `;
+            }
         }
 
         async function loadRadar() {
@@ -4046,7 +4254,7 @@ def nexus_dashboard():
             order.forEach(src => {
                 const arr = radarData[activeBucket][src] || [];
                 container.innerHTML += `
-                    <div class="card hoverable" onclick="showDetails('${src}')" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
+                    <div class="card hoverable" onclick="showDetails('${src}')" style="display:flex; justify-content:space-between; align-items:center;">
                         <div style="font-weight:800; font-size:16px; text-transform:uppercase;">${src}</div>
                         <div style="text-align:right;"><div class="stat-value">${arr.length}</div><div class="stat-label">Orders</div></div>
                     </div>
@@ -4069,7 +4277,6 @@ def nexus_dashboard():
         
         function copyFollowup() { navigator.clipboard.writeText(document.getElementById('followupText').value); alert("Copied to clipboard!"); }
 
-        let activeDetails = [];
         function showDetails(src) {
             activeDetails = radarData[activeBucket][src]; if(!activeDetails || activeDetails.length === 0) return;
             document.getElementById('modalTitle').innerText = src;
