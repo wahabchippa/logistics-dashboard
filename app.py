@@ -4338,19 +4338,253 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 
-
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE) - FIXED EDITION
+# 🛰️ TID OPERATIONS HUB + 📦 BUNDLING INTELLIGENCE - ULTIMATE COMBO
 # ==============================================================================
 import urllib.request
 import csv
 import re
-import ssl
+import json
+import os
+import time
+import concurrent.futures
 from datetime import datetime
+import ssl
+import requests
+from bs4 import BeautifulSoup
 from flask import jsonify, request, session, render_template_string
 
-def std_date(d_str):
-    """Date ko standard YYYY-MM-DD format me convert karta hai filters ke lie"""
+# 🛠️ ANTI-DROP FIX
+try:
+    _create_unverified_https_context = ssl._create_unverified_context
+except AttributeError:
+    pass
+else:
+    ssl._create_default_https_context = _create_unverified_https_context
+
+# ------------------------------------------------------------------------------
+# 1. TID OPERATIONS HUB - CORE DATA SOURCES
+# ------------------------------------------------------------------------------
+NEXUS_SOURCES = {
+    "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+    "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+    "GE QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=710036753&single=true&output=csv",
+    "GE Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+    "APX": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRDEzAMUwnFZ7aoThGoMERtxxsll2kfEaSpa9ksXIx6sqbdMncts6Go2d5mKKabepbNXDSoeaUlk-mP/pub?gid=0&single=true&output=csv",
+    "Kerry": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=0&single=true&output=csv"
+}
+NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
+
+# ------------------------------------------------------------------------------
+# 2. TID OPERATIONS HUB - CACHE & COLUMN MAP
+# ------------------------------------------------------------------------------
+NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
+NEXUS_FILTER_DATE = datetime(2026, 1, 1)
+
+NEXUS_SHEET_MAP = {
+    "Kerry":         {"o": 1, "b": 5, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
+    "APX":           {"o": 1, "b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
+    "ECL QC Center": {"o": 1, "b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
+    "ECL Zone":      {"o": 1, "b": 4, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
+    "GE QC Center":  {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
+    "GE Zone":       {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
+}
+
+def nexus_fetch_sheet_data(url, name):
+    try:
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
+            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
+            data = list(csv.reader(raw_data))
+            col = NEXUS_SHEET_MAP.get(name)
+            if not col or not data: return []
+
+            start_row, order_idx = 1, 0
+            for i, row in enumerate(data[:20]):
+                if not row: continue
+                c = [re.sub(r'[^a-z0-9]', '', str(x).lower()) for x in row]
+                if 'order' in c or 'fleekid' in c or 'orderid' in c or 'shipmentid' in c:
+                    start_row = i + 1
+                    for j, cell in enumerate(c):
+                        if cell in ['order', 'fleekid', 'orderid', 'shipmentid']: order_idx = j; break
+                    break
+
+            processed = []
+            for row in data[start_row:]:
+                if not row: continue
+                p = row + [''] * 60 
+                o_val = str(p[order_idx]).strip()
+                
+                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan']: continue
+
+                def get_v(col_num):
+                    v = str(p[col_num - 1]).strip()
+                    return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
+
+                processed.append({
+                    'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
+                    'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
+                    'country': get_v(col['cn']), 'tid': get_v(col['t']), 'mawb': get_v(col['ma'])
+                })
+            return processed
+    except: return []
+
+def nexus_clean_tids(raw):
+    raw = str(raw).strip()
+    if not raw or raw.lower() in ['pending','none','n/a']: return []
+    if not any(x in raw for x in [',','/',' ']) and len(raw) > 15:
+        if re.search(r'[A-Za-z]', raw): parts = [p for p in re.split(r'(?<=[a-zA-Z])', raw) if p.strip()]
+        elif len(raw) % 15 == 0: parts = [raw[i:i+15] for i in range(0, len(raw), 15)]
+        else: parts = [raw]
+    else: parts = [t.strip() for t in re.split(r'[,\/\s]+', raw) if t.strip()]
+    return ['0'+t if (t.startswith('150') and 12<=len(t)<=15) else t for t in parts]
+
+def nexus_fetch_kerry_status(url):
+    try:
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
+            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
+            data = list(csv.reader(raw_data))
+            if not data: return {}
+            s_col, h_idx = 1, -1
+            for i, row in enumerate(data[:15]):
+                c = [str(x).lower().replace(' ', '') for x in row]
+                if 'order' in c or 'fleekid' in c or 'orderid' in c:
+                    h_idx, s_col = i, c.index('lateststatus') if 'lateststatus' in c else c.index('status')
+                    break
+            s_map = {}
+            if h_idx != -1:
+                for row in data[h_idx+1:]:
+                    p = row + [''] * 40
+                    o = str(p[0]).strip().lower()
+                    if o: s_map[o] = str(p[s_col]).strip().upper()
+            return s_map
+    except: return {}
+
+def nexus_parse_date(date_str):
+    try:
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%Y/%m/%d'):
+            try: return datetime.strptime(date_str.split(' ')[0], fmt)
+            except: continue
+    except: pass
+    return None
+
+def nexus_sync_db(force=False):
+    global NEXUS_GLOBAL_CACHE
+    now = time.time()
+    if not force and now - NEXUS_GLOBAL_CACHE['time'] < 300 and NEXUS_GLOBAL_CACHE['sheets']:
+        return NEXUS_GLOBAL_CACHE['sheets'], NEXUS_GLOBAL_CACHE['kerry']
+
+    res = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
+        f_sheets = {exe.submit(nexus_fetch_sheet_data, url, name): name for name, url in NEXUS_SOURCES.items()}
+        f_kerry = exe.submit(nexus_fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
+        for f in concurrent.futures.as_completed(f_sheets):
+            res[f_sheets[f]] = f.result()
+        try: k_map = f_kerry.result()
+        except: k_map = {}
+        
+    NEXUS_GLOBAL_CACHE['time'] = now
+    NEXUS_GLOBAL_CACHE['sheets'] = res
+    NEXUS_GLOBAL_CACHE['kerry'] = k_map
+    return res, k_map
+
+# ------------------------------------------------------------------------------
+# 3. TID OPERATIONS HUB - API ROUTES
+# ------------------------------------------------------------------------------
+
+@app.route('/api/nexus/refresh', methods=['POST'])
+def api_nexus_refresh():
+    nexus_sync_db(force=True)
+    return jsonify({"success": True})
+
+@app.route('/api/nexus/search', methods=['POST'])
+def api_nexus_search():
+    order_ids = [x.strip().lower() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
+    results = []
+    sheets_data, kerry_data = nexus_sync_db()
+    
+    for q in order_ids:
+        q_alt = '0' + q if (q.startswith('150') and 12 <= len(q) <= 15) else q
+        found = False
+        for src, rows in sheets_data.items():
+            for r in rows:
+                oid, tid_raw = r['order'].lower(), r['tid'].lower()
+                if q in oid or q in tid_raw or q_alt in tid_raw:
+                    k_stat = kerry_data.get(oid, "N/A")
+                    results.append({
+                        "order_id": r['order'].upper(), "source": src, "status": k_stat, 
+                        "date": r['date'], "boxes": r['boxes'], "weight": r['weight'], 
+                        "vendor": r['vendor'], "customer": r['customer'], "country": r['country'], 
+                        "tids": nexus_clean_tids(r['tid']), "mawb": r['mawb']
+                    })
+                    found = True; break
+            if found: break
+    return jsonify(results)
+
+@app.route('/api/nexus/radar_data', methods=['GET'])
+def api_nexus_radar_data():
+    sheets_data, kerry_data = nexus_sync_db()
+    buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES} }
+    for src, rows in sheets_data.items():
+        for r in rows:
+            dt_obj = nexus_parse_date(r['date'])
+            if dt_obj and dt_obj < NEXUS_FILTER_DATE: continue
+            oid = r['order']
+            if oid == 'N/A': continue
+            
+            kerry_stat = kerry_data.get(oid.lower(), "PENDING")
+            tids = nexus_clean_tids(r['tid'])
+            has_tid = len(tids) > 0
+            if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and has_tid:
+                buckets["handed_over"][src].append({ "Order": oid.upper(), "Date": r['date'], "Vendor": r['vendor'], "Customer": r['customer'], "Boxes": r['boxes'], "Weight": r['weight'], "TID": ", ".join(tids), "MAWB": r['mawb'], "Status": kerry_stat })
+    return jsonify(buckets)
+
+@app.route('/api/nexus/ops_commander', methods=['GET'])
+def api_nexus_ops_commander():
+    sheets_data, kerry_data = nexus_sync_db()
+    blame_radar = []
+    missing_text = "Hi Kerry Team,\nThe following orders have been Handed Over but are missing Tracking IDs. Kindly update ASAP:\n\n"
+    count = 1
+    
+    for src, rows in sheets_data.items():
+        for r in rows:
+            dt_obj = nexus_parse_date(r['date'])
+            if not dt_obj or dt_obj < NEXUS_FILTER_DATE: continue
+            oid = r['order']
+            k_stat = kerry_data.get(oid.lower(), "PENDING")
+            has_tid = len(nexus_clean_tids(r['tid'])) > 0
+            days = (datetime.now() - dt_obj).days if dt_obj else 0
+            
+            if k_stat == "HANDED OVER TO LOGISTICS PARTNER" and not has_tid and days > 1:
+                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Missing TID", "aging": f"{days} Days", "blame": "Kerry Logistics"})
+                missing_text += f"{count}. Order: {oid.upper()} | Date: {r['date']} | Source: {src}\n"
+                count += 1
+            elif k_stat in ["QC PENDING", "CREATED", "ACCEPTED"] and days > 2:
+                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Stuck in QC", "aging": f"{days} Days", "blame": f"{src} Operations"})
+    
+    if count == 1: missing_text = "All good! No missing TIDs currently."
+    return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
+
+# ------------------------------------------------------------------------------
+# 4. TID OPERATIONS HUB - FRONTEND
+# ------------------------------------------------------------------------------
+@app.route('/nexus')
+def nexus_dashboard():
+    # (Your existing TID dashboard HTML - keep as is)
+    return render_template_string('''
+    <!DOCTYPE html><html lang="en" data-theme="dark">
+    <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
+    <style>/* your existing styles */</style></head>
+    <body><!-- your existing HTML --></body></html>
+    ''')
+
+# ------------------------------------------------------------------------------
+# 5. BUNDLING INTELLIGENCE - FIXED COLUMN MAPPING
+# ------------------------------------------------------------------------------
+def bundling_std_date(d_str):
     try:
         for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%d-%b-%Y', '%Y/%m/%d'):
             try: return datetime.strptime(d_str.split(' ')[0], fmt).strftime('%Y-%m-%d')
@@ -4358,8 +4592,7 @@ def std_date(d_str):
     except: pass
     return "1970-01-01"
 
-def fetch_bundling_standalone_data():
-    """Fixed column mapping based on user input"""
+def fetch_bundling_data():
     BUNDLING_SOURCES = {
         "ECL QC Center": {
             "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -4387,7 +4620,6 @@ def fetch_bundling_standalone_data():
                 data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
                 if not data: continue
                 
-                # Assume first row is header, start from row index 1
                 start_row = 1
                 col = info["cols"]
                 
@@ -4407,7 +4639,7 @@ def fetch_bundling_standalone_data():
                     processed.append({
                         'order': o_val,
                         'date': g(col['d']),
-                        'date_std': std_date(g(col['d'])),
+                        'date_std': bundling_std_date(g(col['d'])),
                         'boxes': g(col['b']),
                         'order_line_id': g(col['oli']),
                         'vendor': g(col['v']), 
@@ -4415,29 +4647,16 @@ def fetch_bundling_standalone_data():
                         'item_count': g(col['ic']),
                         'customer': g(col['c']),
                         'country': g(col['cn']),
-                        'tid': "N/A"  # No TID column in these sheets
+                        'tid': "N/A"
                     })
                 res[name] = processed
     except Exception as e:
         print("Bundling Fetch Error:", e)
     return res
 
-def clean_bundling_tids(raw):
-    raw = str(raw).strip()
-    if not raw or raw.lower() in ['pending', 'none', 'n/a', '-', 'tbd', 'update soon']: return []
-    raw = re.sub(r'(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})', r' \1 ', raw)
-    parts = [t.strip() for t in re.split(r'[,\/\s;]+', raw) if t.strip()]
-    cleaned = []
-    for t in parts:
-        t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
-        if len(t) > 6 and re.search(r'\d', t):
-            if t.startswith('150') and len(t) >= 12 and not t.startswith('0'): cleaned.append('0' + t)
-            else: cleaned.append(t)
-    return list(dict.fromkeys(cleaned))
-
 @app.route('/api/nexus/bundling_data', methods=['GET'])
 def api_nexus_bundling_data():
-    sheets_data = fetch_bundling_standalone_data()
+    sheets_data = fetch_bundling_data()
     bundles_list = []
     
     for src, rows in sheets_data.items():
@@ -4452,11 +4671,10 @@ def api_nexus_bundling_data():
             }
             
             if bx != "N/A" and bx != "":
-                # Boxes column non-empty: new bundle starts
                 if cb and len(cb['orders']) > 1:
                     bundles_list.append(cb)
                 cb = {
-                    "tid": "Pending Tracking",  # No TID in these sheets
+                    "tid": "Pending Tracking",
                     "orders": [od],
                     "date": r['date'],
                     "date_std": r['date_std'],
@@ -4468,14 +4686,12 @@ def api_nexus_bundling_data():
                     "total_items": 0
                 }
             else:
-                # Boxes column empty: merge into current bundle
                 if cb:
                     cb['orders'].append(od)
                     
         if cb and len(cb['orders']) > 1:
             bundles_list.append(cb)
             
-    # Calculate total items per bundle
     for b in bundles_list:
         tq = 0
         for o in b['orders']:
@@ -4685,12 +4901,11 @@ def bundling_dashboard_view():
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         
-        /* Floating side buttons */
+        /* Side controls - fixed to right side, bottom */
         .side-controls {
             position: fixed;
             right: 30px;
-            top: 50%;
-            transform: translateY(-50%);
+            bottom: 30px;
             display: flex;
             flex-direction: column;
             gap: 12px;
@@ -4797,7 +5012,7 @@ def bundling_dashboard_view():
         <div id="noDataMessage" style="text-align:center; padding:60px; color:var(--muted);">No Bundled Orders Found from Merged Cells.</div>
     </div>
 
-    <!-- Side Controls -->
+    <!-- Side Controls (fixed at bottom right) -->
     <div class="side-controls">
         <a href="/" class="side-btn">🏠 Main Dash</a>
         <button class="side-btn" onclick="fetchData()">🔄 Refresh Engine</button>
@@ -4837,14 +5052,9 @@ def bundling_dashboard_view():
             const source = document.getElementById('sourceSelect').value;
 
             let filtered = allBundles.filter(b => {
-                // Source filter
                 if (source !== 'all' && b.source !== source) return false;
-                
-                // Date filter
                 if (dateFrom && b.date_std < dateFrom) return false;
                 if (dateTo && b.date_std > dateTo) return false;
-                
-                // Search filter
                 if (searchTerm) {
                     const matchesOrder = b.orders.some(o => o.order_id.toLowerCase().includes(searchTerm));
                     const matchesCustomer = b.customer && b.customer.toLowerCase().includes(searchTerm);
@@ -4895,10 +5105,7 @@ def bundling_dashboard_view():
         function updateKPIs(bundles) {
             let totalBundles = bundles.length;
             let totalOrdersMerged = bundles.reduce((acc, b) => acc + b.orders.length, 0);
-            let totalBoxes = bundles.reduce((acc, b) => {
-                let boxNum = parseInt(b.boxes_val) || 0;
-                return acc + boxNum;
-            }, 0);
+            let totalBoxes = bundles.reduce((acc, b) => acc + (parseInt(b.boxes_val) || 0), 0);
             
             document.getElementById('totalBundles').innerText = totalBundles;
             document.getElementById('totalOrdersMerged').innerText = totalOrdersMerged;
@@ -4933,10 +5140,7 @@ def bundling_dashboard_view():
             });
         }
 
-        // Initial load
         window.onload = fetchData;
-
-        // Refresh on filter change
         document.getElementById('searchInput').addEventListener('input', applyFilters);
         document.getElementById('dateFrom').addEventListener('change', applyFilters);
         document.getElementById('dateTo').addEventListener('change', applyFilters);
@@ -4945,8 +5149,32 @@ def bundling_dashboard_view():
 </body>
 </html>
     ''')
+
+# ------------------------------------------------------------------------------
+# 6. FLOATING BUTTON INJECTION (FIXED)
+# ------------------------------------------------------------------------------
+@app.after_request
+def inject_nexus_button(response):
+    # Sirf HTML pages par inject karo
+    if response.content_type and response.content_type.startswith('text/html'):
+        # Admin check aur endpoint check (taake /nexus aur /bundling par na aaye)
+        if session.get('role') == 'admin' and request.endpoint not in ['nexus_dashboard', 'bundling_dashboard_view']:
+            html = response.get_data(as_text=True)
+            btn = """<a href="/nexus" id="nexus-fab" style="position:fixed; bottom:30px; right:30px; background:linear-gradient(135deg, #18181b, #09090b); color:#fff; border:1px solid #27272a; padding:14px 28px; border-radius:50px; text-decoration:none; font-weight:700; z-index:9999; font-family:'Inter',sans-serif; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5); transition:0.3s;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">🚀 TID Operations Hub</a>"""
+            if '</body>' in html:
+                response.set_data(html.replace('</body>', btn + '</body>'))
+    return response
+
+# ------------------------------------------------------------------------------
+# 7. MAIN DASHBOARD (OPTIONAL) - YOU MAY HAVE YOUR OWN
+# ------------------------------------------------------------------------------
+@app.route('/')
+def home():
+    return "Welcome to 3PL Dashboard. Go to <a href='/nexus'>TID Operations</a> or <a href='/bundling'>Bundling AI</a>."
+
 # ==============================================================================
 # END OF CODE
 # ==============================================================================
+
 if __name__ == '__main__':
     app.run(debug=True)
