@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - ADMIN ONLY SECURE VERSION + NATIVE TRACKING
+# 🛰️ TID OPERATIONS HUB (NEXUS) - SMART SEARCH (_ and /) + SECURE NATIVE
 # ==============================================================================
 import urllib.request
 import urllib.parse
@@ -3611,7 +3611,7 @@ import time
 import concurrent.futures
 from datetime import datetime
 import ssl
-from flask import jsonify, request, session, render_template_string, redirect, url_for
+from flask import jsonify, request, session, render_template_string
 
 # 🛠️ ANTI-DROP FIX FOR LOCAL VS CODE
 try:
@@ -3733,20 +3733,14 @@ def nexus_sync_db(force=False):
     NEXUS_GLOBAL_CACHE['kerry'] = k_map
     return res, k_map
 
-# 🚨 ADMIN SECURITY CHECK: BUTTON INJECTION 🚨
 @app.after_request
 def add_nexus_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
-        
-        # Sirf tab show hoga jab admin login ho (Checking session keys)
         user_val = session.get('username') or session.get('user') or session.get('role')
-        is_admin = (user_val and str(user_val).lower() == 'admin')
-        
-        if is_admin:
+        if user_val and str(user_val).lower() == 'admin':
             html = response.get_data(as_text=True)
             btn = '<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:#fff; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub</a>'
             if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
-            
     return response
 
 # ------------------------------------------------------------------------------
@@ -3765,12 +3759,22 @@ def api_nexus_search():
     sheets_data, kerry_data = nexus_sync_db()
     
     for q in order_ids:
-        q_alt = '0' + q if (q.startswith('150') and 12 <= len(q) <= 15) else q
+        # TIDs fixes (adding 0 if it starts with 150)
+        q_alt_tid = '0' + q if (q.startswith('150') and 12 <= len(q) <= 15) else q
+        
+        # 🚨 SMART FORMAT MATCHER (_ and / conversion) 🚨
+        q_slash = q.replace('_', '/')
+        q_under = q.replace('/', '_')
+        
         found = False
         for src, rows in sheets_data.items():
             for r in rows:
                 oid, tid_raw = r['order'].lower(), r['tid'].lower()
-                if q in oid or q in tid_raw or q_alt in tid_raw:
+                
+                # Checking all possibilities (_ or /)
+                if (q in oid or q_slash in oid or q_under in oid or 
+                    q in tid_raw or q_alt_tid in tid_raw):
+                    
                     k_stat = kerry_data.get(oid, "N/A")
                     results.append({
                         "order_id": r['order'].upper(), "source": src, "status": k_stat, 
@@ -3866,15 +3870,14 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI (NATIVE PURE CSS TIMELINE & ADMIN SECURE)
+# 4. FRONTEND UI 
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
 def nexus_dashboard():
-    # 🚨 ADMIN SECURITY CHECK: DIRECT LINK PROTECTION 🚨
     user_val = session.get('username') or session.get('user') or session.get('role')
     if not user_val or str(user_val).lower() != 'admin':
-        return "<div style='text-align:center; padding:100px; font-family:sans-serif;'><h2>⛔ Access Denied</h2><p>Only Admin users can access the TID Operations Hub.</p><a href='/'>Go Back</a></div>", 403
+        return "<div style='text-align:center; padding:100px; font-family:sans-serif; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2><p>Only Admin users can access the TID Operations Hub.</p><a href='/' style='color:#10B981;'>Go Back</a></div>", 403
 
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
@@ -4027,7 +4030,7 @@ def nexus_dashboard():
                 
                 <div id="view-track" class="view-pane active">
                     <div class="card" style="margin-bottom: 30px;">
-                        <textarea id="searchInput" placeholder="Paste Order IDs or TIDs here (e.g. 1ZW599K16722861884)..."></textarea>
+                        <textarea id="searchInput" placeholder="Paste Order IDs (e.g., 1234_12 or 1234/12) or TIDs..."></textarea>
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="searchOrders()">Scan Matrix</button>
                             <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
@@ -4194,7 +4197,6 @@ def nexus_dashboard():
             }
         }
 
-        // 🚨 ASLI NATIVE JSON PARSING WITH YOUR SCRAPERAPI KEY 🚨
         async function loadNativeTimeline(tid, btn) {
             const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
             const box = document.getElementById('native-' + cleanId);
