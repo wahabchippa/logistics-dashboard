@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - AUTO-ZERO + AI SPLITTER + RADAR DASHBOARD
+# 🛰️ TID OPERATIONS HUB (NEXUS) - STRICT 150 ZERO RULE + RADAR + SECURE
 # ==============================================================================
 import urllib.request
 import urllib.parse
@@ -3678,8 +3678,7 @@ def nexus_fetch_sheet_data(url, name):
 
 def nexus_clean_tids(raw):
     """
-    🚨 THE AI SMART SPLITTER & 150 ZERO RESTORER 🚨
-    Ensures text like "Pending" is ignored, adds missing zeros, and splits concatenated TIDs.
+    🚨 THE AI SMART SPLITTER & STRICT 150 ZERO RESTORER 🚨
     """
     raw = str(raw).strip()
     if not raw or raw.lower() in ['pending', 'none', 'n/a', '-', 'tbd', 'tba', 'update soon']: return []
@@ -3696,11 +3695,11 @@ def nexus_clean_tids(raw):
         
         # Validation: Must be >6 chars AND contain digits AND not be a common text word
         if len(t) > 6 and re.search(r'\d', t) and t.lower() not in ['tracking', 'number', 'pending', 'orderno']:
-            # 🚨 THE MISSING ZERO RESTORER 🚨
-            if (t.startswith('150') or t.startswith('155')) and len(t) >= 12 and not t.startswith('0'):
+            # 🚨 STRICT ZERO RESTORER (ONLY FOR 150) 🚨
+            if t.startswith('150') and len(t) >= 12 and not t.startswith('0'):
                 cleaned.append('0' + t)
             else:
-                cleaned.append(t)
+                cleaned.append(t) # 155 aur baqi sab waise hi jayenge
                 
     return list(dict.fromkeys(cleaned))
 
@@ -3715,7 +3714,6 @@ def nexus_fetch_kerry_status(url):
             
             o_idx, s_idx, h_idx = -1, -1, -1
             
-            # Find the headers dynamically
             for i, row in enumerate(data[:20]):
                 c = [str(x).lower().replace(' ', '').replace('_', '') for x in row]
                 for j, col_name in enumerate(c):
@@ -3732,12 +3730,9 @@ def nexus_fetch_kerry_status(url):
                     if o: 
                         stat_val = str(p[s_idx]).strip().upper()
                         if not stat_val: stat_val = "PENDING"
-                        
-                        # Store _ and / variations to ensure perfect matching
                         s_map[o] = stat_val
                         s_map[o.replace('_', '/')] = stat_val
                         s_map[o.replace('/', '_')] = stat_val
-                        # Store version without leading zero just in case
                         if o.startswith('0'):
                             s_map[o[1:]] = stat_val
             return s_map
@@ -3799,8 +3794,9 @@ def api_nexus_search():
     for q in order_ids:
         q_slash = q.replace('_', '/')
         q_under = q.replace('/', '_')
-        q_with_zero = '0' + q if not q.startswith('0') else q
-        q_no_zero = q[1:] if q.startswith('0') else q
+        # Smart search match exclusively for 150
+        q_with_zero = '0' + q if q.startswith('150') else q
+        q_no_zero = q[1:] if q.startswith('0150') else q
         
         found = False
         for src, rows in sheets_data.items():
@@ -3862,7 +3858,6 @@ def api_track_real():
     except Exception as e: pass
     return jsonify({"success": False, "tid": tid})
 
-# 🚨 STRICT HANDED OVER LOGIC 🚨
 @app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
     sheets_data, kerry_data = nexus_sync_db()
@@ -3875,21 +3870,17 @@ def api_nexus_radar_data():
             
             k_stat = str(kerry_data.get(oid.lower(), "PENDING")).upper()
             
-            # CONDITION 1: Kerry Status must be HANDED OVER
             if "HANDED OVER" not in k_stat:
                 continue
                 
-            # CONDITION 2: Must have a Real Valid TID (Not "Pending")
             tids = nexus_clean_tids(r.get('tid', ''))
             if len(tids) == 0:
                 continue
                 
-            # CONDITION 3: Must have MAWB updated
             mawb = str(r.get('mawb', '')).strip()
             if not mawb or mawb.lower() in ['n/a', 'nan', 'none', 'pending', '-']:
                 continue
             
-            # Success: Add to the dashboard count!
             buckets["handed_over"][src].append({ 
                 "Order": oid.upper(), 
                 "Date": r.get('date', 'N/A'), 
@@ -4193,8 +4184,8 @@ def nexus_dashboard():
             
             let finalTids = [];
             tids.forEach(t => {
-                if (t.length > 5) {
-                    if ((t.startsWith('150') || t.startsWith('155')) && t.length >= 12 && !t.startsWith('0')) {
+                if (t.length > 6 && !['tracking', 'number', 'pending', 'orderno'].includes(t.toLowerCase())) {
+                    if (t.startsWith('150') && t.length >= 12 && !t.startsWith('0')) {
                         finalTids.push('0' + t);
                     } else {
                         finalTids.push(t);
@@ -4278,6 +4269,7 @@ def nexus_dashboard():
             }
         }
 
+        // 🚨 HANDED OVER DASHBOARD LOGIC 🚨
         async function loadRadar() {
             const container = document.getElementById('radar-container'); container.innerHTML = ''; 
             document.getElementById('loader').style.display = 'block';
