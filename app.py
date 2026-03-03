@@ -4343,15 +4343,22 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 
+
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - COMPLETE FINAL CODE
+# 📦 BUNDLING INTELLIGENCE HUB - FINAL STABLE EDITION
 # ==============================================================================
 import urllib.request
 import csv
 import re
 import ssl
+import time
+import urllib.parse
 from datetime import datetime
 from flask import jsonify, request, session, render_template_string
+
+# -------------------- CACHE SETUP --------------------
+_cache = {'data': None, 'time': 0}
+CACHE_DURATION = 300  # 5 minutes
 
 def std_date(d_str):
     """Date ko standard format mein convert karo"""
@@ -4362,10 +4369,41 @@ def std_date(d_str):
     except: pass
     return "1970-01-01"
 
-def fetch_bundling_standalone_data():
-    """Ab bilkul sahi tarike se data uthayega - tere bataye columns ke according"""
+def fetch_with_retry(url, retries=3):
+    """Fetch with retry and proxy fallback"""
+    for attempt in range(retries):
+        # Direct fetch
+        try:
+            print(f"   Attempt {attempt+1} (direct): {url[:60]}...")
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return r.read().decode('utf-8', errors='ignore').splitlines()
+        except Exception as e:
+            print(f"   Direct attempt {attempt+1} failed: {e}")
+        
+        # Proxy fetch (allorigins)
+        try:
+            proxy_url = f"https://api.allorigins.win/raw?url={urllib.parse.quote(url)}"
+            print(f"   Attempt {attempt+1} (proxy): {proxy_url[:60]}...")
+            req = urllib.request.Request(proxy_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return r.read().decode('utf-8', errors='ignore').splitlines()
+        except Exception as e:
+            print(f"   Proxy attempt {attempt+1} failed: {e}")
     
-    # TUMHARI DIYI GAYI EXACT COLUMN MAPPINGS (0-based indices)
+    return None
+
+def fetch_bundling_standalone_data():
+    """Fetch data with caching and retry mechanism"""
+    global _cache
+    now = time.time()
+    
+    # Return cached data if fresh
+    if _cache['data'] and (now - _cache['time']) < CACHE_DURATION:
+        print("📦 Using cached data")
+        return _cache['data']
+    
+    # TUMHARI FINAL COLUMN MAPPINGS (0-based indices)
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -4386,7 +4424,7 @@ def fetch_bundling_standalone_data():
             {
                 "o": 0,   # Order ID: Col 1 (A)
                 "d": 1,   # Date: Col 2 (B)
-                "b": 3,   # Boxes: Col 4 (D)
+                "b": 3,   # Boxes: Col 4 (D)  (earlier said 5 but corrected to 4)
                 "oli": 11, # Order Line ID: Col 12 (L)
                 "v": 13,  # Vendor: Col 14 (N)
                 "title": 14, # Title: Col 15 (O)
@@ -4419,56 +4457,60 @@ def fetch_bundling_standalone_data():
         
         for name, (url, col) in BUNDLING_SOURCES.items():
             print(f"\n🔍 Fetching {name}...")
-            print(f"   URL: {url[:100]}...")
+            lines = fetch_with_retry(url)
+            if not lines:
+                print(f"❌ Failed to fetch {name} after retries")
+                res[name] = []
+                continue
             
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
-                data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
-                print(f"   Raw rows: {len(data)}")
+            data = list(csv.reader(lines))
+            print(f"   Raw rows: {len(data)}")
+            if len(data) > 0:
+                print(f"   Header (first 10): {data[0][:10]}")
+            
+            processed = []
+            for row_idx, row in enumerate(data[1:], start=2):
+                if not row: continue
+                p = row + [''] * 50  # padding
                 
-                if len(data) > 0:
-                    print(f"   Header row (first 10 cols): {data[0][:10]}")
-                if len(data) > 1:
-                    print(f"   Sample data row (row 2): {data[1][:10]}")
+                # Order ID - required
+                if col['o'] >= len(p): continue
+                o_val = str(p[col['o']]).strip()
+                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']:
+                    continue
                 
-                processed = []
-                for row_idx, row in enumerate(data[1:], start=2):  # Skip header (row 0)
-                    if not row: continue
-                    p = row + [''] * 50  # padding to prevent index errors
-                    
-                    # Order ID - required field
-                    if col['o'] >= len(p):
-                        continue
-                    o_val = str(p[col['o']]).strip()
-                    if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']:
-                        continue
-                    
-                    def g(c_idx):
-                        if c_idx >= len(p): return "N/A"
-                        val = str(p[c_idx]).strip()
-                        return val if val and val.lower() not in ['n/a', 'nan', '-'] else "N/A"
-                    
-                    processed.append({
-                        'order': o_val,
-                        'date': g(col['d']),
-                        'date_std': std_date(g(col['d'])),
-                        'boxes': g(col['b']),
-                        'order_line_id': g(col['oli']),
-                        'vendor': g(col['v']),
-                        'title': g(col['title']),
-                        'item_count': g(col['ic']),
-                        'customer': g(col['c']),
-                        'country': g(col['cn'])
-                    })
-                    
-                    # Print first few rows for debugging
-                    if row_idx < 5:
-                        print(f"   Row {row_idx}: Order={o_val}, Boxes={g(col['b'])}, Customer={g(col['c'])[:20]}")
+                def get_col(idx):
+                    if idx >= len(p): return "N/A"
+                    val = str(p[idx]).strip()
+                    return val if val and val.lower() not in ['n/a', 'nan', '-'] else "N/A"
                 
-                print(f"   ✅ Processed rows: {len(processed)}")
-                res[name] = processed
+                processed.append({
+                    'order': o_val,
+                    'date': get_col(col['d']),
+                    'date_std': std_date(get_col(col['d'])),
+                    'boxes': get_col(col['b']),
+                    'order_line_id': get_col(col['oli']),
+                    'vendor': get_col(col['v']),
+                    'title': get_col(col['title']),
+                    'item_count': get_col(col['ic']),
+                    'customer': get_col(col['c']),
+                    'country': get_col(col['cn'])
+                })
+                
+                # Debug first few rows
+                if row_idx < 5:
+                    print(f"   Row {row_idx}: Order={o_val}, Boxes={get_col(col['b'])}, Customer={get_col(col['c'])[:20]}")
+            
+            print(f"   ✅ Processed rows: {len(processed)}")
+            res[name] = processed
+        
+        # Update cache
+        _cache['data'] = res
+        _cache['time'] = now
+        
     except Exception as e:
         print(f"❌ Bundling Fetch Error: {e}")
+    
     return res
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
@@ -4476,7 +4518,6 @@ def api_nexus_bundling_data():
     sheets_data = fetch_bundling_standalone_data()
     bundles_list, tot_bundles, tot_orders = [], 0, 0
     
-    # Source-wise stats ke liye
     source_stats = {
         "ECL QC Center": {"orders": 0, "boxes": 0},
         "ECL Zone": {"orders": 0, "boxes": 0},
@@ -4485,7 +4526,7 @@ def api_nexus_bundling_data():
     
     for src, rows in sheets_data.items():
         print(f"\n📦 Processing {src}...")
-        cb = None  # Current Bundle
+        cb = None
         bundle_count = 0
         row_count = 0
         
@@ -4502,24 +4543,22 @@ def api_nexus_bundling_data():
                 "country": r['country']
             }
             
-            # Agar box ki value mojood hai (yani yeh naya dabba hai)
+            # Agar box ki value mojood hai (naya bundle)
             if bx != "N/A" and bx != "":
-                # Save previous bundle if it had multiple orders
                 if cb and len(cb['orders']) > 1:
                     bundles_list.append(cb)
                     tot_bundles += 1
                     tot_orders += len(cb['orders'])
                     bundle_count += 1
-                    # Update source stats with proper numeric conversion
+                    # Update source stats
                     try:
                         box_val = float(cb['boxes_val'])
                         source_stats[src]["boxes"] += int(box_val)
-                    except (ValueError, TypeError):
+                    except:
                         pass
                     source_stats[src]["orders"] += len(cb['orders'])
                     print(f"   Bundle #{bundle_count}: {len(cb['orders'])} orders, Box: {cb['boxes_val']}")
                 
-                # Start new bundle
                 cb = {
                     "orders": [od],
                     "date": r['date'],
@@ -4532,11 +4571,11 @@ def api_nexus_bundling_data():
                     "total_items": 0
                 }
             else:
-                # Agar box blank/N/A hai (yani merge hona chahiye)
+                # Box blank → merge into current bundle
                 if cb:
                     cb['orders'].append(od)
         
-        # Loop end hone pe aakhri bundle check karo
+        # End of rows – check last bundle
         if cb and len(cb['orders']) > 1:
             bundles_list.append(cb)
             tot_bundles += 1
@@ -4545,23 +4584,22 @@ def api_nexus_bundling_data():
             try:
                 box_val = float(cb['boxes_val'])
                 source_stats[src]["boxes"] += int(box_val)
-            except (ValueError, TypeError):
+            except:
                 pass
             source_stats[src]["orders"] += len(cb['orders'])
             print(f"   Bundle #{bundle_count}: {len(cb['orders'])} orders, Box: {cb['boxes_val']}")
         
         print(f"   {src} - Total rows: {row_count}, Bundles: {bundle_count}")
     
-    # Calculate Total Quantities per bundle
+    # Calculate total items per bundle
     for b in bundles_list:
         tq = 0
         for o in b['orders']:
             try:
-                # Handle item_count which might be like "1.00" or "1"
                 ic_str = str(o['item_count']).replace(',', '').strip()
                 if ic_str and ic_str != "N/A":
                     tq += int(float(ic_str))
-            except (ValueError, TypeError):
+            except:
                 pass
         b['total_items'] = tq
     
@@ -4919,16 +4957,13 @@ def bundling_dashboard_view():
                 const r = await fetch('/api/nexus/bundling_data');
                 const d = await r.json();
                 
-                // Store data
                 allBundles = d.bundles || [];
                 sourceStats = d.source_stats || {};
                 
-                // Update KPI
                 document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
                 document.getElementById('kpi-orders').innerText = d.kpi?.total_orders_bundled || 0;
                 document.getElementById('kpi-saved').innerText = d.kpi?.saved_shipments || 0;
                 
-                // Update source stats
                 document.getElementById('qc-orders').innerText = sourceStats['ECL QC Center']?.orders || 0;
                 document.getElementById('qc-boxes').innerText = sourceStats['ECL QC Center']?.boxes || 0;
                 document.getElementById('ecl-orders').innerText = sourceStats['ECL Zone']?.orders || 0;
@@ -5001,14 +5036,13 @@ def bundling_dashboard_view():
 </html>
     ''')
 
-# Floating Button jo Main Dashboard par aayega (TID Hub ke upar)
+# Floating Button for Main Dashboard
 @app.after_request
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
         user_val = session.get('username') or session.get('user') or session.get('role')
         if user_val and str(user_val).lower() == 'admin':
             html = response.get_data(as_text=True)
-            # Yeh button TID Hub ke upar (bottom: 100px) aayega - overlap nahi hoga
             btn = '<a href="/bundling" style="position:fixed; bottom:100px; right:30px; background:#10B981; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(16,185,129,0.4); transition:0.2s;">📦 Bundling AI</a>'
             if '</body>' in html:
                 response.set_data(html.replace('</body>', btn + '</body>'))
