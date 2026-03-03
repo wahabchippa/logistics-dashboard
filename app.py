@@ -3600,9 +3600,10 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - 100% NATIVE TIMELINE UI (NO IFRAMES/ADS)
+# 🛰️ TID OPERATIONS HUB (NEXUS) - THE PROPER JUGAAD (NATIVE PROXY SCRAPER)
 # ==============================================================================
 import urllib.request
+import urllib.parse
 import csv
 import re
 import json
@@ -3634,7 +3635,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. ISOLATED CACHE & EXACT COLUMN MAP
+# 2. EXACT COLUMNS MAP
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
@@ -3673,13 +3674,10 @@ def nexus_fetch_sheet_data(url, name):
                 if not row: continue
                 p = row + [''] * 60 
                 o_val = str(p[order_idx]).strip()
-                
                 if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan']: continue
-
                 def get_v(col_num):
                     v = str(p[col_num - 1]).strip()
                     return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
-
                 processed.append({
                     'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
                     'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
@@ -3758,7 +3756,7 @@ def add_nexus_floating_btn(response):
     return response
 
 # ------------------------------------------------------------------------------
-# 3. BACKEND API ROUTES (NATIVE JSON ENGINE)
+# 3. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
@@ -3790,31 +3788,66 @@ def api_nexus_search():
             if found: break
     return jsonify(results)
 
-# 🚨 THIS IS THE NATIVE JSON TRACKING ENGINE 🚨
+# 🚨 PROPER JUGAAD: BACKEND PROXY SCRAPER (100% FREE, NO IFRAMES) 🚨
 @app.route('/api/nexus/track_native', methods=['POST'])
 def api_track_native():
     tid = request.json.get('tid', '')
-    
-    # 💎 PERFECT DEMO FOR YOUR SPECIFIC TID (DPD UK) 
-    # This will show you exactly how a 100% Native Timeline looks without iframes!
-    if "15502802020940" in tid:
-        time.sleep(0.5) # Simulate API request
-        return jsonify({
-            "success": True,
-            "events": [
-                {"time": "2026-02-23 10:11", "status": "Your parcel has been delivered", "loc": "DPD (UK)", "active": True},
-                {"time": "2026-02-23 08:20", "status": "Your parcel will be with you today", "loc": "DPD (UK)", "active": False},
-                {"time": "2026-02-23 05:42", "status": "Your parcel is at our depot", "loc": "DPD (UK)", "active": False},
-                {"time": "2026-02-22 20:26", "status": "We have your parcel and it's on its way to our depot", "loc": "DPD (UK)", "active": False},
-                {"time": "2026-02-17 20:01", "status": "We've received your order details, but have not yet received your parcel", "loc": "DPD (UK)", "active": False}
-            ]
-        })
-    
-    # For other TIDs, we return a beautifully styled "External Link" array, NOT an error!
-    return jsonify({
-        "success": False,
-        "tid": tid
-    })
+    if not tid: return jsonify({"success": False})
+
+    # Hum 2 mukhtalif Free Proxies use kar rahe hain taake agar ek fail ho tou dusra chalay
+    proxy_urls = [
+        f"https://api.allorigins.win/get?url={urllib.parse.quote('https://www.ordertracker.com/track/' + tid)}",
+        f"https://api.codetabs.com/v1/proxy?quest={urllib.parse.quote('https://www.ordertracker.com/track/' + tid)}"
+    ]
+
+    for proxy in proxy_urls:
+        try:
+            req = urllib.request.Request(proxy, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+            res = urllib.request.urlopen(req, timeout=12).read().decode('utf-8')
+            
+            html = res
+            if 'contents' in res: # Handling allorigins JSON wrapper
+                try: html = json.loads(res)['contents']
+                except: pass
+
+            # Extracting the hidden JSON database from the website
+            match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html)
+            if match:
+                data = json.loads(match.group(1))
+                
+                # Recursive function to dig out tracking events automatically
+                def extract_events(node):
+                    if isinstance(node, dict):
+                        if 'events' in node and isinstance(node['events'], list) and len(node['events']) > 0:
+                            if 'description' in node['events'][0] or 'status' in node['events'][0]:
+                                return node['events']
+                        for v in node.values():
+                            found = extract_events(v)
+                            if found: return found
+                    elif isinstance(node, list):
+                        for item in node:
+                            found = extract_events(item)
+                            if found: return found
+                    return None
+                
+                raw_events = extract_events(data)
+                
+                if raw_events:
+                    events = []
+                    for i, ev in enumerate(raw_events):
+                        events.append({
+                            "time": ev.get("date", "Unknown Date"),
+                            "status": ev.get("description", ev.get("status", "Update")),
+                            "loc": ev.get("location", ""),
+                            "active": i == 0 # Pehli line par green dot aayega
+                        })
+                    return jsonify({"success": True, "events": events})
+        except Exception as e:
+            continue # Try the next proxy if this one fails
+            
+    # Agar donon proxies block ho jayen, toh hum error nahi denge!
+    # Front-end par ek clean professional message aayega.
+    return jsonify({"success": False, "tid": tid})
 
 
 @app.route('/api/nexus/radar_data', methods=['GET'])
@@ -3861,7 +3894,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI (NATIVE CSS TIMELINE - NO IFRAMES)
+# 4. FRONTEND UI (NATIVE PURE CSS TIMELINE)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3925,11 +3958,11 @@ def nexus_dashboard():
         .tid-strip { display: flex; flex-direction: column; gap: 20px; padding-bottom: 8px;}
         .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; transition: 0.3s;}
         
-        /* 🚀 PURE NATIVE TIMELINE CSS 🚀 */
+        /* 🚀 THE BEAUTIFUL NATIVE TIMELINE (ZERO IFRAMES) 🚀 */
         .native-timeline-box {
             display: none;
             background: #050505;
-            border: 1px solid var(--border);
+            border: 1px solid #222;
             border-radius: 12px;
             padding: 30px;
             margin-top: 10px;
@@ -3941,7 +3974,7 @@ def nexus_dashboard():
         }
         .tl-item {
             position: relative;
-            margin-bottom: 25px;
+            margin-bottom: 30px;
             animation: fadeIn 0.4s ease forwards;
         }
         .tl-item:last-child { margin-bottom: 0; }
@@ -3960,24 +3993,31 @@ def nexus_dashboard():
             box-shadow: 0 0 10px rgba(16,185,129,0.5);
             border-color: #050505;
         }
-        .tl-time { font-size: 12px; color: #888; font-weight: 700; margin-bottom: 4px; letter-spacing: 0.5px; }
-        .tl-status { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+        .tl-time { font-size: 12px; color: #888; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.5px; }
+        .tl-status { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
         .tl-loc { font-size: 12px; color: #555; }
         
+        /* Fallback Link Styling (Clean & Not Error-like) */
+        .fallback-container {
+            text-align: center;
+            padding: 30px;
+            background: #080808;
+            border-radius: 12px;
+            border: 1px solid #1A1A1A;
+        }
         .fallback-btn {
             display: inline-block;
-            background: #111;
-            color: #fff;
-            border: 1px solid #333;
-            padding: 10px 20px;
+            background: #fff;
+            color: #000;
+            padding: 10px 24px;
             border-radius: 8px;
-            font-weight: 600;
-            font-size: 12px;
+            font-weight: 700;
+            font-size: 13px;
             text-decoration: none;
             margin-top: 15px;
             transition: 0.2s;
         }
-        .fallback-btn:hover { background: #fff; color: #000; }
+        .fallback-btn:hover { opacity: 0.8; transform: translateY(-2px); }
 
         .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
         .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; }
@@ -4015,6 +4055,7 @@ def nexus_dashboard():
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="searchOrders()">Scan Matrix</button>
                             <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
+                            <button class="btn" id="bulkTrackBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('tracking-results')">⚡ Bulk Track All</button>
                         </div>
                     </div>
                     <div id="tracking-results"></div>
@@ -4026,6 +4067,7 @@ def nexus_dashboard():
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="directTrackTIDs()">Extract TIDs</button>
                             <button class="btn outline" onclick="document.getElementById('directInput').value=''; document.getElementById('direct-results').innerHTML=''; document.getElementById('bulkDirectBtn').style.display='none';">Clear</button>
+                            <button class="btn" id="bulkDirectBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('direct-results')">⚡ Bulk Track All</button>
                         </div>
                     </div>
                     <div id="direct-results" style="display:flex; flex-direction:column; gap:16px;"></div>
@@ -4089,14 +4131,17 @@ def nexus_dashboard():
         async function searchOrders() {
             const q = document.getElementById('searchInput').value; if(!q) return;
             document.getElementById('tracking-results').innerHTML = '<div style="padding:60px;text-align:center"><div class="loader" style="width:30px; height:30px;"></div></div>';
+            document.getElementById('bulkTrackBtn').style.display = 'none';
             const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
             const data = await r.json(); renderCards(data);
         }
 
         function renderCards(data) {
             let h = '';
+            let hasTids = false;
             data.forEach(item => {
                 const isDelivered = item.status.toLowerCase().includes('delivered');
+                if(item.tids.length > 0) hasTids = true;
                 h += `<div class="card track-card">
                     <div class="track-header">
                         <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:800; font-size: 16px; color: var(--accent);">${item.order_id}</span></div>
@@ -4117,7 +4162,7 @@ def nexus_dashboard():
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                                        <button class="btn outline" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
+                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
                                     </div>
                                     <div id="native-${cleanId}" class="native-timeline-box"></div>
                                 </div>
@@ -4127,6 +4172,7 @@ def nexus_dashboard():
                 </div>`;
             });
             document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted); font-weight:600; padding: 40px; border: 1px dashed var(--border); border-radius: 12px;">No matching records found.</div>';
+            if(hasTids) document.getElementById('bulkTrackBtn').style.display = 'block';
         }
 
         async function directTrackTIDs() {
@@ -4139,15 +4185,27 @@ def nexus_dashboard():
                 h += `<div class="tid-box card" style="width:100%; border: 1px solid var(--border);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                            <button class="btn outline" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
+                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
                         </div>
                         <div id="native-${cleanId}" class="native-timeline-box"></div>
                       </div>`;
             });
             document.getElementById('direct-results').innerHTML = h;
+            if(tids.length > 0) document.getElementById('bulkDirectBtn').style.display = 'block';
         }
 
-        // 🚨 MAGIC HAPPENS HERE: NATIVE JSON PARSING 🚨
+        async function bulkTrackAll(containerId) {
+            const container = document.getElementById(containerId);
+            const btns = container.querySelectorAll('.sync-btn');
+            for(let btn of btns) {
+                if(btn.innerText !== '✖ Close Tracker') {
+                    btn.click();
+                    await new Promise(r => setTimeout(r, 600)); 
+                }
+            }
+        }
+
+        // 🚨 THE MASTERPIECE: NATIVE JSON PARSING 🚨
         async function loadNativeTimeline(tid, btn) {
             const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
             const box = document.getElementById('native-' + cleanId);
@@ -4163,7 +4221,7 @@ def nexus_dashboard():
 
             btn.innerHTML = '<div class="loader"></div>';
             
-            // Hit our backend which returns pure JSON data (No HTML/Iframes)
+            // HITTING OUR BACKEND SCRAPER (100% FREE)
             const r = await fetch('/api/nexus/track_native', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tid:tid})});
             const data = await r.json();
             
@@ -4174,7 +4232,7 @@ def nexus_dashboard():
             box.style.display = 'block';
 
             if(data.success) {
-                // RENDER BEAUTIFUL NATIVE TIMELINE
+                // IT WORKED! RENDER BEAUTIFUL NATIVE TIMELINE
                 let timelineHtml = '<div class="tl-container">';
                 data.events.forEach(e => {
                     timelineHtml += `
@@ -4189,13 +4247,13 @@ def nexus_dashboard():
                 timelineHtml += '</div>';
                 box.innerHTML = timelineHtml;
             } else {
-                // If backend has no data, show a sleek clean button (NO ERRORS)
+                // SCRAPER BLOCKED: NO ERRORS! NO DASHED LINES! JUST A CLEAN BUTTON
                 box.innerHTML = `
-                    <div style="text-align:center; padding: 20px;">
-                        <div style="font-size: 40px; margin-bottom: 10px;">📦</div>
-                        <h3 style="margin: 0 0 5px 0; color: #fff;">Connect to Courier</h3>
-                        <p style="color: #888; font-size: 13px; margin: 0 0 15px 0;">To view live data, please open the official secure tracking portal.</p>
-                        <a href="https://t.17track.net/en#nums=${tid}" target="_blank" class="fallback-btn">🚢 View on Official Portal ↗</a>
+                    <div class="fallback-container">
+                        <div style="font-size: 30px; margin-bottom: 10px;">📦</div>
+                        <h3 style="margin: 0 0 5px 0; color: #fff;">Connect to Courier Gateway</h3>
+                        <p style="color: #666; font-size: 13px; margin: 0 0 15px 0;">To view live detailed data, open the secure tracking portal.</p>
+                        <a href="https://parcelsapp.com/en/tracking/${tid}" target="_blank" class="fallback-btn">🚢 View on ParcelsApp ↗</a>
                     </div>
                 `;
             }
@@ -4240,6 +4298,15 @@ def nexus_dashboard():
             let tbody = '<tbody>' + activeDetails.map(r=>'<tr>' + Object.values(r).map(v=>`<td>${v}</td>`).join('') + '</tr>').join('') + '</tbody>';
             document.getElementById('detailTable').innerHTML = thead + tbody;
             document.getElementById('detailPanel').style.display = 'block';
+        }
+
+        function downloadCSV() {
+            if(!activeDetails.length) return;
+            const headers = Object.keys(activeDetails[0]).join(',');
+            const rows = activeDetails.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\\n');
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + headers + "\\n" + rows));
+            link.setAttribute("download", `nexus_${activeBucket}_export.csv`); link.click();
         }
     </script>
     </body></html>
