@@ -4340,7 +4340,7 @@ def nexus_dashboard():
 
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB (FIXED COLUMN MAPPING + FILTERS)
+# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE) - FIXED EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -4358,20 +4358,20 @@ def std_date(d_str):
     except: pass
     return "1970-01-01"
 
-def fetch_bundling_fixed_data():
-    """Exact column mapping based on user input"""
+def fetch_bundling_standalone_data():
+    """Fixed column mapping based on user input"""
     BUNDLING_SOURCES = {
         "ECL QC Center": {
             "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            "cols": {'o': 0, 'd': 1, 'b': 3, 'oli': 8, 'v': 10, 'title': 11, 'ic': 12, 'c': 13, 'cn': 17, 't': 31}  # 0-based index
+            "cols": {"o": 0, "d": 1, "b": 3, "oli": 8, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17}
         },
         "ECL Zone": {
             "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            "cols": {'o': 0, 'd': 1, 'b': 3, 'oli': 11, 'v': 13, 'title': 14, 'ic': 15, 'c': 16, 'cn': 20, 't': 28}
+            "cols": {"o": 0, "d": 1, "b": 3, "oli": 11, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20}
         },
         "GE Zone": {
             "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            "cols": {'o': 0, 'd': 1, 'b': 3, 'oli': 11, 'v': 12, 'title': 13, 'ic': 14, 'c': 15, 'cn': 19, 't': 28}
+            "cols": {"o": 0, "d": 1, "b": 3, "oli": 11, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19}
         }
     }
     
@@ -4381,41 +4381,41 @@ def fetch_bundling_fixed_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         
-        for name, config in BUNDLING_SOURCES.items():
-            req = urllib.request.Request(config["url"], headers={'User-Agent': 'Mozilla/5.0'})
+        for name, info in BUNDLING_SOURCES.items():
+            req = urllib.request.Request(info["url"], headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
                 data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
                 if not data: continue
                 
-                # Remove header row
+                # Assume first row is header, start from row index 1
                 start_row = 1
-                col = config["cols"]
+                col = info["cols"]
                 
                 processed = []
                 for row in data[start_row:]:
                     if not row: continue
                     p = row + [''] * 50 
                     
-                    o_val = str(p[col['o']]).strip()
+                    o_val = str(p[col['o']]).strip() if col['o'] < len(p) else ""
                     if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order']: continue
                     
-                    def g(c_idx): 
-                        if c_idx >= len(p): return "N/A"
-                        val = str(p[c_idx]).strip()
+                    def g(idx): 
+                        if idx == -1 or idx >= len(p): return "N/A"
+                        val = str(p[idx]).strip()
                         return val if val and val.lower() not in ['n/a', 'nan', '-'] else "N/A"
-                        
+                    
                     processed.append({
-                        'order': o_val, 
-                        'date': g(col['d']), 
+                        'order': o_val,
+                        'date': g(col['d']),
                         'date_std': std_date(g(col['d'])),
-                        'boxes': g(col['b']), 
-                        'order_line_id': g(col['oli']), 
+                        'boxes': g(col['b']),
+                        'order_line_id': g(col['oli']),
                         'vendor': g(col['v']), 
-                        'title': g(col['title']), 
+                        'title': g(col['title']),
                         'item_count': g(col['ic']),
-                        'customer': g(col['c']), 
-                        'country': g(col['cn']), 
-                        'tid': g(col['t'])
+                        'customer': g(col['c']),
+                        'country': g(col['cn']),
+                        'tid': "N/A"  # No TID column in these sheets
                     })
                 res[name] = processed
     except Exception as e:
@@ -4437,23 +4437,12 @@ def clean_bundling_tids(raw):
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
 def api_nexus_bundling_data():
-    sheets_data = fetch_bundling_fixed_data()
-    filter_date = request.args.get('filter_date', '')
-    filter_source = request.args.get('filter_source', '')
-    
+    sheets_data = fetch_bundling_standalone_data()
     bundles_list = []
     
     for src, rows in sheets_data.items():
-        # Apply source filter
-        if filter_source and filter_source != src:
-            continue
-            
         cb = None
         for r in rows:
-            # Apply date filter
-            if filter_date and r['date_std'] < filter_date:
-                continue
-                
             oid = r['order'].upper()
             bx = r['boxes']
             
@@ -4462,15 +4451,12 @@ def api_nexus_bundling_data():
                 "title": r['title'], "item_count": r['item_count'], "country": r['country']
             }
             
-            # If boxes is present and not N/A, it's a parent
             if bx != "N/A" and bx != "":
-                # Save previous bundle if it had at least one child
+                # Boxes column non-empty: new bundle starts
                 if cb and len(cb['orders']) > 1:
                     bundles_list.append(cb)
-                # Start new bundle
-                tids = clean_bundling_tids(r['tid'])
                 cb = {
-                    "tid": ", ".join(tids) if tids else "Pending Tracking",
+                    "tid": "Pending Tracking",  # No TID in these sheets
                     "orders": [od],
                     "date": r['date'],
                     "date_std": r['date_std'],
@@ -4482,14 +4468,10 @@ def api_nexus_bundling_data():
                     "total_items": 0
                 }
             else:
-                # This is a child order, add to current bundle
+                # Boxes column empty: merge into current bundle
                 if cb:
                     cb['orders'].append(od)
-                    tids = clean_bundling_tids(r['tid'])
-                    if tids and cb['tid'] == "Pending Tracking":
-                        cb['tid'] = ", ".join(tids)
                     
-        # Add last bundle if it has children
         if cb and len(cb['orders']) > 1:
             bundles_list.append(cb)
             
@@ -4511,367 +4493,457 @@ def bundling_dashboard_view():
         return "<div style='text-align:center; padding:100px; font-family:sans-serif; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2></div>", 403
 
     return render_template_string('''
-    <!DOCTYPE html>
-    <html lang="en" data-theme="dark">
-    <head>
-        <meta charset="UTF-8">
-        <title>📦 Bundling Intelligence</title>
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-            :root {
-                --bg: #000;
-                --card: #0A0A0A;
-                --border: #1A1A1A;
-                --text: #FAFAFA;
-                --accent: #10B981;
-                --muted: #888;
-            }
-            body {
-                font-family: 'Inter', sans-serif;
-                background: var(--bg);
-                color: var(--text);
-                margin: 0;
-                padding: 0;
-                display: flex;
-                height: 100vh;
-                overflow: hidden;
-            }
-            /* Sidebar */
-            .sidebar {
-                width: 280px;
-                background: var(--card);
-                border-right: 1px solid var(--border);
-                padding: 30px 20px;
-                display: flex;
-                flex-direction: column;
-                gap: 20px;
-                height: 100vh;
-                overflow-y: auto;
-                flex-shrink: 0;
-            }
-            .sidebar h2 {
-                font-size: 18px;
-                margin: 0 0 10px 0;
-                padding-bottom: 10px;
-                border-bottom: 1px solid var(--border);
-            }
-            .filter-group {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-                margin-bottom: 20px;
-            }
-            .filter-group label {
-                font-size: 12px;
-                color: var(--muted);
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            }
-            .filter-input {
-                background: #050505;
-                border: 1px solid #333;
-                color: #fff;
-                padding: 12px 15px;
-                border-radius: 8px;
-                font-family: 'Inter';
-                outline: none;
-                width: 100%;
-            }
-            .filter-input:focus {
-                border-color: var(--accent);
-            }
-            .filter-select {
-                background: #050505;
-                border: 1px solid #333;
-                color: #fff;
-                padding: 12px 15px;
-                border-radius: 8px;
-                font-family: 'Inter';
-                outline: none;
-                width: 100%;
-                cursor: pointer;
-            }
-            .apply-btn {
-                background: var(--accent);
-                color: #000;
-                border: none;
-                padding: 14px;
-                border-radius: 8px;
-                font-weight: 800;
-                font-size: 14px;
-                cursor: pointer;
-                margin-top: 10px;
-                transition: 0.2s;
-            }
-            .apply-btn:hover {
-                opacity: 0.9;
-                transform: translateY(-2px);
-            }
-            .reset-btn {
-                background: transparent;
-                color: var(--text);
-                border: 1px solid var(--border);
-                padding: 12px;
-                border-radius: 8px;
-                font-weight: 600;
-                font-size: 13px;
-                cursor: pointer;
-                margin-top: 10px;
-                transition: 0.2s;
-            }
-            .reset-btn:hover {
-                background: var(--border);
-            }
-            /* Main content */
-            .main-content {
-                flex: 1;
-                padding: 30px 40px;
-                overflow-y: auto;
-            }
-            .header {
-                margin-bottom: 30px;
-            }
-            .header h1 {
-                font-size: 28px;
-                font-weight: 800;
-                letter-spacing: -1px;
-                margin: 0;
-            }
-            .header p {
-                color: var(--muted);
-                margin-top: 5px;
-                font-size: 14px;
-            }
-            .kpi-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 20px;
-                margin-bottom: 40px;
-            }
-            .kpi-card {
-                background: var(--card);
-                border: 1px solid var(--border);
-                border-radius: 16px;
-                padding: 30px;
-                border-left: 4px solid var(--accent);
-                position: relative;
-                overflow: hidden;
-            }
-            .kpi-val {
-                font-size: 48px;
-                font-weight: 900;
-                letter-spacing: -2px;
-                margin-bottom: 5px;
-            }
-            .kpi-lbl {
-                font-size: 13px;
-                color: var(--muted);
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            }
-            .bundles-table {
-                width: 100%;
-                border-collapse: collapse;
-                background: var(--card);
-                border-radius: 16px;
-                border: 1px solid var(--border);
-                overflow: hidden;
-            }
-            .bundles-table th {
-                background: #050505;
-                padding: 18px 20px;
-                font-size: 11px;
-                color: var(--muted);
-                text-transform: uppercase;
-                font-weight: 800;
-                border-bottom: 1px solid var(--border);
-                text-align: left;
-                letter-spacing: 1px;
-            }
-            .bundles-table td {
-                padding: 18px 20px;
-                border-bottom: 1px solid var(--border);
-                text-align: left;
-                vertical-align: top;
-            }
-            .bundles-table tr:hover td {
-                background: #111;
-            }
-            .bundle-box {
-                background: #050505;
-                border: 1px solid #1A1A1A;
-                border-radius: 12px;
-                padding: 10px 15px;
-                margin-top: 8px;
-            }
-            .bundle-item {
-                display: grid;
-                grid-template-columns: 140px 1fr 70px;
-                gap: 15px;
-                padding: 12px 0;
-                border-bottom: 1px dashed #222;
-                align-items: center;
-            }
-            .bundle-item:last-child {
-                border-bottom: none;
-                padding-bottom: 0;
-            }
-            .loader {
-                width: 40px;
-                height: 40px;
-                border: 4px solid var(--border);
-                border-top-color: var(--accent);
-                border-radius: 50%;
-                animation: spin 0.8s linear infinite;
-                margin: 50px auto;
-            }
-            @keyframes spin { to { transform: rotate(360deg); } }
-            .badge {
-                background: var(--accent);
-                color: #000;
-                padding: 4px 10px;
-                border-radius: 20px;
-                font-size: 11px;
-                font-weight: 800;
-            }
-        </style>
-    </head>
-    <body>
-        <!-- Sidebar with filters -->
-        <div class="sidebar">
-            <h2>📊 Filters</h2>
-            <div class="filter-group">
-                <label>Date From</label>
-                <input type="date" id="filterDate" class="filter-input" value="2026-01-01">
-            </div>
-            <div class="filter-group">
-                <label>3PL Source</label>
-                <select id="filterSource" class="filter-select">
-                    <option value="">All Sources</option>
-                    <option value="ECL QC Center">ECL QC Center</option>
-                    <option value="ECL Zone">ECL Zone</option>
-                    <option value="GE Zone">GE Zone</option>
-                </select>
-            </div>
-            <button class="apply-btn" onclick="loadBundles()">Apply Filters</button>
-            <button class="reset-btn" onclick="resetFilters()">Reset</button>
-            <div style="margin-top: 30px;">
-                <h3>📦 KPI Summary</h3>
-                <div id="kpiTotal" style="font-size: 36px; font-weight: 800; margin: 10px 0;">0</div>
-                <div style="color: var(--muted); font-size: 13px;">Total Bundles</div>
-                <div id="kpiOrders" style="font-size: 36px; font-weight: 800; margin: 20px 0 10px;">0</div>
-                <div style="color: var(--muted); font-size: 13px;">Consolidated Orders</div>
-            </div>
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>📦 Bundling Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        :root {
+            --bg: #000;
+            --card: #0A0A0A;
+            --border: #1A1A1A;
+            --text: #FAFAFA;
+            --accent: #10B981;
+            --muted: #71717A;
+            --input-bg: #050505;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 40px;
+            margin: 0;
+            padding-bottom: 100px;
+        }
+        .header {
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .filter-box {
+            display: flex;
+            gap: 20px;
+            background: var(--card);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            margin-bottom: 30px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .f-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .f-group label {
+            font-size: 12px;
+            color: #888;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .f-input {
+            background: var(--input-bg);
+            border: 1px solid #333;
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-family: 'Inter';
+            outline: none;
+            min-width: 200px;
+        }
+        .f-input:focus {
+            border-color: var(--accent);
+        }
+        .source-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .source-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 25px;
+            border-left: 4px solid var(--accent);
+        }
+        .source-title {
+            font-size: 18px;
+            font-weight: 800;
+            margin-bottom: 15px;
+            color: var(--accent);
+            letter-spacing: -0.5px;
+        }
+        .source-stats {
+            display: flex;
+            justify-content: space-between;
+        }
+        .stat-item {
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: 900;
+            line-height: 1.2;
+        }
+        .stat-label {
+            font-size: 11px;
+            color: var(--muted);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .kpi-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 30px;
+            border-left: 4px solid var(--accent);
+            position: relative;
+            overflow: hidden;
+        }
+        .kpi-val {
+            font-size: 48px;
+            font-weight: 900;
+            letter-spacing: -2px;
+            margin-bottom: 5px;
+        }
+        .kpi-lbl {
+            font-size: 13px;
+            color: #888;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        th {
+            background: #050505;
+            padding: 18px 20px;
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            font-weight: 800;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            letter-spacing: 1px;
+        }
+        td {
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            vertical-align: top;
+        }
+        tr:hover td {
+            background: #111;
+        }
+        .bundle-box {
+            background: #050505;
+            border: 1px solid #1A1A1A;
+            border-radius: 12px;
+            padding: 10px 15px;
+        }
+        .bundle-item {
+            display: grid;
+            grid-template-columns: 140px 1fr 70px;
+            gap: 15px;
+            padding: 12px 0;
+            border-bottom: 1px dashed #222;
+            align-items: center;
+        }
+        .bundle-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .loader {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 50px auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Floating side buttons */
+        .side-controls {
+            position: fixed;
+            right: 30px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 999;
+        }
+        .side-btn {
+            padding: 14px 24px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 800;
+            font-size: 14px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: 0.2s;
+            background: var(--card);
+            color: var(--text);
+            text-align: center;
+            min-width: 120px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        .side-btn:hover {
+            background: var(--accent);
+            color: #000;
+            transform: scale(1.05);
+            border-color: var(--accent);
+        }
+        .search-box {
+            flex: 1;
+            min-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1 style="margin:0; font-size:28px; font-weight:800; letter-spacing:-1px;">📦 Order Consolidation AI</h1>
+            <p style="color:#888; margin-top:5px;">Advanced Box & Item level Breakdown from Merged Rows</p>
         </div>
+    </div>
 
-        <!-- Main content -->
-        <div class="main-content">
-            <div class="header">
-                <h1>📦 Order Consolidation AI</h1>
-                <p>Automatically grouped bundles based on Boxes column</p>
-            </div>
-
-            <div id="loader" class="loader" style="display: none;"></div>
-            <div id="bundlesContainer"></div>
+    <!-- Search and Date Filters -->
+    <div class="filter-box">
+        <div class="f-group search-box">
+            <label>🔍 Search (Order ID or Customer)</label>
+            <input type="text" id="searchInput" class="f-input" placeholder="e.g. 12345 or John Doe">
         </div>
+        <div class="f-group">
+            <label>📅 From Date</label>
+            <input type="date" id="dateFrom" class="f-input">
+        </div>
+        <div class="f-group">
+            <label>📅 To Date</label>
+            <input type="date" id="dateTo" class="f-input">
+        </div>
+        <div class="f-group">
+            <label>🏷️ Source</label>
+            <select id="sourceSelect" class="f-input">
+                <option value="all">All Sources</option>
+                <option value="ECL QC Center">ECL QC Center</option>
+                <option value="ECL Zone">ECL Zone</option>
+                <option value="GE Zone">GE Zone</option>
+            </select>
+        </div>
+        <button class="side-btn" onclick="fetchData()" style="background:var(--accent); color:#000;">Apply Filters</button>
+    </div>
 
-        <script>
-            async function loadBundles() {
-                const loader = document.getElementById('loader');
-                const container = document.getElementById('bundlesContainer');
-                loader.style.display = 'block';
-                container.innerHTML = '';
+    <!-- Source-wise KPI Cards -->
+    <div class="source-kpi-grid" id="sourceKpiCards">
+        <!-- Dynamically filled -->
+    </div>
 
-                const filterDate = document.getElementById('filterDate').value;
-                const filterSource = document.getElementById('filterSource').value;
+    <!-- Global KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-val" id="totalBundles">0</div>
+            <div class="kpi-lbl">TOTAL BUNDLES PACKED</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-val" id="totalOrdersMerged">0</div>
+            <div class="kpi-lbl">TOTAL ORDERS MERGED</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-val" id="totalBoxes">0</div>
+            <div class="kpi-lbl">TOTAL BOXES</div>
+        </div>
+    </div>
 
-                try {
-                    const url = new URL('/api/nexus/bundling_data', window.location.origin);
-                    if (filterDate) url.searchParams.append('filter_date', filterDate);
-                    if (filterSource) url.searchParams.append('filter_source', filterSource);
+    <!-- Bundles Table -->
+    <div id="bundlesTableContainer">
+        <div class="loader" style="display:none;" id="loader"></div>
+        <table id="bundlesTable" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Source</th>
+                    <th>Master Box</th>
+                    <th>Customer</th>
+                    <th>Orders</th>
+                    <th>Items</th>
+                </tr>
+            </thead>
+            <tbody id="bundlesBody"></tbody>
+        </table>
+        <div id="noDataMessage" style="text-align:center; padding:60px; color:var(--muted);">No Bundled Orders Found from Merged Cells.</div>
+    </div>
 
-                    const response = await fetch(url);
-                    const data = await response.json();
+    <!-- Side Controls -->
+    <div class="side-controls">
+        <a href="/" class="side-btn">🏠 Main Dash</a>
+        <button class="side-btn" onclick="fetchData()">🔄 Refresh Engine</button>
+    </div>
 
+    <script>
+        let allBundles = [];
+
+        function fetchData() {
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('bundlesTable').style.display = 'none';
+            document.getElementById('noDataMessage').style.display = 'none';
+            
+            fetch('/api/nexus/bundling_data')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('loader').style.display = 'none';
                     if (data.success && data.bundles.length > 0) {
-                        renderBundles(data.bundles);
-                        updateKPI(data.bundles);
+                        allBundles = data.bundles;
+                        applyFilters();
                     } else {
-                        container.innerHTML = '<div style="text-align:center; padding:60px; color: var(--muted); border: 1px dashed var(--border); border-radius: 16px;">📭 No bundles found for selected filters</div>';
-                        document.getElementById('kpiTotal').innerText = '0';
-                        document.getElementById('kpiOrders').innerText = '0';
+                        document.getElementById('noDataMessage').style.display = 'block';
+                        updateKPIs([]);
                     }
-                } catch (e) {
-                    container.innerHTML = `<div style="color:#EF4444; text-align:center; padding:60px;">Error: ${e.message}</div>`;
-                } finally {
-                    loader.style.display = 'none';
-                }
-            }
-
-            function renderBundles(bundles) {
-                let html = `<table class="bundles-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Source</th>
-                            <th>Customer / Vendor</th>
-                            <th>Boxes</th>
-                            <th>Tracking ID</th>
-                            <th>Consolidated Orders</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
-
-                bundles.forEach(b => {
-                    html += `<tr>
-                        <td>${b.date}</td>
-                        <td><span class="badge">${b.source}</span></td>
-                        <td>
-                            <div><strong>Customer:</strong> ${b.customer}</div>
-                            <div><strong>Vendor:</strong> ${b.vendor}</div>
-                            <div><strong>Country:</strong> ${b.country}</div>
-                        </td>
-                        <td><strong>${b.boxes_val}</strong></td>
-                        <td style="font-family: monospace; max-width: 200px; word-break: break-word;">${b.tid}</td>
-                        <td>
-                            <div class="bundle-box">
-                                <div style="margin-bottom: 8px;"><strong>📦 Total Items: ${b.total_items}</strong></div>
-                                ${b.orders.map(o => `
-                                    <div class="bundle-item">
-                                        <div>${o.order_id}</div>
-                                        <div>${o.title || 'No title'}</div>
-                                        <div style="text-align:right;">x${o.item_count}</div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </td>
-                    </tr>`;
+                })
+                .catch(err => {
+                    console.error(err);
+                    document.getElementById('loader').style.display = 'none';
+                    document.getElementById('noDataMessage').style.display = 'block';
                 });
+        }
 
-                html += '</tbody></table>';
-                document.getElementById('bundlesContainer').innerHTML = html;
+        function applyFilters() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const source = document.getElementById('sourceSelect').value;
+
+            let filtered = allBundles.filter(b => {
+                // Source filter
+                if (source !== 'all' && b.source !== source) return false;
+                
+                // Date filter
+                if (dateFrom && b.date_std < dateFrom) return false;
+                if (dateTo && b.date_std > dateTo) return false;
+                
+                // Search filter
+                if (searchTerm) {
+                    const matchesOrder = b.orders.some(o => o.order_id.toLowerCase().includes(searchTerm));
+                    const matchesCustomer = b.customer && b.customer.toLowerCase().includes(searchTerm);
+                    return matchesOrder || matchesCustomer;
+                }
+                return true;
+            });
+
+            renderBundles(filtered);
+            updateKPIs(filtered);
+            updateSourceKPIs(filtered);
+        }
+
+        function renderBundles(bundles) {
+            const tbody = document.getElementById('bundlesBody');
+            tbody.innerHTML = '';
+            if (bundles.length === 0) {
+                document.getElementById('bundlesTable').style.display = 'none';
+                document.getElementById('noDataMessage').style.display = 'block';
+                return;
             }
+            document.getElementById('bundlesTable').style.display = 'table';
+            document.getElementById('noDataMessage').style.display = 'none';
+            
+            bundles.forEach(b => {
+                let ordersHtml = '<div class="bundle-box">';
+                b.orders.forEach(o => {
+                    ordersHtml += `<div class="bundle-item">
+                        <div><strong>${o.order_id}</strong></div>
+                        <div style="color: #aaa;">${o.title || ''}</div>
+                        <div style="text-align:right;">${o.item_count || 0}</div>
+                    </div>`;
+                });
+                ordersHtml += '</div>';
+                
+                let row = `<tr>
+                    <td>${b.date || ''}</td>
+                    <td>${b.source}</td>
+                    <td>${b.boxes_val}</td>
+                    <td>${b.customer || ''}</td>
+                    <td>${ordersHtml}</td>
+                    <td style="text-align:center; font-weight:700;">${b.total_items}</td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
 
-            function updateKPI(bundles) {
-                let totalOrders = 0;
-                bundles.forEach(b => totalOrders += b.orders.length);
-                document.getElementById('kpiTotal').innerText = bundles.length;
-                document.getElementById('kpiOrders').innerText = totalOrders;
-            }
+        function updateKPIs(bundles) {
+            let totalBundles = bundles.length;
+            let totalOrdersMerged = bundles.reduce((acc, b) => acc + b.orders.length, 0);
+            let totalBoxes = bundles.reduce((acc, b) => {
+                let boxNum = parseInt(b.boxes_val) || 0;
+                return acc + boxNum;
+            }, 0);
+            
+            document.getElementById('totalBundles').innerText = totalBundles;
+            document.getElementById('totalOrdersMerged').innerText = totalOrdersMerged;
+            document.getElementById('totalBoxes').innerText = totalBoxes;
+        }
 
-            function resetFilters() {
-                document.getElementById('filterDate').value = '2026-01-01';
-                document.getElementById('filterSource').value = '';
-                loadBundles();
-            }
+        function updateSourceKPIs(bundles) {
+            const sources = ['ECL QC Center', 'ECL Zone', 'GE Zone'];
+            const container = document.getElementById('sourceKpiCards');
+            container.innerHTML = '';
+            
+            sources.forEach(src => {
+                const srcBundles = bundles.filter(b => b.source === src);
+                const totalOrders = srcBundles.reduce((acc, b) => acc + b.orders.length, 0);
+                const totalBoxes = srcBundles.reduce((acc, b) => acc + (parseInt(b.boxes_val) || 0), 0);
+                
+                container.innerHTML += `
+                    <div class="source-card">
+                        <div class="source-title">${src}</div>
+                        <div class="source-stats">
+                            <div class="stat-item">
+                                <div class="stat-value">${totalOrders}</div>
+                                <div class="stat-label">Orders</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value">${totalBoxes}</div>
+                                <div class="stat-label">Boxes</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
 
-            // Load on page load
-            window.onload = loadBundles;
-        </script>
-    </body>
-    </html>
+        // Initial load
+        window.onload = fetchData;
+
+        // Refresh on filter change
+        document.getElementById('searchInput').addEventListener('input', applyFilters);
+        document.getElementById('dateFrom').addEventListener('change', applyFilters);
+        document.getElementById('dateTo').addEventListener('change', applyFilters);
+        document.getElementById('sourceSelect').addEventListener('change', applyFilters);
+    </script>
+</body>
+</html>
     ''')
 # ==============================================================================
 # END OF CODE
