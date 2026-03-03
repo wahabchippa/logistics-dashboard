@@ -4344,7 +4344,7 @@ def nexus_dashboard():
 # ==============================================================================
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE) - DEBUG EDITION
+# 📦 BUNDLING INTELLIGENCE HUB - COMPLETE FINAL CODE
 # ==============================================================================
 import urllib.request
 import csv
@@ -4363,21 +4363,51 @@ def std_date(d_str):
     return "1970-01-01"
 
 def fetch_bundling_standalone_data():
-    """Yeh function sirf Bundling ke liye data uthayega, exact column mappings ke saath"""
+    """Ab bilkul sahi tarike se data uthayega - tere bataye columns ke according"""
     
-    # Aapke bataye gaye exact column mappings (1-based index)
+    # TUMHARI DIYI GAYI EXACT COLUMN MAPPINGS (0-based indices)
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o": 1, "d": 2, "b": 4, "oli": 9, "v": 11, "title": 12, "ic": 13, "c": 14, "cn": 18}
+            {
+                "o": 0,   # Order ID: Col 1 (A)
+                "d": 1,   # Date: Col 2 (B)
+                "b": 3,   # Boxes: Col 4 (D)
+                "oli": 8, # Order Line ID: Col 9 (I)
+                "v": 10,  # Vendor: Col 11 (K)
+                "title": 11, # Title: Col 12 (L)
+                "ic": 12, # Item Count: Col 13 (M)
+                "c": 13,  # Customer: Col 14 (N)
+                "cn": 17  # Country: Col 18 (R)
+            }
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o": 1, "d": 2, "b": 4, "oli": 12, "v": 14, "title": 15, "ic": 16, "c": 17, "cn": 21}
+            {
+                "o": 0,   # Order ID: Col 1 (A)
+                "d": 1,   # Date: Col 2 (B)
+                "b": 3,   # Boxes: Col 4 (D)
+                "oli": 11, # Order Line ID: Col 12 (L)
+                "v": 13,  # Vendor: Col 14 (N)
+                "title": 14, # Title: Col 15 (O)
+                "ic": 15, # Item Count: Col 16 (P)
+                "c": 16,  # Customer: Col 17 (Q)
+                "cn": 20  # Country: Col 21 (U)
+            }
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o": 1, "d": 2, "b": 4, "oli": 12, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20}
+            {
+                "o": 0,   # Order ID: Col 1 (A)
+                "d": 1,   # Date: Col 2 (B)
+                "b": 3,   # Boxes: Col 4 (D)
+                "oli": 11, # Order Line ID: Col 12 (L)
+                "v": 12,  # Vendor: Col 13 (M)
+                "title": 13, # Title: Col 14 (N)
+                "ic": 14, # Item Count: Col 15 (O)
+                "c": 15,  # Customer: Col 16 (P)
+                "cn": 19  # Country: Col 20 (T)
+            }
         )
     }
     
@@ -4388,63 +4418,58 @@ def fetch_bundling_standalone_data():
         ctx.verify_mode = ssl.CERT_NONE
         
         for name, (url, col) in BUNDLING_SOURCES.items():
-            print(f"🔍 Fetching {name} from {url}")
+            print(f"\n🔍 Fetching {name}...")
+            print(f"   URL: {url[:100]}...")
+            
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
                 data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
                 print(f"   Raw rows: {len(data)}")
+                
                 if len(data) > 0:
-                    print(f"   Header row: {data[0]}")
+                    print(f"   Header row (first 10 cols): {data[0][:10]}")
                 if len(data) > 1:
-                    print(f"   Sample data row (row 2): {data[1]}")
+                    print(f"   Sample data row (row 2): {data[1][:10]}")
                 
                 processed = []
-                for idx, row in enumerate(data[1:]):  # Skip header (row 0)
+                for row_idx, row in enumerate(data[1:], start=2):  # Skip header (row 0)
                     if not row: continue
-                    p = row + [''] * 50 # padding to prevent index errors
+                    p = row + [''] * 50  # padding to prevent index errors
                     
-                    # Order ID
-                    if col['o'] - 1 >= len(p):
+                    # Order ID - required field
+                    if col['o'] >= len(p):
                         continue
-                    o_val = str(p[col['o'] - 1]).strip()
+                    o_val = str(p[col['o']]).strip()
                     if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']:
                         continue
                     
-                    def g(c_num): 
-                        if c_num - 1 >= len(p): return "N/A"
-                        val = str(p[c_num - 1]).strip()
+                    def g(c_idx):
+                        if c_idx >= len(p): return "N/A"
+                        val = str(p[c_idx]).strip()
                         return val if val and val.lower() not in ['n/a', 'nan', '-'] else "N/A"
-                        
+                    
                     processed.append({
-                        'order': o_val, 
-                        'date': g(col['d']), 
+                        'order': o_val,
+                        'date': g(col['d']),
                         'date_std': std_date(g(col['d'])),
                         'boxes': g(col['b']),
-                        'order_line_id': g(col['oli']), 
-                        'vendor': g(col['v']), 
-                        'title': g(col['title']), 
+                        'order_line_id': g(col['oli']),
+                        'vendor': g(col['v']),
+                        'title': g(col['title']),
                         'item_count': g(col['ic']),
-                        'customer': g(col['c']), 
+                        'customer': g(col['c']),
                         'country': g(col['cn'])
                     })
-                print(f"   Processed rows: {len(processed)}")
+                    
+                    # Print first few rows for debugging
+                    if row_idx < 5:
+                        print(f"   Row {row_idx}: Order={o_val}, Boxes={g(col['b'])}, Customer={g(col['c'])[:20]}")
+                
+                print(f"   ✅ Processed rows: {len(processed)}")
                 res[name] = processed
     except Exception as e:
-        print("Bundling Fetch Error:", e)
+        print(f"❌ Bundling Fetch Error: {e}")
     return res
-
-def clean_bundling_tids(raw):
-    raw = str(raw).strip()
-    if not raw or raw.lower() in ['pending', 'none', 'n/a', '-', 'tbd', 'update soon']: return []
-    raw = re.sub(r'(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})', r' \1 ', raw)
-    parts = [t.strip() for t in re.split(r'[,\/\s;]+', raw) if t.strip()]
-    cleaned = []
-    for t in parts:
-        t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
-        if len(t) > 6 and re.search(r'\d', t) and t.lower() not in ['tracking', 'number']:
-            if t.startswith('150') and len(t) >= 12 and not t.startswith('0'): cleaned.append('0' + t)
-            else: cleaned.append(t)
-    return list(dict.fromkeys(cleaned))
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
 def api_nexus_bundling_data():
@@ -4459,8 +4484,13 @@ def api_nexus_bundling_data():
     }
     
     for src, rows in sheets_data.items():
+        print(f"\n📦 Processing {src}...")
         cb = None  # Current Bundle
+        bundle_count = 0
+        row_count = 0
+        
         for r in rows:
+            row_count += 1
             oid = r['order'].upper()
             bx = r['boxes']
             
@@ -4479,14 +4509,17 @@ def api_nexus_bundling_data():
                     bundles_list.append(cb)
                     tot_bundles += 1
                     tot_orders += len(cb['orders'])
+                    bundle_count += 1
                     # Update source stats with proper numeric conversion
                     try:
-                        box_val = float(cb['boxes_val'])  # Pehle float mein convert
-                        source_stats[src]["boxes"] += int(box_val)  # Phir integer
+                        box_val = float(cb['boxes_val'])
+                        source_stats[src]["boxes"] += int(box_val)
                     except (ValueError, TypeError):
                         pass
                     source_stats[src]["orders"] += len(cb['orders'])
-                    
+                    print(f"   Bundle #{bundle_count}: {len(cb['orders'])} orders, Box: {cb['boxes_val']}")
+                
+                # Start new bundle
                 cb = {
                     "orders": [od],
                     "date": r['date'],
@@ -4499,39 +4532,53 @@ def api_nexus_bundling_data():
                     "total_items": 0
                 }
             else:
-                # Agar box blank/N/A hai (yani merge hua wa hai), toh isay purane dabbe me daalo
+                # Agar box blank/N/A hai (yani merge hona chahiye)
                 if cb:
                     cb['orders'].append(od)
-                    
+        
         # Loop end hone pe aakhri bundle check karo
-        if cb and len(cb['orders']) > 1: 
+        if cb and len(cb['orders']) > 1:
             bundles_list.append(cb)
             tot_bundles += 1
             tot_orders += len(cb['orders'])
+            bundle_count += 1
             try:
                 box_val = float(cb['boxes_val'])
                 source_stats[src]["boxes"] += int(box_val)
             except (ValueError, TypeError):
                 pass
             source_stats[src]["orders"] += len(cb['orders'])
-            
-    # Calculate Total Quantities
+            print(f"   Bundle #{bundle_count}: {len(cb['orders'])} orders, Box: {cb['boxes_val']}")
+        
+        print(f"   {src} - Total rows: {row_count}, Bundles: {bundle_count}")
+    
+    # Calculate Total Quantities per bundle
     for b in bundles_list:
         tq = 0
         for o in b['orders']:
-            try: tq += int(float(str(o['item_count']).replace(',', '')))
-            except: pass
+            try:
+                # Handle item_count which might be like "1.00" or "1"
+                ic_str = str(o['item_count']).replace(',', '').strip()
+                if ic_str and ic_str != "N/A":
+                    tq += int(float(ic_str))
+            except (ValueError, TypeError):
+                pass
         b['total_items'] = tq
-        
+    
     bundles_list.sort(key=lambda x: str(x['date_std']), reverse=True)
     
+    print(f"\n📊 FINAL STATS:")
+    print(f"   Total Bundles: {tot_bundles}")
+    print(f"   Total Orders: {tot_orders}")
+    print(f"   Source Stats: {source_stats}")
+    
     return jsonify({
-        "success": True, 
+        "success": True,
         "kpi": {
-            "total_bundles": tot_bundles, 
-            "total_orders_bundled": tot_orders, 
+            "total_bundles": tot_bundles,
+            "total_orders_bundled": tot_orders,
             "saved_shipments": (tot_orders - tot_bundles if tot_bundles > 0 else 0)
-        }, 
+        },
         "source_stats": source_stats,
         "bundles": bundles_list
     })
@@ -4539,7 +4586,7 @@ def api_nexus_bundling_data():
 @app.route('/bundling')
 def bundling_dashboard_view():
     u = session.get('username') or session.get('user') or session.get('role')
-    if not u or str(u).lower() != 'admin': 
+    if not u or str(u).lower() != 'admin':
         return "<div style='text-align:center; padding:100px; font-family:sans-serif; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2><p>Admin Only.</p></div>", 403
 
     return render_template_string('''
@@ -4811,9 +4858,27 @@ def bundling_dashboard_view():
 
     <!-- Source-wise KPI Cards -->
     <div class="source-kpi-grid" id="sourceKpiCards">
-        <div class="source-card"><div class="source-title">ECL QC Center</div><div class="source-stats"><div class="stat-item"><div class="stat-value" id="qc-orders">0</div><div class="stat-label">Orders</div></div><div class="stat-item"><div class="stat-value" id="qc-boxes">0</div><div class="stat-label">Boxes</div></div></div></div>
-        <div class="source-card"><div class="source-title">ECL Zone</div><div class="source-stats"><div class="stat-item"><div class="stat-value" id="ecl-orders">0</div><div class="stat-label">Orders</div></div><div class="stat-item"><div class="stat-value" id="ecl-boxes">0</div><div class="stat-label">Boxes</div></div></div></div>
-        <div class="source-card"><div class="source-title">GE Zone</div><div class="source-stats"><div class="stat-item"><div class="stat-value" id="ge-orders">0</div><div class="stat-label">Orders</div></div><div class="stat-item"><div class="stat-value" id="ge-boxes">0</div><div class="stat-label">Boxes</div></div></div></div>
+        <div class="source-card">
+            <div class="source-title">ECL QC Center</div>
+            <div class="source-stats">
+                <div class="stat-item"><div class="stat-value" id="qc-orders">0</div><div class="stat-label">Orders</div></div>
+                <div class="stat-item"><div class="stat-value" id="qc-boxes">0</div><div class="stat-label">Boxes</div></div>
+            </div>
+        </div>
+        <div class="source-card">
+            <div class="source-title">ECL Zone</div>
+            <div class="source-stats">
+                <div class="stat-item"><div class="stat-value" id="ecl-orders">0</div><div class="stat-label">Orders</div></div>
+                <div class="stat-item"><div class="stat-value" id="ecl-boxes">0</div><div class="stat-label">Boxes</div></div>
+            </div>
+        </div>
+        <div class="source-card">
+            <div class="source-title">GE Zone</div>
+            <div class="source-stats">
+                <div class="stat-item"><div class="stat-value" id="ge-orders">0</div><div class="stat-label">Orders</div></div>
+                <div class="stat-item"><div class="stat-value" id="ge-boxes">0</div><div class="stat-label">Boxes</div></div>
+            </div>
+        </div>
     </div>
 
     <!-- Global KPI Cards -->
@@ -4850,27 +4915,32 @@ def bundling_dashboard_view():
             document.getElementById('content').style.display = 'none';
             document.getElementById('loading').style.display = 'block';
             
-            const r = await fetch('/api/nexus/bundling_data');
-            const d = await r.json();
-            
-            // Store data
-            allBundles = d.bundles;
-            sourceStats = d.source_stats;
-            
-            // Update KPI
-            document.getElementById('kpi-bundles').innerText = d.kpi.total_bundles;
-            document.getElementById('kpi-orders').innerText = d.kpi.total_orders_bundled;
-            document.getElementById('kpi-saved').innerText = d.kpi.saved_shipments;
-            
-            // Update source stats
-            document.getElementById('qc-orders').innerText = sourceStats['ECL QC Center']?.orders || 0;
-            document.getElementById('qc-boxes').innerText = sourceStats['ECL QC Center']?.boxes || 0;
-            document.getElementById('ecl-orders').innerText = sourceStats['ECL Zone']?.orders || 0;
-            document.getElementById('ecl-boxes').innerText = sourceStats['ECL Zone']?.boxes || 0;
-            document.getElementById('ge-orders').innerText = sourceStats['GE Zone']?.orders || 0;
-            document.getElementById('ge-boxes').innerText = sourceStats['GE Zone']?.boxes || 0;
-            
-            applyFilters();
+            try {
+                const r = await fetch('/api/nexus/bundling_data');
+                const d = await r.json();
+                
+                // Store data
+                allBundles = d.bundles || [];
+                sourceStats = d.source_stats || {};
+                
+                // Update KPI
+                document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
+                document.getElementById('kpi-orders').innerText = d.kpi?.total_orders_bundled || 0;
+                document.getElementById('kpi-saved').innerText = d.kpi?.saved_shipments || 0;
+                
+                // Update source stats
+                document.getElementById('qc-orders').innerText = sourceStats['ECL QC Center']?.orders || 0;
+                document.getElementById('qc-boxes').innerText = sourceStats['ECL QC Center']?.boxes || 0;
+                document.getElementById('ecl-orders').innerText = sourceStats['ECL Zone']?.orders || 0;
+                document.getElementById('ecl-boxes').innerText = sourceStats['ECL Zone']?.boxes || 0;
+                document.getElementById('ge-orders').innerText = sourceStats['GE Zone']?.orders || 0;
+                document.getElementById('ge-boxes').innerText = sourceStats['GE Zone']?.boxes || 0;
+                
+                applyFilters();
+            } catch (e) {
+                console.error("Error loading bundles:", e);
+                document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data. Check console.</div>';
+            }
         }
 
         function applyFilters() {
@@ -4905,15 +4975,15 @@ def bundling_dashboard_view():
                     let items = b.orders.map(o => `
                         <div class="bundle-item">
                             <div><span style="color:var(--accent); font-weight:800;">${o.order_id}</span><br><span style="font-size:10px; color:#666;">Line: ${o.order_line_id}</span></div>
-                            <div style="font-size:11px; color:#888;">${o.title.substring(0,30)}...</div>
+                            <div style="font-size:11px; color:#888;">${o.title && o.title.length > 30 ? o.title.substring(0,30)+'...' : o.title || ''}</div>
                             <div style="font-weight:800; text-align:right;">${o.item_count}</div>
                         </div>
                     `).join('');
                     
                     h += `<tr>
-                        <td><b>${b.date}</b><br><span style="color:#888; font-size:10px;">${b.source}</span></td>
-                        <td><b>${b.customer}</b><br><span style="color:#666; font-size:11px;">${b.vendor}</span><br><span style="color:#666; font-size:11px;">${b.country}</span></td>
-                        <td><span style="background:#1A1A1A; padding:4px 8px; border-radius:4px;">${b.boxes_val}</span><br><span style="color:#888; font-size:11px;">Items: ${b.total_items}</span></td>
+                        <td><b>${b.date || ''}</b><br><span style="color:#888; font-size:10px;">${b.source || ''}</span></td>
+                        <td><b>${b.customer || ''}</b><br><span style="color:#666; font-size:11px;">${b.vendor || ''}</span><br><span style="color:#666; font-size:11px;">${b.country || ''}</span></td>
+                        <td><span style="background:#1A1A1A; padding:4px 8px; border-radius:4px;">${b.boxes_val || ''}</span><br><span style="color:#888; font-size:11px;">Items: ${b.total_items || 0}</span></td>
                         <td><div class="bundle-box">${items}</div></td>
                     </tr>`;
                 });
@@ -4940,7 +5010,7 @@ def add_bundling_floating_btn(response):
             html = response.get_data(as_text=True)
             # Yeh button TID Hub ke upar (bottom: 100px) aayega - overlap nahi hoga
             btn = '<a href="/bundling" style="position:fixed; bottom:100px; right:30px; background:#10B981; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(16,185,129,0.4); transition:0.2s;">📦 Bundling AI</a>'
-            if '</body>' in html: 
+            if '</body>' in html:
                 response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
