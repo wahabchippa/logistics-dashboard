@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - SMART SEARCH (_ and /) + SECURE NATIVE
+# 🛰️ TID OPERATIONS HUB (NEXUS) - STATUS FIX + SMART TID CLEANER + ADMIN SECURE
 # ==============================================================================
 import urllib.request
 import urllib.parse
@@ -3635,7 +3635,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. EXACT COLUMNS MAP
+# 2. DATA PROCESSING & STATUS ENGINE
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
@@ -3677,12 +3677,24 @@ def nexus_fetch_sheet_data(url, name):
     except: return []
 
 def nexus_clean_tids(raw):
+    # 🚨 SMART TID CLEANER (Removes colons, spaces, and words like 'TID:')
     raw = str(raw).strip()
     if not raw or raw.lower() in ['pending','none','n/a', '-']: return []
-    parts = [t.strip() for t in re.split(r'[,\/\s]+', raw) if t.strip()]
-    return ['0'+t if (t.startswith('150') and 12<=len(t)<=15) else t for t in parts]
+    # Split by comma, slash, space, OR colon
+    parts = [t.strip() for t in re.split(r'[,\/\s:;]+', raw) if t.strip()]
+    cleaned = []
+    for t in parts:
+        # Faltu nishanaat hatana aage peechay se
+        t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
+        if t and t.lower() not in ['tid', 'tracking', 'no', 'number']:
+            if t.startswith('150') and 12<=len(t)<=15:
+                cleaned.append('0' + t)
+            else:
+                cleaned.append(t)
+    return cleaned
 
 def nexus_fetch_kerry_status(url):
+    # 🚨 STATUS FIX ENGINE: Auto-detects columns dynamically!
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
@@ -3690,18 +3702,33 @@ def nexus_fetch_kerry_status(url):
             raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
             data = list(csv.reader(raw_data))
             if not data: return {}
-            s_col, h_idx = 1, -1
-            for i, row in enumerate(data[:15]):
-                c = [str(x).lower().replace(' ', '') for x in row]
-                if 'order' in c or 'fleekid' in c or 'orderid' in c:
-                    h_idx, s_col = i, c.index('lateststatus') if 'lateststatus' in c else c.index('status')
-                    break
+            
+            o_idx, s_idx, h_idx = -1, -1, -1
+            
+            for i, row in enumerate(data[:20]):
+                c = [str(x).lower().replace(' ', '').replace('_', '') for x in row]
+                # Order ID column dhoondo
+                for j, col_name in enumerate(c):
+                    if col_name in ['order', 'orderid', 'fleekid', 'shipmentid', 'orderno']: o_idx = j; break
+                # Status column dhoondo
+                for j, col_name in enumerate(c):
+                    if col_name in ['status', 'lateststatus', 'currentstatus', 'trackingstatus', 'orderstatus']: s_idx = j; break
+                        
+                if o_idx != -1 and s_idx != -1:
+                    h_idx = i; break
+            
             s_map = {}
-            if h_idx != -1:
+            if h_idx != -1 and o_idx != -1 and s_idx != -1:
                 for row in data[h_idx+1:]:
                     p = row + [''] * 40
-                    o = str(p[0]).strip().lower()
-                    if o: s_map[o] = str(p[s_col]).strip().upper()
+                    o = str(p[o_idx]).strip().lower()
+                    if o: 
+                        stat_val = str(p[s_idx]).strip().upper()
+                        if not stat_val: stat_val = "PENDING"
+                        # _ aur / dono variations save kar rahe hain taake match miss na ho
+                        s_map[o] = stat_val
+                        s_map[o.replace('_', '/')] = stat_val
+                        s_map[o.replace('/', '_')] = stat_val
             return s_map
     except: return {}
 
@@ -3759,10 +3786,7 @@ def api_nexus_search():
     sheets_data, kerry_data = nexus_sync_db()
     
     for q in order_ids:
-        # TIDs fixes (adding 0 if it starts with 150)
         q_alt_tid = '0' + q if (q.startswith('150') and 12 <= len(q) <= 15) else q
-        
-        # 🚨 SMART FORMAT MATCHER (_ and / conversion) 🚨
         q_slash = q.replace('_', '/')
         q_under = q.replace('/', '_')
         
@@ -3771,11 +3795,12 @@ def api_nexus_search():
             for r in rows:
                 oid, tid_raw = r['order'].lower(), r['tid'].lower()
                 
-                # Checking all possibilities (_ or /)
                 if (q in oid or q_slash in oid or q_under in oid or 
                     q in tid_raw or q_alt_tid in tid_raw):
                     
+                    # Safe get from dictionary
                     k_stat = kerry_data.get(oid, "N/A")
+                    
                     results.append({
                         "order_id": r['order'].upper(), "source": src, "status": k_stat, 
                         "date": r['date'], "boxes": r['boxes'], "weight": r['weight'], 
@@ -3938,64 +3963,18 @@ def nexus_dashboard():
         .tid-strip { display: flex; flex-direction: column; gap: 20px; padding-bottom: 8px;}
         .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; transition: 0.3s;}
         
-        /* 🚀 THE BEAUTIFUL NATIVE TIMELINE (ZERO IFRAMES) 🚀 */
-        .native-timeline-box {
-            display: none;
-            background: #050505;
-            border: 1px solid #222;
-            border-radius: 12px;
-            padding: 30px;
-            margin-top: 10px;
-        }
-        .tl-container {
-            border-left: 2px solid #222;
-            padding-left: 25px;
-            margin-left: 10px;
-        }
-        .tl-item {
-            position: relative;
-            margin-bottom: 30px;
-            animation: fadeIn 0.4s ease forwards;
-        }
+        .native-timeline-box { display: none; background: #050505; border: 1px solid #222; border-radius: 12px; padding: 30px; margin-top: 10px; }
+        .tl-container { border-left: 2px solid #222; padding-left: 25px; margin-left: 10px; }
+        .tl-item { position: relative; margin-bottom: 30px; animation: fadeIn 0.4s ease forwards; }
         .tl-item:last-child { margin-bottom: 0; }
-        .tl-dot {
-            position: absolute;
-            left: -32px;
-            top: 4px;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #222;
-            border: 3px solid #000;
-        }
-        .tl-dot.active {
-            background: #10B981;
-            box-shadow: 0 0 10px rgba(16,185,129,0.5);
-            border-color: #050505;
-        }
+        .tl-dot { position: absolute; left: -32px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: #222; border: 3px solid #000; }
+        .tl-dot.active { background: #10B981; box-shadow: 0 0 10px rgba(16,185,129,0.5); border-color: #050505; }
         .tl-time { font-size: 12px; color: #888; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.5px; display:block;}
         .tl-status { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; display:block;}
         .tl-loc { font-size: 12px; color: #555; display:block;}
         
-        .fallback-container {
-            text-align: center;
-            padding: 30px;
-            background: #080808;
-            border-radius: 12px;
-            border: 1px dashed #222;
-        }
-        .fallback-btn {
-            display: inline-block;
-            background: #fff;
-            color: #000;
-            padding: 10px 24px;
-            border-radius: 8px;
-            font-weight: 700;
-            font-size: 13px;
-            text-decoration: none;
-            margin-top: 15px;
-            transition: 0.2s;
-        }
+        .fallback-container { text-align: center; padding: 30px; background: #080808; border-radius: 12px; border: 1px dashed #222; }
+        .fallback-btn { display: inline-block; background: #fff; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none; margin-top: 15px; transition: 0.2s; }
         .fallback-btn:hover { opacity: 0.8; transform: translateY(-2px); }
 
         .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
