@@ -3600,20 +3600,17 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - DIRECT SHIP24 SCRAPER (NO API)
+# 🛰️ TID OPERATIONS HUB (NEXUS) - LIFETIME FREE (UI CROP HACK VERSION)
 # ==============================================================================
 import urllib.request
 import csv
 import re
 import json
-import os
 import time
 import concurrent.futures
 from datetime import datetime
 import ssl
-import requests
-from bs4 import BeautifulSoup
-from flask import jsonify, request, session, render_template_string
+from flask import jsonify, request, render_template_string
 
 # 🛠️ ANTI-DROP FIX FOR LOCAL VS CODE
 try:
@@ -3637,7 +3634,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. CACHE & COLUMN MAP (unchanged)
+# 2. ISOLATED CACHE & EXACT COLUMN MAP
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
@@ -3761,149 +3758,7 @@ def add_nexus_floating_btn(response):
     return response
 
 # ------------------------------------------------------------------------------
-# 3. ✅ DIRECT SHIP24 SCRAPER (NO API KEY) - FIXED VERSION
-# ------------------------------------------------------------------------------
-def scrape_ship24_direct(tid):
-    """Direct Ship24 scrape with browser headers to avoid 403"""
-    try:
-        # Professional browser headers to avoid 403
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Cache-Control': 'max-age=0'
-        }
-        
-        url = f"https://www.ship24.com/tracking?p={tid}"
-        
-        # Add delay to avoid rate limiting
-        time.sleep(1.5)
-        
-        # Make request with timeout
-        response = requests.get(url, headers=headers, timeout=15)
-        
-        # If still 403, return redirect fallback
-        if response.status_code != 200:
-            return {
-                'fallback': True,
-                'tid': tid,
-                'url': url,
-                'message': f'Direct tracking unavailable (HTTP {response.status_code})'
-            }
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Try multiple selectors for events (Ship24 structure)
-        events = []
-        event_selectors = [
-            '.tracking-event',
-            '.event-item',
-            '[class*="event"]',
-            '.MuiTimelineItem-root',
-            'tr.event',
-            '.timeline-item'
-        ]
-        
-        event_elements = []
-        for selector in event_selectors:
-            event_elements = soup.select(selector)
-            if event_elements:
-                break
-        
-        for elem in event_elements[:15]:
-            # Try different possible selectors for status, time, location
-            status = (
-                elem.select_one('.status') or 
-                elem.select_one('[class*="status"]') or 
-                elem.select_one('.MuiTimelineContent-root') or
-                elem.select_one('strong') or
-                elem.select_one('b')
-            )
-            
-            time_elem = (
-                elem.select_one('.time') or 
-                elem.select_one('[class*="time"]') or 
-                elem.select_one('.MuiTypography-caption') or
-                elem.select_one('.date') or
-                elem.select_one('span:not([class])')
-            )
-            
-            location = (
-                elem.select_one('.location') or 
-                elem.select_one('[class*="location"]') or 
-                elem.select_one('.MuiTypography-body2') or
-                elem.select_one('.city')
-            )
-            
-            if status and status.get_text(strip=True):
-                events.append({
-                    'status': status.get_text(strip=True)[:100],
-                    'time': time_elem.get_text(strip=True) if time_elem else 'N/A',
-                    'location': location.get_text(strip=True) if location else 'N/A'
-                })
-        
-        # Try to get carrier
-        carrier_selectors = [
-            '.carrier-name',
-            '[class*="carrier"]',
-            '.MuiTypography-h6',
-            '.courier-name'
-        ]
-        
-        carrier = 'Ship24'
-        for selector in carrier_selectors:
-            elem = soup.select_one(selector)
-            if elem:
-                carrier = elem.get_text(strip=True)
-                break
-        
-        # If events found, return them
-        if events:
-            return {
-                'success': True,
-                'tid': tid,
-                'carrier': carrier,
-                'events': events
-            }
-        
-        # No events found, return fallback
-        return {
-            'fallback': True,
-            'tid': tid,
-            'url': url,
-            'message': 'No tracking events found, click to view on Ship24'
-        }
-        
-    except Exception as e:
-        return {
-            'fallback': True,
-            'tid': tid,
-            'url': f"https://www.ship24.com/tracking?p={tid}",
-            'message': f'Error: {str(e)[:50]}'
-        }
-
-@app.route('/api/nexus/ship24_direct', methods=['POST'])
-def api_nexus_ship24_direct():
-    data = request.get_json()
-    tids = data.get('tids', [])
-    results = []
-    
-    for tid in tids:
-        if tid.startswith('150') and 12 <= len(tid) <= 15:
-            tid = '0' + tid
-        results.append(scrape_ship24_direct(tid))
-    
-    return jsonify(results)
-
-# ------------------------------------------------------------------------------
-# 4. BACKEND ROUTES (unchanged)
+# 3. BACKEND API ROUTES
 # ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
@@ -3950,17 +3805,7 @@ def api_nexus_radar_data():
             tids = nexus_clean_tids(r['tid'])
             has_tid = len(tids) > 0
             if kerry_stat == "HANDED OVER TO LOGISTICS PARTNER" and has_tid:
-                buckets["handed_over"][src].append({ 
-                    "Order": oid.upper(), 
-                    "Date": r['date'], 
-                    "Vendor": r['vendor'], 
-                    "Customer": r['customer'], 
-                    "Boxes": r['boxes'], 
-                    "Weight": r['weight'], 
-                    "TID": ", ".join(tids), 
-                    "MAWB": r['mawb'], 
-                    "Status": kerry_stat 
-                })
+                buckets["handed_over"][src].append({ "Order": oid.upper(), "Date": r['date'], "Vendor": r['vendor'], "Customer": r['customer'], "Boxes": r['boxes'], "Weight": r['weight'], "TID": ", ".join(tids), "MAWB": r['mawb'], "Status": kerry_stat })
     return jsonify(buckets)
 
 @app.route('/api/nexus/ops_commander', methods=['GET'])
@@ -3990,7 +3835,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 5. FRONTEND UI (Ship24 Direct + Redirect Fallback)
+# 4. FRONTEND UI (CSS MASK / HACKED IFRAME NO-ADS VERSION)
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -4034,26 +3879,6 @@ def nexus_dashboard():
         .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
         .btn.outline:hover { background: var(--border); }
         
-        .redirect-btn {
-            display: inline-block;
-            background: #10B981;
-            color: white;
-            padding: 10px 16px;
-            border-radius: 6px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 13px;
-            margin-top: 10px;
-            text-align: center;
-            transition: 0.2s;
-            border: none;
-            cursor: pointer;
-        }
-        .redirect-btn:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
-        }
-        
         textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--text); font-family: monospace; font-size: 15px; outline: none; resize: vertical; min-height: 100px; transition: 0.2s;}
         textarea:focus { border-color: #444; }
         
@@ -4072,32 +3897,28 @@ def nexus_dashboard():
         
         .tid-area { padding: 30px; background: var(--card);}
         .tid-strip { display: flex; flex-direction: column; gap: 20px; padding-bottom: 8px;}
-        .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px;}
+        .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; transition: 0.3s;}
         
-        /* Timeline styles */
-        .timeline-container { margin-top: 10px; }
-        .timeline { border-left: 2px solid var(--accent); padding-left: 20px; margin-top: 10px; }
-        .event-item { margin-bottom: 16px; position: relative; }
-        .event-item::before { content: ''; position: absolute; left: -26px; top: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
-        .event-status { font-weight: 700; color: var(--text); }
-        .event-time { font-size: 12px; color: var(--muted); margin-left: 8px; }
-        .event-location { font-size: 13px; color: var(--muted); margin-top: 2px; }
-        .carrier-badge { 
-            display: inline-block; 
-            background: var(--badge-bg); 
-            color: var(--badge-text); 
-            padding: 4px 10px; 
-            border-radius: 4px; 
-            font-size: 11px; 
-            font-weight: 600; 
-            margin-bottom: 8px;
+        /* 🚨 CSS MAGIC: CROP THE ADS & HEADER OUT OF THE IFRAME 🚨 */
+        .crop-container {
+            display: none;
+            width: 100%;
+            height: 350px; /* Shows only the timeline area */
+            overflow-y: auto; /* Allow scrolling inside the box */
+            overflow-x: hidden;
+            border-radius: 12px;
+            position: relative;
+            margin-top: 15px;
+            border: 1px solid var(--border);
+            background: #ffffff;
         }
-        .fallback-message {
-            color: #F59E0B;
-            padding: 8px;
-            border: 1px dashed #F59E0B;
-            border-radius: 4px;
-            font-size: 13px;
+        .crop-iframe {
+            position: absolute;
+            top: -100px; /* SHIFTS THE WEBSITE UP TO HIDE THE LOGO/HEADER */
+            left: 0;
+            width: 100%;
+            height: 800px; /* Large enough to render the whole timeline */
+            border: none;
         }
         
         .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
@@ -4249,15 +4070,19 @@ def nexus_dashboard():
                     </div>
                     <div class="tid-area">
                         <div class="tid-strip">
-                            ${item.tids.map(tid => `
+                            ${item.tids.map(tid => {
+                                const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
+                                return `
                                 <div class="tid-box">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="trackShip24('${tid}', this)">🚢 Track</button>
+                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="toggleTracker('${tid}', this)">🔍 Track Native</button>
                                     </div>
-                                    <div id="track-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="timeline-container"></div>
+                                    <div id="crop-${cleanId}" class="crop-container">
+                                        <iframe id="iframe-${cleanId}" class="crop-iframe"></iframe>
+                                    </div>
                                 </div>
-                            `).join('')}
+                            `}).join('')}
                         </div>
                     </div>
                 </div>`;
@@ -4266,86 +4091,61 @@ def nexus_dashboard():
             if(hasTids) document.getElementById('bulkTrackBtn').style.display = 'block';
         }
 
-        async function trackShip24(tid, btn) {
-            const container = document.getElementById(`track-${tid.replace(/[^a-zA-Z0-9]/g,'')}`);
-            if(!container) return;
-            
-            btn.innerText = "Loading...";
-            btn.style.opacity = "0.5";
-            btn.style.pointerEvents = "none";
-            container.innerHTML = '<div class="loader" style="width:20px;height:20px; margin:10px auto;"></div>';
-            
-            try {
-                const response = await fetch('/api/nexus/ship24_direct', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({tids: [tid]})
-                });
-                const results = await response.json();
-                const data = results[0];
-                
-                if (data.success) {
-                    // Show carrier and events
-                    let html = `<div class="carrier-badge">${data.carrier}</div>`;
-                    html += '<div class="timeline">';
-                    data.events.forEach(ev => {
-                        html += `<div class="event-item">
-                            <div class="event-status">${ev.status}</div>
-                            <div><span class="event-time">${ev.time}</span> <span class="event-location">${ev.location}</span></div>
-                        </div>`;
-                    });
-                    html += '</div>';
-                    container.innerHTML = html;
-                    
-                } else if (data.fallback) {
-                    // Show fallback with redirect button
-                    container.innerHTML = `
-                        <div class="fallback-message">${data.message}</div>
-                        <a href="${data.url}" target="_blank" class="redirect-btn">🔍 View Full on Ship24</a>
-                    `;
-                } else {
-                    // Show error fallback
-                    container.innerHTML = `
-                        <div class="fallback-message">Error tracking this shipment</div>
-                        <a href="https://www.ship24.com/tracking?p=${tid}" target="_blank" class="redirect-btn">🔍 View on Ship24</a>
-                    `;
-                }
-            } catch (e) {
-                container.innerHTML = `
-                    <div class="fallback-message">Network error</div>
-                    <a href="https://www.ship24.com/tracking?p=${tid}" target="_blank" class="redirect-btn">🔍 View on Ship24</a>
-                `;
-            } finally {
-                btn.innerText = "Track Again";
-                btn.style.opacity = "1";
-                btn.style.pointerEvents = "auto";
-            }
-        }
-
         async function directTrackTIDs() {
             let val = document.getElementById('directInput').value; if(!val) return;
             let tids = val.split(/[\\n,\\t \\/]+/).map(t => t.trim()).filter(Boolean);
             tids = tids.map(t => (t.startsWith('150') && t.length >= 12 && t.length <= 15) ? '0' + t : t);
             let h = '';
             tids.forEach(tid => {
+                const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
                 h += `<div class="tid-box card" style="width:100%; border: 1px solid var(--border);">
                         <div style="display:flex; justify-content:space-between; align-items:center;">
                             <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="trackShip24('${tid}', this)">🚢 Track</button>
+                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="toggleTracker('${tid}', this)">🔍 Track Native</button>
                         </div>
-                        <div id="track-${tid.replace(/[^a-zA-Z0-9]/g,'')}" class="timeline-container"></div>
+                        <div id="crop-${cleanId}" class="crop-container">
+                            <iframe id="iframe-${cleanId}" class="crop-iframe"></iframe>
+                        </div>
                       </div>`;
             });
             document.getElementById('direct-results').innerHTML = h;
             if(tids.length > 0) document.getElementById('bulkDirectBtn').style.display = 'block';
         }
 
+        // 🚨 NATIVE TOGGLE LOGIC: OPENS IFRAME AND HIDES THE JUNK
+        function toggleTracker(tid, btn) {
+            const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
+            const box = document.getElementById('crop-' + cleanId);
+            const iframe = document.getElementById('iframe-' + cleanId);
+
+            if(box.style.display === 'block') {
+                // Close it
+                box.style.display = 'none';
+                iframe.src = '';
+                btn.innerHTML = '🔍 Track Native';
+                btn.style.background = 'transparent';
+                btn.style.color = 'var(--text)';
+                btn.style.border = '1px solid var(--border)';
+            } else {
+                // Open it inside the row
+                box.style.display = 'block';
+                // OrderTracker is very clean and fast, and we cropped its header out!
+                iframe.src = `https://www.ordertracker.com/track/${tid}`;
+                btn.innerHTML = '✖ Close Tracker';
+                btn.style.background = '#EF4444';
+                btn.style.color = '#fff';
+                btn.style.border = 'none';
+            }
+        }
+
         async function bulkTrackAll(containerId) {
             const container = document.getElementById(containerId);
             const btns = container.querySelectorAll('.sync-btn');
             for(let btn of btns) {
-                btn.click();
-                await new Promise(r => setTimeout(r, 800));
+                if(btn.innerText !== '✖ Close Tracker') {
+                    btn.click();
+                    await new Promise(r => setTimeout(r, 600)); // Delay to not overload the browser
+                }
             }
         }
 
