@@ -4339,6 +4339,171 @@ def nexus_dashboard():
 # ==============================================================================
 
 
-if __name__ == '__main__':
+# ==============================================================================
+# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE)
+# ==============================================================================
+import urllib.request
+import csv
+import re
+import ssl
+from flask import jsonify, request, session, render_template_string
 
+def fetch_bundling_standalone_data():
+    """Yeh function sirf Bundling ke liye data uthayega, purane TID hub ko disturb kiye bina."""
+    
+    # Aapke bataye gaye exact column mappings:
+    BUNDLING_SOURCES = {
+        "ECL QC Center": (
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+            {"o": 1, "d": 2, "b": 4, "oli": 9,  "v": 11, "title": 12, "ic": 13, "c": 14, "cn": 18, "t": 26}
+        ),
+        "ECL Zone": (
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+            {"o": 1, "d": 2, "b": 4, "oli": 12, "v": 14, "title": 15, "ic": 16, "c": 17, "cn": 21, "t": 29}
+        ),
+        "GE Zone": (
+            "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+            {"o": 1, "d": 2, "b": 4, "oli": 12, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 29}
+        )
+    }
+    
+    res = {}
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        
+        for name, (url, col) in BUNDLING_SOURCES.items():
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
+                data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+                processed = []
+                for row in data:
+                    if not row: continue
+                    p = row + [''] * 50 # padding to prevent index errors
+                    
+                    o_val = str(p[col['o'] - 1]).strip()
+                    if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
+                    
+                    def g(c_num): 
+                        val = str(p[c_num - 1]).strip()
+                        return val if val and val.lower() not in ['n/a', 'nan', '-'] else "N/A"
+                        
+                    processed.append({
+                        'order': o_val, 'date': g(col['d']), 'boxes': g(col['b']),
+                        'order_line_id': g(col['oli']), 'vendor': g(col['v']), 
+                        'title': g(col['title']), 'item_count': g(col['ic']),
+                        'customer': g(col['c']), 'country': g(col['cn']), 'tid': g(col['t'])
+                    })
+                res[name] = processed
+    except Exception as e:
+        print("Bundling Fetch Error:", e)
+    return res
+
+def clean_bundling_tids(raw):
+    raw = str(raw).strip()
+    if not raw or raw.lower() in ['pending', 'none', 'n/a', '-', 'tbd', 'update soon']: return []
+    raw = re.sub(r'(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})', r' \1 ', raw)
+    parts = [t.strip() for t in re.split(r'[,\/\s;]+', raw) if t.strip()]
+    cleaned = []
+    for t in parts:
+        t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
+        if len(t) > 6 and re.search(r'\d', t) and t.lower() not in ['tracking', 'number']:
+            if t.startswith('150') and len(t) >= 12 and not t.startswith('0'): cleaned.append('0' + t)
+            else: cleaned.append(t)
+    return list(dict.fromkeys(cleaned))
+
+@app.route('/api/nexus/bundling_data', methods=['GET'])
+def api_nexus_bundling_data():
+    sheets_data = fetch_bundling_standalone_data()
+    bundles_list, tot_bundles, tot_orders = [], 0, 0
+    
+    for src, rows in sheets_data.items():
+        cb = None # Current Bundle
+        for r in rows:
+            oid = r['order'].upper()
+            bx = r['boxes']
+            
+            od = {
+                "order_id": oid,
+                "order_line_id": r['order_line_id'],
+                "title": r['title'],
+                "item_count": r['item_count'],
+                "country": r['country']
+            }
+            
+            # Agar box ki value mojood hai (yani yeh naya dabba hai)
+            if bx != "N/A" and bx != "":
+                # Save previous bundle if it had multiple orders
+                if cb and len(cb['orders']) > 1:
+                    bundles_list.append(cb)
+                    tot_bundles += 1
+                    tot_orders += len(cb['orders'])
+                    
+                tids = clean_bundling_tids(r['tid'])
+                cb = {
+                    "tid": ", ".join(tids) if tids else "Pending Tracking",
+                    "orders": [od],
+                    "date": r['date'],
+                    "customer": r['customer'],
+                    "vendor": r['vendor'],
+                    "country": r['country'],
+                    "source": src,
+                    "boxes_val": bx,
+                    "total_items": 0
+                }
+            else:
+                # Agar box blank/N/A hai (yani merge hua wa hai), toh isay purane dabbe me daalo
+                if cb:
+                    cb['orders'].append(od)
+                    tids = clean_bundling_tids(r['tid'])
+                    if tids and cb['tid'] == "Pending Tracking": cb['tid'] = ", ".join(tids)
+                    
+        # Loop end hone pe aakhri bundle check karo
+        if cb and len(cb['orders']) > 1: 
+            bundles_list.append(cb)
+            tot_bundles += 1
+            tot_orders += len(cb['orders'])
+            
+    # Calculate Total Quantities
+    for b in bundles_list:
+        tq = 0
+        for o in b['orders']:
+            try: tq += int(float(str(o['item_count']).replace(',', '')))
+            except: pass
+        b['total_items'] = tq
+        
+    bundles_list.sort(key=lambda x: str(x['date']), reverse=True)
+    
+    return jsonify({
+        "success": True, 
+        "kpi": {
+            "total_bundles": tot_bundles, 
+            "total_orders_bundled": tot_orders, 
+            "saved_shipments": (tot_orders - tot_bundles if tot_bundles > 0 else 0)
+        }, 
+        "bundles": bundles_list
+    })
+
+@app.route('/bundling')
+def bundling_dashboard_view():
+    u = session.get('username') or session.get('user') or session.get('role')
+    if not u or str(u).lower() != 'admin': 
+        return "<div style='text-align:center; padding:100px; font-family:sans-serif; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2><p>Admin Only.</p></div>", 403
+
+    return render_template_string('''<!DOCTYPE html><html lang="en" data-theme="dark"><head><meta charset="UTF-8"><title>📦 Bundling Intelligence</title><style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'); :root { --bg: #000; --card: #0A0A0A; --border: #1A1A1A; --text: #FAFAFA; --accent: #10B981; } body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); padding: 40px; margin:0; } .header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; border-bottom:1px solid var(--border); padding-bottom:20px; } .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 40px; } .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; border-left: 4px solid var(--accent); position:relative; overflow:hidden;} .kpi-val { font-size: 48px; font-weight: 900; letter-spacing:-2px; margin-bottom:5px; } .kpi-lbl { font-size: 13px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; } table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 16px; border: 1px solid var(--border); overflow:hidden;} th { background: #050505; padding: 18px 20px; font-size: 11px; color: #888; text-transform: uppercase; font-weight: 800; border-bottom: 1px solid var(--border); text-align: left; letter-spacing: 1px;} td { padding: 18px 20px; border-bottom: 1px solid var(--border); text-align: left; vertical-align:top;} tr:hover td { background: #111; } .bundle-box { background:#050505; border:1px solid #1A1A1A; border-radius:12px; padding:10px 15px; } .bundle-item { display:grid; grid-template-columns: 140px 1fr 70px; gap:15px; padding:12px 0; border-bottom:1px dashed #222; align-items:center; } .bundle-item:last-child { border-bottom:none; padding-bottom:0;} .loader { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 50px auto; } @keyframes spin { to { transform: rotate(360deg); } }</style></head><body><div class="header"><div><h1 style="margin:0; font-size:28px; font-weight:800; letter-spacing:-1px;">📦 Order Consolidation AI</h1><p style="color:#888; margin-top:5px; font-size:14px; font-weight:500;">Advanced Box & Item level Breakdown from Merged Rows</p></div><div><a href="/" style="padding:10px 20px; background:#111; color:#fff; border-radius:8px; text-decoration:none; font-weight:bold; margin-right:10px; border:1px solid #333; font-size:13px; transition:0.2s;">⬅️ Main Dash</a><button onclick="loadBundles()" style="padding:10px 20px; background:#fff; color:#000; border-radius:8px; cursor:pointer; font-weight:bold; border:none; font-size:13px; transition:0.2s;">🔄 Refresh Engine</button></div></div><div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888; font-weight:600;">Scanning Merged Rows...</p></div><div id="content" style="display:none;"><div class="kpi-grid"><div class="kpi-card"><div class="kpi-val" id="kpi-bundles">0</div><div class="kpi-lbl">Total Bundles Packed</div></div><div class="kpi-card"><div class="kpi-val" id="kpi-orders">0</div><div class="kpi-lbl">Total Orders Merged</div></div><div class="kpi-card" style="border-left-color:#F59E0B"><div class="kpi-val" id="kpi-saved" style="color:#F59E0B">0</div><div class="kpi-lbl" style="color:#F59E0B;">🚚 Shipments Saved</div></div></div><table><thead><tr><th>Timeline & Source</th><th>Client Info</th><th>Master Box & TID</th><th>📦 The Box Breakdown (What's Inside)</th></tr></thead><tbody id="tb"></tbody></table></div><script>async function loadBundles() { document.getElementById('content').style.display='none'; document.getElementById('loading').style.display='block'; const r = await fetch('/api/nexus/bundling_data'); const d = await r.json(); document.getElementById('kpi-bundles').innerText=d.kpi.total_bundles; document.getElementById('kpi-orders').innerText=d.kpi.total_orders_bundled; document.getElementById('kpi-saved').innerText=d.kpi.saved_shipments; let h=''; d.bundles.forEach(b=>{ let items = b.orders.map(o=>`<div class="bundle-item"><div><span style="color:var(--accent); font-weight:800; font-size:13px; padding:4px 8px; background:rgba(16,185,129,0.1); border-radius:6px; border:1px solid rgba(16,185,129,0.2); display:inline-block; margin-bottom:4px;">${o.order_id}</span><br><span style="font-size:11px; color:#666; font-weight:600;">Line: ${o.order_line_id}</span></div><div style="font-size:12px; color:#888; line-height:1.4;">${o.title}</div><div style="font-weight:800; font-size:13px; text-align:right; color:#fff;">Qty: ${o.item_count}</div></div>`).join(''); h+=`<tr><td><b style="font-size:14px;">${b.date}</b><br><span style="color:#888; font-size:11px; font-weight:800; text-transform:uppercase; margin-top:4px; display:inline-block;">${b.source}</span></td><td><b style="font-size:14px;">${b.customer}</b><br><span style="color:#666; font-size:12px; margin-top:4px; display:inline-block;">Vendor: ${b.vendor}</span><br><span style="color:#666; font-size:12px;">Dest: ${b.country}</span></td><td><span style="font-family:monospace; background:#1A1A1A; padding:6px 12px; border-radius:6px; border:1px solid #333; font-weight:800; font-size:13px;">${b.tid}</span><br><div style="margin-top:10px;"><span style="color:var(--accent); font-size:12px; font-weight:800;">🏷️ Master Box: ${b.boxes_val}</span><br><span style="color:#888; font-size:11px; font-weight:700;">Total Items: ${b.total_items}</span></div></td><td><div class="bundle-box">${items}</div></td></tr>`; }); document.getElementById('tb').innerHTML=h||'<tr><td colspan="4" style="text-align:center; padding:60px; color:#666; font-weight:600;">No Bundled Orders Found from Merged Cells.</td></tr>'; document.getElementById('loading').style.display='none'; document.getElementById('content').style.display='block'; } window.onload=loadBundles;</script></body></html>''')
+
+# Naya Floating Button jo Main Dashboard par aayega
+@app.after_request
+def add_bundling_floating_btn(response):
+    if request.path == '/' and response.content_type and 'text/html' in response.content_type:
+        user_val = session.get('username') or session.get('user') or session.get('role')
+        if user_val and str(user_val).lower() == 'admin':
+            html = response.get_data(as_text=True)
+            # Yeh button TID Hub ke bilkul upar (bottom: 90px) aayega
+            btn = '<a href="/bundling" target="_blank" style="position:fixed; bottom:90px; right:30px; background:#10B981; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(16,185,129,0.4); transition:0.2s;">📦 Bundling Intel ↗</a>'
+            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
+    return response
+
+if __name__ == '__main__':
     app.run(debug=True)
