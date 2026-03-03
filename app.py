@@ -4344,7 +4344,7 @@ def nexus_dashboard():
 # ==============================================================================
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE) - FIXED EDITION
+# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE) - FINAL EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -4365,7 +4365,7 @@ def std_date(d_str):
 def fetch_bundling_standalone_data():
     """Yeh function sirf Bundling ke liye data uthayega, exact column mappings ke saath"""
     
-    # Aapke bataye gaye exact column mappings:
+    # Aapke bataye gaye exact column mappings (1-based index)
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -4388,6 +4388,7 @@ def fetch_bundling_standalone_data():
         ctx.verify_mode = ssl.CERT_NONE
         
         for name, (url, col) in BUNDLING_SOURCES.items():
+            print(f"Fetching {name}...")
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
                 data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
@@ -4415,6 +4416,7 @@ def fetch_bundling_standalone_data():
                         'customer': g(col['c']), 
                         'country': g(col['cn'])
                     })
+                print(f"  -> {len(processed)} rows")
                 res[name] = processed
     except Exception as e:
         print("Bundling Fetch Error:", e)
@@ -4468,7 +4470,10 @@ def api_nexus_bundling_data():
                     tot_orders += len(cb['orders'])
                     # Update source stats
                     source_stats[src]["orders"] += len(cb['orders'])
-                    source_stats[src]["boxes"] += int(cb['boxes_val']) if cb['boxes_val'].isdigit() else 0
+                    try:
+                        source_stats[src]["boxes"] += int(cb['boxes_val'])
+                    except:
+                        pass
                     
                 cb = {
                     "orders": [od],
@@ -4492,7 +4497,10 @@ def api_nexus_bundling_data():
             tot_bundles += 1
             tot_orders += len(cb['orders'])
             source_stats[src]["orders"] += len(cb['orders'])
-            source_stats[src]["boxes"] += int(cb['boxes_val']) if cb['boxes_val'].isdigit() else 0
+            try:
+                source_stats[src]["boxes"] += int(cb['boxes_val'])
+            except:
+                pass
             
     # Calculate Total Quantities
     for b in bundles_list:
@@ -4842,12 +4850,12 @@ def bundling_dashboard_view():
             document.getElementById('kpi-saved').innerText = d.kpi.saved_shipments;
             
             // Update source stats
-            document.getElementById('qc-orders').innerText = sourceStats['ECL QC Center'].orders;
-            document.getElementById('qc-boxes').innerText = sourceStats['ECL QC Center'].boxes;
-            document.getElementById('ecl-orders').innerText = sourceStats['ECL Zone'].orders;
-            document.getElementById('ecl-boxes').innerText = sourceStats['ECL Zone'].boxes;
-            document.getElementById('ge-orders').innerText = sourceStats['GE Zone'].orders;
-            document.getElementById('ge-boxes').innerText = sourceStats['GE Zone'].boxes;
+            document.getElementById('qc-orders').innerText = sourceStats['ECL QC Center']?.orders || 0;
+            document.getElementById('qc-boxes').innerText = sourceStats['ECL QC Center']?.boxes || 0;
+            document.getElementById('ecl-orders').innerText = sourceStats['ECL Zone']?.orders || 0;
+            document.getElementById('ecl-boxes').innerText = sourceStats['ECL Zone']?.boxes || 0;
+            document.getElementById('ge-orders').innerText = sourceStats['GE Zone']?.orders || 0;
+            document.getElementById('ge-boxes').innerText = sourceStats['GE Zone']?.boxes || 0;
             
             applyFilters();
         }
@@ -4922,7 +4930,6 @@ def add_bundling_floating_btn(response):
             if '</body>' in html: 
                 response.set_data(html.replace('</body>', btn + '</body>'))
     return response
-
 
 if __name__ == '__main__':
     app.run(debug=True)
