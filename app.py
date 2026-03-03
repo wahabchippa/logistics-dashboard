@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - THE PROPER JUGAAD (NATIVE PROXY SCRAPER)
+# 🛰️ TID OPERATIONS HUB (NEXUS) - FIXED TID SPLITTING & STRICT COLUMNS
 # ==============================================================================
 import urllib.request
 import urllib.parse
@@ -3635,7 +3635,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. EXACT COLUMNS MAP
+# 2. EXACT COLUMNS MAP (NO SMART GUESSING)
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
@@ -3659,25 +3659,20 @@ def nexus_fetch_sheet_data(url, name):
             col = NEXUS_SHEET_MAP.get(name)
             if not col or not data: return []
 
-            start_row, order_idx = 1, 0
-            for i, row in enumerate(data[:20]):
-                if not row: continue
-                c = [re.sub(r'[^a-z0-9]', '', str(x).lower()) for x in row]
-                if 'order' in c or 'fleekid' in c or 'orderid' in c or 'shipmentid' in c:
-                    start_row = i + 1
-                    for j, cell in enumerate(c):
-                        if cell in ['order', 'fleekid', 'orderid', 'shipmentid']: order_idx = j; break
-                    break
-
             processed = []
-            for row in data[start_row:]:
+            for row in data:
                 if not row: continue
                 p = row + [''] * 60 
-                o_val = str(p[order_idx]).strip()
-                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan']: continue
+                # STRICTLY USE COLUMN 1 FOR ORDER ID
+                o_val = str(p[col['o'] - 1]).strip()
+                
+                # IGNORE HEADERS AND EMPTY ROWS
+                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
+                
                 def get_v(col_num):
                     v = str(p[col_num - 1]).strip()
                     return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
+                
                 processed.append({
                     'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
                     'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
@@ -3687,13 +3682,11 @@ def nexus_fetch_sheet_data(url, name):
     except: return []
 
 def nexus_clean_tids(raw):
+    # 🚨 FIXED: NO MORE CRAZY REGEX SPLITTING!
     raw = str(raw).strip()
-    if not raw or raw.lower() in ['pending','none','n/a']: return []
-    if not any(x in raw for x in [',','/',' ']) and len(raw) > 15:
-        if re.search(r'[A-Za-z]', raw): parts = [p for p in re.split(r'(?<=[a-zA-Z])', raw) if p.strip()]
-        elif len(raw) % 15 == 0: parts = [raw[i:i+15] for i in range(0, len(raw), 15)]
-        else: parts = [raw]
-    else: parts = [t.strip() for t in re.split(r'[,\/\s]+', raw) if t.strip()]
+    if not raw or raw.lower() in ['pending','none','n/a', '-']: return []
+    # Sirf Comma, Slash, aur Spaces par katega
+    parts = [t.strip() for t in re.split(r'[,\/\s]+', raw) if t.strip()]
     return ['0'+t if (t.startswith('150') and 12<=len(t)<=15) else t for t in parts]
 
 def nexus_fetch_kerry_status(url):
@@ -3788,13 +3781,12 @@ def api_nexus_search():
             if found: break
     return jsonify(results)
 
-# 🚨 PROPER JUGAAD: BACKEND PROXY SCRAPER (100% FREE, NO IFRAMES) 🚨
+# 🚨 BACKEND PROXY SCRAPER (NATIVE TIMELINE)
 @app.route('/api/nexus/track_native', methods=['POST'])
 def api_track_native():
     tid = request.json.get('tid', '')
     if not tid: return jsonify({"success": False})
 
-    # Hum 2 mukhtalif Free Proxies use kar rahe hain taake agar ek fail ho tou dusra chalay
     proxy_urls = [
         f"https://api.allorigins.win/get?url={urllib.parse.quote('https://www.ordertracker.com/track/' + tid)}",
         f"https://api.codetabs.com/v1/proxy?quest={urllib.parse.quote('https://www.ordertracker.com/track/' + tid)}"
@@ -3802,25 +3794,21 @@ def api_track_native():
 
     for proxy in proxy_urls:
         try:
-            req = urllib.request.Request(proxy, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-            res = urllib.request.urlopen(req, timeout=12).read().decode('utf-8')
+            req = urllib.request.Request(proxy, headers={'User-Agent': 'Mozilla/5.0'})
+            res = urllib.request.urlopen(req, timeout=8).read().decode('utf-8')
             
             html = res
-            if 'contents' in res: # Handling allorigins JSON wrapper
+            if 'contents' in res: 
                 try: html = json.loads(res)['contents']
                 except: pass
 
-            # Extracting the hidden JSON database from the website
             match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html)
             if match:
                 data = json.loads(match.group(1))
-                
-                # Recursive function to dig out tracking events automatically
                 def extract_events(node):
                     if isinstance(node, dict):
                         if 'events' in node and isinstance(node['events'], list) and len(node['events']) > 0:
-                            if 'description' in node['events'][0] or 'status' in node['events'][0]:
-                                return node['events']
+                            if 'description' in node['events'][0] or 'status' in node['events'][0]: return node['events']
                         for v in node.values():
                             found = extract_events(v)
                             if found: return found
@@ -3831,7 +3819,6 @@ def api_track_native():
                     return None
                 
                 raw_events = extract_events(data)
-                
                 if raw_events:
                     events = []
                     for i, ev in enumerate(raw_events):
@@ -3839,16 +3826,13 @@ def api_track_native():
                             "time": ev.get("date", "Unknown Date"),
                             "status": ev.get("description", ev.get("status", "Update")),
                             "loc": ev.get("location", ""),
-                            "active": i == 0 # Pehli line par green dot aayega
+                            "active": i == 0
                         })
                     return jsonify({"success": True, "events": events})
         except Exception as e:
-            continue # Try the next proxy if this one fails
+            continue
             
-    # Agar donon proxies block ho jayen, toh hum error nahi denge!
-    # Front-end par ek clean professional message aayega.
     return jsonify({"success": False, "tid": tid})
-
 
 @app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
@@ -3894,7 +3878,7 @@ def api_nexus_ops_commander():
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
 # ------------------------------------------------------------------------------
-# 4. FRONTEND UI (NATIVE PURE CSS TIMELINE)
+# 4. FRONTEND UI
 # ------------------------------------------------------------------------------
 
 @app.route('/nexus')
@@ -3997,13 +3981,12 @@ def nexus_dashboard():
         .tl-status { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
         .tl-loc { font-size: 12px; color: #555; }
         
-        /* Fallback Link Styling (Clean & Not Error-like) */
         .fallback-container {
             text-align: center;
             padding: 30px;
             background: #080808;
             border-radius: 12px;
-            border: 1px solid #1A1A1A;
+            border: 1px dashed #222;
         }
         .fallback-btn {
             display: inline-block;
@@ -4051,7 +4034,7 @@ def nexus_dashboard():
                 
                 <div id="view-track" class="view-pane active">
                     <div class="card" style="margin-bottom: 30px;">
-                        <textarea id="searchInput" placeholder="Paste Order IDs or TIDs here (e.g. 129027_34, 15502802020940)..."></textarea>
+                        <textarea id="searchInput" placeholder="Paste Order IDs or TIDs here (e.g. 129042_42)..."></textarea>
                         <div style="margin-top: 20px; display: flex; gap: 16px;">
                             <button class="btn" onclick="searchOrders()">Scan Matrix</button>
                             <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
@@ -4086,6 +4069,19 @@ def nexus_dashboard():
                     </div>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <div id="detailPanel" class="modal" onclick="if(event.target==this)this.style.display='none'">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:30px">
+                <h2 id="modalTitle" style="margin:0; font-size:24px; font-weight: 800;">Details</h2>
+                <div style="display:flex; gap:16px;">
+                    <button class="btn outline" onclick="downloadCSV()">Export CSV</button>
+                    <button class="btn" style="background:#EF4444; border:none; color:white;" onclick="document.getElementById('detailPanel').style.display='none'">Close</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto; max-height: 65vh; border: 1px solid var(--border); border-radius: 12px;"><table id="detailTable"></table></div>
         </div>
     </div>
 
@@ -4205,7 +4201,7 @@ def nexus_dashboard():
             }
         }
 
-        // 🚨 THE MASTERPIECE: NATIVE JSON PARSING 🚨
+        // 🚨 NATIVE JSON PARSING 🚨
         async function loadNativeTimeline(tid, btn) {
             const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
             const box = document.getElementById('native-' + cleanId);
@@ -4221,7 +4217,6 @@ def nexus_dashboard():
 
             btn.innerHTML = '<div class="loader"></div>';
             
-            // HITTING OUR BACKEND SCRAPER (100% FREE)
             const r = await fetch('/api/nexus/track_native', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tid:tid})});
             const data = await r.json();
             
@@ -4232,7 +4227,6 @@ def nexus_dashboard():
             box.style.display = 'block';
 
             if(data.success) {
-                // IT WORKED! RENDER BEAUTIFUL NATIVE TIMELINE
                 let timelineHtml = '<div class="tl-container">';
                 data.events.forEach(e => {
                     timelineHtml += `
@@ -4247,7 +4241,6 @@ def nexus_dashboard():
                 timelineHtml += '</div>';
                 box.innerHTML = timelineHtml;
             } else {
-                // SCRAPER BLOCKED: NO ERRORS! NO DASHED LINES! JUST A CLEAN BUTTON
                 box.innerHTML = `
                     <div class="fallback-container">
                         <div style="font-size: 30px; margin-bottom: 10px;">📦</div>
