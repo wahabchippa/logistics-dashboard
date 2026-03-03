@@ -3769,18 +3769,15 @@ def nexus_sync_db(force=False):
     return res, k_map
 
 @app.after_request
-def add_nexus_floating_btn(response):
-    # Sirf HTML pages par inject karo
-    if response.content_type and 'text/html' in response.content_type:
-        # Sirf home page (/) par inject karo
-        if request.path == '/':
-            user_val = session.get('username') or session.get('user') or session.get('role')
-            if user_val and str(user_val).lower() == 'admin':
-                html = response.get_data(as_text=True)
-                btn = '<a href="/nexus" style="position:fixed; bottom:30px; right:30px; background:#fff; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow:0 10px 20px rgba(0,0,0,0.5);">🚀 TID Hub</a>'
-                if '</body>' in html:
-                    response.set_data(html.replace('</body>', btn + '</body>'))
+def add_nexus_floating-btn(response):
+    if request.path == '/and response.content_type and 'text/html' in response.content_type:
+        user_val = session.get('username') or session.get('user') or session.get('role')
+        if user_val and str(user_val).lower()==admin':
+            html = response.get_data(as_text=True)
+            btn='<ahref="/nexus"style="position:fixed;bottom:30px;right:30px;background:#fff;color:#000;padding:12px24px;border-'
+            if '</body>'in html:response.set_data(html.replace('</body>',btn+ '</body>'))
     return response
+
 
 # ------------------------------------------------------------------------------
 # 3. BACKEND API ROUTES
