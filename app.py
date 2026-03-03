@@ -4340,31 +4340,39 @@ def nexus_dashboard():
 
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE)
+# 📦 BUNDLING INTELLIGENCE HUB (FIXED COLUMN MAPPING + FILTERS)
 # ==============================================================================
 import urllib.request
 import csv
 import re
 import ssl
+from datetime import datetime
 from flask import jsonify, request, session, render_template_string
 
-def fetch_bundling_standalone_data():
-    """Yeh function sirf Bundling ke liye data uthayega, purane TID hub ko disturb kiye bina."""
-    
-    # Aapke bataye gaye exact column mappings:
+def std_date(d_str):
+    """Date ko standard YYYY-MM-DD format me convert karta hai filters ke lie"""
+    try:
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%d-%b-%Y', '%Y/%m/%d'):
+            try: return datetime.strptime(d_str.split(' ')[0], fmt).strftime('%Y-%m-%d')
+            except: continue
+    except: pass
+    return "1970-01-01"
+
+def fetch_bundling_fixed_data():
+    """Exact column mapping based on user input"""
     BUNDLING_SOURCES = {
-        "ECL QC Center": (
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o": 1, "d": 2, "b": 4, "oli": 9,  "v": 11, "title": 12, "ic": 13, "c": 14, "cn": 18, "t": 26}
-        ),
-        "ECL Zone": (
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o": 1, "d": 2, "b": 4, "oli": 12, "v": 14, "title": 15, "ic": 16, "c": 17, "cn": 21, "t": 29}
-        ),
-        "GE Zone": (
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o": 1, "d": 2, "b": 4, "oli": 12, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 29}
-        )
+        "ECL QC Center": {
+            "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+            "cols": {'o': 0, 'd': 1, 'b': 3, 'oli': 8, 'v': 10, 'title': 11, 'ic': 12, 'c': 13, 'cn': 17, 't': 31}  # 0-based index
+        },
+        "ECL Zone": {
+            "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+            "cols": {'o': 0, 'd': 1, 'b': 3, 'oli': 11, 'v': 13, 'title': 14, 'ic': 15, 'c': 16, 'cn': 20, 't': 28}
+        },
+        "GE Zone": {
+            "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+            "cols": {'o': 0, 'd': 1, 'b': 3, 'oli': 11, 'v': 12, 'title': 13, 'ic': 14, 'c': 15, 'cn': 19, 't': 28}
+        }
     }
     
     res = {}
@@ -4373,27 +4381,41 @@ def fetch_bundling_standalone_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         
-        for name, (url, col) in BUNDLING_SOURCES.items():
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        for name, config in BUNDLING_SOURCES.items():
+            req = urllib.request.Request(config["url"], headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
                 data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+                if not data: continue
+                
+                # Remove header row
+                start_row = 1
+                col = config["cols"]
+                
                 processed = []
-                for row in data:
+                for row in data[start_row:]:
                     if not row: continue
-                    p = row + [''] * 50 # padding to prevent index errors
+                    p = row + [''] * 50 
                     
-                    o_val = str(p[col['o'] - 1]).strip()
-                    if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
+                    o_val = str(p[col['o']]).strip()
+                    if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order']: continue
                     
-                    def g(c_num): 
-                        val = str(p[c_num - 1]).strip()
+                    def g(c_idx): 
+                        if c_idx >= len(p): return "N/A"
+                        val = str(p[c_idx]).strip()
                         return val if val and val.lower() not in ['n/a', 'nan', '-'] else "N/A"
                         
                     processed.append({
-                        'order': o_val, 'date': g(col['d']), 'boxes': g(col['b']),
-                        'order_line_id': g(col['oli']), 'vendor': g(col['v']), 
-                        'title': g(col['title']), 'item_count': g(col['ic']),
-                        'customer': g(col['c']), 'country': g(col['cn']), 'tid': g(col['t'])
+                        'order': o_val, 
+                        'date': g(col['d']), 
+                        'date_std': std_date(g(col['d'])),
+                        'boxes': g(col['b']), 
+                        'order_line_id': g(col['oli']), 
+                        'vendor': g(col['v']), 
+                        'title': g(col['title']), 
+                        'item_count': g(col['ic']),
+                        'customer': g(col['c']), 
+                        'country': g(col['cn']), 
+                        'tid': g(col['t'])
                     })
                 res[name] = processed
     except Exception as e:
@@ -4408,43 +4430,50 @@ def clean_bundling_tids(raw):
     cleaned = []
     for t in parts:
         t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
-        if len(t) > 6 and re.search(r'\d', t) and t.lower() not in ['tracking', 'number']:
+        if len(t) > 6 and re.search(r'\d', t):
             if t.startswith('150') and len(t) >= 12 and not t.startswith('0'): cleaned.append('0' + t)
             else: cleaned.append(t)
     return list(dict.fromkeys(cleaned))
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
 def api_nexus_bundling_data():
-    sheets_data = fetch_bundling_standalone_data()
-    bundles_list, tot_bundles, tot_orders = [], 0, 0
+    sheets_data = fetch_bundling_fixed_data()
+    filter_date = request.args.get('filter_date', '')
+    filter_source = request.args.get('filter_source', '')
+    
+    bundles_list = []
     
     for src, rows in sheets_data.items():
-        cb = None # Current Bundle
+        # Apply source filter
+        if filter_source and filter_source != src:
+            continue
+            
+        cb = None
         for r in rows:
+            # Apply date filter
+            if filter_date and r['date_std'] < filter_date:
+                continue
+                
             oid = r['order'].upper()
             bx = r['boxes']
             
             od = {
-                "order_id": oid,
-                "order_line_id": r['order_line_id'],
-                "title": r['title'],
-                "item_count": r['item_count'],
-                "country": r['country']
+                "order_id": oid, "order_line_id": r['order_line_id'],
+                "title": r['title'], "item_count": r['item_count'], "country": r['country']
             }
             
-            # Agar box ki value mojood hai (yani yeh naya dabba hai)
+            # If boxes is present and not N/A, it's a parent
             if bx != "N/A" and bx != "":
-                # Save previous bundle if it had multiple orders
+                # Save previous bundle if it had at least one child
                 if cb and len(cb['orders']) > 1:
                     bundles_list.append(cb)
-                    tot_bundles += 1
-                    tot_orders += len(cb['orders'])
-                    
+                # Start new bundle
                 tids = clean_bundling_tids(r['tid'])
                 cb = {
                     "tid": ", ".join(tids) if tids else "Pending Tracking",
                     "orders": [od],
                     "date": r['date'],
+                    "date_std": r['date_std'],
                     "customer": r['customer'],
                     "vendor": r['vendor'],
                     "country": r['country'],
@@ -4453,19 +4482,18 @@ def api_nexus_bundling_data():
                     "total_items": 0
                 }
             else:
-                # Agar box blank/N/A hai (yani merge hua wa hai), toh isay purane dabbe me daalo
+                # This is a child order, add to current bundle
                 if cb:
                     cb['orders'].append(od)
                     tids = clean_bundling_tids(r['tid'])
-                    if tids and cb['tid'] == "Pending Tracking": cb['tid'] = ", ".join(tids)
+                    if tids and cb['tid'] == "Pending Tracking":
+                        cb['tid'] = ", ".join(tids)
                     
-        # Loop end hone pe aakhri bundle check karo
-        if cb and len(cb['orders']) > 1: 
+        # Add last bundle if it has children
+        if cb and len(cb['orders']) > 1:
             bundles_list.append(cb)
-            tot_bundles += 1
-            tot_orders += len(cb['orders'])
             
-    # Calculate Total Quantities
+    # Calculate total items per bundle
     for b in bundles_list:
         tq = 0
         for o in b['orders']:
@@ -4473,37 +4501,380 @@ def api_nexus_bundling_data():
             except: pass
         b['total_items'] = tq
         
-    bundles_list.sort(key=lambda x: str(x['date']), reverse=True)
-    
-    return jsonify({
-        "success": True, 
-        "kpi": {
-            "total_bundles": tot_bundles, 
-            "total_orders_bundled": tot_orders, 
-            "saved_shipments": (tot_orders - tot_bundles if tot_bundles > 0 else 0)
-        }, 
-        "bundles": bundles_list
-    })
+    bundles_list.sort(key=lambda x: str(x['date_std']), reverse=True)
+    return jsonify({"success": True, "bundles": bundles_list})
 
 @app.route('/bundling')
 def bundling_dashboard_view():
     u = session.get('username') or session.get('user') or session.get('role')
     if not u or str(u).lower() != 'admin': 
-        return "<div style='text-align:center; padding:100px; font-family:sans-serif; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2><p>Admin Only.</p></div>", 403
+        return "<div style='text-align:center; padding:100px; font-family:sans-serif; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2></div>", 403
 
-    return render_template_string('''<!DOCTYPE html><html lang="en" data-theme="dark"><head><meta charset="UTF-8"><title>📦 Bundling Intelligence</title><style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'); :root { --bg: #000; --card: #0A0A0A; --border: #1A1A1A; --text: #FAFAFA; --accent: #10B981; } body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); padding: 40px; margin:0; } .header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; border-bottom:1px solid var(--border); padding-bottom:20px; } .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 40px; } .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; border-left: 4px solid var(--accent); position:relative; overflow:hidden;} .kpi-val { font-size: 48px; font-weight: 900; letter-spacing:-2px; margin-bottom:5px; } .kpi-lbl { font-size: 13px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; } table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 16px; border: 1px solid var(--border); overflow:hidden;} th { background: #050505; padding: 18px 20px; font-size: 11px; color: #888; text-transform: uppercase; font-weight: 800; border-bottom: 1px solid var(--border); text-align: left; letter-spacing: 1px;} td { padding: 18px 20px; border-bottom: 1px solid var(--border); text-align: left; vertical-align:top;} tr:hover td { background: #111; } .bundle-box { background:#050505; border:1px solid #1A1A1A; border-radius:12px; padding:10px 15px; } .bundle-item { display:grid; grid-template-columns: 140px 1fr 70px; gap:15px; padding:12px 0; border-bottom:1px dashed #222; align-items:center; } .bundle-item:last-child { border-bottom:none; padding-bottom:0;} .loader { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 50px auto; } @keyframes spin { to { transform: rotate(360deg); } }</style></head><body><div class="header"><div><h1 style="margin:0; font-size:28px; font-weight:800; letter-spacing:-1px;">📦 Order Consolidation AI</h1><p style="color:#888; margin-top:5px; font-size:14px; font-weight:500;">Advanced Box & Item level Breakdown from Merged Rows</p></div><div><a href="/" style="padding:10px 20px; background:#111; color:#fff; border-radius:8px; text-decoration:none; font-weight:bold; margin-right:10px; border:1px solid #333; font-size:13px; transition:0.2s;">⬅️ Main Dash</a><button onclick="loadBundles()" style="padding:10px 20px; background:#fff; color:#000; border-radius:8px; cursor:pointer; font-weight:bold; border:none; font-size:13px; transition:0.2s;">🔄 Refresh Engine</button></div></div><div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888; font-weight:600;">Scanning Merged Rows...</p></div><div id="content" style="display:none;"><div class="kpi-grid"><div class="kpi-card"><div class="kpi-val" id="kpi-bundles">0</div><div class="kpi-lbl">Total Bundles Packed</div></div><div class="kpi-card"><div class="kpi-val" id="kpi-orders">0</div><div class="kpi-lbl">Total Orders Merged</div></div><div class="kpi-card" style="border-left-color:#F59E0B"><div class="kpi-val" id="kpi-saved" style="color:#F59E0B">0</div><div class="kpi-lbl" style="color:#F59E0B;">🚚 Shipments Saved</div></div></div><table><thead><tr><th>Timeline & Source</th><th>Client Info</th><th>Master Box & TID</th><th>📦 The Box Breakdown (What's Inside)</th></tr></thead><tbody id="tb"></tbody></table></div><script>async function loadBundles() { document.getElementById('content').style.display='none'; document.getElementById('loading').style.display='block'; const r = await fetch('/api/nexus/bundling_data'); const d = await r.json(); document.getElementById('kpi-bundles').innerText=d.kpi.total_bundles; document.getElementById('kpi-orders').innerText=d.kpi.total_orders_bundled; document.getElementById('kpi-saved').innerText=d.kpi.saved_shipments; let h=''; d.bundles.forEach(b=>{ let items = b.orders.map(o=>`<div class="bundle-item"><div><span style="color:var(--accent); font-weight:800; font-size:13px; padding:4px 8px; background:rgba(16,185,129,0.1); border-radius:6px; border:1px solid rgba(16,185,129,0.2); display:inline-block; margin-bottom:4px;">${o.order_id}</span><br><span style="font-size:11px; color:#666; font-weight:600;">Line: ${o.order_line_id}</span></div><div style="font-size:12px; color:#888; line-height:1.4;">${o.title}</div><div style="font-weight:800; font-size:13px; text-align:right; color:#fff;">Qty: ${o.item_count}</div></div>`).join(''); h+=`<tr><td><b style="font-size:14px;">${b.date}</b><br><span style="color:#888; font-size:11px; font-weight:800; text-transform:uppercase; margin-top:4px; display:inline-block;">${b.source}</span></td><td><b style="font-size:14px;">${b.customer}</b><br><span style="color:#666; font-size:12px; margin-top:4px; display:inline-block;">Vendor: ${b.vendor}</span><br><span style="color:#666; font-size:12px;">Dest: ${b.country}</span></td><td><span style="font-family:monospace; background:#1A1A1A; padding:6px 12px; border-radius:6px; border:1px solid #333; font-weight:800; font-size:13px;">${b.tid}</span><br><div style="margin-top:10px;"><span style="color:var(--accent); font-size:12px; font-weight:800;">🏷️ Master Box: ${b.boxes_val}</span><br><span style="color:#888; font-size:11px; font-weight:700;">Total Items: ${b.total_items}</span></div></td><td><div class="bundle-box">${items}</div></td></tr>`; }); document.getElementById('tb').innerHTML=h||'<tr><td colspan="4" style="text-align:center; padding:60px; color:#666; font-weight:600;">No Bundled Orders Found from Merged Cells.</td></tr>'; document.getElementById('loading').style.display='none'; document.getElementById('content').style.display='block'; } window.onload=loadBundles;</script></body></html>''')
+    return render_template_string('''
+    <!DOCTYPE html>
+    <html lang="en" data-theme="dark">
+    <head>
+        <meta charset="UTF-8">
+        <title>📦 Bundling Intelligence</title>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+            :root {
+                --bg: #000;
+                --card: #0A0A0A;
+                --border: #1A1A1A;
+                --text: #FAFAFA;
+                --accent: #10B981;
+                --muted: #888;
+            }
+            body {
+                font-family: 'Inter', sans-serif;
+                background: var(--bg);
+                color: var(--text);
+                margin: 0;
+                padding: 0;
+                display: flex;
+                height: 100vh;
+                overflow: hidden;
+            }
+            /* Sidebar */
+            .sidebar {
+                width: 280px;
+                background: var(--card);
+                border-right: 1px solid var(--border);
+                padding: 30px 20px;
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+                height: 100vh;
+                overflow-y: auto;
+                flex-shrink: 0;
+            }
+            .sidebar h2 {
+                font-size: 18px;
+                margin: 0 0 10px 0;
+                padding-bottom: 10px;
+                border-bottom: 1px solid var(--border);
+            }
+            .filter-group {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-bottom: 20px;
+            }
+            .filter-group label {
+                font-size: 12px;
+                color: var(--muted);
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+            .filter-input {
+                background: #050505;
+                border: 1px solid #333;
+                color: #fff;
+                padding: 12px 15px;
+                border-radius: 8px;
+                font-family: 'Inter';
+                outline: none;
+                width: 100%;
+            }
+            .filter-input:focus {
+                border-color: var(--accent);
+            }
+            .filter-select {
+                background: #050505;
+                border: 1px solid #333;
+                color: #fff;
+                padding: 12px 15px;
+                border-radius: 8px;
+                font-family: 'Inter';
+                outline: none;
+                width: 100%;
+                cursor: pointer;
+            }
+            .apply-btn {
+                background: var(--accent);
+                color: #000;
+                border: none;
+                padding: 14px;
+                border-radius: 8px;
+                font-weight: 800;
+                font-size: 14px;
+                cursor: pointer;
+                margin-top: 10px;
+                transition: 0.2s;
+            }
+            .apply-btn:hover {
+                opacity: 0.9;
+                transform: translateY(-2px);
+            }
+            .reset-btn {
+                background: transparent;
+                color: var(--text);
+                border: 1px solid var(--border);
+                padding: 12px;
+                border-radius: 8px;
+                font-weight: 600;
+                font-size: 13px;
+                cursor: pointer;
+                margin-top: 10px;
+                transition: 0.2s;
+            }
+            .reset-btn:hover {
+                background: var(--border);
+            }
+            /* Main content */
+            .main-content {
+                flex: 1;
+                padding: 30px 40px;
+                overflow-y: auto;
+            }
+            .header {
+                margin-bottom: 30px;
+            }
+            .header h1 {
+                font-size: 28px;
+                font-weight: 800;
+                letter-spacing: -1px;
+                margin: 0;
+            }
+            .header p {
+                color: var(--muted);
+                margin-top: 5px;
+                font-size: 14px;
+            }
+            .kpi-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+                margin-bottom: 40px;
+            }
+            .kpi-card {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 16px;
+                padding: 30px;
+                border-left: 4px solid var(--accent);
+                position: relative;
+                overflow: hidden;
+            }
+            .kpi-val {
+                font-size: 48px;
+                font-weight: 900;
+                letter-spacing: -2px;
+                margin-bottom: 5px;
+            }
+            .kpi-lbl {
+                font-size: 13px;
+                color: var(--muted);
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+            .bundles-table {
+                width: 100%;
+                border-collapse: collapse;
+                background: var(--card);
+                border-radius: 16px;
+                border: 1px solid var(--border);
+                overflow: hidden;
+            }
+            .bundles-table th {
+                background: #050505;
+                padding: 18px 20px;
+                font-size: 11px;
+                color: var(--muted);
+                text-transform: uppercase;
+                font-weight: 800;
+                border-bottom: 1px solid var(--border);
+                text-align: left;
+                letter-spacing: 1px;
+            }
+            .bundles-table td {
+                padding: 18px 20px;
+                border-bottom: 1px solid var(--border);
+                text-align: left;
+                vertical-align: top;
+            }
+            .bundles-table tr:hover td {
+                background: #111;
+            }
+            .bundle-box {
+                background: #050505;
+                border: 1px solid #1A1A1A;
+                border-radius: 12px;
+                padding: 10px 15px;
+                margin-top: 8px;
+            }
+            .bundle-item {
+                display: grid;
+                grid-template-columns: 140px 1fr 70px;
+                gap: 15px;
+                padding: 12px 0;
+                border-bottom: 1px dashed #222;
+                align-items: center;
+            }
+            .bundle-item:last-child {
+                border-bottom: none;
+                padding-bottom: 0;
+            }
+            .loader {
+                width: 40px;
+                height: 40px;
+                border: 4px solid var(--border);
+                border-top-color: var(--accent);
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin: 50px auto;
+            }
+            @keyframes spin { to { transform: rotate(360deg); } }
+            .badge {
+                background: var(--accent);
+                color: #000;
+                padding: 4px 10px;
+                border-radius: 20px;
+                font-size: 11px;
+                font-weight: 800;
+            }
+        </style>
+    </head>
+    <body>
+        <!-- Sidebar with filters -->
+        <div class="sidebar">
+            <h2>📊 Filters</h2>
+            <div class="filter-group">
+                <label>Date From</label>
+                <input type="date" id="filterDate" class="filter-input" value="2026-01-01">
+            </div>
+            <div class="filter-group">
+                <label>3PL Source</label>
+                <select id="filterSource" class="filter-select">
+                    <option value="">All Sources</option>
+                    <option value="ECL QC Center">ECL QC Center</option>
+                    <option value="ECL Zone">ECL Zone</option>
+                    <option value="GE Zone">GE Zone</option>
+                </select>
+            </div>
+            <button class="apply-btn" onclick="loadBundles()">Apply Filters</button>
+            <button class="reset-btn" onclick="resetFilters()">Reset</button>
+            <div style="margin-top: 30px;">
+                <h3>📦 KPI Summary</h3>
+                <div id="kpiTotal" style="font-size: 36px; font-weight: 800; margin: 10px 0;">0</div>
+                <div style="color: var(--muted); font-size: 13px;">Total Bundles</div>
+                <div id="kpiOrders" style="font-size: 36px; font-weight: 800; margin: 20px 0 10px;">0</div>
+                <div style="color: var(--muted); font-size: 13px;">Consolidated Orders</div>
+            </div>
+        </div>
 
-# Naya Floating Button jo Main Dashboard par aayega
-@app.after_request
-def add_bundling_floating_btn(response):
-    if request.path == '/' and response.content_type and 'text/html' in response.content_type:
-        user_val = session.get('username') or session.get('user') or session.get('role')
-        if user_val and str(user_val).lower() == 'admin':
-            html = response.get_data(as_text=True)
-            # Yeh button TID Hub ke bilkul upar (bottom: 90px) aayega
-            btn = '<a href="/bundling" target="_blank" style="position:fixed; bottom:90px; right:30px; background:#10B981; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(16,185,129,0.4); transition:0.2s;">📦 Bundling Intel ↗</a>'
-            if '</body>' in html: response.set_data(html.replace('</body>', btn + '</body>'))
-    return response
+        <!-- Main content -->
+        <div class="main-content">
+            <div class="header">
+                <h1>📦 Order Consolidation AI</h1>
+                <p>Automatically grouped bundles based on Boxes column</p>
+            </div>
 
+            <div id="loader" class="loader" style="display: none;"></div>
+            <div id="bundlesContainer"></div>
+        </div>
+
+        <script>
+            async function loadBundles() {
+                const loader = document.getElementById('loader');
+                const container = document.getElementById('bundlesContainer');
+                loader.style.display = 'block';
+                container.innerHTML = '';
+
+                const filterDate = document.getElementById('filterDate').value;
+                const filterSource = document.getElementById('filterSource').value;
+
+                try {
+                    const url = new URL('/api/nexus/bundling_data', window.location.origin);
+                    if (filterDate) url.searchParams.append('filter_date', filterDate);
+                    if (filterSource) url.searchParams.append('filter_source', filterSource);
+
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    if (data.success && data.bundles.length > 0) {
+                        renderBundles(data.bundles);
+                        updateKPI(data.bundles);
+                    } else {
+                        container.innerHTML = '<div style="text-align:center; padding:60px; color: var(--muted); border: 1px dashed var(--border); border-radius: 16px;">📭 No bundles found for selected filters</div>';
+                        document.getElementById('kpiTotal').innerText = '0';
+                        document.getElementById('kpiOrders').innerText = '0';
+                    }
+                } catch (e) {
+                    container.innerHTML = `<div style="color:#EF4444; text-align:center; padding:60px;">Error: ${e.message}</div>`;
+                } finally {
+                    loader.style.display = 'none';
+                }
+            }
+
+            function renderBundles(bundles) {
+                let html = `<table class="bundles-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Source</th>
+                            <th>Customer / Vendor</th>
+                            <th>Boxes</th>
+                            <th>Tracking ID</th>
+                            <th>Consolidated Orders</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+                bundles.forEach(b => {
+                    html += `<tr>
+                        <td>${b.date}</td>
+                        <td><span class="badge">${b.source}</span></td>
+                        <td>
+                            <div><strong>Customer:</strong> ${b.customer}</div>
+                            <div><strong>Vendor:</strong> ${b.vendor}</div>
+                            <div><strong>Country:</strong> ${b.country}</div>
+                        </td>
+                        <td><strong>${b.boxes_val}</strong></td>
+                        <td style="font-family: monospace; max-width: 200px; word-break: break-word;">${b.tid}</td>
+                        <td>
+                            <div class="bundle-box">
+                                <div style="margin-bottom: 8px;"><strong>📦 Total Items: ${b.total_items}</strong></div>
+                                ${b.orders.map(o => `
+                                    <div class="bundle-item">
+                                        <div>${o.order_id}</div>
+                                        <div>${o.title || 'No title'}</div>
+                                        <div style="text-align:right;">x${o.item_count}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </td>
+                    </tr>`;
+                });
+
+                html += '</tbody></table>';
+                document.getElementById('bundlesContainer').innerHTML = html;
+            }
+
+            function updateKPI(bundles) {
+                let totalOrders = 0;
+                bundles.forEach(b => totalOrders += b.orders.length);
+                document.getElementById('kpiTotal').innerText = bundles.length;
+                document.getElementById('kpiOrders').innerText = totalOrders;
+            }
+
+            function resetFilters() {
+                document.getElementById('filterDate').value = '2026-01-01';
+                document.getElementById('filterSource').value = '';
+                loadBundles();
+            }
+
+            // Load on page load
+            window.onload = loadBundles;
+        </script>
+    </body>
+    </html>
+    ''')
+# ==============================================================================
+# END OF CODE
+# ==============================================================================
 if __name__ == '__main__':
     app.run(debug=True)
