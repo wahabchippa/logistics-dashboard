@@ -4344,7 +4344,7 @@ def nexus_dashboard():
 # ==============================================================================
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE) - COMPLETE FIXED EDITION
+# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE) - DEBUG EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -4388,17 +4388,27 @@ def fetch_bundling_standalone_data():
         ctx.verify_mode = ssl.CERT_NONE
         
         for name, (url, col) in BUNDLING_SOURCES.items():
-            print(f"🔍 Fetching {name}...")
+            print(f"🔍 Fetching {name} from {url}")
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
                 data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+                print(f"   Raw rows: {len(data)}")
+                if len(data) > 0:
+                    print(f"   Header row: {data[0]}")
+                if len(data) > 1:
+                    print(f"   Sample data row (row 2): {data[1]}")
+                
                 processed = []
-                for row in data[1:]:  # Skip header
+                for idx, row in enumerate(data[1:]):  # Skip header (row 0)
                     if not row: continue
                     p = row + [''] * 50 # padding to prevent index errors
                     
+                    # Order ID
+                    if col['o'] - 1 >= len(p):
+                        continue
                     o_val = str(p[col['o'] - 1]).strip()
-                    if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
+                    if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']:
+                        continue
                     
                     def g(c_num): 
                         if c_num - 1 >= len(p): return "N/A"
@@ -4417,7 +4427,7 @@ def fetch_bundling_standalone_data():
                         'customer': g(col['c']), 
                         'country': g(col['cn'])
                     })
-                print(f"  -> {len(processed)} rows fetched for {name}")
+                print(f"   Processed rows: {len(processed)}")
                 res[name] = processed
     except Exception as e:
         print("Bundling Fetch Error:", e)
@@ -4933,9 +4943,6 @@ def add_bundling_floating_btn(response):
             if '</body>' in html: 
                 response.set_data(html.replace('</body>', btn + '</body>'))
     return response
-
-if __name__ == '__main__':
-    app.run(debug=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
