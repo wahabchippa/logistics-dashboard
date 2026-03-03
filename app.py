@@ -4344,7 +4344,7 @@ def nexus_dashboard():
 # ==============================================================================
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE) - FINAL EDITION
+# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE PRO MODULE) - COMPLETE FIXED EDITION
 # ==============================================================================
 import urllib.request
 import csv
@@ -4388,7 +4388,7 @@ def fetch_bundling_standalone_data():
         ctx.verify_mode = ssl.CERT_NONE
         
         for name, (url, col) in BUNDLING_SOURCES.items():
-            print(f"Fetching {name}...")
+            print(f"🔍 Fetching {name}...")
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
                 data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
@@ -4401,6 +4401,7 @@ def fetch_bundling_standalone_data():
                     if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
                     
                     def g(c_num): 
+                        if c_num - 1 >= len(p): return "N/A"
                         val = str(p[c_num - 1]).strip()
                         return val if val and val.lower() not in ['n/a', 'nan', '-'] else "N/A"
                         
@@ -4416,7 +4417,7 @@ def fetch_bundling_standalone_data():
                         'customer': g(col['c']), 
                         'country': g(col['cn'])
                     })
-                print(f"  -> {len(processed)} rows")
+                print(f"  -> {len(processed)} rows fetched for {name}")
                 res[name] = processed
     except Exception as e:
         print("Bundling Fetch Error:", e)
@@ -4468,12 +4469,13 @@ def api_nexus_bundling_data():
                     bundles_list.append(cb)
                     tot_bundles += 1
                     tot_orders += len(cb['orders'])
-                    # Update source stats
-                    source_stats[src]["orders"] += len(cb['orders'])
+                    # Update source stats with proper numeric conversion
                     try:
-                        source_stats[src]["boxes"] += int(cb['boxes_val'])
-                    except:
+                        box_val = float(cb['boxes_val'])  # Pehle float mein convert
+                        source_stats[src]["boxes"] += int(box_val)  # Phir integer
+                    except (ValueError, TypeError):
                         pass
+                    source_stats[src]["orders"] += len(cb['orders'])
                     
                 cb = {
                     "orders": [od],
@@ -4496,11 +4498,12 @@ def api_nexus_bundling_data():
             bundles_list.append(cb)
             tot_bundles += 1
             tot_orders += len(cb['orders'])
-            source_stats[src]["orders"] += len(cb['orders'])
             try:
-                source_stats[src]["boxes"] += int(cb['boxes_val'])
-            except:
+                box_val = float(cb['boxes_val'])
+                source_stats[src]["boxes"] += int(box_val)
+            except (ValueError, TypeError):
                 pass
+            source_stats[src]["orders"] += len(cb['orders'])
             
     # Calculate Total Quantities
     for b in bundles_list:
@@ -4930,6 +4933,9 @@ def add_bundling_floating_btn(response):
             if '</body>' in html: 
                 response.set_data(html.replace('</body>', btn + '</body>'))
     return response
+
+if __name__ == '__main__':
+    app.run(debug=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
