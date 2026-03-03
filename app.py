@@ -3600,7 +3600,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - STATUS FIX + SMART TID CLEANER + ADMIN SECURE
+# 🛰️ TID OPERATIONS HUB (NEXUS) - AI TID SPLITTER + SECURE NATIVE TRACKER
 # ==============================================================================
 import urllib.request
 import urllib.parse
@@ -3635,7 +3635,7 @@ NEXUS_SOURCES = {
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
 # ------------------------------------------------------------------------------
-# 2. DATA PROCESSING & STATUS ENGINE
+# 2. EXACT COLUMNS MAP & DATA ENGINE
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
@@ -3677,24 +3677,49 @@ def nexus_fetch_sheet_data(url, name):
     except: return []
 
 def nexus_clean_tids(raw):
-    # 🚨 SMART TID CLEANER (Removes colons, spaces, and words like 'TID:')
+    """
+    🚨 THE AI SMART SPLITTER 🚨
+    Handles normal splits, cleans colons/junk, AND auto-splits concatenated TIDs!
+    """
     raw = str(raw).strip()
     if not raw or raw.lower() in ['pending','none','n/a', '-']: return []
-    # Split by comma, slash, space, OR colon
-    parts = [t.strip() for t in re.split(r'[,\/\s:;]+', raw) if t.strip()]
+    
+    # Clean leading and trailing weird characters (like colons or spaces)
+    raw = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', raw)
+    
+    parts = []
+    # CONDITION 1: Obvious Delimiters exist
+    if any(x in raw for x in [',', '/', ' ', ';', '\n', '\t']):
+        parts = [t.strip() for t in re.split(r'[,\/\s;]+', raw) if t.strip()]
+    else:
+        # CONDITION 2: No delimiters, but string is unusually long (Concatenated Data)
+        if len(raw) > 20:
+            # AI Lookahead Split: Find '150', '155', '1Z', 'JD', 'YT' and split BEFORE them
+            split_by_prefix = [p for p in re.split(r'(?=15[05]\d|1Z|JD|YT)', raw) if p]
+            
+            if len(split_by_prefix) > 1:
+                parts = split_by_prefix
+            else:
+                # Fallback chunking: Split into chunks of 15 if prefix logic misses
+                parts = [raw[i:i+15] for i in range(0, len(raw), 15)]
+        else:
+            # Normal single TID
+            parts = [raw]
+
+    # Clean and Format the resulting array
     cleaned = []
     for t in parts:
-        # Faltu nishanaat hatana aage peechay se
         t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
-        if t and t.lower() not in ['tid', 'tracking', 'no', 'number']:
+        if len(t) > 5 and t.lower() not in ['tid', 'tracking', 'no', 'number']:
             if t.startswith('150') and 12<=len(t)<=15:
                 cleaned.append('0' + t)
             else:
                 cleaned.append(t)
-    return cleaned
+                
+    # Remove duplicates but keep sequence
+    return list(dict.fromkeys(cleaned))
 
 def nexus_fetch_kerry_status(url):
-    # 🚨 STATUS FIX ENGINE: Auto-detects columns dynamically!
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
@@ -3702,21 +3727,14 @@ def nexus_fetch_kerry_status(url):
             raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
             data = list(csv.reader(raw_data))
             if not data: return {}
-            
             o_idx, s_idx, h_idx = -1, -1, -1
-            
             for i, row in enumerate(data[:20]):
                 c = [str(x).lower().replace(' ', '').replace('_', '') for x in row]
-                # Order ID column dhoondo
                 for j, col_name in enumerate(c):
                     if col_name in ['order', 'orderid', 'fleekid', 'shipmentid', 'orderno']: o_idx = j; break
-                # Status column dhoondo
                 for j, col_name in enumerate(c):
                     if col_name in ['status', 'lateststatus', 'currentstatus', 'trackingstatus', 'orderstatus']: s_idx = j; break
-                        
-                if o_idx != -1 and s_idx != -1:
-                    h_idx = i; break
-            
+                if o_idx != -1 and s_idx != -1: h_idx = i; break
             s_map = {}
             if h_idx != -1 and o_idx != -1 and s_idx != -1:
                 for row in data[h_idx+1:]:
@@ -3725,7 +3743,6 @@ def nexus_fetch_kerry_status(url):
                     if o: 
                         stat_val = str(p[s_idx]).strip().upper()
                         if not stat_val: stat_val = "PENDING"
-                        # _ aur / dono variations save kar rahe hain taake match miss na ho
                         s_map[o] = stat_val
                         s_map[o.replace('_', '/')] = stat_val
                         s_map[o.replace('/', '_')] = stat_val
@@ -3798,7 +3815,6 @@ def api_nexus_search():
                 if (q in oid or q_slash in oid or q_under in oid or 
                     q in tid_raw or q_alt_tid in tid_raw):
                     
-                    # Safe get from dictionary
                     k_stat = kerry_data.get(oid, "N/A")
                     
                     results.append({
