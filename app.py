@@ -4344,7 +4344,7 @@ def nexus_dashboard():
 # ==============================================================================
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - FINAL STABLE EDITION (PERFECT MAPPING & BUTTONS)
+# 📦 BUNDLING INTELLIGENCE HUB - FINAL STABLE EDITION (ECL ZONE COLUMN E FIXED)
 # ==============================================================================
 import urllib.request
 import csv
@@ -4390,15 +4390,15 @@ def fetch_bundling_standalone_data():
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 3, "oli": 8, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25}
+            {"o": 0, "d": 1, "b": 3, "oli": 8, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25} # Boxes is Col D (3)
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 4, "oli": 11, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28} # Col 5 is index 4
+            {"o": 0, "d": 1, "b": 4, "oli": 11, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28} # FIXED: Boxes is Col E (4)
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 3, "oli": 11, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28} # Col 4 is index 3
+            {"o": 0, "d": 1, "b": 3, "oli": 11, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28} # Boxes is Col D (3)
         )
     }
     
@@ -4425,6 +4425,7 @@ def fetch_bundling_standalone_data():
                         raw_oli = str(p[col['oli']]).strip()
                         raw_title = str(p[col['title']]).strip()
                         
+                        # Completely blank lines are skipped
                         if not raw_order and not raw_oli and not raw_title: 
                             continue
                             
@@ -4446,17 +4447,17 @@ def fetch_bundling_standalone_data():
                         if country_val: last_country = country_val
                         if tid_val: last_tid = tid_val
                         
-                        box_val = str(p[col['b']]).strip() # Bundle Trigger
+                        box_val = str(p[col['b']]).strip() # The Merge Trigger!
                         
                         processed.append({
                             'order': current_order,
                             'date': date_val if date_val else last_date,
                             'date_std': std_date(date_val if date_val else last_date),
                             'boxes': box_val,
-                            'order_line_id': raw_oli,
+                            'order_line_id': raw_oli if raw_oli else "N/A",
                             'vendor': vendor_val if vendor_val else last_vendor,
-                            'title': raw_title,
-                            'item_count': str(p[col['ic']]).strip(),
+                            'title': raw_title if raw_title else "N/A",
+                            'item_count': str(p[col['ic']]).strip() or "0",
                             'customer': customer_val if customer_val else last_customer,
                             'country': country_val if country_val else last_country,
                             'tid': tid_val if tid_val else last_tid
@@ -4597,7 +4598,7 @@ def bundling_dashboard_view():
         .loader { width:40px; height:40px; border:4px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; margin:50px auto; }
         @keyframes spin { to { transform:rotate(360deg); } }
         
-        /* 🔥 Top Header Buttons as requested */
+        /* 🔥 Top Header Buttons */
         .btn-top { padding:10px 20px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:13px; cursor:pointer; border:none; display:flex; align-items:center; gap:8px;}
         .btn-apply { background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; cursor:pointer;}
         .btn-apply:hover, .btn-top:hover { opacity: 0.8; }
@@ -4778,14 +4779,20 @@ def bundling_dashboard_view():
 </html>
 ''')
 
-# 🔥 MAIN DASHBOARD FLOATING BUTTON (RESTORED AS YOUR ORIGINAL CODE) 🔥
+# 🔥 MAIN DASHBOARD FLOATING BUTTON (RESTORED SAFELY) 🔥
 @app.after_request
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
         user_val = session.get('username') or session.get('user') or session.get('role')
         if user_val and str(user_val).lower() == 'admin':
             html = response.get_data(as_text=True)
-            btn = '<a href="/bundling" style="position:fixed; bottom:100px; right:30px; background:#10B981; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(16,185,129,0.4); transition:0.2s;">📦 Bundling AI</a>'
+            # Both Buttons inside main dashboard ONLY
+            btn = '''
+            <div style="position:fixed; bottom:30px; right:30px; display:flex; flex-direction:column; gap:12px; z-index:99999;">
+                <a href="/bundling" target="_blank" style="background:#10B981; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:800; font-family:sans-serif; text-align:center; box-shadow: 0 10px 20px rgba(16,185,129,0.3);">📦 Bundling Intel ↗</a>
+                <a href="/nexus" style="background:#fff; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:800; font-family:sans-serif; text-align:center; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub ↗</a>
+            </div>
+            '''
             if '</body>' in html:
                 response.set_data(html.replace('</body>', btn + '</body>'))
     return response
