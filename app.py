@@ -4356,7 +4356,10 @@ from datetime import datetime
 from flask import jsonify, request, session, render_template_string
 
 _bundling_cache = {'data': None, 'time': 0}
+_journey_cache = {'data': None, 'time': 0}
 BUNDLING_CACHE_DURATION = 300  # 5 minutes
+
+JOURNEY_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRsiVaciOMON0xaXXEi1guBYrqfVNpD-j4My_9YokGd5kftqjAXvri5c_gLB_VRXeoDLzEtz9h5y8x/pub?gid=1409345116&single=true&output=csv"
 
 def std_date(d_str):
     try:
@@ -4379,72 +4382,129 @@ def clean_bundling_tids(raw):
             else: cleaned.append(t)
     return list(dict.fromkeys(cleaned))
 
+def parse_journey_date(val):
+    """Parse datetime string, return datetime obj or None"""
+    if not val or str(val).strip() in ['', 'nan', 'N/A', '-', 'None', 'null']:
+        return None
+    val = str(val).strip()
+    fmts = [
+        '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S.%f',
+        '%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M', '%d/%m/%Y',
+        '%Y-%m-%d', '%d-%m-%Y', '%d-%b-%Y', '%d %b %Y'
+    ]
+    for fmt in fmts:
+        try:
+            return datetime.strptime(val.split('+')[0].strip(), fmt)
+        except:
+            continue
+    return None
+
+def days_between(dt1, dt2):
+    """Return days difference between two datetime objects"""
+    if dt1 and dt2:
+        diff = (dt2 - dt1).total_seconds()
+        days = diff / 86400
+        if days < 0: return None
+        if days < 1:
+            hrs = int(diff / 3600)
+            return f"{hrs}h"
+        return f"{days:.1f}d"
+    return None
+
+def fmt_journey_date(dt):
+    if not dt: return None
+    return dt.strftime('%d %b %Y, %H:%M')
+
 def fetch_rates_sheet(ctx):
-    """Fetch Rates based on Country"""
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
             rates_map = {}
-            for row in data[1:]: # Skip header
+            for row in data[1:]:
                 p = row + [''] * 20
-                country = str(p[7]).strip().lower() # Col H (Country)
-                rate_str = str(p[12]).strip()       # Col M (Per kg Rate)
+                country = str(p[7]).strip().lower()
+                rate_str = str(p[12]).strip()
                 if country and rate_str:
-                    try:
-                        rates_map[country] = float(re.sub(r'[^0-9.]', '', rate_str))
+                    try: rates_map[country] = float(re.sub(r'[^0-9.]', '', rate_str))
                     except: pass
             return "RATES", rates_map
+    except: return "RATES", {}
+
+def fetch_journey_sheet_data():
+    """Fetch and cache the order journey sheet"""
+    global _journey_cache
+    now = time.time()
+    if _journey_cache['data'] and (now - _journey_cache['time']) < BUNDLING_CACHE_DURATION:
+        return _journey_cache['data']
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(JOURNEY_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+            data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+        # Build lookup: fleek_id (col E=4) -> row dict
+        journey_map = {}
+        for row in data[1:]:
+            p = row + [''] * 60
+            fleek_id = str(p[4]).strip()  # Column E
+            if not fleek_id or fleek_id.lower() in ['', 'nan', 'fleek_id', 'fleek id']:
+                continue
+            journey_map[fleek_id.upper()] = {
+                'created_at':             str(p[0]).strip(),   # A
+                'accepted_at':            str(p[8]).strip(),   # I
+                'pickup_ready_at':        str(p[9]).strip(),   # J
+                'cancelled_at':           str(p[12]).strip(),  # M
+                'qc_pending_at':          str(p[13]).strip(),  # N
+                'qc_approved_at':         str(p[14]).strip(),  # O
+                'handedover_at':          str(p[30]).strip(),  # AE
+                'freight_at':             str(p[31]).strip(),  # AF
+                'courier_at':             str(p[34]).strip(),  # AI
+                'delivered_at':           str(p[36]).strip(),  # AK
+            }
+        _journey_cache['data'] = journey_map
+        _journey_cache['time'] = now
+        return journey_map
     except Exception as e:
-        return "RATES", {}
+        return {}
 
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
-    """Parallel Fetch for Orders"""
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
             processed = []
             last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
-            
             for row in data[start_idx:]:
                 if not row: continue
                 p = row + [''] * 60
-                
                 raw_order = str(p[col['o']]).strip()
                 raw_weight = str(p[col['w']]).strip()
                 raw_title = str(p[col['title']]).strip()
-                
-                if not raw_order and not raw_weight and not raw_title: continue 
-                
-                # MERGED ROWS LOGIC (CARRY FORWARD)
+                if not raw_order and not raw_weight and not raw_title: continue
                 if raw_order: last_order = raw_order
                 current_order = raw_order if raw_order else last_order
-                
                 if not current_order or not re.search(r'\d', current_order): continue
                 if current_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
-                
                 date_val = str(p[col['d']]).strip()
                 vendor_val = str(p[col['v']]).strip()
                 customer_val = str(p[col['c']]).strip()
                 country_val = str(p[col['cn']]).strip()
                 tid_val = str(p[col['t']]).strip()
-                
                 if date_val: last_date = date_val
                 if vendor_val: last_vendor = vendor_val
                 if customer_val: last_customer = customer_val
                 if country_val: last_country = country_val
                 if tid_val: last_tid = tid_val
-                
                 box_val = str(p[col['b']]).strip()
-                
                 processed.append({
                     'order': current_order,
                     'date': date_val if date_val else last_date,
                     'date_std': std_date(date_val if date_val else last_date),
                     'boxes': box_val,
-                    'weight': raw_weight,           # Now using 'weight' instead of 'order_line_id'
+                    'weight': raw_weight,
                     'vendor': vendor_val if vendor_val else last_vendor,
                     'title': raw_title if raw_title else "N/A",
                     'item_count': str(p[col['ic']]).strip() or "0",
@@ -4453,149 +4513,163 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
                     'tid': tid_val if tid_val else last_tid
                 })
             return name, processed
-    except Exception as e:
-        return name, []
+    except: return name, []
 
 def fetch_bundling_standalone_data():
     global _bundling_cache
     now = time.time()
-    
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
-    
-    # 🚨 FINAL PERFECT MAPPING APPLIED (using 'w' for weight) 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            # Box=D(3), Weight=G(6), Vendor=K(10), Title=L(11), ItemCount=M(12), Customer=N(13), Country=R(17)
             {"o": 0, "d": 1, "b": 3, "w": 6, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25}, 1
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            # Box=E(4), Weight=I(8), Vendor=N(13), Title=O(14), ItemCount=P(15), Customer=Q(16), Country=U(20)
             {"o": 0, "d": 1, "b": 4, "w": 8, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28}, 2
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            # Box=D(3), Weight=H(7), Vendor=M(12), Title=N(13), ItemCount=O(14), Customer=P(15), Country=T(19)
             {"o": 0, "d": 1, "b": 3, "w": 7, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28}, 2
         )
     }
-    
     res = {}
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-    
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = [executor.submit(fetch_single_bundling_sheet, name, url, col, start_idx, ctx) for name, (url, col, start_idx) in BUNDLING_SOURCES.items()]
         futures.append(executor.submit(fetch_rates_sheet, ctx))
-        
         for future in concurrent.futures.as_completed(futures):
             name, data = future.result()
             res[name] = data
-            
     _bundling_cache['data'] = res
     _bundling_cache['time'] = now
     return res
+
+@app.route('/api/nexus/order_journey/<order_id>')
+def api_order_journey(order_id):
+    journey_map = fetch_journey_sheet_data()
+    order_key = str(order_id).strip().upper()
+    row = journey_map.get(order_key)
+    if not row:
+        return jsonify({"success": False, "message": f"Order '{order_id}' not found in journey sheet."})
+    
+    dt_created      = parse_journey_date(row['created_at'])
+    dt_accepted     = parse_journey_date(row['accepted_at'])
+    dt_pickup       = parse_journey_date(row['pickup_ready_at'])
+    dt_cancelled    = parse_journey_date(row['cancelled_at'])
+    dt_qc_pending   = parse_journey_date(row['qc_pending_at'])
+    dt_qc_approved  = parse_journey_date(row['qc_approved_at'])
+    dt_handedover   = parse_journey_date(row['handedover_at'])
+    dt_freight      = parse_journey_date(row['freight_at'])
+    dt_courier      = parse_journey_date(row['courier_at'])
+    dt_delivered    = parse_journey_date(row['delivered_at'])
+
+    # ⭐ KEY METRICS
+    qc_to_handover  = days_between(dt_qc_approved, dt_handedover)
+    handover_to_freight = days_between(dt_handedover, dt_freight)
+    total_journey   = days_between(dt_created, dt_delivered or dt_courier or dt_freight or dt_handedover)
+
+    return jsonify({
+        "success": True,
+        "order_id": order_id,
+        "is_cancelled": bool(dt_cancelled),
+        "timeline": {
+            "created_at":       fmt_journey_date(dt_created),
+            "accepted_at":      fmt_journey_date(dt_accepted),
+            "pickup_ready_at":  fmt_journey_date(dt_pickup),
+            "cancelled_at":     fmt_journey_date(dt_cancelled),
+            "qc_pending_at":    fmt_journey_date(dt_qc_pending),
+            "qc_approved_at":   fmt_journey_date(dt_qc_approved),
+            "handedover_at":    fmt_journey_date(dt_handedover),
+            "freight_at":       fmt_journey_date(dt_freight),
+            "courier_at":       fmt_journey_date(dt_courier),
+            "delivered_at":     fmt_journey_date(dt_delivered),
+        },
+        "key_metrics": {
+            "qc_to_handover":       qc_to_handover,
+            "handover_to_freight":  handover_to_freight,
+            "total_journey":        total_journey,
+        }
+    })
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
 def api_nexus_bundling_data():
     sheets_data = fetch_bundling_standalone_data()
     bundles_list, tot_bundles, tot_orders = [], 0, 0
     total_savings_gbp = 0.0
-    
     rates_map = sheets_data.get("RATES", {})
-    DEFAULT_RATE_GBP = 4.50 
-    
+    DEFAULT_RATE_GBP = 4.50
     source_stats = {
         "ECL QC Center": {"orders": 0, "boxes": 0},
-        "PK Zone": {"orders": 0, "boxes": 0} 
+        "PK Zone": {"orders": 0, "boxes": 0}
     }
-    
     for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
         rows = sheets_data.get(src, [])
         cb = None
         stat_src = "PK Zone" if src in ["ECL Zone", "GE Zone"] else src
-        
         for r in rows:
             oid = r['order'].upper()
             bx = r['boxes']
-            
             od = {
                 "order_id": oid,
-                "weight": r['weight'],            # Now using 'weight'
+                "weight": r['weight'],
                 "title": r['title'],
                 "item_count": r['item_count'],
                 "country": r['country']
             }
-            
-            if bx != "": 
+            if bx != "":
                 if cb and len(cb['orders']) > 1:
                     bundles_list.append(cb)
                     tot_bundles += 1; tot_orders += len(cb['orders'])
                     source_stats[stat_src]["orders"] += len(cb['orders'])
                     source_stats[stat_src]["boxes"] += 1
-                
                 tids = clean_bundling_tids(r['tid'])
                 cb = {
                     "orders": [od], "date": r['date'], "date_std": r['date_std'],
                     "customer": r['customer'], "vendor": r['vendor'], "country": r['country'],
                     "source": src, "boxes_val": bx, "tid": ", ".join(tids) if tids else "Pending Tracking", "total_items": 0
                 }
-            else: 
+            else:
                 if cb:
                     cb['orders'].append(od)
                     if r['tid'] != "N/A" and r['tid'] != "":
                         if cb['tid'] == "Pending Tracking":
                             tids = clean_bundling_tids(r['tid'])
                             if tids: cb['tid'] = ", ".join(tids)
-        
         if cb and len(cb['orders']) > 1:
             bundles_list.append(cb)
             tot_bundles += 1; tot_orders += len(cb['orders'])
             source_stats[stat_src]["orders"] += len(cb['orders'])
             source_stats[stat_src]["boxes"] += 1
-    
-    # 💰 FINANCIAL SAVINGS CALCULATION LOOP (ROUND UP RULE) 💰
+
     for b in bundles_list:
         tq = 0
         bundle_weight_sum = 0.0
         ind_shipping_cost = 0.0
-        
         c_name = str(b.get('country', '')).strip().lower()
         per_kg_rate = rates_map.get(c_name, DEFAULT_RATE_GBP)
-        
         for o in b['orders']:
             try: tq += int(float(re.sub(r'[^0-9.]', '', str(o['item_count']))))
             except: pass
-            
-            # Extract actual Weight exactly from the mapped column
-            try: 
+            try:
                 wt_str = re.sub(r'[^0-9.]', '', str(o['weight']))
                 wt = float(wt_str) if wt_str else 0.0
             except: wt = 0.0
-            
             bundle_weight_sum += wt
-            
-            # 3PL RULE: Round up to nearest 1 KG (0 KG ko bhi kam az kam 1 KG charge kia jayega)
             billed_ind = max(math.ceil(wt), 1)
             ind_shipping_cost += (billed_ind * per_kg_rate)
-            
         b['total_items'] = tq
         b['bundle_weight_kg'] = round(bundle_weight_sum, 2)
-        
-        # 3PL RULE FOR BUNDLE: Round up TOTAL master box weight to nearest 1 KG
         billed_bundle = max(math.ceil(bundle_weight_sum), 1)
         bundled_shipping_cost = billed_bundle * per_kg_rate
-        
         sav = ind_shipping_cost - bundled_shipping_cost
         b['savings_gbp'] = round(sav if sav > 0 else 0, 2)
-        
         total_savings_gbp += b['savings_gbp']
-    
+
     bundles_list.sort(key=lambda x: str(x['date_std']), reverse=True)
-    
     return jsonify({
         "success": True,
         "kpi": {
@@ -4631,7 +4705,6 @@ def bundling_dashboard_view():
         .f-input { background:var(--input-bg); border:1px solid #333; color:#fff; padding:8px 12px; border-radius:6px; font-family:'Inter'; outline:none; min-width:150px; }
         .f-input:focus { border-color:var(--accent); }
         .search-box { flex:1; min-width:250px; }
-        
         .source-kpi-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:20px; margin-bottom:30px; }
         .source-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; border-left:3px solid var(--accent); }
         .source-title { font-size:14px; font-weight:800; margin-bottom:10px; color:var(--accent); }
@@ -4639,12 +4712,10 @@ def bundling_dashboard_view():
         .stat-item { flex:1; }
         .stat-value { font-size:24px; font-weight:900; line-height:1.2; }
         .stat-label { font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase; }
-        
         .kpi-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:20px; margin-bottom:40px; }
         .kpi-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:25px; border-left:4px solid var(--accent); }
         .kpi-val { font-size:40px; font-weight:900; letter-spacing:-2px; margin-bottom:5px; }
         .kpi-lbl { font-size:12px; color:#888; font-weight:700; text-transform:uppercase; }
-        
         table { width:100%; border-collapse:collapse; background:var(--card); border-radius:16px; border:1px solid var(--border); overflow:hidden; }
         th { background:#050505; padding:15px; font-size:11px; color:#888; text-transform:uppercase; font-weight:800; border-bottom:1px solid var(--border); text-align:left; }
         td { padding:15px; border-bottom:1px solid var(--border); vertical-align:top; }
@@ -4652,12 +4723,115 @@ def bundling_dashboard_view():
         .bundle-box { background:#050505; border:1px solid #1A1A1A; border-radius:8px; padding:8px 12px; }
         .bundle-item { display:grid; grid-template-columns:120px 1fr 60px; gap:10px; padding:8px 0; border-bottom:1px dashed #222; align-items:center; }
         .bundle-item:last-child { border-bottom:none; padding-bottom:0; }
+
+        /* ORDER CLICK STYLE */
+        .order-link {
+            color: #10B981;
+            font-weight: 800;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 13px;
+            background: rgba(16,185,129,0.08);
+            padding: 3px 7px;
+            border-radius: 5px;
+            border: 1px solid rgba(16,185,129,0.2);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .order-link:hover {
+            background: rgba(16,185,129,0.18);
+            border-color: rgba(16,185,129,0.5);
+            transform: translateY(-1px);
+        }
+        .order-link .arr { font-size: 10px; opacity: 0.7; }
+
+        /* MODAL */
+        .modal-overlay {
+            display: none;
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 10000;
+            backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: #0A0A0A;
+            border: 1px solid #2A2A2A;
+            border-radius: 16px;
+            padding: 32px;
+            width: 100%;
+            max-width: 580px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.8);
+        }
+        .modal-close {
+            position: absolute; top:16px; right:16px;
+            background: #1A1A1A; border:1px solid #333; color:#fff;
+            width:32px; height:32px; border-radius:50%;
+            cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;
+            transition: background 0.2s;
+        }
+        .modal-close:hover { background: #EF4444; border-color: #EF4444; }
+        .modal-title { font-size:20px; font-weight:800; margin-bottom:4px; }
+        .modal-subtitle { font-size:12px; color:#666; margin-bottom:24px; }
+
+        /* JOURNEY TIMELINE */
+        .timeline { position:relative; padding-left: 28px; margin-bottom: 24px; }
+        .timeline::before {
+            content:''; position:absolute; left:9px; top:0; bottom:0;
+            width: 2px; background: linear-gradient(180deg, #10B981, #333);
+        }
+        .tl-item {
+            position: relative; margin-bottom: 18px;
+        }
+        .tl-item:last-child { margin-bottom:0; }
+        .tl-dot {
+            position: absolute; left: -24px; top: 3px;
+            width: 12px; height: 12px; border-radius: 50%;
+            border: 2px solid #10B981;
+            background: #0A0A0A;
+        }
+        .tl-dot.done { background: #10B981; }
+        .tl-dot.cancelled { background: #EF4444; border-color: #EF4444; }
+        .tl-dot.pending { border-color: #333; }
+        .tl-label { font-size:11px; color:#666; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+        .tl-value { font-size:13px; color:#fff; font-weight:600; margin-top:2px; }
+        .tl-value.pending-val { color:#444; font-style:italic; }
+        .tl-value.cancelled-val { color:#EF4444; font-weight:700; }
+
+        /* KEY METRICS */
+        .metrics-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:24px; }
+        .metric-card {
+            background:#111; border:1px solid #1A1A1A; border-radius:10px; padding:14px; text-align:center;
+        }
+        .metric-val { font-size:22px; font-weight:900; color:#10B981; }
+        .metric-val.warn { color:#F59E0B; }
+        .metric-val.danger { color:#EF4444; }
+        .metric-val.na { color:#444; font-size:16px; }
+        .metric-lbl { font-size:10px; color:#666; text-transform:uppercase; font-weight:700; margin-top:4px; line-height:1.3; }
+
+        /* CANCELLED BANNER */
+        .cancelled-banner {
+            background: rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3);
+            border-radius:8px; padding:10px 14px; margin-bottom:16px;
+            color:#EF4444; font-weight:700; font-size:13px;
+            display:flex; align-items:center; gap:8px;
+        }
+
         .loader { width:40px; height:40px; border:4px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; margin:50px auto; }
+        .modal-loader { width:28px; height:28px; border:3px solid #333; border-top-color:#10B981; border-radius:50%; animation:spin 0.8s linear infinite; margin:30px auto; }
         @keyframes spin { to { transform:rotate(360deg); } }
-        
         .btn-top { padding:10px 20px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:13px; cursor:pointer; border:none; display:flex; align-items:center; gap:8px;}
         .btn-apply { background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; cursor:pointer;}
         .btn-apply:hover, .btn-top:hover { opacity: 0.8; }
+        .section-hd { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#10B981; margin-bottom:12px; padding-bottom:6px; border-bottom:1px solid #1A1A1A; }
     </style>
 </head>
 <body>
@@ -4729,10 +4903,20 @@ def bundling_dashboard_view():
     <div id="content" style="display:none;">
         <table>
             <thead>
-                <tr><th>Timeline & Source</th><th>Client Info</th><th>Master Box Analytics</th><th>📦 The Box Breakdown</th></tr>
+                <tr><th>Timeline & Source</th><th>Client Info</th><th>Master Box Analytics</th><th>📦 The Box Breakdown <small style="color:#555;font-size:9px;"> (click order to see journey)</small></th></tr>
             </thead>
             <tbody id="tb"></tbody>
         </table>
+    </div>
+
+    <!-- ===== ORDER JOURNEY MODAL ===== -->
+    <div class="modal-overlay" id="journeyModal" onclick="closeModal(event)">
+        <div class="modal" id="modalContent">
+            <button class="modal-close" onclick="closeModalDirect()">✕</button>
+            <div id="modalBody">
+                <div class="modal-loader"></div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -4741,27 +4925,20 @@ def bundling_dashboard_view():
         async function loadBundles() {
             document.getElementById('content').style.display = 'none';
             document.getElementById('loading').style.display = 'block';
-            
             try {
                 const r = await fetch('/api/nexus/bundling_data');
                 const d = await r.json();
-                
                 allBundles = d.bundles || [];
                 let s = d.source_stats || {};
-                
                 document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
                 document.getElementById('kpi-orders').innerText = d.kpi?.total_orders_bundled || 0;
                 document.getElementById('kpi-saved').innerText = d.kpi?.saved_shipments || 0;
-                
                 let money = d.kpi?.total_savings_gbp || 0;
                 document.getElementById('kpi-money').innerText = '£' + money.toLocaleString(undefined, {minimumFractionDigits: 2});
-                
                 document.getElementById('qc-orders').innerText = s['ECL QC Center']?.orders || 0;
                 document.getElementById('qc-boxes').innerText = s['ECL QC Center']?.boxes || 0;
-                
                 document.getElementById('pk-orders').innerText = s['PK Zone']?.orders || 0;
                 document.getElementById('pk-boxes').innerText = s['PK Zone']?.boxes || 0;
-                
                 applyFilters();
             } catch (e) {
                 console.error(e);
@@ -4774,7 +4951,6 @@ def bundling_dashboard_view():
             const dateFrom = document.getElementById('dateFrom').value;
             const dateTo = document.getElementById('dateTo').value;
             const source = document.getElementById('sourceSelect').value;
-
             let filtered = allBundles.filter(b => {
                 if (source !== 'all' && b.source !== source) return false;
                 if (dateFrom && b.date_std < dateFrom) return false;
@@ -4786,7 +4962,6 @@ def bundling_dashboard_view():
                 }
                 return true;
             });
-
             renderTable(filtered);
             document.getElementById('loading').style.display = 'none';
             document.getElementById('content').style.display = 'block';
@@ -4800,16 +4975,19 @@ def bundling_dashboard_view():
                 bundles.forEach(b => {
                     let items = b.orders.map(o => `
                         <div class="bundle-item">
-                            <div><span style="color:var(--accent); font-weight:800;">${o.order_id}</span><br><span style="font-size:10px; color:#666;">Wt: ${o.weight} kg</span></div>
+                            <div>
+                                <span class="order-link" onclick="openJourney('${o.order_id}')">
+                                    ${o.order_id} <span class="arr">▼</span>
+                                </span>
+                                <br><span style="font-size:10px; color:#666;">Wt: ${o.weight} kg</span>
+                            </div>
                             <div style="font-size:11px; color:#888;">${o.title && o.title.length > 40 ? o.title.substring(0,40)+'...' : o.title || ''}</div>
                             <div style="font-weight:800; text-align:right;">${o.item_count}</div>
                         </div>
                     `).join('');
-                    
                     let savStr = (b.savings_gbp || 0).toFixed(2);
                     let actualWt = (b.bundle_weight_kg || 0);
-                    let billedWt = Math.max(Math.ceil(actualWt), 1); 
-                    
+                    let billedWt = Math.max(Math.ceil(actualWt), 1);
                     h += `<tr>
                         <td><b>${b.date || ''}</b><br><span style="color:#888; font-size:10px;">${b.source || ''}</span></td>
                         <td><b>${b.customer || ''}</b><br><span style="color:#666; font-size:11px;">${b.vendor || ''}</span><br><span style="color:#666; font-size:11px;">${b.country || ''}</span></td>
@@ -4831,6 +5009,100 @@ def bundling_dashboard_view():
             document.getElementById('tb').innerHTML = h;
         }
 
+        // ===== JOURNEY MODAL =====
+        async function openJourney(orderId) {
+            document.getElementById('journeyModal').classList.add('open');
+            document.getElementById('modalBody').innerHTML = '<div class="modal-loader"></div><p style="text-align:center;color:#666;font-size:13px;">Fetching order journey...</p>';
+            try {
+                const r = await fetch('/api/nexus/order_journey/' + encodeURIComponent(orderId));
+                const d = await r.json();
+                if (!d.success) {
+                    document.getElementById('modalBody').innerHTML = `
+                        <div style="text-align:center; padding:30px;">
+                            <div style="font-size:40px; margin-bottom:12px;">🔍</div>
+                            <div style="font-size:16px; font-weight:700; color:#fff; margin-bottom:8px;">Order Not Found</div>
+                            <div style="font-size:13px; color:#666;">${d.message}</div>
+                        </div>`;
+                    return;
+                }
+                
+                const tl = d.timeline;
+                const km = d.key_metrics;
+                
+                // Metric color logic
+                function metricColor(val) {
+                    if (!val || val === 'N/A') return 'na';
+                    const num = parseFloat(val);
+                    if (isNaN(num)) return ''; // hours like "5h"
+                    if (num <= 1) return '';        // green default
+                    if (num <= 3) return 'warn';
+                    return 'danger';
+                }
+
+                let cancelledBanner = '';
+                if (d.is_cancelled) {
+                    cancelledBanner = `<div class="cancelled-banner">⚠️ This order was CANCELLED on ${tl.cancelled_at || 'N/A'}</div>`;
+                }
+
+                function tlItem(label, val, type) {
+                    let dotClass = val ? 'done' : 'pending';
+                    let valClass = val ? '' : 'pending-val';
+                    if (type === 'cancelled') { dotClass = val ? 'cancelled' : 'pending'; valClass = val ? 'cancelled-val' : 'pending-val'; }
+                    return `<div class="tl-item">
+                        <div class="tl-dot ${dotClass}"></div>
+                        <div class="tl-label">${label}</div>
+                        <div class="tl-value ${valClass}">${val || '— Not yet'}</div>
+                    </div>`;
+                }
+
+                document.getElementById('modalBody').innerHTML = `
+                    <div class="modal-title">📦 Order Journey</div>
+                    <div class="modal-subtitle" style="font-family:monospace; color:#10B981; font-size:13px;">${d.order_id}</div>
+                    ${cancelledBanner}
+
+                    <div class="section-hd">⭐ Key Metrics</div>
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-val ${metricColor(km.qc_to_handover)}">${km.qc_to_handover || 'N/A'}</div>
+                            <div class="metric-lbl">QC Approved → Handover</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-val ${metricColor(km.handover_to_freight)}">${km.handover_to_freight || 'N/A'}</div>
+                            <div class="metric-lbl">Handover → Freight</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-val">${km.total_journey || 'N/A'}</div>
+                            <div class="metric-lbl">Total Journey Duration</div>
+                        </div>
+                    </div>
+
+                    <div class="section-hd">🗺️ Full Timeline</div>
+                    <div class="timeline">
+                        ${tlItem('📋 Order Created', tl.created_at, 'normal')}
+                        ${tlItem('✅ Accepted', tl.accepted_at, 'normal')}
+                        ${tlItem('🚚 Pickup Ready', tl.pickup_ready_at, 'normal')}
+                        ${tlItem('🔍 QC Pending', tl.qc_pending_at, 'normal')}
+                        ${tlItem('✅ QC Approved', tl.qc_approved_at, 'normal')}
+                        ${tlItem('🤝 Handed to Logistics Partner', tl.handedover_at, 'normal')}
+                        ${tlItem('✈️ Freight', tl.freight_at, 'normal')}
+                        ${tlItem('🚁 Courier Assigned', tl.courier_at, 'normal')}
+                        ${tlItem('📬 Delivered', tl.delivered_at, 'normal')}
+                        ${tl.cancelled_at ? tlItem('❌ Cancelled', tl.cancelled_at, 'cancelled') : ''}
+                    </div>
+                `;
+            } catch(e) {
+                document.getElementById('modalBody').innerHTML = `<div style="color:#EF4444; text-align:center; padding:30px;">Error fetching journey.<br><small>${e.message}</small></div>`;
+            }
+        }
+
+        function closeModal(e) {
+            if (e.target === document.getElementById('journeyModal')) closeModalDirect();
+        }
+        function closeModalDirect() {
+            document.getElementById('journeyModal').classList.remove('open');
+        }
+        document.addEventListener('keydown', function(e) { if(e.key === 'Escape') closeModalDirect(); });
+
         window.onload = loadBundles;
         document.getElementById('searchInput').addEventListener('keyup', function(e) { if(e.key === 'Enter') applyFilters(); });
     </script>
@@ -4838,7 +5110,6 @@ def bundling_dashboard_view():
 </html>
 ''')
 
-# 🔥 MAIN DASHBOARD FLOATING BUTTON (RESTORED SAFELY - SAME TAB) 🔥
 @app.after_request
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
@@ -4858,6 +5129,7 @@ def add_bundling_floating_btn(response):
 # ==============================================================================
 # 🛑 BUNDLING BLOCK END
 # ==============================================================================
+
 
 if __name__ == '__main__':
     app.run(debug=True)
