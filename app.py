@@ -4344,394 +4344,12 @@ def nexus_dashboard():
 # ==============================================================================
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE MODULE - NO INTERFERENCE)
+# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE MODULE - VERCEL TIMEOUT FIX + EXACT MAPPING)
 # ==============================================================================
-import urllib.request
-import csv
-import re
-import ssl
-import time
+import urllib.request, csv, re, ssl, time, concurrent.futures
 from datetime import datetime
-from flask import jsonify, render_template_string
+from flask import jsonify, render_template_string, session
 
-_bundling_cache = {'data': None, 'time': 0}
-BUNDLING_CACHE_DURATION = 300  # 5 minutes
-
-def std_date_bundling(d_str):
-    try:
-        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%d-%b-%Y', '%Y/%m/%d'):
-            try: return datetime.strptime(d_str.split(' ')[0], fmt).strftime('%Y-%m-%d')
-            except: continue
-    except: pass
-    return "1970-01-01"
-
-def clean_bundling_tids(raw):
-    raw = str(raw).strip()
-    if not raw or raw.lower() in ['pending', 'none', 'n/a', '-', 'tbd', 'update soon']: return []
-    raw = re.sub(r'(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})', r' \1 ', raw)
-    parts = [t.strip() for t in re.split(r'[,\/\s;]+', raw) if t.strip()]
-    cleaned = []
-    for t in parts:
-        t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
-        if len(t) > 6 and re.search(r'\d', t):
-            if t.startswith('150') and len(t) >= 12 and not t.startswith('0'): cleaned.append('0' + t)
-            else: cleaned.append(t)
-    return list(dict.fromkeys(cleaned))
-
-def fetch_bundling_standalone_data():
-    global _bundling_cache
-    now = time.time()
-    if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
-        return _bundling_cache['data']
-    
-    # 🚨 EXACT COLUMN MAPPING AS PER YOUR FINAL LIST (0-Based Index) 🚨
-    BUNDLING_SOURCES = {
-        "ECL QC Center": (
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 3, "oli": 8, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25}, 1 
-        ),
-        "ECL Zone": (
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            # A=0, B=1, E=4 (Boxes), I=8 (Weight/Line), N=13, O=14, P=15, Q=16, U=20, AC=28
-            {"o": 0, "d": 1, "b": 4, "oli": 8, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28}, 2 
-        ),
-        "GE Zone": (
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 3, "oli": 11, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28}, 2 
-        )
-    }
-    
-    res = {}
-    try:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        
-        for name, (url, col, start_idx) in BUNDLING_SOURCES.items():
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            try:
-                with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
-                    data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
-                    processed = []
-                    last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
-                    
-                    for row in data[start_idx:]:
-                        if not row: continue
-                        p = row + [''] * 60
-                        
-                        raw_order = str(p[col['o']]).strip()
-                        raw_oli = str(p[col['oli']]).strip()
-                        raw_title = str(p[col['title']]).strip()
-                        
-                        if not raw_order and not raw_oli and not raw_title: continue 
-                        
-                        # CARRY FORWARD LOGIC FOR MERGED ROWS
-                        if raw_order: last_order = raw_order
-                        current_order = raw_order if raw_order else last_order
-                        
-                        if not current_order or not re.search(r'\d', current_order): continue
-                        
-                        date_val = str(p[col['d']]).strip()
-                        vendor_val = str(p[col['v']]).strip()
-                        customer_val = str(p[col['c']]).strip()
-                        country_val = str(p[col['cn']]).strip()
-                        tid_val = str(p[col['t']]).strip()
-                        
-                        if date_val: last_date = date_val
-                        if vendor_val: last_vendor = vendor_val
-                        if customer_val: last_customer = customer_val
-                        if country_val: last_country = country_val
-                        if tid_val: last_tid = tid_val
-                        
-                        box_val = str(p[col['b']]).strip()
-                        
-                        processed.append({
-                            'order': current_order,
-                            'date': date_val if date_val else last_date,
-                            'date_std': std_date_bundling(date_val if date_val else last_date),
-                            'boxes': box_val,
-                            'order_line_id': raw_oli if raw_oli else "N/A",
-                            'vendor': vendor_val if vendor_val else last_vendor,
-                            'title': raw_title if raw_title else "N/A",
-                            'item_count': str(p[col['ic']]).strip() or "0",
-                            'customer': customer_val if customer_val else last_customer,
-                            'country': country_val if country_val else last_country,
-                            'tid': tid_val if tid_val else last_tid
-                        })
-                    res[name] = processed
-            except Exception as e:
-                res[name] = []
-        _bundling_cache['data'] = res
-        _bundling_cache['time'] = now
-    except Exception as e: pass
-    return res
-
-@app.route('/api/nexus/bundling_data', methods=['GET'])
-def api_nexus_bundling_data():
-    sheets_data = fetch_bundling_standalone_data()
-    bundles_list, tot_bundles, tot_orders = [], 0, 0
-    source_stats = {"ECL QC Center": {"orders":0, "boxes":0}, "ECL Zone": {"orders":0, "boxes":0}, "GE Zone": {"orders":0, "boxes":0}}
-    
-    for src, rows in sheets_data.items():
-        cb = None
-        for r in rows:
-            oid = r['order'].upper()
-            bx = r['boxes']
-            od = {"order_id": oid, "order_line_id": r['order_line_id'], "title": r['title'], "item_count": r['item_count'], "country": r['country']}
-            
-            if bx != "": # Naya dabba shuru
-                if cb and len(cb['orders']) > 1:
-                    bundles_list.append(cb); tot_bundles += 1; tot_orders += len(cb['orders'])
-                    source_stats[src]["orders"] += len(cb['orders']); source_stats[src]["boxes"] += 1
-                
-                tids = clean_bundling_tids(r['tid'])
-                cb = {
-                    "orders": [od], "date": r['date'], "date_std": r['date_std'],
-                    "customer": r['customer'], "vendor": r['vendor'], "country": r['country'],
-                    "source": src, "boxes_val": bx, "tid": ", ".join(tids) if tids else "Pending Tracking", "total_items": 0
-                }
-            else: # Merge dabba (Box is blank)
-                if cb:
-                    cb['orders'].append(od)
-                    if r['tid'] != "N/A" and r['tid'] != "":
-                        if cb['tid'] == "Pending Tracking":
-                            tids = clean_bundling_tids(r['tid'])
-                            if tids: cb['tid'] = ", ".join(tids)
-        
-        # Akhri Bundle
-        if cb and len(cb['orders']) > 1:
-            bundles_list.append(cb); tot_bundles += 1; tot_orders += len(cb['orders'])
-            source_stats[src]["orders"] += len(cb['orders']); source_stats[src]["boxes"] += 1
-    
-    for b in bundles_list:
-        tq = 0
-        for o in b['orders']:
-            try: tq += int(float(re.sub(r'[^0-9.]', '', str(o['item_count']))))
-            except: pass
-        b['total_items'] = tq
-    
-    bundles_list.sort(key=lambda x: str(x['date_std']), reverse=True)
-    return jsonify({"success": True, "kpi": {"total_bundles": tot_bundles, "total_orders_bundled": tot_orders, "saved_shipments": (tot_orders - tot_bundles if tot_bundles > 0 else 0)}, "source_stats": source_stats, "bundles": bundles_list})
-
-@app.route('/bundling')
-def bundling_dashboard_view():
-    return render_template_string('''
-<!DOCTYPE html>
-<html lang="en" data-theme="dark">
-<head>
-    <meta charset="UTF-8">
-    <title>📦 Bundling Intelligence</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root { --bg: #000; --card: #0A0A0A; --border: #1A1A1A; --text: #FAFAFA; --accent: #10B981; --muted: #71717A; --input-bg: #050505; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); padding: 40px; margin: 0; padding-bottom: 100px; }
-        .header { margin-bottom: 30px; border-bottom: 1px solid var(--border); padding-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;}
-        .filter-box { display: flex; gap: 15px; background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 30px; align-items: flex-end; flex-wrap: wrap; }
-        .f-group { display: flex; flex-direction: column; gap: 5px; }
-        .f-group label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-        .f-input { background: var(--input-bg); border: 1px solid #333; color: #fff; padding: 8px 12px; border-radius: 6px; font-family: 'Inter'; outline: none; min-width: 150px; }
-        .f-input:focus { border-color: var(--accent); }
-        .search-box { flex: 1; min-width: 250px; }
-        .source-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
-        .source-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; border-left: 3px solid var(--accent); }
-        .source-title { font-size: 14px; font-weight: 800; margin-bottom: 10px; color: var(--accent); }
-        .source-stats { display: flex; justify-content: space-around; text-align: center; }
-        .stat-item { flex: 1; }
-        .stat-value { font-size: 24px; font-weight: 900; line-height: 1.2; }
-        .stat-label { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
-        .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px; }
-        .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 25px; border-left: 4px solid var(--accent); }
-        .kpi-val { font-size: 40px; font-weight: 900; letter-spacing: -2px; margin-bottom: 5px; }
-        .kpi-lbl { font-size: 12px; color: #888; font-weight: 700; text-transform: uppercase; }
-        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 16px; border: 1px solid var(--border); overflow: hidden; }
-        th { background: #050505; padding: 15px; font-size: 11px; color: #888; text-transform: uppercase; font-weight: 800; border-bottom: 1px solid var(--border); text-align: left; }
-        td { padding: 15px; border-bottom: 1px solid var(--border); vertical-align: top; }
-        tr:hover td { background: #111; }
-        .bundle-box { background: #050505; border: 1px solid #1A1A1A; border-radius: 8px; padding: 8px 12px; }
-        .bundle-item { display: grid; grid-template-columns: 120px 1fr 60px; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #222; align-items: center; }
-        .bundle-item:last-child { border-bottom: none; padding-bottom: 0; }
-        .loader { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 50px auto; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .btn-top { padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px; cursor: pointer; border: none; display:flex; align-items:center; gap:8px;}
-        .btn-apply { background: var(--accent); color: #000; border: none; padding: 10px 20px; border-radius: 6px; font-weight:bold; cursor:pointer;}
-        .btn-apply:hover, .btn-top:hover { opacity: 0.8; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <div>
-            <h1 style="margin:0; font-size:28px; font-weight:800; letter-spacing:-1px;">📦 Order Consolidation AI</h1>
-            <p style="color:#888; margin-top:5px;">Advanced Box & Item level Breakdown</p>
-        </div>
-        <div style="display:flex; gap: 15px;">
-            <a href="/" class="btn-top" style="background:#1A1A1A; color:#fff; border:1px solid #333;">🏠 Main Dash</a>
-            <button onclick="loadBundles()" class="btn-top" style="background:#10B981; color:#fff;">🔄 Refresh Data</button>
-        </div>
-    </div>
-
-    <div class="filter-box">
-        <div class="f-group search-box">
-            <label>🔍 Search (Order ID or Customer)</label>
-            <input type="text" id="searchInput" class="f-input" placeholder="e.g. 12345 or John Doe">
-        </div>
-        <div class="f-group">
-            <label>📅 From Date</label>
-            <input type="date" id="dateFrom" class="f-input">
-        </div>
-        <div class="f-group">
-            <label>📅 To Date</label>
-            <input type="date" id="dateTo" class="f-input">
-        </div>
-        <div class="f-group">
-            <label>🏷️ Source</label>
-            <select id="sourceSelect" class="f-input">
-                <option value="all">All Sources</option>
-                <option value="ECL QC Center">ECL QC Center</option>
-                <option value="ECL Zone">ECL Zone</option>
-                <option value="GE Zone">GE Zone</option>
-            </select>
-        </div>
-        <div class="f-group">
-            <label>&nbsp;</label>
-            <button class="btn-apply" onclick="applyFilters()">Apply Filters</button>
-        </div>
-    </div>
-
-    <div class="source-kpi-grid" id="sourceKpiCards">
-        <div class="source-card">
-            <div class="source-title">ECL QC Center</div>
-            <div class="source-stats">
-                <div class="stat-item"><div class="stat-value" id="qc-orders">0</div><div class="stat-label">Orders</div></div>
-                <div class="stat-item"><div class="stat-value" id="qc-boxes">0</div><div class="stat-label">Bundles</div></div>
-            </div>
-        </div>
-        <div class="source-card">
-            <div class="source-title">ECL Zone</div>
-            <div class="source-stats">
-                <div class="stat-item"><div class="stat-value" id="ecl-orders">0</div><div class="stat-label">Orders</div></div>
-                <div class="stat-item"><div class="stat-value" id="ecl-boxes">0</div><div class="stat-label">Bundles</div></div>
-            </div>
-        </div>
-        <div class="source-card">
-            <div class="source-title">GE Zone</div>
-            <div class="source-stats">
-                <div class="stat-item"><div class="stat-value" id="ge-orders">0</div><div class="stat-label">Orders</div></div>
-                <div class="stat-item"><div class="stat-value" id="ge-boxes">0</div><div class="stat-label">Bundles</div></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-val" id="kpi-bundles">0</div><div class="kpi-lbl">Total Bundles Packed</div></div>
-        <div class="kpi-card"><div class="kpi-val" id="kpi-orders">0</div><div class="kpi-lbl">Total Orders Merged</div></div>
-        <div class="kpi-card" style="border-left-color:#F59E0B"><div class="kpi-val" id="kpi-saved" style="color:#F59E0B">0</div><div class="kpi-lbl" style="color:#F59E0B;">🚚 Shipments Saved</div></div>
-    </div>
-
-    <div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888;">Fetching & Merging Data...</p></div>
-
-    <div id="content" style="display:none;">
-        <table>
-            <thead>
-                <tr><th>Timeline & Source</th><th>Client Info</th><th>Master Box & TID</th><th>📦 The Box Breakdown</th></tr>
-            </thead>
-            <tbody id="tb"></tbody>
-        </table>
-    </div>
-
-    <script>
-        let allBundles = [];
-        let sourceStats = {};
-
-        async function loadBundles() {
-            document.getElementById('content').style.display = 'none';
-            document.getElementById('loading').style.display = 'block';
-            try {
-                const r = await fetch('/api/nexus/bundling_data');
-                const d = await r.json();
-                allBundles = d.bundles || [];
-                sourceStats = d.source_stats || {};
-                document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
-                document.getElementById('kpi-orders').innerText = d.kpi?.total_orders_bundled || 0;
-                document.getElementById('kpi-saved').innerText = d.kpi?.saved_shipments || 0;
-                document.getElementById('qc-orders').innerText = sourceStats['ECL QC Center']?.orders || 0;
-                document.getElementById('qc-boxes').innerText = sourceStats['ECL QC Center']?.boxes || 0;
-                document.getElementById('ecl-orders').innerText = sourceStats['ECL Zone']?.orders || 0;
-                document.getElementById('ecl-boxes').innerText = sourceStats['ECL Zone']?.boxes || 0;
-                document.getElementById('ge-orders').innerText = sourceStats['GE Zone']?.orders || 0;
-                document.getElementById('ge-boxes').innerText = sourceStats['GE Zone']?.boxes || 0;
-                applyFilters();
-            } catch (e) {
-                document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data. Check Console.</div>';
-            }
-        }
-
-        function applyFilters() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
-            const dateFrom = document.getElementById('dateFrom').value;
-            const dateTo = document.getElementById('dateTo').value;
-            const source = document.getElementById('sourceSelect').value;
-
-            let filtered = allBundles.filter(b => {
-                if (source !== 'all' && b.source !== source) return false;
-                if (dateFrom && b.date_std < dateFrom) return false;
-                if (dateTo && b.date_std > dateTo) return false;
-                if (searchTerm) {
-                    const matchesOrder = b.orders.some(o => o.order_id.toLowerCase().includes(searchTerm));
-                    const matchesCustomer = b.customer && b.customer.toLowerCase().includes(searchTerm);
-                    return matchesOrder || matchesCustomer;
-                }
-                return true;
-            });
-
-            renderTable(filtered);
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('content').style.display = 'block';
-        }
-
-        function renderTable(bundles) {
-            let h = '';
-            if (bundles.length === 0) {
-                h = '<tr><td colspan="4" style="text-align:center; padding:60px; color:#666; font-weight:bold;">No Bundled Orders Found. Make sure rows are merged in Sheet.</td></tr>';
-            } else {
-                bundles.forEach(b => {
-                    let items = b.orders.map(o => `
-                        <div class="bundle-item">
-                            <div><span style="color:var(--accent); font-weight:800;">${o.order_id}</span><br><span style="font-size:10px; color:#666;">Weight: ${o.order_line_id} kg</span></div>
-                            <div style="font-size:11px; color:#888;">${o.title && o.title.length > 40 ? o.title.substring(0,40)+'...' : o.title || ''}</div>
-                            <div style="font-weight:800; text-align:right;">${o.item_count}</div>
-                        </div>
-                    `).join('');
-                    
-                    h += `<tr>
-                        <td><b>${b.date || ''}</b><br><span style="color:#888; font-size:10px;">${b.source || ''}</span></td>
-                        <td><b>${b.customer || ''}</b><br><span style="color:#666; font-size:11px;">${b.vendor || ''}</span><br><span style="color:#666; font-size:11px;">${b.country || ''}</span></td>
-                        <td>
-                            <div style="background:#111; padding:8px; border-radius:6px; border:1px solid #222;">
-                                <small style="color:#888">TID:</small> <span style="font-family:monospace; font-weight:800;">${b.tid}</span><br>
-                                <small style="color:#888">BOX ID:</small> <b style="color:#10B981">${b.boxes_val}</b>
-                            </div>
-                            <div style="margin-top:8px;"><b>Total Items: ${b.total_items || 0}</b></div>
-                        </td>
-                        <td><div class="bundle-box">${items}</div></td>
-                    </tr>`;
-                });
-            }
-            document.getElementById('tb').innerHTML = h;
-        }
-
-        window.onload = loadBundles;
-        document.getElementById('searchInput').addEventListener('keyup', function(e) { if(e.key === 'Enter') applyFilters(); });
-    </script>
-</body>
-</html>
-''')
-# ==============================================================================
-# END OF BUNDLING HUB
-# ==============================================================================
-
-# ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE BLOCK - EXACT MAPPING)
-# ==============================================================================
 _bundling_cache = {'data': None, 'time': 0}
 BUNDLING_CACHE_DURATION = 300  # 5 minutes
 
@@ -4744,7 +4362,6 @@ def std_date_bundling(d_str):
     return "1970-01-01"
 
 def clean_bundling_tids_func(raw):
-    import re
     raw = str(raw).strip()
     if not raw or raw.lower() in ['pending', 'none', 'n/a', '-', 'tbd', 'update soon']: return []
     raw = re.sub(r'(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})', r' \1 ', raw)
@@ -4757,14 +4374,70 @@ def clean_bundling_tids_func(raw):
             else: cleaned.append(t)
     return list(dict.fromkeys(cleaned))
 
+def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
+    """Parallel fetch function to prevent Vercel 10s Timeout"""
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
+            data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+            processed = []
+            last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
+            
+            for row in data[start_idx:]:
+                if not row: continue
+                p = row + [''] * 60
+                
+                raw_order = str(p[col['o']]).strip()
+                raw_oli = str(p[col['oli']]).strip()
+                raw_title = str(p[col['title']]).strip()
+                
+                if not raw_order and not raw_oli and not raw_title: continue 
+                
+                # CARRY FORWARD LOGIC FOR MERGED ROWS
+                if raw_order: last_order = raw_order
+                current_order = raw_order if raw_order else last_order
+                
+                if not current_order or not re.search(r'\d', current_order): continue
+                if current_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
+                
+                date_val = str(p[col['d']]).strip()
+                vendor_val = str(p[col['v']]).strip()
+                customer_val = str(p[col['c']]).strip()
+                country_val = str(p[col['cn']]).strip()
+                tid_val = str(p[col['t']]).strip()
+                
+                if date_val: last_date = date_val
+                if vendor_val: last_vendor = vendor_val
+                if customer_val: last_customer = customer_val
+                if country_val: last_country = country_val
+                if tid_val: last_tid = tid_val
+                
+                box_val = str(p[col['b']]).strip()
+                
+                processed.append({
+                    'order': current_order,
+                    'date': date_val if date_val else last_date,
+                    'date_std': std_date_bundling(date_val if date_val else last_date),
+                    'boxes': box_val,
+                    'order_line_id': raw_oli if raw_oli else "N/A",
+                    'vendor': vendor_val if vendor_val else last_vendor,
+                    'title': raw_title if raw_title else "N/A",
+                    'item_count': str(p[col['ic']]).strip() or "0",
+                    'customer': customer_val if customer_val else last_customer,
+                    'country': country_val if country_val else last_country,
+                    'tid': tid_val if tid_val else last_tid
+                })
+            return name, processed
+    except Exception as e:
+        return name, []
+
 def fetch_bundling_standalone_data():
-    import urllib.request, csv, re, ssl, time
     global _bundling_cache
     now = time.time()
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
     
-    # 🚨 EXACT COLUMN MAPPING AS PER YOUR INSTRUCTIONS (0-Based Index) 🚨
+    # 🚨 EXACT COLUMN MAPPING AS PER YOUR INSTRUCTIONS 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -4787,61 +4460,13 @@ def fetch_bundling_standalone_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         
-        for name, (url, col, start_idx) in BUNDLING_SOURCES.items():
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            try:
-                with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
-                    data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
-                    processed = []
-                    last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
-                    
-                    for row in data[start_idx:]:
-                        if not row: continue
-                        p = row + [''] * 60
-                        
-                        raw_order = str(p[col['o']]).strip()
-                        raw_oli = str(p[col['oli']]).strip()
-                        raw_title = str(p[col['title']]).strip()
-                        
-                        if not raw_order and not raw_oli and not raw_title: continue 
-                        
-                        # CARRY FORWARD LOGIC FOR BLANK MERGED CELLS
-                        if raw_order: last_order = raw_order
-                        current_order = raw_order if raw_order else last_order
-                        
-                        if not current_order or not re.search(r'\d', current_order): continue
-                        if current_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
-                        
-                        date_val = str(p[col['d']]).strip()
-                        vendor_val = str(p[col['v']]).strip()
-                        customer_val = str(p[col['c']]).strip()
-                        country_val = str(p[col['cn']]).strip()
-                        tid_val = str(p[col['t']]).strip()
-                        
-                        if date_val: last_date = date_val
-                        if vendor_val: last_vendor = vendor_val
-                        if customer_val: last_customer = customer_val
-                        if country_val: last_country = country_val
-                        if tid_val: last_tid = tid_val
-                        
-                        box_val = str(p[col['b']]).strip()
-                        
-                        processed.append({
-                            'order': current_order,
-                            'date': date_val if date_val else last_date,
-                            'date_std': std_date_bundling(date_val if date_val else last_date),
-                            'boxes': box_val, # Blank means it merges
-                            'order_line_id': raw_oli if raw_oli else "N/A",
-                            'vendor': vendor_val if vendor_val else last_vendor,
-                            'title': raw_title if raw_title else "N/A",
-                            'item_count': str(p[col['ic']]).strip() or "0",
-                            'customer': customer_val if customer_val else last_customer,
-                            'country': country_val if country_val else last_country,
-                            'tid': tid_val if tid_val else last_tid
-                        })
-                    res[name] = processed
-            except Exception as e:
-                res[name] = []
+        # 🚀 MULTI-THREADING APPLIED HERE (Saves Vercel Crash) 🚀
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [executor.submit(fetch_single_bundling_sheet, name, url, col, start_idx, ctx) for name, (url, col, start_idx) in BUNDLING_SOURCES.items()]
+            for future in concurrent.futures.as_completed(futures):
+                name, processed_data = future.result()
+                res[name] = processed_data
+                
         _bundling_cache['data'] = res
         _bundling_cache['time'] = now
     except Exception as e: pass
@@ -4897,7 +4522,6 @@ def api_nexus_bundling_data():
 
 @app.route('/bundling')
 def bundling_dashboard_view():
-    from flask import session, render_template_string
     u = session.get('username') or session.get('user') or session.get('role')
     if not u or str(u).lower() != 'admin':
         return "<div style='text-align:center; padding:100px; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2></div>", 403
@@ -5112,11 +4736,6 @@ def bundling_dashboard_view():
 </body>
 </html>
 ''')
-# ==============================================================================
-# END OF BUNDLING HUB
-# ==============================================================================
-
-
 
 if __name__ == '__main__':
     app.run(debug=True)
