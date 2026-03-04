@@ -4747,8 +4747,6 @@ def add_floating_btns(response):
             if '</body>' in h: response.set_data(h.replace('</body>', btns + '</body>'))
     return response
 
-if __name__ == '__main__':
-    app.run(debug=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
