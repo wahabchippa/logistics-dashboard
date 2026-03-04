@@ -4356,10 +4356,16 @@ from datetime import datetime
 from flask import jsonify, request, session, render_template_string
 
 _bundling_cache = {'data': None, 'time': 0}
-_journey_cache = {'data': None, 'time': 0}
+_journey_cache  = {'data': None, 'time': 0}
+_status_cache   = {'data': None, 'time': 0}
 BUNDLING_CACHE_DURATION = 300  # 5 minutes
 
 JOURNEY_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRsiVaciOMON0xaXXEi1guBYrqfVNpD-j4My_9YokGd5kftqjAXvri5c_gLB_VRXeoDLzEtz9h5y8x/pub?gid=1409345116&single=true&output=csv"
+STATUS_SHEET_URL  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1570463436&single=true&output=csv"
+
+# ==============================================================================
+# HELPERS
+# ==============================================================================
 
 def std_date(d_str):
     try:
@@ -4383,15 +4389,14 @@ def clean_bundling_tids(raw):
     return list(dict.fromkeys(cleaned))
 
 def parse_journey_date(val):
-    """Parse datetime string, return datetime obj or None"""
     if not val or str(val).strip() in ['', 'nan', 'N/A', '-', 'None', 'null']:
         return None
     val = str(val).strip()
     fmts = [
-        '%B %d, %Y, %H:%M',      # February 26, 2026, 23:01
-        '%B %d, %Y %H:%M:%S',    # February 26, 2026 23:01:00
-        '%B %d, %Y %H:%M',       # February 26, 2026 23:01
-        '%B %d, %Y',             # February 26, 2026
+        '%B %d, %Y, %H:%M',
+        '%B %d, %Y %H:%M:%S',
+        '%B %d, %Y %H:%M',
+        '%B %d, %Y',
         '%Y-%m-%d %H:%M:%S',
         '%Y-%m-%dT%H:%M:%S',
         '%Y-%m-%d %H:%M:%S.%f',
@@ -4411,7 +4416,6 @@ def parse_journey_date(val):
     return None
 
 def days_between(dt1, dt2):
-    """Return days difference between two datetime objects"""
     if dt1 and dt2:
         diff = (dt2 - dt1).total_seconds()
         days = diff / 86400
@@ -4426,6 +4430,10 @@ def fmt_journey_date(dt):
     if not dt: return None
     return dt.strftime('%d %b %Y, %H:%M')
 
+# ==============================================================================
+# DATA FETCHERS
+# ==============================================================================
+
 def fetch_rates_sheet(ctx):
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
@@ -4435,7 +4443,7 @@ def fetch_rates_sheet(ctx):
             rates_map = {}
             for row in data[1:]:
                 p = row + [''] * 20
-                country = str(p[7]).strip().lower()
+                country  = str(p[7]).strip().lower()
                 rate_str = str(p[12]).strip()
                 if country and rate_str:
                     try: rates_map[country] = float(re.sub(r'[^0-9.]', '', rate_str))
@@ -4443,8 +4451,33 @@ def fetch_rates_sheet(ctx):
             return "RATES", rates_map
     except: return "RATES", {}
 
+def fetch_status_sheet_data():
+    """Fetch & cache status sheet: col A = fleek_id, col B = latest_status"""
+    global _status_cache
+    now = time.time()
+    if _status_cache['data'] and (now - _status_cache['time']) < BUNDLING_CACHE_DURATION:
+        return _status_cache['data']
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(STATUS_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+            data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+        status_map = {}
+        for row in data[1:]:
+            p = row + [''] * 10
+            fleek_id = str(p[0]).strip()
+            status   = str(p[1]).strip()
+            if fleek_id and fleek_id.lower() not in ['', 'nan', 'fleek_id', 'fleek id', 'order']:
+                status_map[fleek_id.upper()] = status if status else '—'
+        _status_cache['data'] = status_map
+        _status_cache['time'] = now
+        return status_map
+    except:
+        return {}
+
 def fetch_journey_sheet_data():
-    """Fetch and cache the order journey sheet"""
     global _journey_cache
     now = time.time()
     if _journey_cache['data'] and (now - _journey_cache['time']) < BUNDLING_CACHE_DURATION:
@@ -4456,29 +4489,28 @@ def fetch_journey_sheet_data():
         req = urllib.request.Request(JOURNEY_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
-        # Build lookup: fleek_id (col E=4) -> row dict
         journey_map = {}
         for row in data[1:]:
             p = row + [''] * 60
-            fleek_id = str(p[4]).strip()  # Column E
+            fleek_id = str(p[4]).strip()
             if not fleek_id or fleek_id.lower() in ['', 'nan', 'fleek_id', 'fleek id']:
                 continue
             journey_map[fleek_id.upper()] = {
-                'created_at':             str(p[0]).strip(),   # A
-                'accepted_at':            str(p[8]).strip(),   # I
-                'pickup_ready_at':        str(p[9]).strip(),   # J
-                'cancelled_at':           str(p[12]).strip(),  # M
-                'qc_pending_at':          str(p[13]).strip(),  # N
-                'qc_approved_at':         str(p[14]).strip(),  # O
-                'handedover_at':          str(p[30]).strip(),  # AE
-                'freight_at':             str(p[31]).strip(),  # AF
-                'courier_at':             str(p[34]).strip(),  # AI
-                'delivered_at':           str(p[36]).strip(),  # AK
+                'created_at':      str(p[0]).strip(),
+                'accepted_at':     str(p[8]).strip(),
+                'pickup_ready_at': str(p[9]).strip(),
+                'cancelled_at':    str(p[12]).strip(),
+                'qc_pending_at':   str(p[13]).strip(),
+                'qc_approved_at':  str(p[14]).strip(),
+                'handedover_at':   str(p[30]).strip(),
+                'freight_at':      str(p[31]).strip(),
+                'courier_at':      str(p[34]).strip(),
+                'delivered_at':    str(p[36]).strip(),
             }
         _journey_cache['data'] = journey_map
         _journey_cache['time'] = now
         return journey_map
-    except Exception as e:
+    except:
         return {}
 
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
@@ -4491,37 +4523,37 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
             for row in data[start_idx:]:
                 if not row: continue
                 p = row + [''] * 60
-                raw_order = str(p[col['o']]).strip()
+                raw_order  = str(p[col['o']]).strip()
                 raw_weight = str(p[col['w']]).strip()
-                raw_title = str(p[col['title']]).strip()
+                raw_title  = str(p[col['title']]).strip()
                 if not raw_order and not raw_weight and not raw_title: continue
                 if raw_order: last_order = raw_order
                 current_order = raw_order if raw_order else last_order
                 if not current_order or not re.search(r'\d', current_order): continue
                 if current_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
-                date_val = str(p[col['d']]).strip()
-                vendor_val = str(p[col['v']]).strip()
+                date_val     = str(p[col['d']]).strip()
+                vendor_val   = str(p[col['v']]).strip()
                 customer_val = str(p[col['c']]).strip()
-                country_val = str(p[col['cn']]).strip()
-                tid_val = str(p[col['t']]).strip()
-                if date_val: last_date = date_val
-                if vendor_val: last_vendor = vendor_val
+                country_val  = str(p[col['cn']]).strip()
+                tid_val      = str(p[col['t']]).strip()
+                if date_val:     last_date     = date_val
+                if vendor_val:   last_vendor   = vendor_val
                 if customer_val: last_customer = customer_val
-                if country_val: last_country = country_val
-                if tid_val: last_tid = tid_val
+                if country_val:  last_country  = country_val
+                if tid_val:      last_tid      = tid_val
                 box_val = str(p[col['b']]).strip()
                 processed.append({
-                    'order': current_order,
-                    'date': date_val if date_val else last_date,
-                    'date_std': std_date(date_val if date_val else last_date),
-                    'boxes': box_val,
-                    'weight': raw_weight,
-                    'vendor': vendor_val if vendor_val else last_vendor,
-                    'title': raw_title if raw_title else "N/A",
+                    'order':      current_order,
+                    'date':       date_val if date_val else last_date,
+                    'date_std':   std_date(date_val if date_val else last_date),
+                    'boxes':      box_val,
+                    'weight':     raw_weight,
+                    'vendor':     vendor_val   if vendor_val   else last_vendor,
+                    'title':      raw_title    if raw_title    else "N/A",
                     'item_count': str(p[col['ic']]).strip() or "0",
-                    'customer': customer_val if customer_val else last_customer,
-                    'country': country_val if country_val else last_country,
-                    'tid': tid_val if tid_val else last_tid
+                    'customer':   customer_val if customer_val else last_customer,
+                    'country':    country_val  if country_val  else last_country,
+                    'tid':        tid_val      if tid_val      else last_tid
                 })
             return name, processed
     except: return name, []
@@ -4534,15 +4566,15 @@ def fetch_bundling_standalone_data():
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 3, "w": 6, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25}, 1
+            {"o":0,"d":1,"b":3,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25}, 1
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 4, "w": 8, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28}, 2
+            {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28}, 2
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 3, "w": 7, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28}, 2
+            {"o":0,"d":1,"b":3,"w":7,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28}, 2
         )
     }
     res = {}
@@ -4550,7 +4582,8 @@ def fetch_bundling_standalone_data():
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(fetch_single_bundling_sheet, name, url, col, start_idx, ctx) for name, (url, col, start_idx) in BUNDLING_SOURCES.items()]
+        futures = [executor.submit(fetch_single_bundling_sheet, name, url, col, start_idx, ctx)
+                   for name, (url, col, start_idx) in BUNDLING_SOURCES.items()]
         futures.append(executor.submit(fetch_rates_sheet, ctx))
         for future in concurrent.futures.as_completed(futures):
             name, data = future.result()
@@ -4559,94 +4592,143 @@ def fetch_bundling_standalone_data():
     _bundling_cache['time'] = now
     return res
 
+# ==============================================================================
+# API ENDPOINTS
+# ==============================================================================
+
 @app.route('/api/nexus/order_journey/<order_id>')
 def api_order_journey(order_id):
     journey_map = fetch_journey_sheet_data()
-    order_key = str(order_id).strip().upper()
+    order_key   = str(order_id).strip().upper()
     row = journey_map.get(order_key)
     if not row:
         return jsonify({"success": False, "message": f"Order '{order_id}' not found in journey sheet."})
-    
-    dt_created      = parse_journey_date(row['created_at'])
-    dt_accepted     = parse_journey_date(row['accepted_at'])
-    dt_pickup       = parse_journey_date(row['pickup_ready_at'])
-    dt_cancelled    = parse_journey_date(row['cancelled_at'])
-    dt_qc_pending   = parse_journey_date(row['qc_pending_at'])
-    dt_qc_approved  = parse_journey_date(row['qc_approved_at'])
-    dt_handedover   = parse_journey_date(row['handedover_at'])
-    dt_freight      = parse_journey_date(row['freight_at'])
-    dt_courier      = parse_journey_date(row['courier_at'])
-    dt_delivered    = parse_journey_date(row['delivered_at'])
-
-    # ⭐ KEY METRICS
-    qc_to_handover  = days_between(dt_qc_approved, dt_handedover)
-    handover_to_freight = days_between(dt_handedover, dt_freight)
-    total_journey   = days_between(dt_created, dt_delivered or dt_courier or dt_freight or dt_handedover)
-
+    dt_created    = parse_journey_date(row['created_at'])
+    dt_accepted   = parse_journey_date(row['accepted_at'])
+    dt_pickup     = parse_journey_date(row['pickup_ready_at'])
+    dt_cancelled  = parse_journey_date(row['cancelled_at'])
+    dt_qc_pending = parse_journey_date(row['qc_pending_at'])
+    dt_qc_appr    = parse_journey_date(row['qc_approved_at'])
+    dt_handed     = parse_journey_date(row['handedover_at'])
+    dt_freight    = parse_journey_date(row['freight_at'])
+    dt_courier    = parse_journey_date(row['courier_at'])
+    dt_delivered  = parse_journey_date(row['delivered_at'])
+    qc_to_handover       = days_between(dt_qc_appr, dt_handed)
+    handover_to_freight  = days_between(dt_handed,  dt_freight)
+    total_journey        = days_between(dt_created, dt_delivered or dt_courier or dt_freight or dt_handed)
     return jsonify({
-        "success": True,
-        "order_id": order_id,
+        "success": True, "order_id": order_id,
         "is_cancelled": bool(dt_cancelled),
         "timeline": {
-            "created_at":       fmt_journey_date(dt_created),
-            "accepted_at":      fmt_journey_date(dt_accepted),
-            "pickup_ready_at":  fmt_journey_date(dt_pickup),
-            "cancelled_at":     fmt_journey_date(dt_cancelled),
-            "qc_pending_at":    fmt_journey_date(dt_qc_pending),
-            "qc_approved_at":   fmt_journey_date(dt_qc_approved),
-            "handedover_at":    fmt_journey_date(dt_handedover),
-            "freight_at":       fmt_journey_date(dt_freight),
-            "courier_at":       fmt_journey_date(dt_courier),
-            "delivered_at":     fmt_journey_date(dt_delivered),
+            "created_at":      fmt_journey_date(dt_created),
+            "accepted_at":     fmt_journey_date(dt_accepted),
+            "pickup_ready_at": fmt_journey_date(dt_pickup),
+            "cancelled_at":    fmt_journey_date(dt_cancelled),
+            "qc_pending_at":   fmt_journey_date(dt_qc_pending),
+            "qc_approved_at":  fmt_journey_date(dt_qc_appr),
+            "handedover_at":   fmt_journey_date(dt_handed),
+            "freight_at":      fmt_journey_date(dt_freight),
+            "courier_at":      fmt_journey_date(dt_courier),
+            "delivered_at":    fmt_journey_date(dt_delivered),
         },
         "key_metrics": {
-            "qc_to_handover":       qc_to_handover,
-            "handover_to_freight":  handover_to_freight,
-            "total_journey":        total_journey,
+            "qc_to_handover":      qc_to_handover,
+            "handover_to_freight": handover_to_freight,
+            "total_journey":       total_journey,
         }
+    })
+
+@app.route('/api/nexus/status_intelligence')
+def api_status_intelligence():
+    """Return all orders from all 3 sources merged with latest status"""
+    sheets_data = fetch_bundling_standalone_data()
+    status_map  = fetch_status_sheet_data()
+
+    all_orders = []
+    unique_statuses = set()
+
+    for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
+        rows = sheets_data.get(src, [])
+        for r in rows:
+            oid    = r['order'].strip().upper()
+            status = status_map.get(oid, '—')
+            unique_statuses.add(status)
+            all_orders.append({
+                "order_id":   oid,
+                "date":       r['date'],
+                "date_std":   r['date_std'],
+                "source":     src,
+                "customer":   r['customer'],
+                "country":    r['country'],
+                "vendor":     r['vendor'],
+                "weight":     r['weight'],
+                "title":      r['title'],
+                "item_count": r['item_count'],
+                "status":     status,
+            })
+
+    all_orders.sort(key=lambda x: x['date_std'], reverse=True)
+
+    statuses_list = sorted([s for s in unique_statuses if s and s != '—'])
+    if '—' in unique_statuses: statuses_list.append('—')
+
+    return jsonify({
+        "success":          True,
+        "total":            len(all_orders),
+        "orders":           all_orders,
+        "unique_statuses":  statuses_list,
     })
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
 def api_nexus_bundling_data():
-    sheets_data = fetch_bundling_standalone_data()
+    sheets_data    = fetch_bundling_standalone_data()
+    status_map     = fetch_status_sheet_data()
     bundles_list, tot_bundles, tot_orders = [], 0, 0
     total_savings_gbp = 0.0
-    rates_map = sheets_data.get("RATES", {})
+    rates_map      = sheets_data.get("RATES", {})
     DEFAULT_RATE_GBP = 4.50
     source_stats = {
         "ECL QC Center": {"orders": 0, "boxes": 0},
-        "PK Zone": {"orders": 0, "boxes": 0}
+        "PK Zone":        {"orders": 0, "boxes": 0}
     }
     for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
-        rows = sheets_data.get(src, [])
-        cb = None
+        rows     = sheets_data.get(src, [])
+        cb       = None
         stat_src = "PK Zone" if src in ["ECL Zone", "GE Zone"] else src
         for r in rows:
             oid = r['order'].upper()
-            bx = r['boxes']
-            od = {
-                "order_id": oid,
-                "weight": r['weight'],
-                "title": r['title'],
+            bx  = r['boxes']
+            od  = {
+                "order_id":   oid,
+                "weight":     r['weight'],
+                "title":      r['title'],
                 "item_count": r['item_count'],
-                "country": r['country']
+                "country":    r['country'],
+                "status":     status_map.get(oid, '—'),
             }
             if bx != "":
                 if cb and len(cb['orders']) > 1:
                     bundles_list.append(cb)
                     tot_bundles += 1; tot_orders += len(cb['orders'])
                     source_stats[stat_src]["orders"] += len(cb['orders'])
-                    source_stats[stat_src]["boxes"] += 1
+                    source_stats[stat_src]["boxes"]  += 1
                 tids = clean_bundling_tids(r['tid'])
                 cb = {
-                    "orders": [od], "date": r['date'], "date_std": r['date_std'],
-                    "customer": r['customer'], "vendor": r['vendor'], "country": r['country'],
-                    "source": src, "boxes_val": bx, "tid": ", ".join(tids) if tids else "Pending Tracking", "total_items": 0
+                    "orders":    [od],
+                    "date":      r['date'],
+                    "date_std":  r['date_std'],
+                    "customer":  r['customer'],
+                    "vendor":    r['vendor'],
+                    "country":   r['country'],
+                    "source":    src,
+                    "boxes_val": bx,
+                    "tid":       ", ".join(tids) if tids else "Pending Tracking",
+                    "total_items": 0
                 }
             else:
                 if cb:
                     cb['orders'].append(od)
-                    if r['tid'] != "N/A" and r['tid'] != "":
+                    if r['tid'] not in ['N/A', '']:
                         if cb['tid'] == "Pending Tracking":
                             tids = clean_bundling_tids(r['tid'])
                             if tids: cb['tid'] = ", ".join(tids)
@@ -4654,29 +4736,25 @@ def api_nexus_bundling_data():
             bundles_list.append(cb)
             tot_bundles += 1; tot_orders += len(cb['orders'])
             source_stats[stat_src]["orders"] += len(cb['orders'])
-            source_stats[stat_src]["boxes"] += 1
+            source_stats[stat_src]["boxes"]  += 1
 
     for b in bundles_list:
-        tq = 0
-        bundle_weight_sum = 0.0
-        ind_shipping_cost = 0.0
-        c_name = str(b.get('country', '')).strip().lower()
-        per_kg_rate = rates_map.get(c_name, DEFAULT_RATE_GBP)
+        tq = 0; bundle_weight_sum = 0.0; ind_shipping_cost = 0.0
+        c_name    = str(b.get('country', '')).strip().lower()
+        per_kg    = rates_map.get(c_name, DEFAULT_RATE_GBP)
         for o in b['orders']:
-            try: tq += int(float(re.sub(r'[^0-9.]', '', str(o['item_count']))))
+            try:   tq += int(float(re.sub(r'[^0-9.]', '', str(o['item_count']))))
             except: pass
             try:
                 wt_str = re.sub(r'[^0-9.]', '', str(o['weight']))
                 wt = float(wt_str) if wt_str else 0.0
             except: wt = 0.0
             bundle_weight_sum += wt
-            billed_ind = max(math.ceil(wt), 1)
-            ind_shipping_cost += (billed_ind * per_kg_rate)
-        b['total_items'] = tq
+            ind_shipping_cost += (max(math.ceil(wt), 1) * per_kg)
+        b['total_items']      = tq
         b['bundle_weight_kg'] = round(bundle_weight_sum, 2)
-        billed_bundle = max(math.ceil(bundle_weight_sum), 1)
-        bundled_shipping_cost = billed_bundle * per_kg_rate
-        sav = ind_shipping_cost - bundled_shipping_cost
+        billed_bundle         = max(math.ceil(bundle_weight_sum), 1)
+        sav = ind_shipping_cost - (billed_bundle * per_kg)
         b['savings_gbp'] = round(sav if sav > 0 else 0, 2)
         total_savings_gbp += b['savings_gbp']
 
@@ -4684,194 +4762,485 @@ def api_nexus_bundling_data():
     return jsonify({
         "success": True,
         "kpi": {
-            "total_bundles": tot_bundles,
+            "total_bundles":        tot_bundles,
             "total_orders_bundled": tot_orders,
-            "saved_shipments": (tot_orders - tot_bundles if tot_bundles > 0 else 0),
-            "total_savings_gbp": round(total_savings_gbp, 2)
+            "saved_shipments":      (tot_orders - tot_bundles if tot_bundles > 0 else 0),
+            "total_savings_gbp":    round(total_savings_gbp, 2)
         },
         "source_stats": source_stats,
-        "bundles": bundles_list
+        "bundles":      bundles_list
     })
+
+# ==============================================================================
+# VIEWS
+# ==============================================================================
 
 @app.route('/bundling')
 def bundling_dashboard_view():
     u = session.get('username') or session.get('user') or session.get('role')
     if not u or str(u).lower() != 'admin':
-        return "<div style='text-align:center; padding:100px; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2></div>", 403
+        return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
+    return render_template_string(BUNDLING_HTML)
 
-    return render_template_string('''
-<!DOCTYPE html>
-<html lang="en" data-theme="dark">
+@app.route('/bundling/status')
+def bundling_status_view():
+    u = session.get('username') or session.get('user') or session.get('role')
+    if not u or str(u).lower() != 'admin':
+        return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
+    return render_template_string(STATUS_INTELLIGENCE_HTML)
+
+# ==============================================================================
+# BUNDLING HTML
+# ==============================================================================
+
+BUNDLING_HTML = '''<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>📦 Bundling Intelligence</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root { --bg:#000; --card:#0A0A0A; --border:#1A1A1A; --text:#FAFAFA; --accent:#10B981; --muted:#71717A; --input-bg:#050505; }
-        body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); padding:40px; margin:0; padding-bottom:50px; }
-        .header { margin-bottom:30px; border-bottom:1px solid var(--border); padding-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:20px; }
-        .filter-box { display:flex; gap:15px; background:var(--card); padding:20px; border-radius:12px; border:1px solid var(--border); margin-bottom:30px; align-items:flex-end; flex-wrap:wrap; }
-        .f-group { display:flex; flex-direction:column; gap:5px; }
-        .f-group label { font-size:11px; color:#888; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
-        .f-input { background:var(--input-bg); border:1px solid #333; color:#fff; padding:8px 12px; border-radius:6px; font-family:'Inter'; outline:none; min-width:150px; }
-        .f-input:focus { border-color:var(--accent); }
-        .search-box { flex:1; min-width:250px; }
-        .source-kpi-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:20px; margin-bottom:30px; }
-        .source-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; border-left:3px solid var(--accent); }
-        .source-title { font-size:14px; font-weight:800; margin-bottom:10px; color:var(--accent); }
-        .source-stats { display:flex; justify-content:space-around; text-align:center; }
-        .stat-item { flex:1; }
-        .stat-value { font-size:24px; font-weight:900; line-height:1.2; }
-        .stat-label { font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase; }
-        .kpi-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:20px; margin-bottom:40px; }
-        .kpi-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:25px; border-left:4px solid var(--accent); }
-        .kpi-val { font-size:40px; font-weight:900; letter-spacing:-2px; margin-bottom:5px; }
-        .kpi-lbl { font-size:12px; color:#888; font-weight:700; text-transform:uppercase; }
-        table { width:100%; border-collapse:collapse; background:var(--card); border-radius:16px; border:1px solid var(--border); overflow:hidden; }
-        th { background:#050505; padding:15px; font-size:11px; color:#888; text-transform:uppercase; font-weight:800; border-bottom:1px solid var(--border); text-align:left; }
-        td { padding:15px; border-bottom:1px solid var(--border); vertical-align:top; }
-        tr:hover td { background:#111; }
-        .bundle-box { background:#050505; border:1px solid #1A1A1A; border-radius:8px; padding:8px 12px; }
-        .bundle-item { display:grid; grid-template-columns:120px 1fr 60px; gap:10px; padding:8px 0; border-bottom:1px dashed #222; align-items:center; }
-        .bundle-item:last-child { border-bottom:none; padding-bottom:0; }
-
-        /* ORDER CLICK STYLE */
-        .order-link {
-            color: #10B981;
-            font-weight: 800;
-            cursor: pointer;
-            font-family: monospace;
-            font-size: 13px;
-            background: rgba(16,185,129,0.08);
-            padding: 3px 7px;
-            border-radius: 5px;
-            border: 1px solid rgba(16,185,129,0.2);
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            transition: all 0.2s;
-            text-decoration: none;
-        }
-        .order-link:hover {
-            background: rgba(16,185,129,0.18);
-            border-color: rgba(16,185,129,0.5);
-            transform: translateY(-1px);
-        }
-        .order-link .arr { font-size: 10px; opacity: 0.7; }
-
-        /* MODAL */
-        .modal-overlay {
-            display: none;
-            position: fixed; top:0; left:0; width:100%; height:100%;
-            background: rgba(0,0,0,0.85);
-            z-index: 10000;
-            backdrop-filter: blur(4px);
-            justify-content: center;
-            align-items: center;
-        }
-        .modal-overlay.open { display: flex; }
-        .modal {
-            background: #0A0A0A;
-            border: 1px solid #2A2A2A;
-            border-radius: 16px;
-            padding: 32px;
-            width: 100%;
-            max-width: 580px;
-            max-height: 90vh;
-            overflow-y: auto;
-            position: relative;
-            box-shadow: 0 30px 60px rgba(0,0,0,0.8);
-        }
-        .modal-close {
-            position: absolute; top:16px; right:16px;
-            background: #1A1A1A; border:1px solid #333; color:#fff;
-            width:32px; height:32px; border-radius:50%;
-            cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center;
-            transition: background 0.2s;
-        }
-        .modal-close:hover { background: #EF4444; border-color: #EF4444; }
-        .modal-title { font-size:20px; font-weight:800; margin-bottom:4px; }
-        .modal-subtitle { font-size:12px; color:#666; margin-bottom:24px; }
-
-        /* JOURNEY TIMELINE */
-        .timeline { position:relative; padding-left: 28px; margin-bottom: 24px; }
-        .timeline::before {
-            content:''; position:absolute; left:9px; top:0; bottom:0;
-            width: 2px; background: linear-gradient(180deg, #10B981, #333);
-        }
-        .tl-item {
-            position: relative; margin-bottom: 18px;
-        }
-        .tl-item:last-child { margin-bottom:0; }
-        .tl-dot {
-            position: absolute; left: -24px; top: 3px;
-            width: 12px; height: 12px; border-radius: 50%;
-            border: 2px solid #10B981;
-            background: #0A0A0A;
-        }
-        .tl-dot.done { background: #10B981; }
-        .tl-dot.cancelled { background: #EF4444; border-color: #EF4444; }
-        .tl-dot.pending { border-color: #333; }
-        .tl-label { font-size:11px; color:#666; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
-        .tl-value { font-size:13px; color:#fff; font-weight:600; margin-top:2px; }
-        .tl-value.pending-val { color:#444; font-style:italic; }
-        .tl-value.cancelled-val { color:#EF4444; font-weight:700; }
-
-        /* KEY METRICS */
-        .metrics-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:24px; }
-        .metric-card {
-            background:#111; border:1px solid #1A1A1A; border-radius:10px; padding:14px; text-align:center;
-        }
-        .metric-val { font-size:22px; font-weight:900; color:#10B981; }
-        .metric-val.warn { color:#F59E0B; }
-        .metric-val.danger { color:#EF4444; }
-        .metric-val.na { color:#444; font-size:16px; }
-        .metric-lbl { font-size:10px; color:#666; text-transform:uppercase; font-weight:700; margin-top:4px; line-height:1.3; }
-
-        /* CANCELLED BANNER */
-        .cancelled-banner {
-            background: rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3);
-            border-radius:8px; padding:10px 14px; margin-bottom:16px;
-            color:#EF4444; font-weight:700; font-size:13px;
-            display:flex; align-items:center; gap:8px;
-        }
-
-        .loader { width:40px; height:40px; border:4px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; margin:50px auto; }
-        .modal-loader { width:28px; height:28px; border:3px solid #333; border-top-color:#10B981; border-radius:50%; animation:spin 0.8s linear infinite; margin:30px auto; }
-        @keyframes spin { to { transform:rotate(360deg); } }
-        .btn-top { padding:10px 20px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:13px; cursor:pointer; border:none; display:flex; align-items:center; gap:8px;}
-        .btn-apply { background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; cursor:pointer;}
-        .btn-apply:hover, .btn-top:hover { opacity: 0.8; }
-        .section-hd { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#10B981; margin-bottom:12px; padding-bottom:6px; border-bottom:1px solid #1A1A1A; }
+        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#10B981;--muted:#71717A;--input-bg:#050505;}
+        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:50px;}
+        .header{margin-bottom:30px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px;}
+        .nav-tabs{display:flex;gap:10px;margin-bottom:30px;}
+        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
+        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
+        .nav-tab.active{background:var(--accent);color:#000;border-color:var(--accent);}
+        .filter-box{display:flex;gap:15px;background:var(--card);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:30px;align-items:flex-end;flex-wrap:wrap;}
+        .f-group{display:flex;flex-direction:column;gap:5px;}
+        .f-group label{font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';outline:none;min-width:150px;}
+        .f-input:focus{border-color:var(--accent);}
+        .search-box{flex:1;min-width:250px;}
+        .source-kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-bottom:30px;}
+        .source-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;border-left:3px solid var(--accent);}
+        .source-title{font-size:14px;font-weight:800;margin-bottom:10px;color:var(--accent);}
+        .source-stats{display:flex;justify-content:space-around;text-align:center;}
+        .stat-item{flex:1;}
+        .stat-value{font-size:24px;font-weight:900;line-height:1.2;}
+        .stat-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;}
+        .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:40px;}
+        .kpi-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:25px;border-left:4px solid var(--accent);}
+        .kpi-val{font-size:40px;font-weight:900;letter-spacing:-2px;margin-bottom:5px;}
+        .kpi-lbl{font-size:12px;color:#888;font-weight:700;text-transform:uppercase;}
+        table{width:100%;border-collapse:collapse;background:var(--card);border-radius:16px;border:1px solid var(--border);overflow:hidden;}
+        th{background:#050505;padding:15px;font-size:11px;color:#888;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;}
+        td{padding:15px;border-bottom:1px solid var(--border);vertical-align:top;}
+        tr:hover td{background:#111;}
+        .bundle-box{background:#050505;border:1px solid #1A1A1A;border-radius:8px;padding:8px 12px;}
+        .bundle-item{display:grid;grid-template-columns:140px 1fr 60px;gap:10px;padding:8px 0;border-bottom:1px dashed #222;align-items:center;}
+        .bundle-item:last-child{border-bottom:none;padding-bottom:0;}
+        .order-link{color:#10B981;font-weight:800;cursor:pointer;font-family:monospace;font-size:13px;background:rgba(16,185,129,0.08);padding:3px 7px;border-radius:5px;border:1px solid rgba(16,185,129,0.2);display:inline-flex;align-items:center;gap:5px;transition:all 0.2s;text-decoration:none;}
+        .order-link:hover{background:rgba(16,185,129,0.18);border-color:rgba(16,185,129,0.5);transform:translateY(-1px);}
+        .status-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-top:3px;white-space:nowrap;}
+        .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;backdrop-filter:blur(4px);justify-content:center;align-items:center;}
+        .modal-overlay.open{display:flex;}
+        .modal{background:#0A0A0A;border:1px solid #2A2A2A;border-radius:16px;padding:32px;width:100%;max-width:580px;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 30px 60px rgba(0,0,0,0.8);}
+        .modal-close{position:absolute;top:16px;right:16px;background:#1A1A1A;border:1px solid #333;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:background 0.2s;}
+        .modal-close:hover{background:#EF4444;border-color:#EF4444;}
+        .modal-title{font-size:20px;font-weight:800;margin-bottom:4px;}
+        .timeline{position:relative;padding-left:28px;margin-bottom:24px;}
+        .timeline::before{content:'';position:absolute;left:9px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#10B981,#333);}
+        .tl-item{position:relative;margin-bottom:18px;}
+        .tl-dot{position:absolute;left:-24px;top:3px;width:12px;height:12px;border-radius:50%;border:2px solid #10B981;background:#0A0A0A;}
+        .tl-dot.done{background:#10B981;}
+        .tl-dot.cancelled{background:#EF4444;border-color:#EF4444;}
+        .tl-dot.pending{border-color:#333;}
+        .tl-label{font-size:11px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;}
+        .tl-value{font-size:13px;color:#fff;font-weight:600;margin-top:2px;}
+        .tl-value.pending-val{color:#444;font-style:italic;}
+        .tl-value.cancelled-val{color:#EF4444;font-weight:700;}
+        .metrics-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px;}
+        .metric-card{background:#111;border:1px solid #1A1A1A;border-radius:10px;padding:14px;text-align:center;}
+        .metric-val{font-size:22px;font-weight:900;color:#10B981;}
+        .metric-val.warn{color:#F59E0B;}
+        .metric-val.danger{color:#EF4444;}
+        .metric-val.na{color:#444;font-size:16px;}
+        .metric-lbl{font-size:10px;color:#666;text-transform:uppercase;font-weight:700;margin-top:4px;line-height:1.3;}
+        .cancelled-banner{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;color:#EF4444;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;}
+        .loader{width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:50px auto;}
+        .modal-loader{width:28px;height:28px;border:3px solid #333;border-top-color:#10B981;border-radius:50%;animation:spin 0.8s linear infinite;margin:30px auto;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
+        .btn-apply{background:var(--accent);color:#000;border:none;padding:10px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
+        .btn-apply:hover,.btn-top:hover{opacity:0.8;}
+        .section-hd{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#10B981;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #1A1A1A;}
     </style>
 </head>
 <body>
-    <div class="header">
-        <div>
-            <h1 style="margin:0; font-size:28px; font-weight:800; letter-spacing:-1px;">📦 Order Consolidation AI</h1>
-            <p style="color:#888; margin-top:5px;">Advanced Box & Item level Breakdown (Live Cost Analytics)</p>
-        </div>
-        <div style="display:flex; gap:15px;">
-            <a href="/" class="btn-top" style="background:#1A1A1A; color:#fff; border:1px solid #333;">🏠 Main Dash</a>
-            <button onclick="loadBundles()" class="btn-top" style="background:#10B981; color:#fff;">🔄 Refresh Data</button>
+<div class="header">
+    <div>
+        <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-1px;">📦 Order Consolidation AI</h1>
+        <p style="color:#888;margin-top:5px;">Advanced Box & Item level Breakdown (Live Cost Analytics)</p>
+    </div>
+    <div style="display:flex;gap:15px;">
+        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
+        <button onclick="loadBundles()" class="btn-top" style="background:#10B981;color:#fff;">🔄 Refresh Data</button>
+    </div>
+</div>
+
+<div class="nav-tabs">
+    <a href="/bundling" class="nav-tab active">📦 Bundle Intelligence</a>
+    <a href="/bundling/status" class="nav-tab">📡 Status Intelligence</a>
+</div>
+
+<div class="filter-box">
+    <div class="f-group search-box">
+        <label>🔍 Search (Order ID or Customer)</label>
+        <input type="text" id="searchInput" class="f-input" placeholder="e.g. 12345 or John Doe">
+    </div>
+    <div class="f-group">
+        <label>📅 From Date</label>
+        <input type="date" id="dateFrom" class="f-input">
+    </div>
+    <div class="f-group">
+        <label>📅 To Date</label>
+        <input type="date" id="dateTo" class="f-input">
+    </div>
+    <div class="f-group">
+        <label>🏷️ Source</label>
+        <select id="sourceSelect" class="f-input">
+            <option value="all">All Sources</option>
+            <option value="ECL QC Center">ECL QC Center</option>
+            <option value="ECL Zone">ECL Zone</option>
+            <option value="GE Zone">GE Zone</option>
+        </select>
+    </div>
+    <div class="f-group">
+        <label>&nbsp;</label>
+        <button class="btn-apply" onclick="applyFilters()">Apply Filters</button>
+    </div>
+</div>
+
+<div class="source-kpi-grid">
+    <div class="source-card">
+        <div class="source-title">ECL QC Center</div>
+        <div class="source-stats">
+            <div class="stat-item"><div class="stat-value" id="qc-orders">0</div><div class="stat-label">Orders</div></div>
+            <div class="stat-item"><div class="stat-value" id="qc-boxes">0</div><div class="stat-label">Bundles</div></div>
         </div>
     </div>
-
-    <div class="filter-box">
-        <div class="f-group search-box">
-            <label>🔍 Search (Order ID or Customer)</label>
-            <input type="text" id="searchInput" class="f-input" placeholder="e.g. 12345 or John Doe">
+    <div class="source-card">
+        <div class="source-title">PK Zone (ECL & GE Zone)</div>
+        <div class="source-stats">
+            <div class="stat-item"><div class="stat-value" id="pk-orders">0</div><div class="stat-label">Orders</div></div>
+            <div class="stat-item"><div class="stat-value" id="pk-boxes">0</div><div class="stat-label">Bundles</div></div>
         </div>
+    </div>
+</div>
+
+<div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-val" id="kpi-bundles">0</div><div class="kpi-lbl">Total Bundles Packed</div></div>
+    <div class="kpi-card"><div class="kpi-val" id="kpi-orders">0</div><div class="kpi-lbl">Total Orders Merged</div></div>
+    <div class="kpi-card" style="border-left-color:#F59E0B"><div class="kpi-val" id="kpi-saved" style="color:#F59E0B">0</div><div class="kpi-lbl" style="color:#F59E0B;">🚚 Shipments Saved</div></div>
+    <div class="kpi-card" style="border-left-color:#10B981"><div class="kpi-val" id="kpi-money" style="color:#10B981">£0</div><div class="kpi-lbl" style="color:#10B981;">💰 Total Saved (Est)</div></div>
+</div>
+
+<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888;">AI Calculating Savings & Merging Data...</p></div>
+
+<div id="content" style="display:none;">
+    <table>
+        <thead>
+            <tr>
+                <th>Timeline & Source</th>
+                <th>Client Info</th>
+                <th>Master Box Analytics</th>
+                <th>📦 Box Breakdown <small style="color:#555;font-size:9px;">(click order for journey)</small></th>
+            </tr>
+        </thead>
+        <tbody id="tb"></tbody>
+    </table>
+</div>
+
+<!-- JOURNEY MODAL -->
+<div class="modal-overlay" id="journeyModal" onclick="closeModal(event)">
+    <div class="modal" id="modalContent">
+        <button class="modal-close" onclick="closeModalDirect()">✕</button>
+        <div id="modalBody"><div class="modal-loader"></div></div>
+    </div>
+</div>
+
+<script>
+let allBundles = [];
+
+function statusPill(status) {
+    if (!status || status === '—') return '';
+    const s = status.toLowerCase();
+    let bg = '#333', color = '#aaa';
+    if (s.includes('deliver'))   { bg='rgba(16,185,129,0.15)';  color='#10B981'; }
+    else if (s.includes('freight'))   { bg='rgba(99,102,241,0.15)';  color='#818cf8'; }
+    else if (s.includes('courier'))   { bg='rgba(139,92,246,0.15)';  color='#a78bfa'; }
+    else if (s.includes('cancel'))    { bg='rgba(239,68,68,0.15)';   color='#f87171'; }
+    else if (s.includes('qc'))        { bg='rgba(245,158,11,0.15)';  color='#fbbf24'; }
+    else if (s.includes('hand'))      { bg='rgba(59,130,246,0.15)';  color='#60a5fa'; }
+    else if (s.includes('pending'))   { bg='rgba(245,158,11,0.12)';  color='#f59e0b'; }
+    return `<span class="status-pill" style="background:${bg};color:${color}">📡 ${status}</span>`;
+}
+
+async function loadBundles() {
+    document.getElementById('content').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+    try {
+        const r = await fetch('/api/nexus/bundling_data');
+        const d = await r.json();
+        allBundles = d.bundles || [];
+        let s = d.source_stats || {};
+        document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
+        document.getElementById('kpi-orders').innerText  = d.kpi?.total_orders_bundled || 0;
+        document.getElementById('kpi-saved').innerText   = d.kpi?.saved_shipments || 0;
+        let money = d.kpi?.total_savings_gbp || 0;
+        document.getElementById('kpi-money').innerText   = '£' + money.toLocaleString(undefined,{minimumFractionDigits:2});
+        document.getElementById('qc-orders').innerText   = s['ECL QC Center']?.orders || 0;
+        document.getElementById('qc-boxes').innerText    = s['ECL QC Center']?.boxes  || 0;
+        document.getElementById('pk-orders').innerText   = s['PK Zone']?.orders || 0;
+        document.getElementById('pk-boxes').innerText    = s['PK Zone']?.boxes  || 0;
+        applyFilters();
+    } catch(e) {
+        document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data.</div>';
+    }
+}
+
+function applyFilters() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+    const dateFrom   = document.getElementById('dateFrom').value;
+    const dateTo     = document.getElementById('dateTo').value;
+    const source     = document.getElementById('sourceSelect').value;
+    let filtered = allBundles.filter(b => {
+        if (source !== 'all' && b.source !== source) return false;
+        if (dateFrom && b.date_std < dateFrom) return false;
+        if (dateTo   && b.date_std > dateTo)   return false;
+        if (searchTerm) {
+            const mo = b.orders.some(o => o.order_id.toLowerCase().includes(searchTerm));
+            const mc = b.customer && b.customer.toLowerCase().includes(searchTerm);
+            return mo || mc;
+        }
+        return true;
+    });
+    renderTable(filtered);
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+}
+
+function renderTable(bundles) {
+    let h = '';
+    if (!bundles.length) {
+        h = '<tr><td colspan="4" style="text-align:center;padding:60px;color:#666;font-weight:bold;">No Bundled Orders Found.</td></tr>';
+    } else {
+        bundles.forEach(b => {
+            let items = b.orders.map(o => `
+                <div class="bundle-item">
+                    <div>
+                        <span class="order-link" onclick="openJourney('${o.order_id}')">${o.order_id} <span style="font-size:10px;opacity:0.7">▼</span></span>
+                        ${statusPill(o.status)}
+                        <br><span style="font-size:10px;color:#666;">Wt: ${o.weight} kg</span>
+                    </div>
+                    <div style="font-size:11px;color:#888;">${o.title && o.title.length>40?o.title.substring(0,40)+'...':o.title||''}</div>
+                    <div style="font-weight:800;text-align:right;">${o.item_count}</div>
+                </div>`).join('');
+            let savStr   = (b.savings_gbp||0).toFixed(2);
+            let actualWt = b.bundle_weight_kg||0;
+            let billedWt = Math.max(Math.ceil(actualWt),1);
+            h += `<tr>
+                <td><b>${b.date||''}</b><br><span style="color:#888;font-size:10px;">${b.source||''}</span></td>
+                <td><b>${b.customer||''}</b><br><span style="color:#666;font-size:11px;">${b.vendor||''}</span><br><span style="color:#666;font-size:11px;">${b.country||''}</span></td>
+                <td>
+                    <div style="background:#111;padding:8px;border-radius:6px;border:1px solid #222;">
+                        <small style="color:#888">TID:</small> <span style="font-family:monospace;font-weight:800;">${b.tid}</span><br>
+                        <small style="color:#888">BOX ID:</small> <b style="color:#10B981">${b.boxes_val}</b>
+                    </div>
+                    <div style="margin-top:8px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);padding:8px;border-radius:6px;">
+                        <div style="font-size:11px;color:#888;display:flex;justify-content:space-between;margin-bottom:4px;"><span>Total Wt:</span><b>${actualWt} kg</b></div>
+                        <div style="font-size:11px;color:#888;display:flex;justify-content:space-between;margin-bottom:4px;"><span>Billed Wt:</span><b>${billedWt} kg</b></div>
+                        <div style="font-size:13px;color:#10B981;display:flex;justify-content:space-between;font-weight:800;"><span>💰 Saved:</span><span>£${savStr}</span></div>
+                    </div>
+                </td>
+                <td><div class="bundle-box">${items}</div></td>
+            </tr>`;
+        });
+    }
+    document.getElementById('tb').innerHTML = h;
+}
+
+async function openJourney(orderId) {
+    document.getElementById('journeyModal').classList.add('open');
+    document.getElementById('modalBody').innerHTML = '<div class="modal-loader"></div><p style="text-align:center;color:#666;font-size:13px;">Fetching order journey...</p>';
+    try {
+        const r = await fetch('/api/nexus/order_journey/' + encodeURIComponent(orderId));
+        const d = await r.json();
+        if (!d.success) {
+            document.getElementById('modalBody').innerHTML = `<div style="text-align:center;padding:30px;"><div style="font-size:40px;margin-bottom:12px;">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;">Order Not Found</div><div style="font-size:13px;color:#666;">${d.message}</div></div>`;
+            return;
+        }
+        const tl = d.timeline, km = d.key_metrics;
+        function metricColor(val) {
+            if (!val||val==='N/A') return 'na';
+            const n = parseFloat(val);
+            if (isNaN(n)) return '';
+            if (n<=1) return '';
+            if (n<=3) return 'warn';
+            return 'danger';
+        }
+        let cancelledBanner = d.is_cancelled ? `<div class="cancelled-banner">⚠️ This order was CANCELLED on ${tl.cancelled_at||'N/A'}</div>` : '';
+        function tlItem(label,val,type) {
+            let dc = val?'done':'pending', vc = val?'':'pending-val';
+            if (type==='cancelled'){dc=val?'cancelled':'pending';vc=val?'cancelled-val':'pending-val';}
+            return `<div class="tl-item"><div class="tl-dot ${dc}"></div><div class="tl-label">${label}</div><div class="tl-value ${vc}">${val||'— Not yet'}</div></div>`;
+        }
+        document.getElementById('modalBody').innerHTML = `
+            <div class="modal-title">📦 Order Journey</div>
+            <div style="font-family:monospace;color:#10B981;font-size:13px;margin-bottom:20px;">${d.order_id}</div>
+            ${cancelledBanner}
+            <div class="section-hd">⭐ Key Metrics</div>
+            <div class="metrics-grid">
+                <div class="metric-card"><div class="metric-val ${metricColor(km.qc_to_handover)}">${km.qc_to_handover||'N/A'}</div><div class="metric-lbl">QC Approved → Handover</div></div>
+                <div class="metric-card"><div class="metric-val ${metricColor(km.handover_to_freight)}">${km.handover_to_freight||'N/A'}</div><div class="metric-lbl">Handover → Freight</div></div>
+                <div class="metric-card"><div class="metric-val">${km.total_journey||'N/A'}</div><div class="metric-lbl">Total Journey Duration</div></div>
+            </div>
+            <div class="section-hd">🗺️ Full Timeline</div>
+            <div class="timeline">
+                ${tlItem('📋 Order Created',tl.created_at,'normal')}
+                ${tlItem('✅ Accepted',tl.accepted_at,'normal')}
+                ${tlItem('🚚 Pickup Ready',tl.pickup_ready_at,'normal')}
+                ${tlItem('🔍 QC Pending',tl.qc_pending_at,'normal')}
+                ${tlItem('✅ QC Approved',tl.qc_approved_at,'normal')}
+                ${tlItem('🤝 Handed to Logistics Partner',tl.handedover_at,'normal')}
+                ${tlItem('✈️ Freight',tl.freight_at,'normal')}
+                ${tlItem('🚁 Courier Assigned',tl.courier_at,'normal')}
+                ${tlItem('📬 Delivered',tl.delivered_at,'normal')}
+                ${tl.cancelled_at?tlItem('❌ Cancelled',tl.cancelled_at,'cancelled'):''}
+            </div>`;
+    } catch(e) {
+        document.getElementById('modalBody').innerHTML = `<div style="color:#EF4444;text-align:center;padding:30px;">Error fetching journey.<br><small>${e.message}</small></div>`;
+    }
+}
+function closeModal(e) { if(e.target===document.getElementById('journeyModal')) closeModalDirect(); }
+function closeModalDirect() { document.getElementById('journeyModal').classList.remove('open'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModalDirect(); });
+window.onload = loadBundles;
+document.getElementById('searchInput').addEventListener('keyup',e=>{ if(e.key==='Enter') applyFilters(); });
+</script>
+</body>
+</html>'''
+
+# ==============================================================================
+# STATUS INTELLIGENCE HTML
+# ==============================================================================
+
+STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>📡 Status Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#6366f1;--muted:#71717A;--input-bg:#050505;}
+        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
+        .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;}
+        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
+        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
+        .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+        /* FILTER BAR */
+        .filter-bar{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:24px;}
+        .filter-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;}
+        .filter-row:last-child{margin-bottom:0;}
+        .f-group{display:flex;flex-direction:column;gap:5px;}
+        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:7px;font-family:'Inter';outline:none;font-size:13px;}
+        .f-input:focus{border-color:var(--accent);}
+        .f-grow{flex:1;min-width:200px;}
+
+        /* QUICK DATE BUTTONS */
+        .quick-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+        .qbtn{padding:6px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#666;font-size:12px;font-family:'Inter';font-weight:600;cursor:pointer;transition:all 0.2s;}
+        .qbtn:hover{background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#818cf8;}
+        .qbtn.active{background:rgba(99,102,241,0.18);border-color:rgba(99,102,241,0.5);color:#818cf8;}
+        .apply-btn{padding:8px 20px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;border-radius:7px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter';}
+        .apply-btn:hover{opacity:0.85;}
+        .clear-btn{padding:8px 16px;background:rgba(255,255,255,0.05);border:1px solid #333;border-radius:7px;color:#888;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter';}
+        .clear-btn:hover{background:rgba(239,68,68,0.1);border-color:#ef4444;color:#ef4444;}
+
+        /* SUMMARY CARDS */
+        .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+        .sum-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;border-left:3px solid var(--accent);}
+        .sum-val{font-size:28px;font-weight:900;color:#fff;margin-bottom:2px;}
+        .sum-lbl{font-size:11px;color:#666;text-transform:uppercase;font-weight:700;}
+
+        /* STATUS BREAKDOWN */
+        .status-breakdown{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:24px;}
+        .sb-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;}
+        .sb-pills{display:flex;flex-wrap:wrap;gap:8px;}
+        .sb-pill{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:all 0.2s;}
+        .sb-pill:hover{transform:translateY(-1px);}
+        .sb-pill.selected{box-shadow:0 0 0 2px #fff;}
+
+        /* TABLE */
+        .result-count{font-size:13px;color:#666;margin-bottom:12px;}
+        .result-count b{color:#fff;}
+        table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;border:1px solid var(--border);overflow:hidden;}
+        th{background:#050505;padding:12px 16px;font-size:10px;color:#666;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;letter-spacing:0.5px;}
+        td{padding:12px 16px;border-bottom:1px solid #111;vertical-align:middle;font-size:13px;}
+        tr:hover td{background:#0d0d0d;}
+        .order-id{font-family:monospace;font-weight:800;color:#a5b4fc;font-size:13px;}
+        .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;}
+        .src-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:#888;}
+        .loader{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:40px auto;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .empty{text-align:center;padding:60px;color:#444;}
+        .empty-icon{font-size:40px;margin-bottom:12px;}
+        .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
+    </style>
+</head>
+<body>
+<div class="header">
+    <div>
+        <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-1px;">📡 Status Intelligence</h1>
+        <p style="color:#888;margin-top:4px;">Filter orders by date range & latest status</p>
+    </div>
+    <div style="display:flex;gap:12px;">
+        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
+        <button onclick="loadData()" class="btn-top" style="background:#6366f1;color:#fff;">🔄 Refresh</button>
+    </div>
+</div>
+
+<div class="nav-tabs">
+    <a href="/bundling" class="nav-tab">📦 Bundle Intelligence</a>
+    <a href="/bundling/status" class="nav-tab active">📡 Status Intelligence</a>
+</div>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+    <div class="filter-row">
+        <!-- Quick date buttons -->
+        <div class="f-group" style="flex:1">
+            <div class="f-label">⚡ Quick Select</div>
+            <div class="quick-btns">
+                <button class="qbtn" onclick="quickDate(this,'today')">Today</button>
+                <button class="qbtn" onclick="quickDate(this,'7d')">Last 7 Days</button>
+                <button class="qbtn" onclick="quickDate(this,'15d')">Last 15 Days</button>
+                <button class="qbtn" onclick="quickDate(this,'30d')">Last 30 Days</button>
+                <button class="qbtn" onclick="quickDate(this,'week')">This Week</button>
+                <button class="qbtn" onclick="quickDate(this,'month')">This Month</button>
+            </div>
+        </div>
+    </div>
+    <div class="filter-row">
         <div class="f-group">
-            <label>📅 From Date</label>
+            <div class="f-label">📅 From Date</div>
             <input type="date" id="dateFrom" class="f-input">
         </div>
         <div class="f-group">
-            <label>📅 To Date</label>
+            <div class="f-label">📅 To Date</div>
             <input type="date" id="dateTo" class="f-input">
         </div>
+        <div class="f-group f-grow">
+            <div class="f-label">🔍 Search Order / Customer</div>
+            <input type="text" id="searchInput" class="f-input" placeholder="Order ID or customer name...">
+        </div>
         <div class="f-group">
-            <label>🏷️ Source</label>
+            <div class="f-label">🏷️ Source</div>
             <select id="sourceSelect" class="f-input">
                 <option value="all">All Sources</option>
                 <option value="ECL QC Center">ECL QC Center</option>
@@ -4879,247 +5248,210 @@ def bundling_dashboard_view():
                 <option value="GE Zone">GE Zone</option>
             </select>
         </div>
-        <div class="f-group">
-            <label>&nbsp;</label>
-            <button class="btn-apply" onclick="applyFilters()">Apply Filters</button>
+        <div class="f-group" style="justify-content:flex-end;flex-direction:row;gap:8px;align-items:flex-end;">
+            <button class="clear-btn" onclick="clearFilters()">Clear</button>
+            <button class="apply-btn" onclick="applyFilters()">Apply Filters</button>
         </div>
     </div>
+</div>
 
-    <div class="source-kpi-grid" id="sourceKpiCards">
-        <div class="source-card">
-            <div class="source-title">ECL QC Center</div>
-            <div class="source-stats">
-                <div class="stat-item"><div class="stat-value" id="qc-orders">0</div><div class="stat-label">Orders</div></div>
-                <div class="stat-item"><div class="stat-value" id="qc-boxes">0</div><div class="stat-label">Bundles</div></div>
-            </div>
-        </div>
-        <div class="source-card">
-            <div class="source-title">PK Zone (ECL & GE Zone)</div>
-            <div class="source-stats">
-                <div class="stat-item"><div class="stat-value" id="pk-orders">0</div><div class="stat-label">Orders</div></div>
-                <div class="stat-item"><div class="stat-value" id="pk-boxes">0</div><div class="stat-label">Bundles</div></div>
-            </div>
-        </div>
-    </div>
+<!-- STATUS BREAKDOWN PILLS -->
+<div class="status-breakdown" id="statusBreakdown" style="display:none;">
+    <div class="sb-title">📊 Filter by Status — click to select</div>
+    <div class="sb-pills" id="statusPills"></div>
+</div>
 
-    <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-val" id="kpi-bundles">0</div><div class="kpi-lbl">Total Bundles Packed</div></div>
-        <div class="kpi-card"><div class="kpi-val" id="kpi-orders">0</div><div class="kpi-lbl">Total Orders Merged</div></div>
-        <div class="kpi-card" style="border-left-color:#F59E0B"><div class="kpi-val" id="kpi-saved" style="color:#F59E0B">0</div><div class="kpi-lbl" style="color:#F59E0B;">🚚 Shipments Saved</div></div>
-        <div class="kpi-card" style="border-left-color:#10B981"><div class="kpi-val" id="kpi-money" style="color:#10B981">£0</div><div class="kpi-lbl" style="color:#10B981;">💰 Total Saved (Est)</div></div>
-    </div>
+<!-- SUMMARY CARDS -->
+<div class="summary-grid">
+    <div class="sum-card"><div class="sum-val" id="s-total">0</div><div class="sum-lbl">Total Orders</div></div>
+    <div class="sum-card" style="border-left-color:#10B981"><div class="sum-val" id="s-delivered" style="color:#10B981">0</div><div class="sum-lbl">Delivered</div></div>
+    <div class="sum-card" style="border-left-color:#F59E0B"><div class="sum-val" id="s-transit" style="color:#F59E0B">0</div><div class="sum-lbl">In Transit / Freight</div></div>
+    <div class="sum-card" style="border-left-color:#EF4444"><div class="sum-val" id="s-cancelled" style="color:#EF4444">0</div><div class="sum-lbl">Cancelled</div></div>
+</div>
 
-    <div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888;">AI Calculating Savings & Merging Data...</p></div>
+<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#666;font-size:13px;">Loading orders & statuses...</p></div>
 
-    <div id="content" style="display:none;">
-        <table>
-            <thead>
-                <tr><th>Timeline & Source</th><th>Client Info</th><th>Master Box Analytics</th><th>📦 The Box Breakdown <small style="color:#555;font-size:9px;"> (click order to see journey)</small></th></tr>
-            </thead>
-            <tbody id="tb"></tbody>
-        </table>
-    </div>
+<div id="content" style="display:none;">
+    <div class="result-count" id="resultCount"></div>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Order ID</th>
+                <th>Date</th>
+                <th>Latest Status</th>
+                <th>Source</th>
+                <th>Customer</th>
+                <th>Country</th>
+                <th>Weight</th>
+            </tr>
+        </thead>
+        <tbody id="tb"></tbody>
+    </table>
+</div>
 
-    <!-- ===== ORDER JOURNEY MODAL ===== -->
-    <div class="modal-overlay" id="journeyModal" onclick="closeModal(event)">
-        <div class="modal" id="modalContent">
-            <button class="modal-close" onclick="closeModalDirect()">✕</button>
-            <div id="modalBody">
-                <div class="modal-loader"></div>
-            </div>
-        </div>
-    </div>
+<script>
+let allOrders = [];
+let allStatuses = [];
+let selectedStatus = null;
 
-    <script>
-        let allBundles = [];
+function getStatusStyle(status) {
+    if (!status || status === '—') return {bg:'rgba(255,255,255,0.05)',color:'#555'};
+    const s = status.toLowerCase();
+    if (s.includes('deliver'))  return {bg:'rgba(16,185,129,0.15)',  color:'#10B981'};
+    if (s.includes('freight'))  return {bg:'rgba(99,102,241,0.15)',  color:'#818cf8'};
+    if (s.includes('courier'))  return {bg:'rgba(139,92,246,0.15)', color:'#a78bfa'};
+    if (s.includes('cancel'))   return {bg:'rgba(239,68,68,0.15)',   color:'#f87171'};
+    if (s.includes('qc'))       return {bg:'rgba(245,158,11,0.15)',  color:'#fbbf24'};
+    if (s.includes('hand'))     return {bg:'rgba(59,130,246,0.15)',  color:'#60a5fa'};
+    if (s.includes('pending'))  return {bg:'rgba(245,158,11,0.12)',  color:'#f59e0b'};
+    return {bg:'rgba(255,255,255,0.06)', color:'#94a3b8'};
+}
 
-        async function loadBundles() {
-            document.getElementById('content').style.display = 'none';
-            document.getElementById('loading').style.display = 'block';
-            try {
-                const r = await fetch('/api/nexus/bundling_data');
-                const d = await r.json();
-                allBundles = d.bundles || [];
-                let s = d.source_stats || {};
-                document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
-                document.getElementById('kpi-orders').innerText = d.kpi?.total_orders_bundled || 0;
-                document.getElementById('kpi-saved').innerText = d.kpi?.saved_shipments || 0;
-                let money = d.kpi?.total_savings_gbp || 0;
-                document.getElementById('kpi-money').innerText = '£' + money.toLocaleString(undefined, {minimumFractionDigits: 2});
-                document.getElementById('qc-orders').innerText = s['ECL QC Center']?.orders || 0;
-                document.getElementById('qc-boxes').innerText = s['ECL QC Center']?.boxes || 0;
-                document.getElementById('pk-orders').innerText = s['PK Zone']?.orders || 0;
-                document.getElementById('pk-boxes').innerText = s['PK Zone']?.boxes || 0;
-                applyFilters();
-            } catch (e) {
-                console.error(e);
-                document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data. Check Console.</div>';
-            }
+function fmtIso(d){ return d.toISOString().split('T')[0]; }
+function getMonday(d){ const day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1); return new Date(d.setDate(diff)); }
+
+function quickDate(btn, period) {
+    document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const today = new Date(); today.setHours(0,0,0,0);
+    let from, to = new Date(today);
+    switch(period){
+        case 'today':  from = new Date(today); break;
+        case '7d':     from = new Date(today); from.setDate(from.getDate()-6); break;
+        case '15d':    from = new Date(today); from.setDate(from.getDate()-14); break;
+        case '30d':    from = new Date(today); from.setDate(from.getDate()-29); break;
+        case 'week':   from = getMonday(new Date(today)); to = new Date(from); to.setDate(to.getDate()+6); break;
+        case 'month':  from = new Date(today.getFullYear(), today.getMonth(), 1);
+                       to   = new Date(today.getFullYear(), today.getMonth()+1, 0); break;
+    }
+    document.getElementById('dateFrom').value = fmtIso(from);
+    document.getElementById('dateTo').value   = fmtIso(to);
+}
+
+function clearFilters() {
+    document.getElementById('dateFrom').value   = '';
+    document.getElementById('dateTo').value     = '';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('sourceSelect').value = 'all';
+    document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+    selectedStatus = null;
+    document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
+    applyFilters();
+}
+
+function selectStatus(pill, status) {
+    if (selectedStatus === status) {
+        selectedStatus = null;
+        document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
+    } else {
+        selectedStatus = status;
+        document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
+        pill.classList.add('selected');
+    }
+    applyFilters();
+}
+
+function buildStatusPills(orders) {
+    const counts = {};
+    orders.forEach(o => { counts[o.status] = (counts[o.status]||0)+1; });
+    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+    let html = '';
+    sorted.forEach(([status, count]) => {
+        const st = getStatusStyle(status);
+        html += `<span class="sb-pill" onclick="selectStatus(this,'${status.replace(/'/g,"\\'")}'"
+            style="background:${st.bg};color:${st.color};border-color:${st.color}33">
+            ${status} <b style="margin-left:4px;opacity:0.8">${count}</b>
+        </span>`;
+    });
+    document.getElementById('statusPills').innerHTML = html;
+    document.getElementById('statusBreakdown').style.display = sorted.length ? 'block' : 'none';
+}
+
+function applyFilters() {
+    const search = document.getElementById('searchInput').value.toLowerCase().trim();
+    const from   = document.getElementById('dateFrom').value;
+    const to     = document.getElementById('dateTo').value;
+    const source = document.getElementById('sourceSelect').value;
+
+    let filtered = allOrders.filter(o => {
+        if (source !== 'all' && o.source !== source) return false;
+        if (from && o.date_std < from) return false;
+        if (to   && o.date_std > to)   return false;
+        if (selectedStatus && o.status !== selectedStatus) return false;
+        if (search) {
+            return o.order_id.toLowerCase().includes(search) ||
+                   (o.customer && o.customer.toLowerCase().includes(search));
         }
+        return true;
+    });
 
-        function applyFilters() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
-            const dateFrom = document.getElementById('dateFrom').value;
-            const dateTo = document.getElementById('dateTo').value;
-            const source = document.getElementById('sourceSelect').value;
-            let filtered = allBundles.filter(b => {
-                if (source !== 'all' && b.source !== source) return false;
-                if (dateFrom && b.date_std < dateFrom) return false;
-                if (dateTo && b.date_std > dateTo) return false;
-                if (searchTerm) {
-                    const matchesOrder = b.orders.some(o => o.order_id.toLowerCase().includes(searchTerm));
-                    const matchesCustomer = b.customer && b.customer.toLowerCase().includes(searchTerm);
-                    return matchesOrder || matchesCustomer;
-                }
-                return true;
-            });
-            renderTable(filtered);
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('content').style.display = 'block';
-        }
+    // Update summary cards
+    const delivered  = filtered.filter(o=>o.status.toLowerCase().includes('deliver')).length;
+    const transit    = filtered.filter(o=>o.status.toLowerCase().includes('freight')||o.status.toLowerCase().includes('courier')).length;
+    const cancelled  = filtered.filter(o=>o.status.toLowerCase().includes('cancel')).length;
+    document.getElementById('s-total').innerText     = filtered.length.toLocaleString();
+    document.getElementById('s-delivered').innerText = delivered.toLocaleString();
+    document.getElementById('s-transit').innerText   = transit.toLocaleString();
+    document.getElementById('s-cancelled').innerText = cancelled.toLocaleString();
 
-        function renderTable(bundles) {
-            let h = '';
-            if (bundles.length === 0) {
-                h = '<tr><td colspan="4" style="text-align:center; padding:60px; color:#666; font-weight:bold;">No Bundled Orders Found.</td></tr>';
-            } else {
-                bundles.forEach(b => {
-                    let items = b.orders.map(o => `
-                        <div class="bundle-item">
-                            <div>
-                                <span class="order-link" onclick="openJourney('${o.order_id}')">
-                                    ${o.order_id} <span class="arr">▼</span>
-                                </span>
-                                <br><span style="font-size:10px; color:#666;">Wt: ${o.weight} kg</span>
-                            </div>
-                            <div style="font-size:11px; color:#888;">${o.title && o.title.length > 40 ? o.title.substring(0,40)+'...' : o.title || ''}</div>
-                            <div style="font-weight:800; text-align:right;">${o.item_count}</div>
-                        </div>
-                    `).join('');
-                    let savStr = (b.savings_gbp || 0).toFixed(2);
-                    let actualWt = (b.bundle_weight_kg || 0);
-                    let billedWt = Math.max(Math.ceil(actualWt), 1);
-                    h += `<tr>
-                        <td><b>${b.date || ''}</b><br><span style="color:#888; font-size:10px;">${b.source || ''}</span></td>
-                        <td><b>${b.customer || ''}</b><br><span style="color:#666; font-size:11px;">${b.vendor || ''}</span><br><span style="color:#666; font-size:11px;">${b.country || ''}</span></td>
-                        <td>
-                            <div style="background:#111; padding:8px; border-radius:6px; border:1px solid #222;">
-                                <small style="color:#888">TID:</small> <span style="font-family:monospace; font-weight:800;">${b.tid}</span><br>
-                                <small style="color:#888">BOX ID:</small> <b style="color:#10B981">${b.boxes_val}</b>
-                            </div>
-                            <div style="margin-top:8px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); padding:8px; border-radius:6px;">
-                                <div style="font-size:11px; color:#888; display:flex; justify-content:space-between; margin-bottom:4px;"><span>Total Wt:</span> <b>${actualWt} kg</b></div>
-                                <div style="font-size:11px; color:#888; display:flex; justify-content:space-between; margin-bottom:4px;"><span>Billed Wt:</span> <b>${billedWt} kg</b></div>
-                                <div style="font-size:13px; color:#10B981; display:flex; justify-content:space-between; font-weight:800;"><span>💰 Saved:</span> <span>£${savStr}</span></div>
-                            </div>
-                        </td>
-                        <td><div class="bundle-box">${items}</div></td>
-                    </tr>`;
-                });
-            }
-            document.getElementById('tb').innerHTML = h;
-        }
+    // Build status pills from filtered set
+    buildStatusPills(filtered);
 
-        // ===== JOURNEY MODAL =====
-        async function openJourney(orderId) {
-            document.getElementById('journeyModal').classList.add('open');
-            document.getElementById('modalBody').innerHTML = '<div class="modal-loader"></div><p style="text-align:center;color:#666;font-size:13px;">Fetching order journey...</p>';
-            try {
-                const r = await fetch('/api/nexus/order_journey/' + encodeURIComponent(orderId));
-                const d = await r.json();
-                if (!d.success) {
-                    document.getElementById('modalBody').innerHTML = `
-                        <div style="text-align:center; padding:30px;">
-                            <div style="font-size:40px; margin-bottom:12px;">🔍</div>
-                            <div style="font-size:16px; font-weight:700; color:#fff; margin-bottom:8px;">Order Not Found</div>
-                            <div style="font-size:13px; color:#666;">${d.message}</div>
-                        </div>`;
-                    return;
-                }
-                
-                const tl = d.timeline;
-                const km = d.key_metrics;
-                
-                // Metric color logic
-                function metricColor(val) {
-                    if (!val || val === 'N/A') return 'na';
-                    const num = parseFloat(val);
-                    if (isNaN(num)) return ''; // hours like "5h"
-                    if (num <= 1) return '';        // green default
-                    if (num <= 3) return 'warn';
-                    return 'danger';
-                }
+    // Result count
+    document.getElementById('resultCount').innerHTML = `Showing <b>${filtered.length.toLocaleString()}</b> of <b>${allOrders.length.toLocaleString()}</b> orders`;
 
-                let cancelledBanner = '';
-                if (d.is_cancelled) {
-                    cancelledBanner = `<div class="cancelled-banner">⚠️ This order was CANCELLED on ${tl.cancelled_at || 'N/A'}</div>`;
-                }
+    renderTable(filtered);
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display  = 'block';
+}
 
-                function tlItem(label, val, type) {
-                    let dotClass = val ? 'done' : 'pending';
-                    let valClass = val ? '' : 'pending-val';
-                    if (type === 'cancelled') { dotClass = val ? 'cancelled' : 'pending'; valClass = val ? 'cancelled-val' : 'pending-val'; }
-                    return `<div class="tl-item">
-                        <div class="tl-dot ${dotClass}"></div>
-                        <div class="tl-label">${label}</div>
-                        <div class="tl-value ${valClass}">${val || '— Not yet'}</div>
-                    </div>`;
-                }
+function renderTable(orders) {
+    if (!orders.length) {
+        document.getElementById('tb').innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">🔍</div><div>No orders found for selected filters</div></div></td></tr>`;
+        return;
+    }
+    let h = '';
+    orders.forEach((o, i) => {
+        const st = getStatusStyle(o.status);
+        h += `<tr>
+            <td style="color:#555;font-size:11px;">${i+1}</td>
+            <td><span class="order-id">${o.order_id}</span></td>
+            <td style="color:#888;white-space:nowrap;">${o.date||'—'}</td>
+            <td><span class="status-pill" style="background:${st.bg};color:${st.color}">${o.status}</span></td>
+            <td><span class="src-badge">${o.source}</span></td>
+            <td style="color:#ccc;">${o.customer||'—'}</td>
+            <td style="color:#888;">${o.country||'—'}</td>
+            <td style="color:#888;">${o.weight||'—'} kg</td>
+        </tr>`;
+    });
+    document.getElementById('tb').innerHTML = h;
+}
 
-                document.getElementById('modalBody').innerHTML = `
-                    <div class="modal-title">📦 Order Journey</div>
-                    <div class="modal-subtitle" style="font-family:monospace; color:#10B981; font-size:13px;">${d.order_id}</div>
-                    ${cancelledBanner}
+async function loadData() {
+    document.getElementById('content').style.display  = 'none';
+    document.getElementById('loading').style.display  = 'block';
+    document.getElementById('statusBreakdown').style.display = 'none';
+    try {
+        const r = await fetch('/api/nexus/status_intelligence');
+        const d = await r.json();
+        allOrders    = d.orders || [];
+        allStatuses  = d.unique_statuses || [];
+        applyFilters();
+    } catch(e) {
+        document.getElementById('loading').innerHTML = `<div style="color:#EF4444;text-align:center;padding:40px;">Error loading data: ${e.message}</div>`;
+    }
+}
 
-                    <div class="section-hd">⭐ Key Metrics</div>
-                    <div class="metrics-grid">
-                        <div class="metric-card">
-                            <div class="metric-val ${metricColor(km.qc_to_handover)}">${km.qc_to_handover || 'N/A'}</div>
-                            <div class="metric-lbl">QC Approved → Handover</div>
-                        </div>
-                        <div class="metric-card">
-                            <div class="metric-val ${metricColor(km.handover_to_freight)}">${km.handover_to_freight || 'N/A'}</div>
-                            <div class="metric-lbl">Handover → Freight</div>
-                        </div>
-                        <div class="metric-card">
-                            <div class="metric-val">${km.total_journey || 'N/A'}</div>
-                            <div class="metric-lbl">Total Journey Duration</div>
-                        </div>
-                    </div>
-
-                    <div class="section-hd">🗺️ Full Timeline</div>
-                    <div class="timeline">
-                        ${tlItem('📋 Order Created', tl.created_at, 'normal')}
-                        ${tlItem('✅ Accepted', tl.accepted_at, 'normal')}
-                        ${tlItem('🚚 Pickup Ready', tl.pickup_ready_at, 'normal')}
-                        ${tlItem('🔍 QC Pending', tl.qc_pending_at, 'normal')}
-                        ${tlItem('✅ QC Approved', tl.qc_approved_at, 'normal')}
-                        ${tlItem('🤝 Handed to Logistics Partner', tl.handedover_at, 'normal')}
-                        ${tlItem('✈️ Freight', tl.freight_at, 'normal')}
-                        ${tlItem('🚁 Courier Assigned', tl.courier_at, 'normal')}
-                        ${tlItem('📬 Delivered', tl.delivered_at, 'normal')}
-                        ${tl.cancelled_at ? tlItem('❌ Cancelled', tl.cancelled_at, 'cancelled') : ''}
-                    </div>
-                `;
-            } catch(e) {
-                document.getElementById('modalBody').innerHTML = `<div style="color:#EF4444; text-align:center; padding:30px;">Error fetching journey.<br><small>${e.message}</small></div>`;
-            }
-        }
-
-        function closeModal(e) {
-            if (e.target === document.getElementById('journeyModal')) closeModalDirect();
-        }
-        function closeModalDirect() {
-            document.getElementById('journeyModal').classList.remove('open');
-        }
-        document.addEventListener('keydown', function(e) { if(e.key === 'Escape') closeModalDirect(); });
-
-        window.onload = loadBundles;
-        document.getElementById('searchInput').addEventListener('keyup', function(e) { if(e.key === 'Enter') applyFilters(); });
-    </script>
+document.getElementById('searchInput').addEventListener('keyup', e=>{ if(e.key==='Enter') applyFilters(); });
+window.onload = loadData;
+</script>
 </body>
-</html>
-''')
+</html>'''
+
+# ==============================================================================
+# FLOATING BUTTON
+# ==============================================================================
 
 @app.after_request
 def add_bundling_floating_btn(response):
@@ -5128,11 +5460,10 @@ def add_bundling_floating_btn(response):
         if user_val and str(user_val).lower() == 'admin':
             html = response.get_data(as_text=True)
             btn = '''
-            <div style="position:fixed; bottom:30px; right:30px; display:flex; flex-direction:column; gap:12px; z-index:99999;">
-                <a href="/bundling" style="background:#10B981; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:800; font-family:sans-serif; text-align:center; box-shadow: 0 10px 20px rgba(16,185,129,0.3);">📦 Bundling Intel</a>
-                <a href="/nexus" style="background:#fff; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:800; font-family:sans-serif; text-align:center; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub</a>
-            </div>
-            '''
+            <div style="position:fixed;bottom:30px;right:30px;display:flex;flex-direction:column;gap:12px;z-index:99999;">
+                <a href="/bundling" style="background:#10B981;color:#000;padding:12px 24px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 10px 20px rgba(16,185,129,0.3);">📦 Bundling Intel</a>
+                <a href="/nexus" style="background:#fff;color:#000;padding:12px 24px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub</a>
+            </div>'''
             if '</body>' in html:
                 response.set_data(html.replace('</body>', btn + '</body>'))
     return response
@@ -5140,6 +5471,7 @@ def add_bundling_floating_btn(response):
 # ==============================================================================
 # 🛑 BUNDLING BLOCK END
 # ==============================================================================
+
  
 
 
