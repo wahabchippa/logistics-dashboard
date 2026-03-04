@@ -4344,7 +4344,7 @@ def nexus_dashboard():
 # ==============================================================================
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - FINAL STABLE (APPEND ONLY BLOCK)
+# 📦 BUNDLING INTELLIGENCE HUB - FINAL STABLE EDITION (ECL ZONE COLUMN E FIXED)
 # ==============================================================================
 import urllib.request
 import csv
@@ -4353,6 +4353,10 @@ import ssl
 import time
 from datetime import datetime
 from flask import jsonify, request, session, render_template_string
+
+# -------------------- CACHE SETUP --------------------
+_cache = {'data': None, 'time': 0}
+CACHE_DURATION = 300  # 5 minutes
 
 def std_date(d_str):
     try:
@@ -4370,27 +4374,31 @@ def clean_bundling_tids(raw):
     cleaned = []
     for t in parts:
         t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
-        if len(t) > 6 and re.search(r'\d', t):
+        if len(t) > 6 and re.search(r'\d', t) and t.lower() not in ['tracking', 'number']:
             if t.startswith('150') and len(t) >= 12 and not t.startswith('0'): cleaned.append('0' + t)
             else: cleaned.append(t)
     return list(dict.fromkeys(cleaned))
 
 def fetch_bundling_standalone_data():
+    global _cache
     now = time.time()
     
-    # 🚨 EXACT COLUMN MAPPING (0-Based Index) 🚨
+    if _cache['data'] and (now - _cache['time']) < CACHE_DURATION:
+        return _cache['data']
+    
+    # 🚨 EXACT COLUMN MAPPING AS PROVIDED BY YOU (0-Based Index) 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 3, "oli": 8, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25}
+            {"o": 0, "d": 1, "b": 3, "oli": 8, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25} # Boxes is Col D (3)
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 4, "oli": 11, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28} # Box is Column E (index 4)
+            {"o": 0, "d": 1, "b": 4, "oli": 11, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28} # FIXED: Boxes is Col E (4)
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 3, "oli": 11, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28}
+            {"o": 0, "d": 1, "b": 3, "oli": 11, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28} # Boxes is Col D (3)
         )
     }
     
@@ -4417,8 +4425,10 @@ def fetch_bundling_standalone_data():
                         raw_oli = str(p[col['oli']]).strip()
                         raw_title = str(p[col['title']]).strip()
                         
-                        if not raw_order and not raw_oli and not raw_title: continue # Blank line
-                        
+                        # Completely blank lines are skipped
+                        if not raw_order and not raw_oli and not raw_title: 
+                            continue
+                            
                         # THE MAGIC FIX: Carry Forward Order ID for merged rows
                         if raw_order: last_order = raw_order
                         current_order = raw_order if raw_order else last_order
@@ -4437,7 +4447,7 @@ def fetch_bundling_standalone_data():
                         if country_val: last_country = country_val
                         if tid_val: last_tid = tid_val
                         
-                        box_val = str(p[col['b']]).strip()
+                        box_val = str(p[col['b']]).strip() # The Merge Trigger!
                         
                         processed.append({
                             'order': current_order,
@@ -4455,8 +4465,12 @@ def fetch_bundling_standalone_data():
                     res[name] = processed
             except Exception as e:
                 res[name] = []
+                
+        _cache['data'] = res
+        _cache['time'] = now
     except Exception as e:
         pass
+    
     return res
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
@@ -4477,22 +4491,35 @@ def api_nexus_bundling_data():
             bx = r['boxes']
             
             od = {
-                "order_id": oid, "order_line_id": r['order_line_id'],
-                "title": r['title'], "item_count": r['item_count'], "country": r['country']
+                "order_id": oid,
+                "order_line_id": r['order_line_id'],
+                "title": r['title'],
+                "item_count": r['item_count'],
+                "country": r['country']
             }
             
-            if bx != "": # Naya dabba shuru
+            if bx != "": # Master Box (Naya dabba)
                 if cb and len(cb['orders']) > 1:
-                    bundles_list.append(cb); tot_bundles += 1; tot_orders += len(cb['orders'])
-                    source_stats[src]["orders"] += len(cb['orders']); source_stats[src]["boxes"] += 1
+                    bundles_list.append(cb)
+                    tot_bundles += 1
+                    tot_orders += len(cb['orders'])
+                    source_stats[src]["orders"] += len(cb['orders'])
+                    source_stats[src]["boxes"] += 1
                 
                 tids = clean_bundling_tids(r['tid'])
                 cb = {
-                    "orders": [od], "date": r['date'], "date_std": r['date_std'],
-                    "customer": r['customer'], "vendor": r['vendor'], "country": r['country'],
-                    "source": src, "boxes_val": bx, "tid": ", ".join(tids) if tids else "Pending Tracking", "total_items": 0
+                    "orders": [od],
+                    "date": r['date'],
+                    "date_std": r['date_std'],
+                    "customer": r['customer'],
+                    "vendor": r['vendor'],
+                    "country": r['country'],
+                    "source": src,
+                    "boxes_val": bx,
+                    "tid": ", ".join(tids) if tids else "Pending Tracking",
+                    "total_items": 0
                 }
-            else: # Merge dabba (Box is blank)
+            else: # Merged Item (Purane dabbe me add)
                 if cb:
                     cb['orders'].append(od)
                     if r['tid'] != "N/A" and r['tid'] != "":
@@ -4500,10 +4527,12 @@ def api_nexus_bundling_data():
                             tids = clean_bundling_tids(r['tid'])
                             if tids: cb['tid'] = ", ".join(tids)
         
-        # Akhri Bundle
         if cb and len(cb['orders']) > 1:
-            bundles_list.append(cb); tot_bundles += 1; tot_orders += len(cb['orders'])
-            source_stats[src]["orders"] += len(cb['orders']); source_stats[src]["boxes"] += 1
+            bundles_list.append(cb)
+            tot_bundles += 1
+            tot_orders += len(cb['orders'])
+            source_stats[src]["orders"] += len(cb['orders'])
+            source_stats[src]["boxes"] += 1
     
     for b in bundles_list:
         tq = 0
@@ -4516,8 +4545,13 @@ def api_nexus_bundling_data():
     
     return jsonify({
         "success": True,
-        "kpi": {"total_bundles": tot_bundles, "total_orders_bundled": tot_orders, "saved_shipments": (tot_orders - tot_bundles if tot_bundles > 0 else 0)},
-        "source_stats": source_stats, "bundles": bundles_list
+        "kpi": {
+            "total_bundles": tot_bundles,
+            "total_orders_bundled": tot_orders,
+            "saved_shipments": (tot_orders - tot_bundles if tot_bundles > 0 else 0)
+        },
+        "source_stats": source_stats,
+        "bundles": bundles_list
     })
 
 @app.route('/bundling')
@@ -4526,7 +4560,6 @@ def bundling_dashboard_view():
     if not u or str(u).lower() != 'admin':
         return "<div style='text-align:center; padding:100px; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2></div>", 403
 
-    # FULL HTML RETAINED (WITH SOURCE CARDS & TOP BUTTONS)
     return render_template_string('''
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -4535,42 +4568,39 @@ def bundling_dashboard_view():
     <title>📦 Bundling Intelligence</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root { --bg: #000; --card: #0A0A0A; --border: #1A1A1A; --text: #FAFAFA; --accent: #10B981; --muted: #71717A; --input-bg: #050505; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); padding: 40px; margin: 0; padding-bottom: 100px; }
-        .header { margin-bottom: 30px; border-bottom: 1px solid var(--border); padding-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;}
-        .filter-box { display: flex; gap: 15px; background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 30px; align-items: flex-end; flex-wrap: wrap; }
-        .f-group { display: flex; flex-direction: column; gap: 5px; }
-        .f-group label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-        .f-input { background: var(--input-bg); border: 1px solid #333; color: #fff; padding: 8px 12px; border-radius: 6px; font-family: 'Inter'; outline: none; min-width: 150px; }
-        .f-input:focus { border-color: var(--accent); }
-        .search-box { flex: 1; min-width: 250px; }
+        :root { --bg:#000; --card:#0A0A0A; --border:#1A1A1A; --text:#FAFAFA; --accent:#10B981; --muted:#71717A; --input-bg:#050505; }
+        body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); padding:40px; margin:0; padding-bottom:50px; }
+        .header { margin-bottom:30px; border-bottom:1px solid var(--border); padding-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:20px; }
+        .filter-box { display:flex; gap:15px; background:var(--card); padding:20px; border-radius:12px; border:1px solid var(--border); margin-bottom:30px; align-items:flex-end; flex-wrap:wrap; }
+        .f-group { display:flex; flex-direction:column; gap:5px; }
+        .f-group label { font-size:11px; color:#888; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
+        .f-input { background:var(--input-bg); border:1px solid #333; color:#fff; padding:8px 12px; border-radius:6px; font-family:'Inter'; outline:none; min-width:150px; }
+        .f-input:focus { border-color:var(--accent); }
+        .search-box { flex:1; min-width:250px; }
+        .source-kpi-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; margin-bottom:30px; }
+        .source-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; border-left:3px solid var(--accent); }
+        .source-title { font-size:14px; font-weight:800; margin-bottom:10px; color:var(--accent); }
+        .source-stats { display:flex; justify-content:space-around; text-align:center; }
+        .stat-item { flex:1; }
+        .stat-value { font-size:24px; font-weight:900; line-height:1.2; }
+        .stat-label { font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase; }
+        .kpi-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; margin-bottom:40px; }
+        .kpi-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:25px; border-left:4px solid var(--accent); }
+        .kpi-val { font-size:40px; font-weight:900; letter-spacing:-2px; margin-bottom:5px; }
+        .kpi-lbl { font-size:12px; color:#888; font-weight:700; text-transform:uppercase; }
+        table { width:100%; border-collapse:collapse; background:var(--card); border-radius:16px; border:1px solid var(--border); overflow:hidden; }
+        th { background:#050505; padding:15px; font-size:11px; color:#888; text-transform:uppercase; font-weight:800; border-bottom:1px solid var(--border); text-align:left; }
+        td { padding:15px; border-bottom:1px solid var(--border); vertical-align:top; }
+        tr:hover td { background:#111; }
+        .bundle-box { background:#050505; border:1px solid #1A1A1A; border-radius:8px; padding:8px 12px; }
+        .bundle-item { display:grid; grid-template-columns:120px 1fr 60px; gap:10px; padding:8px 0; border-bottom:1px dashed #222; align-items:center; }
+        .bundle-item:last-child { border-bottom:none; padding-bottom:0; }
+        .loader { width:40px; height:40px; border:4px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; margin:50px auto; }
+        @keyframes spin { to { transform:rotate(360deg); } }
         
-        .source-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
-        .source-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; border-left: 3px solid var(--accent); }
-        .source-title { font-size: 14px; font-weight: 800; margin-bottom: 10px; color: var(--accent); }
-        .source-stats { display: flex; justify-content: space-around; text-align: center; }
-        .stat-item { flex: 1; }
-        .stat-value { font-size: 24px; font-weight: 900; line-height: 1.2; }
-        .stat-label { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
-        
-        .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px; }
-        .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 25px; border-left: 4px solid var(--accent); }
-        .kpi-val { font-size: 40px; font-weight: 900; letter-spacing: -2px; margin-bottom: 5px; }
-        .kpi-lbl { font-size: 12px; color: #888; font-weight: 700; text-transform: uppercase; }
-        
-        table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 16px; border: 1px solid var(--border); overflow: hidden; }
-        th { background: #050505; padding: 15px; font-size: 11px; color: #888; text-transform: uppercase; font-weight: 800; border-bottom: 1px solid var(--border); text-align: left; }
-        td { padding: 15px; border-bottom: 1px solid var(--border); vertical-align: top; }
-        tr:hover td { background: #111; }
-        .bundle-box { background: #050505; border: 1px solid #1A1A1A; border-radius: 8px; padding: 8px 12px; }
-        .bundle-item { display: grid; grid-template-columns: 120px 1fr 60px; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #222; align-items: center; }
-        .bundle-item:last-child { border-bottom: none; padding-bottom: 0; }
-        
-        .loader { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 50px auto; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        
-        .btn-top { padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px; cursor: pointer; border: none; display:flex; align-items:center; gap:8px;}
-        .btn-apply { background: var(--accent); color: #000; border: none; padding: 10px 20px; border-radius: 6px; font-weight:bold; cursor:pointer;}
+        /* 🔥 Top Header Buttons */
+        .btn-top { padding:10px 20px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:13px; cursor:pointer; border:none; display:flex; align-items:center; gap:8px;}
+        .btn-apply { background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; cursor:pointer;}
         .btn-apply:hover, .btn-top:hover { opacity: 0.8; }
     </style>
 </head>
@@ -4580,7 +4610,7 @@ def bundling_dashboard_view():
             <h1 style="margin:0; font-size:28px; font-weight:800; letter-spacing:-1px;">📦 Order Consolidation AI</h1>
             <p style="color:#888; margin-top:5px;">Advanced Box & Item level Breakdown</p>
         </div>
-        <div style="display:flex; gap: 15px;">
+        <div style="display:flex; gap:15px;">
             <a href="/" class="btn-top" style="background:#1A1A1A; color:#fff; border:1px solid #333;">🏠 Main Dash</a>
             <button onclick="loadBundles()" class="btn-top" style="background:#10B981; color:#fff;">🔄 Refresh Data</button>
         </div>
@@ -4749,7 +4779,7 @@ def bundling_dashboard_view():
 </html>
 ''')
 
-# 🔥 MAIN DASHBOARD FLOATING BUTTON (Safe Append) 🔥
+# 🔥 MAIN DASHBOARD FLOATING BUTTON (RESTORED SAFELY) 🔥
 @app.after_request
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
@@ -4770,6 +4800,3 @@ def add_bundling_floating_btn(response):
 if __name__ == '__main__':
     app.run(debug=True)
 
-
-if __name__ == '__main__':
-    app.run(debug=True)
