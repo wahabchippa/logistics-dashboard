@@ -4344,7 +4344,7 @@ def nexus_dashboard():
 # ==============================================================================
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB (STANDALONE MODULE - VERCEL TIMEOUT FIX + EXACT MAPPING)
+# 📦 PURE BUNDLING MODULE (NO INTERFERENCE WITH MAIN TOOL)
 # ==============================================================================
 import urllib.request, csv, re, ssl, time, concurrent.futures
 from datetime import datetime
@@ -4375,7 +4375,7 @@ def clean_bundling_tids_func(raw):
     return list(dict.fromkeys(cleaned))
 
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
-    """Parallel fetch function to prevent Vercel 10s Timeout"""
+    """Vercel Timeout Fix - Parallel Fetch"""
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
@@ -4393,7 +4393,7 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
                 
                 if not raw_order and not raw_oli and not raw_title: continue 
                 
-                # CARRY FORWARD LOGIC FOR MERGED ROWS
+                # MERGED ROWS LOGIC
                 if raw_order: last_order = raw_order
                 current_order = raw_order if raw_order else last_order
                 
@@ -4437,7 +4437,6 @@ def fetch_bundling_standalone_data():
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
     
-    # 🚨 EXACT COLUMN MAPPING AS PER YOUR INSTRUCTIONS 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -4445,8 +4444,7 @@ def fetch_bundling_standalone_data():
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            # A=0, B=1, E=4 (Boxes), I=8 (Weight), N=13, O=14, P=15, Q=16, U=20, AC=28
-            {"o": 0, "d": 1, "b": 4, "oli": 8, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28}, 2 
+            {"o": 0, "d": 1, "b": 4, "oli": 8, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28}, 2  # ECL ZONE CORRECTED MAPPING
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
@@ -4460,7 +4458,6 @@ def fetch_bundling_standalone_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         
-        # 🚀 MULTI-THREADING APPLIED HERE (Saves Vercel Crash) 🚀
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             futures = [executor.submit(fetch_single_bundling_sheet, name, url, col, start_idx, ctx) for name, (url, col, start_idx) in BUNDLING_SOURCES.items()]
             for future in concurrent.futures.as_completed(futures):
@@ -4485,7 +4482,7 @@ def api_nexus_bundling_data():
             bx = r['boxes']
             od = {"order_id": oid, "order_line_id": r['order_line_id'], "title": r['title'], "item_count": r['item_count'], "country": r['country']}
             
-            if bx != "": # NEW MASTER BOX
+            if bx != "": # NEW BUNDLE
                 if cb and len(cb['orders']) > 1:
                     bundles_list.append(cb); tot_bundles += 1; tot_orders += len(cb['orders'])
                     source_stats[src]["orders"] += len(cb['orders']); source_stats[src]["boxes"] += 1
@@ -4496,7 +4493,7 @@ def api_nexus_bundling_data():
                     "customer": r['customer'], "vendor": r['vendor'], "country": r['country'],
                     "source": src, "boxes_val": bx, "tid": ", ".join(tids) if tids else "Pending Tracking", "total_items": 0
                 }
-            else: # BLANK BOX (MERGE INTO PREVIOUS BUNDLE)
+            else: # MERGE IN CURRENT BUNDLE
                 if cb:
                     cb['orders'].append(od)
                     if r['tid'] != "N/A" and r['tid'] != "":
@@ -4504,12 +4501,11 @@ def api_nexus_bundling_data():
                             tids = clean_bundling_tids_func(r['tid'])
                             if tids: cb['tid'] = ", ".join(tids)
         
-        # SAVE LAST BUNDLE
+        # APPEND LAST BUNDLE
         if cb and len(cb['orders']) > 1:
             bundles_list.append(cb); tot_bundles += 1; tot_orders += len(cb['orders'])
             source_stats[src]["orders"] += len(cb['orders']); source_stats[src]["boxes"] += 1
     
-    import re
     for b in bundles_list:
         tq = 0
         for o in b['orders']:
@@ -4736,6 +4732,9 @@ def bundling_dashboard_view():
 </body>
 </html>
 ''')
+# ==============================================================================
+# 🛑 BUNDLING BLOCK END
+# ==============================================================================
 
 if __name__ == '__main__':
     app.run(debug=True)
