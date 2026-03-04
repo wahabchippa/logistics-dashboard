@@ -4344,7 +4344,7 @@ def nexus_dashboard():
 # ==============================================================================
 
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - FINAL STABLE EDITION (PERFECT MAPPING)
+# 📦 BUNDLING INTELLIGENCE HUB - FINAL STABLE EDITION (PERFECT MAPPING & BUTTONS)
 # ==============================================================================
 import urllib.request
 import csv
@@ -4386,52 +4386,19 @@ def fetch_bundling_standalone_data():
     if _cache['data'] and (now - _cache['time']) < CACHE_DURATION:
         return _cache['data']
     
-    # 🚨 EXACT COLUMN MAPPING AS PROVIDED BY YOU (1-Based converted to 0-Based) 🚨
+    # 🚨 EXACT COLUMN MAPPING AS PROVIDED BY YOU (0-Based Index) 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {
-                "o": 0,    # Order ID: Col 1 (A)
-                "d": 1,    # Date: Col 2 (B)
-                "b": 3,    # Boxes: Col 4 (D)
-                "oli": 8,  # Order Line ID: Col 9 (I)
-                "v": 10,   # Vendor: Col 11 (K)
-                "title": 11, # Title: Col 12 (L)
-                "ic": 12,  # Item Count: Col 13 (M)
-                "c": 13,   # Customer: Col 14 (N)
-                "cn": 17,  # Country: Col 18 (R)
-                "t": 25    # TID: Col 26 (Z) - Kept from previous working state
-            }
+            {"o": 0, "d": 1, "b": 3, "oli": 8, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25}
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {
-                "o": 0,    # Order ID: Col 1 (A)
-                "d": 1,    # Date: Col 2 (B)
-                "b": 4,    # Boxes: Col 5 (D/E) 👈 Exactly index 4 as requested!
-                "oli": 11, # Order Line ID: Col 12 (L)
-                "v": 13,   # Vendor: Col 14 (N)
-                "title": 14, # Title: Col 15 (O)
-                "ic": 15,  # Item Count: Col 16 (P)
-                "c": 16,   # Customer: Col 17 (Q)
-                "cn": 20,  # Country: Col 21 (U)
-                "t": 28    # TID: Col 29 (AC)
-            }
+            {"o": 0, "d": 1, "b": 4, "oli": 11, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28} # Col 5 is index 4
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {
-                "o": 0,    # Order ID: Col 1 (A)
-                "d": 1,    # Date: Col 2 (B)
-                "b": 3,    # Boxes: Col 4 (D)
-                "oli": 11, # Order Line ID: Col 12 (L)
-                "v": 12,   # Vendor: Col 13 (M)
-                "title": 13, # Title: Col 14 (N)
-                "ic": 14,  # Item Count: Col 15 (O)
-                "c": 15,   # Customer: Col 16 (P)
-                "cn": 19,  # Country: Col 20 (T)
-                "t": 28    # TID: Col 29 (AC)
-            }
+            {"o": 0, "d": 1, "b": 3, "oli": 11, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28} # Col 4 is index 3
         )
     }
     
@@ -4448,58 +4415,51 @@ def fetch_bundling_standalone_data():
                     data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
                     
                     processed = []
-                    # 🚨 YAHAN HAI ASLI JADOO (CARRY FORWARD LOGIC) 🚨
                     last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
                     
                     for row in data[1:]: # Skip Header
                         if not row: continue
-                        p = row + [''] * 60 # Prevent Index Error
+                        p = row + [''] * 60
                         
                         raw_order = str(p[col['o']]).strip()
+                        raw_oli = str(p[col['oli']]).strip()
+                        raw_title = str(p[col['title']]).strip()
                         
-                        # Header validation
-                        if raw_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
-                        
-                        # Carry Forward Order ID
+                        if not raw_order and not raw_oli and not raw_title: 
+                            continue
+                            
+                        # THE MAGIC FIX: Carry Forward Order ID for merged rows
                         if raw_order: last_order = raw_order
                         current_order = raw_order if raw_order else last_order
                         
-                        # Agar merged row hone ke bawajood ID nahi mili tou skip
                         if not current_order or not re.search(r'\d', current_order): continue
                         
-                        # Fetch all values
-                        d_val = str(p[col['d']]).strip()
-                        v_val = str(p[col['v']]).strip()
-                        c_val = str(p[col['c']]).strip()
-                        cn_val = str(p[col['cn']]).strip()
-                        t_val = str(p[col['t']]).strip()
+                        date_val = str(p[col['d']]).strip()
+                        vendor_val = str(p[col['v']]).strip()
+                        customer_val = str(p[col['c']]).strip()
+                        country_val = str(p[col['cn']]).strip()
+                        tid_val = str(p[col['t']]).strip()
                         
-                        # Carry forward logic for merged cells
-                        if d_val: last_date = d_val
-                        if v_val: last_vendor = v_val
-                        if c_val: last_customer = c_val
-                        if cn_val: last_country = cn_val
-                        if t_val: last_tid = t_val
+                        if date_val: last_date = date_val
+                        if vendor_val: last_vendor = vendor_val
+                        if customer_val: last_customer = customer_val
+                        if country_val: last_country = country_val
+                        if tid_val: last_tid = tid_val
                         
-                        # Fetch item specific details
-                        box_val = str(p[col['b']]).strip() # The Merge Trigger!
-                        oli_val = str(p[col['oli']]).strip()
-                        title_val = str(p[col['title']]).strip()
-                        ic_val = str(p[col['ic']]).strip()
+                        box_val = str(p[col['b']]).strip() # Bundle Trigger
                         
-                        # Append the combined exact row
                         processed.append({
                             'order': current_order,
-                            'date': d_val if d_val else last_date,
-                            'date_std': std_date(d_val if d_val else last_date),
-                            'boxes': box_val, # Agar blank hua tou bundle banega
-                            'order_line_id': oli_val if oli_val else "N/A",
-                            'vendor': v_val if v_val else last_vendor,
-                            'title': title_val if title_val else "N/A",
-                            'item_count': ic_val if ic_val else "0",
-                            'customer': c_val if c_val else last_customer,
-                            'country': cn_val if cn_val else last_country,
-                            'tid': t_val if t_val else last_tid
+                            'date': date_val if date_val else last_date,
+                            'date_std': std_date(date_val if date_val else last_date),
+                            'boxes': box_val,
+                            'order_line_id': raw_oli,
+                            'vendor': vendor_val if vendor_val else last_vendor,
+                            'title': raw_title,
+                            'item_count': str(p[col['ic']]).strip(),
+                            'customer': customer_val if customer_val else last_customer,
+                            'country': country_val if country_val else last_country,
+                            'tid': tid_val if tid_val else last_tid
                         })
                     res[name] = processed
             except Exception as e:
@@ -4524,7 +4484,7 @@ def api_nexus_bundling_data():
     }
     
     for src, rows in sheets_data.items():
-        cb = None # Current Bundle tracking
+        cb = None
         for r in rows:
             oid = r['order'].upper()
             bx = r['boxes']
@@ -4537,9 +4497,7 @@ def api_nexus_bundling_data():
                 "country": r['country']
             }
             
-            # Agar box ki value hai (Yani yeh Master Box hai)
-            if bx != "": 
-                # Pehle purana dabba save karo
+            if bx != "": # Master Box (Naya dabba)
                 if cb and len(cb['orders']) > 1:
                     bundles_list.append(cb)
                     tot_bundles += 1
@@ -4560,8 +4518,7 @@ def api_nexus_bundling_data():
                     "tid": ", ".join(tids) if tids else "Pending Tracking",
                     "total_items": 0
                 }
-            else:
-                # Box blank hai (Yani yeh pichle Master Box ka hissa hai)
+            else: # Merged Item (Purane dabbe me add)
                 if cb:
                     cb['orders'].append(od)
                     if r['tid'] != "N/A" and r['tid'] != "":
@@ -4569,7 +4526,6 @@ def api_nexus_bundling_data():
                             tids = clean_bundling_tids(r['tid'])
                             if tids: cb['tid'] = ", ".join(tids)
         
-        # Akhri dabbe ko close karo
         if cb and len(cb['orders']) > 1:
             bundles_list.append(cb)
             tot_bundles += 1
@@ -4577,7 +4533,6 @@ def api_nexus_bundling_data():
             source_stats[src]["orders"] += len(cb['orders'])
             source_stats[src]["boxes"] += 1
     
-    # Total Items count logic
     for b in bundles_list:
         tq = 0
         for o in b['orders']:
@@ -4642,7 +4597,7 @@ def bundling_dashboard_view():
         .loader { width:40px; height:40px; border:4px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; margin:50px auto; }
         @keyframes spin { to { transform:rotate(360deg); } }
         
-        /* 🔥 Top Header Buttons */
+        /* 🔥 Top Header Buttons as requested */
         .btn-top { padding:10px 20px; border-radius:8px; text-decoration:none; font-weight:bold; font-size:13px; cursor:pointer; border:none; display:flex; align-items:center; gap:8px;}
         .btn-apply { background:var(--accent); color:#000; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; cursor:pointer;}
         .btn-apply:hover, .btn-top:hover { opacity: 0.8; }
@@ -4822,6 +4777,21 @@ def bundling_dashboard_view():
 </body>
 </html>
 ''')
+
+# 🔥 MAIN DASHBOARD FLOATING BUTTON (RESTORED AS YOUR ORIGINAL CODE) 🔥
+@app.after_request
+def add_bundling_floating_btn(response):
+    if request.path == '/' and response.content_type and 'text/html' in response.content_type:
+        user_val = session.get('username') or session.get('user') or session.get('role')
+        if user_val and str(user_val).lower() == 'admin':
+            html = response.get_data(as_text=True)
+            btn = '<a href="/bundling" style="position:fixed; bottom:100px; right:30px; background:#10B981; color:#fff; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:700; font-family:sans-serif; z-index:99999; box-shadow: 0 10px 20px rgba(16,185,129,0.4); transition:0.2s;">📦 Bundling AI</a>'
+            if '</body>' in html:
+                response.set_data(html.replace('</body>', btn + '</body>'))
+    return response
+
+if __name__ == '__main__':
+    app.run(debug=True)
 
 
 if __name__ == '__main__':
