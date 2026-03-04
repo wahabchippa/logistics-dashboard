@@ -4781,23 +4781,26 @@ def bundling_dashboard_view():
 </html>
 ''')
 
-# 🔥 MAIN DASHBOARD FLOATING BUTTON (RESTORED SAFELY) 🔥
+# 🔥 MAIN DASHBOARD FLOATING BUTTON (FIXED - SAME TAB) 🔥
 @app.after_request
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
         user_val = session.get('username') or session.get('user') or session.get('role')
         if user_val and str(user_val).lower() == 'admin':
             html = response.get_data(as_text=True)
-            # Both Buttons inside main dashboard ONLY
+            # target="_blank" hata diya gaya hai
             btn = '''
             <div style="position:fixed; bottom:30px; right:30px; display:flex; flex-direction:column; gap:12px; z-index:99999;">
-                <a href="/bundling" target="_blank" style="background:#10B981; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:800; font-family:sans-serif; text-align:center; box-shadow: 0 10px 20px rgba(16,185,129,0.3);">📦 Bundling Intel ↗</a>
-                <a href="/nexus" style="background:#fff; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:800; font-family:sans-serif; text-align:center; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub ↗</a>
+                <a href="/bundling" style="background:#10B981; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:800; font-family:sans-serif; text-align:center; box-shadow: 0 10px 20px rgba(16,185,129,0.3);">📦 Bundling Intel</a>
+                <a href="/nexus" style="background:#fff; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:800; font-family:sans-serif; text-align:center; box-shadow: 0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub</a>
             </div>
             '''
             if '</body>' in html:
                 response.set_data(html.replace('</body>', btn + '</body>'))
     return response
+
+if __name__ == '__main__':
+    app.run(debug=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
