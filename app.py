@@ -4388,9 +4388,20 @@ def parse_journey_date(val):
         return None
     val = str(val).strip()
     fmts = [
-        '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S.%f',
-        '%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M', '%d/%m/%Y',
-        '%Y-%m-%d', '%d-%m-%Y', '%d-%b-%Y', '%d %b %Y'
+        '%B %d, %Y, %H:%M',      # February 26, 2026, 23:01
+        '%B %d, %Y %H:%M:%S',    # February 26, 2026 23:01:00
+        '%B %d, %Y %H:%M',       # February 26, 2026 23:01
+        '%B %d, %Y',             # February 26, 2026
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%dT%H:%M:%S',
+        '%Y-%m-%d %H:%M:%S.%f',
+        '%d/%m/%Y %H:%M:%S',
+        '%d/%m/%Y %H:%M',
+        '%d/%m/%Y',
+        '%Y-%m-%d',
+        '%d-%m-%Y',
+        '%d-%b-%Y',
+        '%d %b %Y'
     ]
     for fmt in fmts:
         try:
@@ -5129,6 +5140,7 @@ def add_bundling_floating_btn(response):
 # ==============================================================================
 # 🛑 BUNDLING BLOCK END
 # ==============================================================================
+ 
 
 
 if __name__ == '__main__':
