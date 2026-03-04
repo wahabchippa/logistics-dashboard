@@ -4394,7 +4394,7 @@ def fetch_bundling_standalone_data():
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 4, "oli": 11, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28} # FIXED: Boxes is Col E (4)
+            {"o": 0, "d": 1, "b": 4,"W":8, "V": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28} # FIXED: Boxes is Col E (4)
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
