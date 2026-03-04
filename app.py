@@ -4393,7 +4393,7 @@ def parse_journey_date(val):
         return None
     val = str(val).strip()
     fmts = [
-        '%B %d, %Y, %H:%M',
+        '%B %d, %Y, %H:%M',      # February 26, 2026, 23:01
         '%B %d, %Y %H:%M:%S',
         '%B %d, %Y %H:%M',
         '%B %d, %Y',
@@ -4435,6 +4435,7 @@ def fmt_journey_date(dt):
 # ==============================================================================
 
 def fetch_rates_sheet(ctx):
+    """Fetch Rates based on Country"""
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -4443,8 +4444,8 @@ def fetch_rates_sheet(ctx):
             rates_map = {}
             for row in data[1:]:
                 p = row + [''] * 20
-                country  = str(p[7]).strip().lower()
-                rate_str = str(p[12]).strip()
+                country  = str(p[7]).strip().lower()   # Col H
+                rate_str = str(p[12]).strip()           # Col M
                 if country and rate_str:
                     try: rates_map[country] = float(re.sub(r'[^0-9.]', '', rate_str))
                     except: pass
@@ -4478,6 +4479,7 @@ def fetch_status_sheet_data():
         return {}
 
 def fetch_journey_sheet_data():
+    """Fetch and cache the order journey sheet"""
     global _journey_cache
     now = time.time()
     if _journey_cache['data'] and (now - _journey_cache['time']) < BUNDLING_CACHE_DURATION:
@@ -4492,20 +4494,20 @@ def fetch_journey_sheet_data():
         journey_map = {}
         for row in data[1:]:
             p = row + [''] * 60
-            fleek_id = str(p[4]).strip()
+            fleek_id = str(p[4]).strip()  # Col E
             if not fleek_id or fleek_id.lower() in ['', 'nan', 'fleek_id', 'fleek id']:
                 continue
             journey_map[fleek_id.upper()] = {
-                'created_at':      str(p[0]).strip(),
-                'accepted_at':     str(p[8]).strip(),
-                'pickup_ready_at': str(p[9]).strip(),
-                'cancelled_at':    str(p[12]).strip(),
-                'qc_pending_at':   str(p[13]).strip(),
-                'qc_approved_at':  str(p[14]).strip(),
-                'handedover_at':   str(p[30]).strip(),
-                'freight_at':      str(p[31]).strip(),
-                'courier_at':      str(p[34]).strip(),
-                'delivered_at':    str(p[36]).strip(),
+                'created_at':      str(p[0]).strip(),   # A
+                'accepted_at':     str(p[8]).strip(),   # I
+                'pickup_ready_at': str(p[9]).strip(),   # J
+                'cancelled_at':    str(p[12]).strip(),  # M
+                'qc_pending_at':   str(p[13]).strip(),  # N
+                'qc_approved_at':  str(p[14]).strip(),  # O
+                'handedover_at':   str(p[30]).strip(),  # AE
+                'freight_at':      str(p[31]).strip(),  # AF
+                'courier_at':      str(p[34]).strip(),  # AI
+                'delivered_at':    str(p[36]).strip(),  # AK
             }
         _journey_cache['data'] = journey_map
         _journey_cache['time'] = now
@@ -4514,37 +4516,48 @@ def fetch_journey_sheet_data():
         return {}
 
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
+    """Parallel Fetch for Orders"""
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
             processed = []
             last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
+
             for row in data[start_idx:]:
                 if not row: continue
                 p = row + [''] * 60
+
                 raw_order  = str(p[col['o']]).strip()
                 raw_weight = str(p[col['w']]).strip()
                 raw_title  = str(p[col['title']]).strip()
+
                 if not raw_order and not raw_weight and not raw_title: continue
+
+                # MERGED ROWS LOGIC (CARRY FORWARD)
                 if raw_order: last_order = raw_order
                 current_order = raw_order if raw_order else last_order
+
                 if not current_order or not re.search(r'\d', current_order): continue
                 if current_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
+
                 date_val     = str(p[col['d']]).strip()
                 vendor_val   = str(p[col['v']]).strip()
                 customer_val = str(p[col['c']]).strip()
                 country_val  = str(p[col['cn']]).strip()
                 tid_val      = str(p[col['t']]).strip()
+
                 if date_val:     last_date     = date_val
                 if vendor_val:   last_vendor   = vendor_val
                 if customer_val: last_customer = customer_val
                 if country_val:  last_country  = country_val
                 if tid_val:      last_tid      = tid_val
+
                 box_val = str(p[col['b']]).strip()
+
                 processed.append({
                     'order':      current_order,
-                    'date':       date_val if date_val else last_date,
+                    'date':       date_val     if date_val     else last_date,
                     'date_std':   std_date(date_val if date_val else last_date),
                     'boxes':      box_val,
                     'weight':     raw_weight,
@@ -4563,24 +4576,42 @@ def fetch_bundling_standalone_data():
     now = time.time()
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
+
+    # ============================================================
+    # 🚨 EXACT MAPPING FROM DOCUMENT 3 — DO NOT CHANGE 🚨
+    # ECL QC Center: A=Order B=Date D=Boxes G=Weight K=Vendor
+    #                L=Title M=ItemCount N=Customer R=Country Z=Tracking
+    #                start_row=1
+    # ECL Zone:      A=Order B=Date E=Boxes I=Weight N=Vendor
+    #                O=Title P=ItemCount Q=Customer U=Country AC=Tracking
+    #                start_row=2
+    # GE Zone:       A=Order B=Date D=Boxes H=Weight M=Vendor
+    #                N=Title O=ItemCount P=Customer T=Country AC=Tracking
+    #                start_row=2
+    # ============================================================
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o":0,"d":1,"b":3,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25}, 1
+            {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1
+            # A    B    D    G    K      L       M      N      R      Z
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28}, 2
+            {"o":0, "d":1, "b":4, "w":8, "v":13, "title":14, "ic":15, "c":16, "cn":20, "t":28}, 2
+            # A    B    E    I    N      O       P      Q      U      AC
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o":0,"d":1,"b":3,"w":7,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28}, 2
+            {"o":0, "d":1, "b":3, "w":7, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2
+            # A    B    D    H    M      N       O      P      T      AC
         )
     }
+
     res = {}
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = [executor.submit(fetch_single_bundling_sheet, name, url, col, start_idx, ctx)
                    for name, (url, col, start_idx) in BUNDLING_SOURCES.items()]
@@ -4588,12 +4619,13 @@ def fetch_bundling_standalone_data():
         for future in concurrent.futures.as_completed(futures):
             name, data = future.result()
             res[name] = data
+
     _bundling_cache['data'] = res
     _bundling_cache['time'] = now
     return res
 
 # ==============================================================================
-# API ENDPOINTS
+# API ROUTES
 # ==============================================================================
 
 @app.route('/api/nexus/order_journey/<order_id>')
@@ -4613,9 +4645,6 @@ def api_order_journey(order_id):
     dt_freight    = parse_journey_date(row['freight_at'])
     dt_courier    = parse_journey_date(row['courier_at'])
     dt_delivered  = parse_journey_date(row['delivered_at'])
-    qc_to_handover       = days_between(dt_qc_appr, dt_handed)
-    handover_to_freight  = days_between(dt_handed,  dt_freight)
-    total_journey        = days_between(dt_created, dt_delivered or dt_courier or dt_freight or dt_handed)
     return jsonify({
         "success": True, "order_id": order_id,
         "is_cancelled": bool(dt_cancelled),
@@ -4632,24 +4661,21 @@ def api_order_journey(order_id):
             "delivered_at":    fmt_journey_date(dt_delivered),
         },
         "key_metrics": {
-            "qc_to_handover":      qc_to_handover,
-            "handover_to_freight": handover_to_freight,
-            "total_journey":       total_journey,
+            "qc_to_handover":      days_between(dt_qc_appr, dt_handed),
+            "handover_to_freight": days_between(dt_handed,  dt_freight),
+            "total_journey":       days_between(dt_created, dt_delivered or dt_courier or dt_freight or dt_handed),
         }
     })
 
 @app.route('/api/nexus/status_intelligence')
 def api_status_intelligence():
-    """Return all orders from all 3 sources merged with latest status"""
-    sheets_data = fetch_bundling_standalone_data()
-    status_map  = fetch_status_sheet_data()
-
-    all_orders = []
+    """All orders from all 3 sources merged with latest status"""
+    sheets_data    = fetch_bundling_standalone_data()
+    status_map     = fetch_status_sheet_data()
+    all_orders     = []
     unique_statuses = set()
-
     for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
-        rows = sheets_data.get(src, [])
-        for r in rows:
+        for r in sheets_data.get(src, []):
             oid    = r['order'].strip().upper()
             status = status_map.get(oid, '—')
             unique_statuses.add(status)
@@ -4666,26 +4692,18 @@ def api_status_intelligence():
                 "item_count": r['item_count'],
                 "status":     status,
             })
-
     all_orders.sort(key=lambda x: x['date_std'], reverse=True)
-
     statuses_list = sorted([s for s in unique_statuses if s and s != '—'])
     if '—' in unique_statuses: statuses_list.append('—')
-
-    return jsonify({
-        "success":          True,
-        "total":            len(all_orders),
-        "orders":           all_orders,
-        "unique_statuses":  statuses_list,
-    })
+    return jsonify({"success": True, "total": len(all_orders), "orders": all_orders, "unique_statuses": statuses_list})
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
 def api_nexus_bundling_data():
-    sheets_data    = fetch_bundling_standalone_data()
-    status_map     = fetch_status_sheet_data()
+    sheets_data = fetch_bundling_standalone_data()
+    status_map  = fetch_status_sheet_data()
     bundles_list, tot_bundles, tot_orders = [], 0, 0
     total_savings_gbp = 0.0
-    rates_map      = sheets_data.get("RATES", {})
+    rates_map    = sheets_data.get("RATES", {})
     DEFAULT_RATE_GBP = 4.50
     source_stats = {
         "ECL QC Center": {"orders": 0, "boxes": 0},
@@ -4715,23 +4733,18 @@ def api_nexus_bundling_data():
                 tids = clean_bundling_tids(r['tid'])
                 cb = {
                     "orders":    [od],
-                    "date":      r['date'],
-                    "date_std":  r['date_std'],
-                    "customer":  r['customer'],
-                    "vendor":    r['vendor'],
-                    "country":   r['country'],
-                    "source":    src,
-                    "boxes_val": bx,
-                    "tid":       ", ".join(tids) if tids else "Pending Tracking",
-                    "total_items": 0
+                    "date":      r['date'],      "date_std":  r['date_std'],
+                    "customer":  r['customer'],  "vendor":    r['vendor'],
+                    "country":   r['country'],   "source":    src,
+                    "boxes_val": bx,             "total_items": 0,
+                    "tid": ", ".join(tids) if tids else "Pending Tracking"
                 }
             else:
                 if cb:
                     cb['orders'].append(od)
-                    if r['tid'] not in ['N/A', '']:
-                        if cb['tid'] == "Pending Tracking":
-                            tids = clean_bundling_tids(r['tid'])
-                            if tids: cb['tid'] = ", ".join(tids)
+                    if r['tid'] not in ['N/A', ''] and cb['tid'] == "Pending Tracking":
+                        tids = clean_bundling_tids(r['tid'])
+                        if tids: cb['tid'] = ", ".join(tids)
         if cb and len(cb['orders']) > 1:
             bundles_list.append(cb)
             tot_bundles += 1; tot_orders += len(cb['orders'])
@@ -4740,13 +4753,12 @@ def api_nexus_bundling_data():
 
     for b in bundles_list:
         tq = 0; bundle_weight_sum = 0.0; ind_shipping_cost = 0.0
-        c_name    = str(b.get('country', '')).strip().lower()
-        per_kg    = rates_map.get(c_name, DEFAULT_RATE_GBP)
+        per_kg = rates_map.get(str(b.get('country','')).strip().lower(), DEFAULT_RATE_GBP)
         for o in b['orders']:
-            try:   tq += int(float(re.sub(r'[^0-9.]', '', str(o['item_count']))))
+            try:   tq += int(float(re.sub(r'[^0-9.]','',str(o['item_count']))))
             except: pass
             try:
-                wt_str = re.sub(r'[^0-9.]', '', str(o['weight']))
+                wt_str = re.sub(r'[^0-9.]','',str(o['weight']))
                 wt = float(wt_str) if wt_str else 0.0
             except: wt = 0.0
             bundle_weight_sum += wt
@@ -4829,15 +4841,15 @@ BUNDLING_HTML = '''<!DOCTYPE html>
         td{padding:15px;border-bottom:1px solid var(--border);vertical-align:top;}
         tr:hover td{background:#111;}
         .bundle-box{background:#050505;border:1px solid #1A1A1A;border-radius:8px;padding:8px 12px;}
-        .bundle-item{display:grid;grid-template-columns:140px 1fr 60px;gap:10px;padding:8px 0;border-bottom:1px dashed #222;align-items:center;}
+        .bundle-item{display:grid;grid-template-columns:150px 1fr 60px;gap:10px;padding:8px 0;border-bottom:1px dashed #222;align-items:center;}
         .bundle-item:last-child{border-bottom:none;padding-bottom:0;}
-        .order-link{color:#10B981;font-weight:800;cursor:pointer;font-family:monospace;font-size:13px;background:rgba(16,185,129,0.08);padding:3px 7px;border-radius:5px;border:1px solid rgba(16,185,129,0.2);display:inline-flex;align-items:center;gap:5px;transition:all 0.2s;text-decoration:none;}
+        .order-link{color:#10B981;font-weight:800;cursor:pointer;font-family:monospace;font-size:13px;background:rgba(16,185,129,0.08);padding:3px 7px;border-radius:5px;border:1px solid rgba(16,185,129,0.2);display:inline-flex;align-items:center;gap:4px;transition:all 0.2s;}
         .order-link:hover{background:rgba(16,185,129,0.18);border-color:rgba(16,185,129,0.5);transform:translateY(-1px);}
         .status-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-top:3px;white-space:nowrap;}
         .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;backdrop-filter:blur(4px);justify-content:center;align-items:center;}
         .modal-overlay.open{display:flex;}
         .modal{background:#0A0A0A;border:1px solid #2A2A2A;border-radius:16px;padding:32px;width:100%;max-width:580px;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 30px 60px rgba(0,0,0,0.8);}
-        .modal-close{position:absolute;top:16px;right:16px;background:#1A1A1A;border:1px solid #333;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:background 0.2s;}
+        .modal-close{position:absolute;top:16px;right:16px;background:#1A1A1A;border:1px solid #333;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;}
         .modal-close:hover{background:#EF4444;border-color:#EF4444;}
         .modal-title{font-size:20px;font-weight:800;margin-bottom:4px;}
         .timeline{position:relative;padding-left:28px;margin-bottom:24px;}
@@ -4858,14 +4870,14 @@ BUNDLING_HTML = '''<!DOCTYPE html>
         .metric-val.danger{color:#EF4444;}
         .metric-val.na{color:#444;font-size:16px;}
         .metric-lbl{font-size:10px;color:#666;text-transform:uppercase;font-weight:700;margin-top:4px;line-height:1.3;}
-        .cancelled-banner{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;color:#EF4444;font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px;}
+        .cancelled-banner{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;color:#EF4444;font-weight:700;font-size:13px;}
+        .section-hd{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#10B981;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #1A1A1A;}
         .loader{width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:50px auto;}
         .modal-loader{width:28px;height:28px;border:3px solid #333;border-top-color:#10B981;border-radius:50%;animation:spin 0.8s linear infinite;margin:30px auto;}
         @keyframes spin{to{transform:rotate(360deg);}}
         .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
         .btn-apply{background:var(--accent);color:#000;border:none;padding:10px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
         .btn-apply:hover,.btn-top:hover{opacity:0.8;}
-        .section-hd{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#10B981;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #1A1A1A;}
     </style>
 </head>
 <body>
@@ -4946,7 +4958,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
                 <th>Timeline & Source</th>
                 <th>Client Info</th>
                 <th>Master Box Analytics</th>
-                <th>📦 Box Breakdown <small style="color:#555;font-size:9px;">(click order for journey)</small></th>
+                <th>📦 The Box Breakdown <small style="color:#555;font-size:9px;">(click order for journey)</small></th>
             </tr>
         </thead>
         <tbody id="tb"></tbody>
@@ -4955,7 +4967,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
 
 <!-- JOURNEY MODAL -->
 <div class="modal-overlay" id="journeyModal" onclick="closeModal(event)">
-    <div class="modal" id="modalContent">
+    <div class="modal">
         <button class="modal-close" onclick="closeModalDirect()">✕</button>
         <div id="modalBody"><div class="modal-loader"></div></div>
     </div>
@@ -4967,14 +4979,14 @@ let allBundles = [];
 function statusPill(status) {
     if (!status || status === '—') return '';
     const s = status.toLowerCase();
-    let bg = '#333', color = '#aaa';
-    if (s.includes('deliver'))   { bg='rgba(16,185,129,0.15)';  color='#10B981'; }
-    else if (s.includes('freight'))   { bg='rgba(99,102,241,0.15)';  color='#818cf8'; }
-    else if (s.includes('courier'))   { bg='rgba(139,92,246,0.15)';  color='#a78bfa'; }
-    else if (s.includes('cancel'))    { bg='rgba(239,68,68,0.15)';   color='#f87171'; }
-    else if (s.includes('qc'))        { bg='rgba(245,158,11,0.15)';  color='#fbbf24'; }
-    else if (s.includes('hand'))      { bg='rgba(59,130,246,0.15)';  color='#60a5fa'; }
-    else if (s.includes('pending'))   { bg='rgba(245,158,11,0.12)';  color='#f59e0b'; }
+    let bg='rgba(255,255,255,0.05)', color='#555';
+    if (s.includes('deliver'))  { bg='rgba(16,185,129,0.15)';  color='#10B981'; }
+    else if (s.includes('freight'))  { bg='rgba(99,102,241,0.15)';  color='#818cf8'; }
+    else if (s.includes('courier'))  { bg='rgba(139,92,246,0.15)';  color='#a78bfa'; }
+    else if (s.includes('cancel'))   { bg='rgba(239,68,68,0.15)';   color='#f87171'; }
+    else if (s.includes('qc'))       { bg='rgba(245,158,11,0.15)';  color='#fbbf24'; }
+    else if (s.includes('hand'))     { bg='rgba(59,130,246,0.15)';  color='#60a5fa'; }
+    else if (s.includes('pending'))  { bg='rgba(245,158,11,0.12)';  color='#f59e0b'; }
     return `<span class="status-pill" style="background:${bg};color:${color}">📡 ${status}</span>`;
 }
 
@@ -4990,11 +5002,11 @@ async function loadBundles() {
         document.getElementById('kpi-orders').innerText  = d.kpi?.total_orders_bundled || 0;
         document.getElementById('kpi-saved').innerText   = d.kpi?.saved_shipments || 0;
         let money = d.kpi?.total_savings_gbp || 0;
-        document.getElementById('kpi-money').innerText   = '£' + money.toLocaleString(undefined,{minimumFractionDigits:2});
-        document.getElementById('qc-orders').innerText   = s['ECL QC Center']?.orders || 0;
-        document.getElementById('qc-boxes').innerText    = s['ECL QC Center']?.boxes  || 0;
-        document.getElementById('pk-orders').innerText   = s['PK Zone']?.orders || 0;
-        document.getElementById('pk-boxes').innerText    = s['PK Zone']?.boxes  || 0;
+        document.getElementById('kpi-money').innerText = '£' + money.toLocaleString(undefined,{minimumFractionDigits:2});
+        document.getElementById('qc-orders').innerText = s['ECL QC Center']?.orders || 0;
+        document.getElementById('qc-boxes').innerText  = s['ECL QC Center']?.boxes  || 0;
+        document.getElementById('pk-orders').innerText = s['PK Zone']?.orders || 0;
+        document.getElementById('pk-boxes').innerText  = s['PK Zone']?.boxes  || 0;
         applyFilters();
     } catch(e) {
         document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data.</div>';
@@ -5002,17 +5014,17 @@ async function loadBundles() {
 }
 
 function applyFilters() {
-    const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
-    const dateFrom   = document.getElementById('dateFrom').value;
-    const dateTo     = document.getElementById('dateTo').value;
-    const source     = document.getElementById('sourceSelect').value;
+    const search = document.getElementById('searchInput').value.toLowerCase().trim();
+    const from   = document.getElementById('dateFrom').value;
+    const to     = document.getElementById('dateTo').value;
+    const source = document.getElementById('sourceSelect').value;
     let filtered = allBundles.filter(b => {
         if (source !== 'all' && b.source !== source) return false;
-        if (dateFrom && b.date_std < dateFrom) return false;
-        if (dateTo   && b.date_std > dateTo)   return false;
-        if (searchTerm) {
-            const mo = b.orders.some(o => o.order_id.toLowerCase().includes(searchTerm));
-            const mc = b.customer && b.customer.toLowerCase().includes(searchTerm);
+        if (from && b.date_std < from) return false;
+        if (to   && b.date_std > to)   return false;
+        if (search) {
+            const mo = b.orders.some(o => o.order_id.toLowerCase().includes(search));
+            const mc = b.customer && b.customer.toLowerCase().includes(search);
             return mo || mc;
         }
         return true;
@@ -5031,7 +5043,7 @@ function renderTable(bundles) {
             let items = b.orders.map(o => `
                 <div class="bundle-item">
                     <div>
-                        <span class="order-link" onclick="openJourney('${o.order_id}')">${o.order_id} <span style="font-size:10px;opacity:0.7">▼</span></span>
+                        <span class="order-link" onclick="openJourney('${o.order_id}')">${o.order_id} <span style="font-size:10px">▼</span></span>
                         ${statusPill(o.status)}
                         <br><span style="font-size:10px;color:#666;">Wt: ${o.weight} kg</span>
                     </div>
@@ -5073,7 +5085,7 @@ async function openJourney(orderId) {
             return;
         }
         const tl = d.timeline, km = d.key_metrics;
-        function metricColor(val) {
+        function mColor(val) {
             if (!val||val==='N/A') return 'na';
             const n = parseFloat(val);
             if (isNaN(n)) return '';
@@ -5081,20 +5093,20 @@ async function openJourney(orderId) {
             if (n<=3) return 'warn';
             return 'danger';
         }
-        let cancelledBanner = d.is_cancelled ? `<div class="cancelled-banner">⚠️ This order was CANCELLED on ${tl.cancelled_at||'N/A'}</div>` : '';
+        let cb = d.is_cancelled ? `<div class="cancelled-banner">⚠️ This order was CANCELLED on ${tl.cancelled_at||'N/A'}</div>` : '';
         function tlItem(label,val,type) {
-            let dc = val?'done':'pending', vc = val?'':'pending-val';
-            if (type==='cancelled'){dc=val?'cancelled':'pending';vc=val?'cancelled-val':'pending-val';}
+            let dc=val?'done':'pending', vc=val?'':'pending-val';
+            if(type==='cancelled'){dc=val?'cancelled':'pending';vc=val?'cancelled-val':'pending-val';}
             return `<div class="tl-item"><div class="tl-dot ${dc}"></div><div class="tl-label">${label}</div><div class="tl-value ${vc}">${val||'— Not yet'}</div></div>`;
         }
         document.getElementById('modalBody').innerHTML = `
             <div class="modal-title">📦 Order Journey</div>
             <div style="font-family:monospace;color:#10B981;font-size:13px;margin-bottom:20px;">${d.order_id}</div>
-            ${cancelledBanner}
+            ${cb}
             <div class="section-hd">⭐ Key Metrics</div>
             <div class="metrics-grid">
-                <div class="metric-card"><div class="metric-val ${metricColor(km.qc_to_handover)}">${km.qc_to_handover||'N/A'}</div><div class="metric-lbl">QC Approved → Handover</div></div>
-                <div class="metric-card"><div class="metric-val ${metricColor(km.handover_to_freight)}">${km.handover_to_freight||'N/A'}</div><div class="metric-lbl">Handover → Freight</div></div>
+                <div class="metric-card"><div class="metric-val ${mColor(km.qc_to_handover)}">${km.qc_to_handover||'N/A'}</div><div class="metric-lbl">QC Approved → Handover</div></div>
+                <div class="metric-card"><div class="metric-val ${mColor(km.handover_to_freight)}">${km.handover_to_freight||'N/A'}</div><div class="metric-lbl">Handover → Freight</div></div>
                 <div class="metric-card"><div class="metric-val">${km.total_journey||'N/A'}</div><div class="metric-lbl">Total Journey Duration</div></div>
             </div>
             <div class="section-hd">🗺️ Full Timeline</div>
@@ -5111,7 +5123,7 @@ async function openJourney(orderId) {
                 ${tl.cancelled_at?tlItem('❌ Cancelled',tl.cancelled_at,'cancelled'):''}
             </div>`;
     } catch(e) {
-        document.getElementById('modalBody').innerHTML = `<div style="color:#EF4444;text-align:center;padding:30px;">Error fetching journey.<br><small>${e.message}</small></div>`;
+        document.getElementById('modalBody').innerHTML = `<div style="color:#EF4444;text-align:center;padding:30px;">Error: ${e.message}</div>`;
     }
 }
 function closeModal(e) { if(e.target===document.getElementById('journeyModal')) closeModalDirect(); }
@@ -5141,8 +5153,6 @@ STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
         .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
         .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
         .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-
-        /* FILTER BAR */
         .filter-bar{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:24px;}
         .filter-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;}
         .filter-row:last-child{margin-bottom:0;}
@@ -5151,8 +5161,6 @@ STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
         .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:7px;font-family:'Inter';outline:none;font-size:13px;}
         .f-input:focus{border-color:var(--accent);}
         .f-grow{flex:1;min-width:200px;}
-
-        /* QUICK DATE BUTTONS */
         .quick-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
         .qbtn{padding:6px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#666;font-size:12px;font-family:'Inter';font-weight:600;cursor:pointer;transition:all 0.2s;}
         .qbtn:hover{background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#818cf8;}
@@ -5161,35 +5169,28 @@ STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
         .apply-btn:hover{opacity:0.85;}
         .clear-btn{padding:8px 16px;background:rgba(255,255,255,0.05);border:1px solid #333;border-radius:7px;color:#888;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter';}
         .clear-btn:hover{background:rgba(239,68,68,0.1);border-color:#ef4444;color:#ef4444;}
-
-        /* SUMMARY CARDS */
         .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
         .sum-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;border-left:3px solid var(--accent);}
         .sum-val{font-size:28px;font-weight:900;color:#fff;margin-bottom:2px;}
         .sum-lbl{font-size:11px;color:#666;text-transform:uppercase;font-weight:700;}
-
-        /* STATUS BREAKDOWN */
         .status-breakdown{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:24px;}
         .sb-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;}
         .sb-pills{display:flex;flex-wrap:wrap;gap:8px;}
         .sb-pill{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:all 0.2s;}
         .sb-pill:hover{transform:translateY(-1px);}
         .sb-pill.selected{box-shadow:0 0 0 2px #fff;}
-
-        /* TABLE */
         .result-count{font-size:13px;color:#666;margin-bottom:12px;}
         .result-count b{color:#fff;}
         table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;border:1px solid var(--border);overflow:hidden;}
         th{background:#050505;padding:12px 16px;font-size:10px;color:#666;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;letter-spacing:0.5px;}
         td{padding:12px 16px;border-bottom:1px solid #111;vertical-align:middle;font-size:13px;}
         tr:hover td{background:#0d0d0d;}
-        .order-id{font-family:monospace;font-weight:800;color:#a5b4fc;font-size:13px;}
+        .order-id{font-family:monospace;font-weight:800;color:#a5b4fc;}
         .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;}
         .src-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:#888;}
         .loader{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:40px auto;}
         @keyframes spin{to{transform:rotate(360deg);}}
         .empty{text-align:center;padding:60px;color:#444;}
-        .empty-icon{font-size:40px;margin-bottom:12px;}
         .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
     </style>
 </head>
@@ -5210,10 +5211,8 @@ STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
     <a href="/bundling/status" class="nav-tab active">📡 Status Intelligence</a>
 </div>
 
-<!-- FILTER BAR -->
 <div class="filter-bar">
     <div class="filter-row">
-        <!-- Quick date buttons -->
         <div class="f-group" style="flex:1">
             <div class="f-label">⚡ Quick Select</div>
             <div class="quick-btns">
@@ -5248,20 +5247,18 @@ STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
                 <option value="GE Zone">GE Zone</option>
             </select>
         </div>
-        <div class="f-group" style="justify-content:flex-end;flex-direction:row;gap:8px;align-items:flex-end;">
+        <div class="f-group" style="flex-direction:row;gap:8px;align-items:flex-end;">
             <button class="clear-btn" onclick="clearFilters()">Clear</button>
             <button class="apply-btn" onclick="applyFilters()">Apply Filters</button>
         </div>
     </div>
 </div>
 
-<!-- STATUS BREAKDOWN PILLS -->
 <div class="status-breakdown" id="statusBreakdown" style="display:none;">
-    <div class="sb-title">📊 Filter by Status — click to select</div>
+    <div class="sb-title">📊 Filter by Status — click to select/deselect</div>
     <div class="sb-pills" id="statusPills"></div>
 </div>
 
-<!-- SUMMARY CARDS -->
 <div class="summary-grid">
     <div class="sum-card"><div class="sum-val" id="s-total">0</div><div class="sum-lbl">Total Orders</div></div>
     <div class="sum-card" style="border-left-color:#10B981"><div class="sum-val" id="s-delivered" style="color:#10B981">0</div><div class="sum-lbl">Delivered</div></div>
@@ -5292,7 +5289,6 @@ STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
 
 <script>
 let allOrders = [];
-let allStatuses = [];
 let selectedStatus = null;
 
 function getStatusStyle(status) {
@@ -5300,7 +5296,7 @@ function getStatusStyle(status) {
     const s = status.toLowerCase();
     if (s.includes('deliver'))  return {bg:'rgba(16,185,129,0.15)',  color:'#10B981'};
     if (s.includes('freight'))  return {bg:'rgba(99,102,241,0.15)',  color:'#818cf8'};
-    if (s.includes('courier'))  return {bg:'rgba(139,92,246,0.15)', color:'#a78bfa'};
+    if (s.includes('courier'))  return {bg:'rgba(139,92,246,0.15)',  color:'#a78bfa'};
     if (s.includes('cancel'))   return {bg:'rgba(239,68,68,0.15)',   color:'#f87171'};
     if (s.includes('qc'))       return {bg:'rgba(245,158,11,0.15)',  color:'#fbbf24'};
     if (s.includes('hand'))     return {bg:'rgba(59,130,246,0.15)',  color:'#60a5fa'};
@@ -5317,21 +5313,21 @@ function quickDate(btn, period) {
     const today = new Date(); today.setHours(0,0,0,0);
     let from, to = new Date(today);
     switch(period){
-        case 'today':  from = new Date(today); break;
-        case '7d':     from = new Date(today); from.setDate(from.getDate()-6); break;
-        case '15d':    from = new Date(today); from.setDate(from.getDate()-14); break;
-        case '30d':    from = new Date(today); from.setDate(from.getDate()-29); break;
-        case 'week':   from = getMonday(new Date(today)); to = new Date(from); to.setDate(to.getDate()+6); break;
-        case 'month':  from = new Date(today.getFullYear(), today.getMonth(), 1);
-                       to   = new Date(today.getFullYear(), today.getMonth()+1, 0); break;
+        case 'today': from = new Date(today); break;
+        case '7d':    from = new Date(today); from.setDate(from.getDate()-6); break;
+        case '15d':   from = new Date(today); from.setDate(from.getDate()-14); break;
+        case '30d':   from = new Date(today); from.setDate(from.getDate()-29); break;
+        case 'week':  from = getMonday(new Date(today)); to = new Date(from); to.setDate(to.getDate()+6); break;
+        case 'month': from = new Date(today.getFullYear(),today.getMonth(),1);
+                      to   = new Date(today.getFullYear(),today.getMonth()+1,0); break;
     }
     document.getElementById('dateFrom').value = fmtIso(from);
     document.getElementById('dateTo').value   = fmtIso(to);
 }
 
 function clearFilters() {
-    document.getElementById('dateFrom').value   = '';
-    document.getElementById('dateTo').value     = '';
+    document.getElementById('dateFrom').value    = '';
+    document.getElementById('dateTo').value      = '';
     document.getElementById('searchInput').value = '';
     document.getElementById('sourceSelect').value = 'all';
     document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
@@ -5359,7 +5355,8 @@ function buildStatusPills(orders) {
     let html = '';
     sorted.forEach(([status, count]) => {
         const st = getStatusStyle(status);
-        html += `<span class="sb-pill" onclick="selectStatus(this,'${status.replace(/'/g,"\\'")}'"
+        const esc = status.replace(/'/g,"\\'");
+        html += `<span class="sb-pill" onclick="selectStatus(this,'${esc}')"
             style="background:${st.bg};color:${st.color};border-color:${st.color}33">
             ${status} <b style="margin-left:4px;opacity:0.8">${count}</b>
         </span>`;
@@ -5373,7 +5370,6 @@ function applyFilters() {
     const from   = document.getElementById('dateFrom').value;
     const to     = document.getElementById('dateTo').value;
     const source = document.getElementById('sourceSelect').value;
-
     let filtered = allOrders.filter(o => {
         if (source !== 'all' && o.source !== source) return false;
         if (from && o.date_std < from) return false;
@@ -5385,34 +5381,27 @@ function applyFilters() {
         }
         return true;
     });
-
-    // Update summary cards
-    const delivered  = filtered.filter(o=>o.status.toLowerCase().includes('deliver')).length;
-    const transit    = filtered.filter(o=>o.status.toLowerCase().includes('freight')||o.status.toLowerCase().includes('courier')).length;
-    const cancelled  = filtered.filter(o=>o.status.toLowerCase().includes('cancel')).length;
+    const delivered = filtered.filter(o=>o.status.toLowerCase().includes('deliver')).length;
+    const transit   = filtered.filter(o=>o.status.toLowerCase().includes('freight')||o.status.toLowerCase().includes('courier')).length;
+    const cancelled = filtered.filter(o=>o.status.toLowerCase().includes('cancel')).length;
     document.getElementById('s-total').innerText     = filtered.length.toLocaleString();
     document.getElementById('s-delivered').innerText = delivered.toLocaleString();
     document.getElementById('s-transit').innerText   = transit.toLocaleString();
     document.getElementById('s-cancelled').innerText = cancelled.toLocaleString();
-
-    // Build status pills from filtered set
     buildStatusPills(filtered);
-
-    // Result count
     document.getElementById('resultCount').innerHTML = `Showing <b>${filtered.length.toLocaleString()}</b> of <b>${allOrders.length.toLocaleString()}</b> orders`;
-
     renderTable(filtered);
     document.getElementById('loading').style.display = 'none';
-    document.getElementById('content').style.display  = 'block';
+    document.getElementById('content').style.display = 'block';
 }
 
 function renderTable(orders) {
     if (!orders.length) {
-        document.getElementById('tb').innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">🔍</div><div>No orders found for selected filters</div></div></td></tr>`;
+        document.getElementById('tb').innerHTML = `<tr><td colspan="8"><div class="empty"><div style="font-size:40px;margin-bottom:12px;">🔍</div><div>No orders found</div></div></td></tr>`;
         return;
     }
     let h = '';
-    orders.forEach((o, i) => {
+    orders.forEach((o,i) => {
         const st = getStatusStyle(o.status);
         h += `<tr>
             <td style="color:#555;font-size:11px;">${i+1}</td>
@@ -5429,21 +5418,20 @@ function renderTable(orders) {
 }
 
 async function loadData() {
-    document.getElementById('content').style.display  = 'none';
-    document.getElementById('loading').style.display  = 'block';
+    document.getElementById('content').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
     document.getElementById('statusBreakdown').style.display = 'none';
     try {
         const r = await fetch('/api/nexus/status_intelligence');
         const d = await r.json();
-        allOrders    = d.orders || [];
-        allStatuses  = d.unique_statuses || [];
+        allOrders = d.orders || [];
         applyFilters();
     } catch(e) {
-        document.getElementById('loading').innerHTML = `<div style="color:#EF4444;text-align:center;padding:40px;">Error loading data: ${e.message}</div>`;
+        document.getElementById('loading').innerHTML = `<div style="color:#EF4444;text-align:center;padding:40px;">Error: ${e.message}</div>`;
     }
 }
 
-document.getElementById('searchInput').addEventListener('keyup', e=>{ if(e.key==='Enter') applyFilters(); });
+document.getElementById('searchInput').addEventListener('keyup',e=>{ if(e.key==='Enter') applyFilters(); });
 window.onload = loadData;
 </script>
 </body>
@@ -5471,7 +5459,6 @@ def add_bundling_floating_btn(response):
 # ==============================================================================
 # 🛑 BUNDLING BLOCK END
 # ==============================================================================
-
  
 
 
