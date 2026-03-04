@@ -4343,7 +4343,7 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - WITH SMART FINANCIAL SAVINGS (£ GBP) & ROUNDUP RULE
+# 📦 BUNDLING INTELLIGENCE HUB - 100% PERFECT MAPPING & FINANCIAL SAVINGS (£ GBP)
 # ==============================================================================
 import urllib.request
 import csv
@@ -4380,7 +4380,7 @@ def clean_bundling_tids(raw):
     return list(dict.fromkeys(cleaned))
 
 def fetch_rates_sheet(ctx):
-    """Smart Analysis: Fetch Rates based on Country"""
+    """Fetch Rates based on Country"""
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -4444,7 +4444,7 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
                     'date': date_val if date_val else last_date,
                     'date_std': std_date(date_val if date_val else last_date),
                     'boxes': box_val,
-                    'order_line_id': raw_oli if raw_oli else "0", # Using order_line_id to store weight
+                    'order_line_id': raw_oli if raw_oli else "0", # Actually weight now!
                     'vendor': vendor_val if vendor_val else last_vendor,
                     'title': raw_title if raw_title else "N/A",
                     'item_count': str(p[col['ic']]).strip() or "0",
@@ -4463,18 +4463,22 @@ def fetch_bundling_standalone_data():
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
     
+    # 🚨 FINAL PERFECT MAPPING APPLIED 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 3, "oli": 8, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25}, 1
+            # Box=D(3), Weight=G(6), Vendor=K(10), Title=L(11), ItemCount=M(12), Customer=N(13), Country=R(17)
+            {"o": 0, "d": 1, "b": 3, "oli": 6, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25}, 1
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+            # Box=E(4), Weight=I(8), Vendor=N(13), Title=O(14), ItemCount=P(15), Customer=Q(16), Country=U(20)
             {"o": 0, "d": 1, "b": 4, "oli": 8, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28}, 2
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o": 0, "d": 1, "b": 3, "oli": 11, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28}, 2
+            # Box=D(3), Weight=H(7), Vendor=M(12), Title=N(13), ItemCount=O(14), Customer=P(15), Country=T(19)
+            {"o": 0, "d": 1, "b": 3, "oli": 7, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28}, 2
         )
     }
     
@@ -4501,13 +4505,12 @@ def api_nexus_bundling_data():
     bundles_list, tot_bundles, tot_orders = [], 0, 0
     total_savings_gbp = 0.0
     
-    # Smart Rates mapped by Country
     rates_map = sheets_data.get("RATES", {})
-    DEFAULT_RATE_GBP = 4.50 # Average fall-back rate per kg
+    DEFAULT_RATE_GBP = 4.50 
     
     source_stats = {
         "ECL QC Center": {"orders": 0, "boxes": 0},
-        "PK Zone": {"orders": 0, "boxes": 0} # Merged Cart for UI
+        "PK Zone": {"orders": 0, "boxes": 0} 
     }
     
     for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
@@ -4521,17 +4524,16 @@ def api_nexus_bundling_data():
             
             od = {
                 "order_id": oid,
-                "order_line_id": r['order_line_id'], # Actually holds the weight
+                "order_line_id": r['order_line_id'], 
                 "title": r['title'],
                 "item_count": r['item_count'],
                 "country": r['country']
             }
             
-            if bx != "": # Master Box (Naya dabba)
+            if bx != "": 
                 if cb and len(cb['orders']) > 1:
                     bundles_list.append(cb)
-                    tot_bundles += 1
-                    tot_orders += len(cb['orders'])
+                    tot_bundles += 1; tot_orders += len(cb['orders'])
                     source_stats[stat_src]["orders"] += len(cb['orders'])
                     source_stats[stat_src]["boxes"] += 1
                 
@@ -4541,7 +4543,7 @@ def api_nexus_bundling_data():
                     "customer": r['customer'], "vendor": r['vendor'], "country": r['country'],
                     "source": src, "boxes_val": bx, "tid": ", ".join(tids) if tids else "Pending Tracking", "total_items": 0
                 }
-            else: # Merged Item (Purane dabbe me add)
+            else: 
                 if cb:
                     cb['orders'].append(od)
                     if r['tid'] != "N/A" and r['tid'] != "":
@@ -4551,8 +4553,7 @@ def api_nexus_bundling_data():
         
         if cb and len(cb['orders']) > 1:
             bundles_list.append(cb)
-            tot_bundles += 1
-            tot_orders += len(cb['orders'])
+            tot_bundles += 1; tot_orders += len(cb['orders'])
             source_stats[stat_src]["orders"] += len(cb['orders'])
             source_stats[stat_src]["boxes"] += 1
     
@@ -4562,34 +4563,32 @@ def api_nexus_bundling_data():
         bundle_weight_sum = 0.0
         ind_shipping_cost = 0.0
         
-        # Get rate for this bundle's country
         c_name = str(b.get('country', '')).strip().lower()
         per_kg_rate = rates_map.get(c_name, DEFAULT_RATE_GBP)
         
         for o in b['orders']:
-            # Total Item Count
             try: tq += int(float(re.sub(r'[^0-9.]', '', str(o['item_count']))))
             except: pass
             
-            # Extract weight
-            try: wt = float(re.sub(r'[^0-9.]', '', str(o['order_line_id'])))
+            # Extract actual Weight exactly from the mapped column
+            try: 
+                wt_str = re.sub(r'[^0-9.]', '', str(o['order_line_id']))
+                wt = float(wt_str) if wt_str else 0.0
             except: wt = 0.0
             
             bundle_weight_sum += wt
             
-            # 🔥 3PL RULE: Round up to nearest 1 KG (bhaley 0.1 ho, 1 charge hoga)
-            # max(..., 1) ensures even 0.0kg items get charged at least 1KG if they are an order
-            billed_ind = max(math.ceil(wt), 1) if wt > 0 else 1
+            # 3PL RULE: Round up to nearest 1 KG (0 KG ko bhi kam az kam 1 KG charge kia jayega)
+            billed_ind = max(math.ceil(wt), 1)
             ind_shipping_cost += (billed_ind * per_kg_rate)
             
         b['total_items'] = tq
         b['bundle_weight_kg'] = round(bundle_weight_sum, 2)
         
-        # 🔥 3PL RULE FOR BUNDLE: Round up TOTAL master box weight to nearest 1 KG
-        billed_bundle = max(math.ceil(bundle_weight_sum), 1) if bundle_weight_sum > 0 else 1
+        # 3PL RULE FOR BUNDLE: Round up TOTAL master box weight to nearest 1 KG
+        billed_bundle = max(math.ceil(bundle_weight_sum), 1)
         bundled_shipping_cost = billed_bundle * per_kg_rate
         
-        # Savings = Alag alag bhejne ka kharcha - Ek sath bhejne ka kharcha
         sav = ind_shipping_cost - bundled_shipping_cost
         b['savings_gbp'] = round(sav if sav > 0 else 0, 2)
         
@@ -4641,7 +4640,6 @@ def bundling_dashboard_view():
         .stat-value { font-size:24px; font-weight:900; line-height:1.2; }
         .stat-label { font-size:10px; color:var(--muted); font-weight:700; text-transform:uppercase; }
         
-        /* 🔥 Added 4th Column for Money Saved */
         .kpi-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:20px; margin-bottom:40px; }
         .kpi-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:25px; border-left:4px solid var(--accent); }
         .kpi-val { font-size:40px; font-weight:900; letter-spacing:-2px; margin-bottom:5px; }
@@ -4711,7 +4709,7 @@ def bundling_dashboard_view():
             </div>
         </div>
         <div class="source-card">
-            <div class="source-title">PK Zone </div>
+            <div class="source-title">PK Zone (ECL & GE Zone)</div>
             <div class="source-stats">
                 <div class="stat-item"><div class="stat-value" id="pk-orders">0</div><div class="stat-label">Orders</div></div>
                 <div class="stat-item"><div class="stat-value" id="pk-boxes">0</div><div class="stat-label">Bundles</div></div>
@@ -4755,7 +4753,6 @@ def bundling_dashboard_view():
                 document.getElementById('kpi-orders').innerText = d.kpi?.total_orders_bundled || 0;
                 document.getElementById('kpi-saved').innerText = d.kpi?.saved_shipments || 0;
                 
-                // Format to GBP
                 let money = d.kpi?.total_savings_gbp || 0;
                 document.getElementById('kpi-money').innerText = '£' + money.toLocaleString(undefined, {minimumFractionDigits: 2});
                 
@@ -4798,7 +4795,7 @@ def bundling_dashboard_view():
         function renderTable(bundles) {
             let h = '';
             if (bundles.length === 0) {
-                h = '<tr><td colspan="4" style="text-align:center; padding:60px; color:#666; font-weight:bold;">No Bundled Orders Found. Make sure rows are merged in Sheet.</td></tr>';
+                h = '<tr><td colspan="4" style="text-align:center; padding:60px; color:#666; font-weight:bold;">No Bundled Orders Found.</td></tr>';
             } else {
                 bundles.forEach(b => {
                     let items = b.orders.map(o => `
@@ -4811,7 +4808,7 @@ def bundling_dashboard_view():
                     
                     let savStr = (b.savings_gbp || 0).toFixed(2);
                     let actualWt = (b.bundle_weight_kg || 0);
-                    let billedWt = Math.max(Math.ceil(actualWt), 1); // For display only
+                    let billedWt = Math.max(Math.ceil(actualWt), 1); 
                     
                     h += `<tr>
                         <td><b>${b.date || ''}</b><br><span style="color:#888; font-size:10px;">${b.source || ''}</span></td>
@@ -4848,7 +4845,6 @@ def add_bundling_floating_btn(response):
         user_val = session.get('username') or session.get('user') or session.get('role')
         if user_val and str(user_val).lower() == 'admin':
             html = response.get_data(as_text=True)
-            # Both Buttons inside main dashboard ONLY
             btn = '''
             <div style="position:fixed; bottom:30px; right:30px; display:flex; flex-direction:column; gap:12px; z-index:99999;">
                 <a href="/bundling" style="background:#10B981; color:#000; padding:12px 24px; border-radius:50px; text-decoration:none; font-weight:800; font-family:sans-serif; text-align:center; box-shadow: 0 10px 20px rgba(16,185,129,0.3);">📦 Bundling Intel</a>
