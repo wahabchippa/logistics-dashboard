@@ -4711,7 +4711,7 @@ def bundling_dashboard_view():
             </div>
         </div>
         <div class="source-card">
-            <div class="source-title">PK Zone (ECL & GE Zone)</div>
+            <div class="source-title">PK Zone </div>
             <div class="source-stats">
                 <div class="stat-item"><div class="stat-value" id="pk-orders">0</div><div class="stat-label">Orders</div></div>
                 <div class="stat-item"><div class="stat-value" id="pk-boxes">0</div><div class="stat-label">Bundles</div></div>
