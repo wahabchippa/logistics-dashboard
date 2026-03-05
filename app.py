@@ -4887,7 +4887,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
 <body>
 <div class="header">
     <div>
-        <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-1px;">📦 Order Consolidation AI</h1>
+        <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-1px;">📦 Bundle Order Consolidation </h1>
         <p style="color:#888;margin-top:5px;">Advanced Box & Item level Breakdown (Live Cost Analytics)</p>
     </div>
     <div style="display:flex;gap:15px;">
