@@ -4531,7 +4531,7 @@ def fetch_all():
             {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28}, 2),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o":0,"d":1,"b":3,"w":7,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28}, 2),
+            {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28}, 2),
     }
     ctx = ssl_ctx(); res = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
