@@ -4870,15 +4870,12 @@ tr:hover td{background:#181818;}
   <div class="modal"><button class="mclose" onclick="closeMod()">✕</button><div id="mBody"><div class="mloader"></div></div></div>
 </div>
 <script>
-const CK="bd_cache",CD=30*60*1000;let AB=[];
-function gc(){try{const c=localStorage.getItem(CK);if(!c)return null;const{ts,d}=JSON.parse(c);if(Date.now()-ts<CD)return d;}catch(e){}return null;}
-function sc(d){localStorage.setItem(CK,JSON.stringify({ts:Date.now(),d}));}
-async function loadBundles(fr=false){
+let AB=[];
+async function loadBundles(){
   document.getElementById("content").style.display="none";
   document.getElementById("loading").style.display="block";
-  if(!fr){const c=gc();if(c){renderData(c);return;}}
-  try{const r=await fetch("/api/nexus/bundling_data");const d=await r.json();sc(d);renderData(d);}
-  catch(e){document.getElementById("loading").innerHTML="<div style=color:#EF4444>Error loading data.</div>";}
+  try{const r=await fetch("/api/nexus/bundling_data");const d=await r.json();renderData(d);}
+  catch(e){document.getElementById("loading").innerHTML="<div style=color:#EF4444>Error loading data. Check console.</div>";}
 }
 function renderData(d){
   AB=d.bundles||[];const s=d.source_stats||{};
@@ -4894,7 +4891,7 @@ function renderData(d){
   document.getElementById("loading").style.display="none";
   document.getElementById("content").style.display="block";
 }
-function refreshData(){localStorage.removeItem(CK);loadBundles(true);}
+function refreshData(){loadBundles();}
 function spill(st){
   if(!st||st==="—")return"";
   const s=st.toLowerCase();
@@ -5114,18 +5111,15 @@ tr:hover td{background:#161616;}
   <tbody id="tb"></tbody></table>
 </div>
 <script>
-const CK="st_cache",CD=30*60*1000;let AO=[],SEL=null;
-function gc(){try{const c=localStorage.getItem(CK);if(!c)return null;const{ts,d}=JSON.parse(c);if(Date.now()-ts<CD)return d;}catch(e){}return null;}
-function sc(d){localStorage.setItem(CK,JSON.stringify({ts:Date.now(),d}));}
-async function loadData(fr=false){
+let AO=[],SEL=null;
+async function loadData(){
   document.getElementById("content").style.display="none";
   document.getElementById("loading").style.display="block";
   document.getElementById("sbbox").style.display="none";
-  if(!fr){const c=gc();if(c){AO=c.orders||[];applyFilters();document.getElementById("loading").style.display="none";document.getElementById("content").style.display="block";return;}}
-  try{const r=await fetch("/api/nexus/status_intelligence");const d=await r.json();sc(d);AO=d.orders||[];applyFilters();}
+  try{const r=await fetch("/api/nexus/status_intelligence");const d=await r.json();AO=d.orders||[];applyFilters();}
   catch(e){document.getElementById("loading").innerHTML=`<div style="color:#EF4444">Error: ${e.message}</div>`;}
 }
-function refreshData(){localStorage.removeItem(CK);loadData(true);}
+function refreshData(){loadData();}
 function gss(st){
   if(!st||st==="—")return{bg:"rgba(255,255,255,.05)",c:"#555"};
   const s=st.toLowerCase();
@@ -5342,12 +5336,8 @@ table.matrix th.day-sep{border-left:2px solid #2a2a2a;}
 </div>
 
 <script>
-const CK="sum_cache",CD=30*60*1000;
 let bundlesData=[];
 let modalOrders=[];
-
-function gc(){try{const c=localStorage.getItem(CK);if(!c)return null;const{ts,d}=JSON.parse(c);if(Date.now()-ts<CD)return d;}catch(e){}return null;}
-function sc(d){localStorage.setItem(CK,JSON.stringify({ts:Date.now(),d}));}
 
 function getMonday(d){d=new Date(d);const day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1);return new Date(d.setDate(diff));}
 function fi(d){return d.toISOString().split("T")[0];}
@@ -5368,17 +5358,17 @@ const SRC_COLORS={"ECL QC Center":"#10B981","ECL Zone":"#6366f1","GE Zone":"#f97
 const DAYS=["MON","TUE","WED","THU","FRI","SAT","SUN"];
 const FLIGHT_DAYS=[1,3,5]; // Tue=1 Thu=3 Sat=5 (0-indexed in DAYS)
 
-async function loadSummary(forceRefresh=false){
+async function loadSummary(){
   document.getElementById("content").style.display="none";
   document.getElementById("loading").style.display="block";
-  if(!forceRefresh){const c=gc();if(c){bundlesData=c;render();return;}}
   try{
     const r=await fetch("/api/nexus/summary_data");
     const d=await r.json();
-    bundlesData=d.bundles||[];sc(bundlesData);render();
+    bundlesData=d.bundles||[];
+    render();
   }catch(e){document.getElementById("loading").innerHTML=`<div style="color:#EF4444;text-align:center;padding:36px">Error: ${e.message}</div>`;}
 }
-function refreshData(){localStorage.removeItem(CK);loadSummary(true);}
+function refreshData(){loadSummary();}
 
 function getWeekRange(){
   const ws=document.getElementById("weekStart").value;
@@ -5559,7 +5549,8 @@ function closeMod(){document.getElementById("ordModal").classList.remove("open")
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMod();});
 
 window.onload=function(){
-  setThisWeek(document.querySelector(".qb.active")||document.querySelector(".qb"));
+  const mon=getMonday(new Date());
+  document.getElementById("weekStart").value=fi(mon);
   loadSummary();
 };
 </script></body></html>'''
