@@ -4591,7 +4591,7 @@ def fetch_bundling_standalone_data():
     # 🚨 CORRECTED COLUMN MAPPINGS (based on user's 1‑indexed list) 🚨
     # ECL QC Center: A=0, B=1, D=3, G=6, K=10, N=13, L=11, M=12, R=17, Z=25
     # ECL Zone:      A=0, B=1, E=4, I=8, N=13, O=14, P=15, Q=16, U=20, AC=28
-    # GE Zone:       A=0, B=1, D=3, H=7, M=12, P=15, N=13, O=14, T=19, AC=28
+    # GE Zone:       A=0, B=1, D=3, G=7, M=12, P=15, N=13, O=14, T=19, AC=28
     # ============================================================
     BUNDLING_SOURCES = {
         "ECL QC Center": (
@@ -4604,7 +4604,7 @@ def fetch_bundling_standalone_data():
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o":0, "d":1, "b":3, "w":7, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2
+            {"o":0, "d":1, "b":3, "w":7, "v":12, "title":13, "ic":14, "c":15, "cn":19, "H":28}, 2
         )
     }
 
