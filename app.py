@@ -4343,7 +4343,7 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - WITH REGION SUMMARY TABS (FULL WORKING CODE)
+# 📦 BUNDLING INTELLIGENCE HUB - COMPLETE WITH NEW SUMMARY TABS
 # ==============================================================================
 import urllib.request
 import csv
@@ -4435,7 +4435,6 @@ def fmt_journey_date(dt):
 # ==============================================================================
 
 def fetch_rates_sheet(ctx):
-    """Fetch Rates based on Country"""
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -4444,8 +4443,8 @@ def fetch_rates_sheet(ctx):
             rates_map = {}
             for row in data[1:]:
                 p = row + [''] * 20
-                country  = str(p[7]).strip().lower()   # Col H
-                rate_str = str(p[12]).strip()           # Col M
+                country  = str(p[7]).strip().lower()
+                rate_str = str(p[12]).strip()
                 if country and rate_str:
                     try: rates_map[country] = float(re.sub(r'[^0-9.]', '', rate_str))
                     except: pass
@@ -4455,7 +4454,6 @@ def fetch_rates_sheet(ctx):
         return "RATES", {}
 
 def fetch_status_sheet_data():
-    """Fetch & cache status sheet: col A = fleek_id, col B = latest_status"""
     global _status_cache
     now = time.time()
     if _status_cache['data'] and (now - _status_cache['time']) < BUNDLING_CACHE_DURATION:
@@ -4482,7 +4480,6 @@ def fetch_status_sheet_data():
         return {}
 
 def fetch_journey_sheet_data():
-    """Fetch and cache the order journey sheet – includes region from column CS (index 70)"""
     global _journey_cache
     now = time.time()
     if _journey_cache['data'] and (now - _journey_cache['time']) < BUNDLING_CACHE_DURATION:
@@ -4495,10 +4492,7 @@ def fetch_journey_sheet_data():
         with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
         journey_map = {}
-        # Column indices based on your description:
-        # E (order_id) = 4, CS (region) = 70 (CS = C=3, S=19 → (3-1)*26 + (19-1) = 52+18=70)
         for row in data[1:]:
-            # Pad row to at least 71 columns to safely access index 70
             p = row + [''] * 100
             fleek_id = str(p[4]).strip()
             if not fleek_id or fleek_id.lower() in ['', 'nan', 'fleek_id', 'fleek id']:
@@ -4525,7 +4519,6 @@ def fetch_journey_sheet_data():
         return {}
 
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
-    """Fetch a single sheet with timeout and retry (used in threads)"""
     for attempt in range(2):
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -4628,7 +4621,7 @@ def fetch_bundling_standalone_data():
                     print(f"[ERROR] Failed to get result for {name}: {e}")
                     res[name] = [] if name != "RATES" else {}
         except concurrent.futures.TimeoutError:
-            print("[ERROR] Overall timeout reached while fetching sheets")
+            print("[ERROR] Overall timeout reached")
             for future in futures:
                 if not future.done():
                     future.cancel()
@@ -4644,89 +4637,33 @@ def fetch_bundling_standalone_data():
     return res
 
 # ==============================================================================
-# REGION DATA AGGREGATION (from journey sheet)
+# NEW API: ALL JOURNEY DATA FOR SUMMARY
 # ==============================================================================
 
-def get_region_weekly(week_start_str):
-    """Return region counts per day for the week starting Monday (week_start_str YYYY-MM-DD)"""
+@app.route('/api/nexus/all_journey')
+def api_all_journey():
+    """Return list of orders with date and region from journey sheet"""
     journey_map = fetch_journey_sheet_data()
-    try:
-        week_start = datetime.strptime(week_start_str, '%Y-%m-%d')
-    except:
-        return {"success": False, "message": "Invalid week start date"}
-
-    week_end = week_start + timedelta(days=6)
-    days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
-    result = {}
-
+    result = []
     for order_id, data in journey_map.items():
         created_str = data.get('created_at')
         if not created_str:
             continue
-        created = parse_journey_date(created_str)
-        if not created:
+        dt = parse_journey_date(created_str)
+        if not dt:
             continue
-        # Normalize to date only for comparison
-        created_date = created.date()
-        if week_start.date() <= created_date <= week_end.date():
-            region = data.get('region', 'Unknown').strip()
-            if not region:
-                region = 'Unknown'
-            dow = created.weekday()  # Monday=0, Sunday=6
-            if region not in result:
-                result[region] = [0]*7
-            result[region][dow] += 1
-
-    # Also compute total per day
-    totals = [0]*7
-    for region, counts in result.items():
-        for i in range(7):
-            totals[i] += counts[i]
-
-    return {
-        "success": True,
-        "week_start": week_start_str,
-        "week_end": week_end.strftime('%Y-%m-%d'),
-        "days": days,
-        "regions": result,
-        "totals": totals
-    }
-
-def get_region_summary(start_str, end_str):
-    """Return total orders per region within date range"""
-    journey_map = fetch_journey_sheet_data()
-    try:
-        start = datetime.strptime(start_str, '%Y-%m-%d')
-        end   = datetime.strptime(end_str, '%Y-%m-%d')
-    except:
-        return {"success": False, "message": "Invalid date format"}
-
-    region_counts = {}
-    for order_id, data in journey_map.items():
-        created_str = data.get('created_at')
-        if not created_str:
-            continue
-        created = parse_journey_date(created_str)
-        if not created:
-            continue
-        created_date = created.date()
-        if start.date() <= created_date <= end.date():
-            region = data.get('region', 'Unknown').strip()
-            if not region:
-                region = 'Unknown'
-            region_counts[region] = region_counts.get(region, 0) + 1
-
-    # Sort by count descending
-    sorted_regions = sorted(region_counts.items(), key=lambda x: x[1], reverse=True)
-    return {
-        "success": True,
-        "start_date": start_str,
-        "end_date": end_str,
-        "data": [{"region": r, "count": c} for r, c in sorted_regions]
-    }
+        region = data.get('region', 'Unknown').strip()
+        if not region:
+            region = 'Unknown'
+        result.append({
+            'order_id': order_id,
+            'date': dt.strftime('%Y-%m-%d'),
+            'region': region
+        })
+    return jsonify({"success": True, "data": result})
 
 # ==============================================================================
-# API ROUTES
+# API ROUTES (existing)
 # ==============================================================================
 
 @app.route('/api/nexus/order_journey/<order_id>')
@@ -4929,125 +4866,6 @@ def api_nexus_bundling_data():
         "bundles":      bundles_list
     })
 
-@app.route('/api/nexus/summary_data')
-def api_summary_data():
-    """Legacy summary endpoint (daily/weekly/monthly) – kept for backward compatibility"""
-    period = request.args.get('period', 'daily')
-    start = request.args.get('start_date')
-    end = request.args.get('end_date')
-
-    if not start or not end:
-        return jsonify({"success": False, "message": "start_date and end_date required"})
-
-    try:
-        start_dt = datetime.strptime(start, '%Y-%m-%d')
-        end_dt   = datetime.strptime(end, '%Y-%m-%d')
-    except:
-        return jsonify({"success": False, "message": "Invalid date format. Use YYYY-MM-DD"})
-
-    sheets_data = fetch_bundling_standalone_data()
-    bundles_list = []
-    for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
-        rows = sheets_data.get(src, [])
-        cb = None
-        for r in rows:
-            oid = r['order'].upper()
-            bx  = r['boxes']
-            od = {
-                "order_id": oid,
-                "weight": r['weight'],
-                "title": r['title'],
-                "item_count": r['item_count'],
-                "country": r['country']
-            }
-            if bx != "":
-                if cb and len(cb['orders']) > 1:
-                    bundles_list.append(cb)
-                cb = {
-                    "orders": [od],
-                    "date_std": r['date_std'],
-                    "country": r['country']
-                }
-            else:
-                if cb:
-                    cb['orders'].append(od)
-        if cb and len(cb['orders']) > 1:
-            bundles_list.append(cb)
-
-    filtered = [b for b in bundles_list if start_dt <= datetime.strptime(b['date_std'], '%Y-%m-%d') <= end_dt]
-
-    if period == 'daily':
-        groups = {}
-        for b in filtered:
-            d = b['date_std']
-            if d not in groups:
-                groups[d] = {'bundles':0, 'orders':0, 'weight':0.0}
-            groups[d]['bundles'] += 1
-            groups[d]['orders'] += len(b['orders'])
-            groups[d]['weight'] += b.get('bundle_weight_kg', 0)
-        result = [{'period':d, 'bundles':g['bundles'], 'orders':g['orders'], 'weight':round(g['weight'],2)} for d,g in sorted(groups.items())]
-        return jsonify({"success": True, "data": result})
-    elif period == 'weekly':
-        groups = {}
-        for b in filtered:
-            dt = datetime.strptime(b['date_std'], '%Y-%m-%d')
-            monday = dt - timedelta(days=dt.weekday())
-            key = monday.strftime('%Y-%m-%d')
-            if key not in groups:
-                groups[key] = {'bundles':0, 'orders':0, 'weight':0.0}
-            groups[key]['bundles'] += 1
-            groups[key]['orders'] += len(b['orders'])
-            groups[key]['weight'] += b.get('bundle_weight_kg', 0)
-        result = []
-        for monday_str in sorted(groups.keys()):
-            monday = datetime.strptime(monday_str, '%Y-%m-%d')
-            sunday = monday + timedelta(days=6)
-            result.append({
-                'week_start': monday_str,
-                'week_end': sunday.strftime('%Y-%m-%d'),
-                'bundles': groups[monday_str]['bundles'],
-                'orders': groups[monday_str]['orders'],
-                'weight': round(groups[monday_str]['weight'], 2)
-            })
-        return jsonify({"success": True, "data": result})
-    elif period == 'monthly':
-        groups = {}
-        for b in filtered:
-            month = b['date_std'][:7]
-            if month not in groups:
-                groups[month] = {'bundles':0, 'orders':0, 'weight':0.0}
-            groups[month]['bundles'] += 1
-            groups[month]['orders'] += len(b['orders'])
-            groups[month]['weight'] += b.get('bundle_weight_kg', 0)
-        result = [{'month':m, 'bundles':g['bundles'], 'orders':g['orders'], 'weight':round(g['weight'],2)} for m,g in sorted(groups.items())]
-        return jsonify({"success": True, "data": result})
-    else:
-        return jsonify({"success": False, "message": "Invalid period"})
-
-# ==============================================================================
-# NEW REGION API ENDPOINTS
-# ==============================================================================
-
-@app.route('/api/nexus/region_weekly')
-def api_region_weekly():
-    week_start = request.args.get('week_start')
-    if not week_start:
-        # default to current week's Monday
-        today = datetime.today()
-        monday = today - timedelta(days=today.weekday())
-        week_start = monday.strftime('%Y-%m-%d')
-    result = get_region_weekly(week_start)
-    return jsonify(result)
-
-@app.route('/api/nexus/region_summary')
-def api_region_summary():
-    start = request.args.get('start_date')
-    end = request.args.get('end_date')
-    if not start or not end:
-        return jsonify({"success": False, "message": "start_date and end_date required"})
-    result = get_region_summary(start, end)
-    return jsonify(result)
-
 # ==============================================================================
 # VIEWS
 # ==============================================================================
@@ -5073,22 +4891,8 @@ def bundling_summary_view():
         return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
     return render_template_string(SUMMARY_HTML)
 
-@app.route('/bundling/region_weekly')
-def region_weekly_view():
-    u = session.get('username') or session.get('user') or session.get('role')
-    if not u or str(u).lower() != 'admin':
-        return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
-    return render_template_string(REGION_WEEKLY_HTML)
-
-@app.route('/bundling/region_summary')
-def region_summary_view():
-    u = session.get('username') or session.get('user') or session.get('role')
-    if not u or str(u).lower() != 'admin':
-        return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
-    return render_template_string(REGION_SUMMARY_HTML)
-
 # ==============================================================================
-# HTML TEMPLATES (ALL INCLUDED)
+# HTML TEMPLATES
 # ==============================================================================
 
 BUNDLING_HTML = '''<!DOCTYPE html>
@@ -5187,9 +4991,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
 <div class="nav-tabs">
     <a href="/bundling" class="nav-tab active">📦 Bundle Intelligence</a>
     <a href="/bundling/status" class="nav-tab">📡 Status Intelligence</a>
-    <a href="/bundling/summary" class="nav-tab">📅 Summary</a>
-    <a href="/bundling/region_weekly" class="nav-tab">📊 Region Weekly</a>
-    <a href="/bundling/region_summary" class="nav-tab">🌍 Region Summary</a>
+    <a href="/bundling/summary" class="nav-tab">📊 Summary</a>
 </div>
 
 <div class="filter-box">
@@ -5516,9 +5318,7 @@ STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
 <div class="nav-tabs">
     <a href="/bundling" class="nav-tab">📦 Bundle Intelligence</a>
     <a href="/bundling/status" class="nav-tab active">📡 Status Intelligence</a>
-    <a href="/bundling/summary" class="nav-tab">📅 Summary</a>
-    <a href="/bundling/region_weekly" class="nav-tab">📊 Region Weekly</a>
-    <a href="/bundling/region_summary" class="nav-tab">🌍 Region Summary</a>
+    <a href="/bundling/summary" class="nav-tab">📊 Summary</a>
 </div>
 
 <div class="filter-bar">
@@ -5747,190 +5547,15 @@ window.onload = loadData;
 </body>
 </html>'''
 
+# ==============================================================================
+# NEW SUMMARY HTML
+# ==============================================================================
+
 SUMMARY_HTML = '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>📊 Summary Intelligence</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#8b5cf6;--muted:#71717A;--input-bg:#050505;}
-        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
-        .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
-        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
-        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
-        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
-        .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-        .summary-section{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:24px;}
-        .section-title{font-size:18px;font-weight:800;margin-bottom:16px;color:var(--accent);}
-        .filter-row{display:flex;gap:15px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px;}
-        .f-group{display:flex;flex-direction:column;gap:5px;}
-        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
-        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';outline:none;min-width:150px;}
-        .f-input:focus{border-color:var(--accent);}
-        .btn-apply{background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
-        .btn-apply:hover{opacity:0.8;}
-        table{width:100%;border-collapse:collapse;background:#111;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
-        th{background:#050505;padding:12px;font-size:11px;color:#888;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;}
-        td{padding:12px;border-bottom:1px solid #222;color:#ccc;font-size:13px;}
-        .loader{width:30px;height:30px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto;}
-        @keyframes spin{to{transform:rotate(360deg);}}
-        .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
-        .no-data{text-align:center;padding:40px;color:#666;font-size:14px;}
-    </style>
-</head>
-<body>
-<div class="header">
-    <div>
-        <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-1px;">📊 Summary Intelligence</h1>
-        <p style="color:#888;margin-top:4px;">Daily, weekly & monthly aggregated reports</p>
-    </div>
-    <div style="display:flex;gap:12px;">
-        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
-        <button onclick="location.reload()" class="btn-top" style="background:#8b5cf6;color:#fff;">🔄 Refresh</button>
-    </div>
-</div>
-
-<div class="nav-tabs">
-    <a href="/bundling" class="nav-tab">📦 Bundle Intelligence</a>
-    <a href="/bundling/status" class="nav-tab">📡 Status Intelligence</a>
-    <a href="/bundling/summary" class="nav-tab active">📊 Summary</a>
-    <a href="/bundling/region_weekly" class="nav-tab">📊 Region Weekly</a>
-    <a href="/bundling/region_summary" class="nav-tab">🌍 Region Summary</a>
-</div>
-
-<!-- DAILY SECTION -->
-<div class="summary-section">
-    <div class="section-title">📅 Daily Summary</div>
-    <div class="filter-row">
-        <div class="f-group">
-            <div class="f-label">From Date</div>
-            <input type="date" id="dailyFrom" class="f-input" value="2025-01-01">
-        </div>
-        <div class="f-group">
-            <div class="f-label">To Date</div>
-            <input type="date" id="dailyTo" class="f-input" value="2025-12-31">
-        </div>
-        <button class="btn-apply" onclick="loadSummary('daily')">Apply</button>
-    </div>
-    <div id="dailyLoading" style="display:none;"><div class="loader"></div></div>
-    <div id="dailyTable"></div>
-</div>
-
-<!-- WEEKLY SECTION -->
-<div class="summary-section">
-    <div class="section-title">📆 Weekly Summary (Mon–Sun)</div>
-    <div class="filter-row">
-        <div class="f-group">
-            <div class="f-label">From Date</div>
-            <input type="date" id="weeklyFrom" class="f-input" value="2025-01-01">
-        </div>
-        <div class="f-group">
-            <div class="f-label">To Date</div>
-            <input type="date" id="weeklyTo" class="f-input" value="2025-12-31">
-        </div>
-        <button class="btn-apply" onclick="loadSummary('weekly')">Apply</button>
-    </div>
-    <div id="weeklyLoading" style="display:none;"><div class="loader"></div></div>
-    <div id="weeklyTable"></div>
-</div>
-
-<!-- MONTHLY SECTION -->
-<div class="summary-section">
-    <div class="section-title">📆 Monthly Summary</div>
-    <div class="filter-row">
-        <div class="f-group">
-            <div class="f-label">From Date</div>
-            <input type="date" id="monthlyFrom" class="f-input" value="2025-01-01">
-        </div>
-        <div class="f-group">
-            <div class="f-label">To Date</div>
-            <input type="date" id="monthlyTo" class="f-input" value="2025-12-31">
-        </div>
-        <button class="btn-apply" onclick="loadSummary('monthly')">Apply</button>
-    </div>
-    <div id="monthlyLoading" style="display:none;"><div class="loader"></div></div>
-    <div id="monthlyTable"></div>
-</div>
-
-<script>
-async function loadSummary(period) {
-    const fromId = period + 'From';
-    const toId = period + 'To';
-    const from = document.getElementById(fromId).value;
-    const to = document.getElementById(toId).value;
-    if (!from || !to) {
-        alert('Please select both dates');
-        return;
-    }
-    const loadingId = period + 'Loading';
-    const tableId = period + 'Table';
-    document.getElementById(loadingId).style.display = 'block';
-    document.getElementById(tableId).innerHTML = '';
-    try {
-        const url = `/api/nexus/summary_data?period=${period}&start_date=${from}&end_date=${to}`;
-        const r = await fetch(url);
-        const d = await r.json();
-        document.getElementById(loadingId).style.display = 'none';
-        if (!d.success) {
-            document.getElementById(tableId).innerHTML = `<div class="no-data">${d.message || 'Error loading data'}</div>`;
-            return;
-        }
-        if (!d.data || d.data.length === 0) {
-            document.getElementById(tableId).innerHTML = '<div class="no-data">No data for selected range</div>';
-            return;
-        }
-        let html = '<table><thead><tr>';
-        if (period === 'daily') {
-            html += '<th>Date</th><th>Bundles</th><th>Orders</th><th>Total Weight (kg)</th>';
-        } else if (period === 'weekly') {
-            html += '<th>Week Start (Mon)</th><th>Week End (Sun)</th><th>Bundles</th><th>Orders</th><th>Total Weight (kg)</th>';
-        } else if (period === 'monthly') {
-            html += '<th>Month</th><th>Bundles</th><th>Orders</th><th>Total Weight (kg)</th>';
-        }
-        html += '</tr></thead><tbody>';
-        d.data.forEach(row => {
-            html += '<tr>';
-            if (period === 'daily') {
-                html += `<td>${row.period}</td><td>${row.bundles}</td><td>${row.orders}</td><td>${row.weight}</td>`;
-            } else if (period === 'weekly') {
-                html += `<td>${row.week_start}</td><td>${row.week_end}</td><td>${row.bundles}</td><td>${row.orders}</td><td>${row.weight}</td>`;
-            } else if (period === 'monthly') {
-                html += `<td>${row.month}</td><td>${row.bundles}</td><td>${row.orders}</td><td>${row.weight}</td>`;
-            }
-            html += '</tr>';
-        });
-        html += '</tbody></table>';
-        document.getElementById(tableId).innerHTML = html;
-    } catch(e) {
-        document.getElementById(loadingId).style.display = 'none';
-        document.getElementById(tableId).innerHTML = `<div class="no-data">Error: ${e.message}</div>`;
-    }
-}
-
-// Set default dates to current year
-window.onload = function() {
-    const today = new Date();
-    const year = today.getFullYear();
-    document.getElementById('dailyFrom').value = year + '-01-01';
-    document.getElementById('dailyTo').value = year + '-12-31';
-    document.getElementById('weeklyFrom').value = year + '-01-01';
-    document.getElementById('weeklyTo').value = year + '-12-31';
-    document.getElementById('monthlyFrom').value = year + '-01-01';
-    document.getElementById('monthlyTo').value = year + '-12-31';
-    loadSummary('daily');
-    loadSummary('weekly');
-    loadSummary('monthly');
-}
-</script>
-</body>
-</html>'''
-
-REGION_WEEKLY_HTML = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>📊 Region Weekly</title>
+    <title>📊 Region Summary</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#f97316;--muted:#71717A;--input-bg:#050505;}
@@ -5940,26 +5565,30 @@ REGION_WEEKLY_HTML = '''<!DOCTYPE html>
         .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
         .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
         .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+        .sub-tabs{display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:10px;}
+        .sub-tab{padding:8px 16px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;background:var(--card);border:1px solid var(--border);color:#888;}
+        .sub-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
         .control-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px;display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;}
         .f-group{display:flex;flex-direction:column;gap:5px;}
         .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;}
         .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';}
         .btn{background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
         .btn:hover{opacity:0.8;}
-        table{width:100%;border-collapse:collapse;background:#111;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
+        table{width:100%;border-collapse:collapse;background:#111;border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-top:10px;}
         th{background:#050505;padding:12px;font-size:11px;color:#888;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:center;}
         td{padding:12px;border-bottom:1px solid #222;color:#ccc;text-align:center;}
-        .region-name{font-weight:700;color:#f97316;text-align:left;}
+        .region-name{font-weight:700;color:var(--accent);text-align:left;}
         .totals-row{background:#1a1a1a;font-weight:700;}
         .loader{width:30px;height:30px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto;}
         @keyframes spin{to{transform:rotate(360deg);}}
+        .no-data{text-align:center;padding:40px;color:#666;}
     </style>
 </head>
 <body>
 <div class="header">
     <div>
-        <h1 style="margin:0;font-size:26px;">📊 Region Weekly Matrix</h1>
-        <p style="color:#888;">Order count per day (Mon–Sun) by region</p>
+        <h1 style="margin:0;font-size:26px;">📊 Region Summary</h1>
+        <p style="color:#888;">Daily region totals & weekly matrix</p>
     </div>
     <a href="/" class="nav-tab" style="background:#1A1A1A;">🏠 Main Dash</a>
 </div>
@@ -5967,23 +5596,85 @@ REGION_WEEKLY_HTML = '''<!DOCTYPE html>
 <div class="nav-tabs">
     <a href="/bundling" class="nav-tab">📦 Bundle</a>
     <a href="/bundling/status" class="nav-tab">📡 Status</a>
-    <a href="/bundling/summary" class="nav-tab">📅 Summary</a>
-    <a href="/bundling/region_weekly" class="nav-tab active">📊 Region Weekly</a>
-    <a href="/bundling/region_summary" class="nav-tab">🌍 Region Summary</a>
+    <a href="/bundling/summary" class="nav-tab active">📊 Summary</a>
 </div>
 
-<div class="control-panel">
-    <div class="f-group">
-        <div class="f-label">Week Starting (Monday)</div>
-        <input type="date" id="weekStart" class="f-input" value="">
+<div class="sub-tabs">
+    <div class="sub-tab active" onclick="switchTab('daily')">Daily Region</div>
+    <div class="sub-tab" onclick="switchTab('weekly')">Weekly Matrix</div>
+</div>
+
+<div id="dailyPanel" style="display:block;">
+    <div class="control-panel">
+        <div class="f-group">
+            <div class="f-label">From Date</div>
+            <input type="date" id="dailyFrom" class="f-input" value="">
+        </div>
+        <div class="f-group">
+            <div class="f-label">To Date</div>
+            <input type="date" id="dailyTo" class="f-input" value="">
+        </div>
+        <button class="btn" onclick="loadDaily()">Apply</button>
     </div>
-    <button class="btn" onclick="loadWeekly()">Load Week</button>
+    <div id="dailyLoader" style="display:none;"><div class="loader"></div></div>
+    <div id="dailyTable"></div>
 </div>
 
-<div id="loading" style="display:none;"><div class="loader"></div></div>
-<div id="tableContainer"></div>
+<div id="weeklyPanel" style="display:none;">
+    <div class="control-panel">
+        <div class="f-group">
+            <div class="f-label">Week Starting (Monday)</div>
+            <input type="date" id="weekStart" class="f-input" value="">
+        </div>
+        <button class="btn" onclick="loadWeekly()">Load Week</button>
+    </div>
+    <div id="weeklyLoader" style="display:none;"><div class="loader"></div></div>
+    <div id="weeklyTable"></div>
+</div>
 
 <script>
+// Global data stores
+let bundlesData = null;
+let journeyData = null;
+let currentTab = 'daily';
+
+// Fetch all data once
+async function fetchAllData() {
+    if (bundlesData && journeyData) return;
+    try {
+        const [bRes, jRes] = await Promise.all([
+            fetch('/api/nexus/bundling_data'),
+            fetch('/api/nexus/all_journey')
+        ]);
+        const bJson = await bRes.json();
+        const jJson = await jRes.json();
+        bundlesData = bJson.bundles || [];
+        journeyData = jJson.data || [];
+        // Set default dates
+        setDefaultDates();
+        // Load current tab
+        if (currentTab === 'daily') loadDaily();
+        else loadWeekly();
+    } catch(e) {
+        console.error(e);
+        alert('Error loading data');
+    }
+}
+
+function setDefaultDates() {
+    const today = new Date();
+    const year = today.getFullYear();
+    // Default to current year
+    document.getElementById('dailyFrom').value = year + '-01-01';
+    document.getElementById('dailyTo').value = year + '-12-31';
+    // Default week to current week's Monday
+    const monday = getMonday(today);
+    const yyyy = monday.getFullYear();
+    const mm = String(monday.getMonth() + 1).padStart(2, '0');
+    const dd = String(monday.getDate()).padStart(2, '0');
+    document.getElementById('weekStart').value = `${yyyy}-${mm}-${dd}`;
+}
+
 function getMonday(d) {
     d = new Date(d);
     const day = d.getDay();
@@ -5991,156 +5682,124 @@ function getMonday(d) {
     return new Date(d.setDate(diff));
 }
 
-window.onload = function() {
-    const today = new Date();
-    const monday = getMonday(today);
-    const yyyy = monday.getFullYear();
-    const mm = String(monday.getMonth() + 1).padStart(2, '0');
-    const dd = String(monday.getDate()).padStart(2, '0');
-    document.getElementById('weekStart').value = `${yyyy}-${mm}-${dd}`;
-    loadWeekly();
+function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.sub-tab').forEach(el => el.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('dailyPanel').style.display = tab === 'daily' ? 'block' : 'none';
+    document.getElementById('weeklyPanel').style.display = tab === 'weekly' ? 'block' : 'none';
+    if (tab === 'daily') loadDaily();
+    else loadWeekly();
 }
 
-async function loadWeekly() {
+// Daily region summary
+function loadDaily() {
+    const from = document.getElementById('dailyFrom').value;
+    const to = document.getElementById('dailyTo').value;
+    if (!from || !to) return;
+    document.getElementById('dailyLoader').style.display = 'block';
+    document.getElementById('dailyTable').innerHTML = '';
+
+    // Filter bundles by date range (using bundle's date_std)
+    const start = new Date(from);
+    const end = new Date(to);
+    const filteredBundles = bundlesData.filter(b => {
+        const d = new Date(b.date_std);
+        return d >= start && d <= end;
+    });
+
+    // Aggregate per region
+    const regionMap = {};
+    filteredBundles.forEach(b => {
+        const region = b.country || 'Unknown';
+        if (!regionMap[region]) {
+            regionMap[region] = { orders:0, boxes:0, weight:0, lt20:0, ge20:0 };
+        }
+        regionMap[region].boxes += 1;
+        regionMap[region].orders += b.orders.length; // number of orders in bundle
+        regionMap[region].weight += b.bundle_weight_kg || 0;
+        if (b.bundle_weight_kg < 20) regionMap[region].lt20 += 1;
+        else regionMap[region].ge20 += 1;
+    });
+
+    // Build table
+    let html = '<table><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20kg</th><th>20+kg</th></tr></thead><tbody>';
+    let totalOrders = 0, totalBoxes = 0, totalWeight = 0, totalLt20 = 0, totalGe20 = 0;
+    for (let region in regionMap) {
+        let r = regionMap[region];
+        html += `<tr><td class="region-name">${region}</td><td>${r.orders}</td><td>${r.boxes}</td><td>${r.weight.toFixed(1)}</td><td>${r.lt20}</td><td>${r.ge20}</td></tr>`;
+        totalOrders += r.orders;
+        totalBoxes += r.boxes;
+        totalWeight += r.weight;
+        totalLt20 += r.lt20;
+        totalGe20 += r.ge20;
+    }
+    html += `<tr class="totals-row"><td>TOTAL</td><td>${totalOrders}</td><td>${totalBoxes}</td><td>${totalWeight.toFixed(1)}</td><td>${totalLt20}</td><td>${totalGe20}</td></tr>`;
+    html += '</tbody></table>';
+    document.getElementById('dailyTable').innerHTML = html;
+    document.getElementById('dailyLoader').style.display = 'none';
+}
+
+// Weekly matrix
+function loadWeekly() {
     const weekStart = document.getElementById('weekStart').value;
     if (!weekStart) return;
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('tableContainer').innerHTML = '';
-    try {
-        const r = await fetch(`/api/nexus/region_weekly?week_start=${weekStart}`);
-        const d = await r.json();
-        document.getElementById('loading').style.display = 'none';
-        if (!d.success) {
-            document.getElementById('tableContainer').innerHTML = `<div style="color:#EF4444;">${d.message}</div>`;
-            return;
+    document.getElementById('weeklyLoader').style.display = 'block';
+    document.getElementById('weeklyTable').innerHTML = '';
+
+    const start = new Date(weekStart);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+    // Filter journey data by date range
+    const filteredJourney = journeyData.filter(j => {
+        const d = new Date(j.date);
+        return d >= start && d <= end;
+    });
+
+    // Aggregate per region and day
+    const regionDayMap = {};
+    filteredJourney.forEach(j => {
+        const region = j.region || 'Unknown';
+        const d = new Date(j.date);
+        const dayIndex = d.getDay(); // 0=Sun, 1=Mon, ... 6=Sat
+        // Convert to Mon=0 .. Sun=6
+        let idx = dayIndex === 0 ? 6 : dayIndex - 1; // Mon=0, Tue=1, ..., Sun=6
+        if (!regionDayMap[region]) {
+            regionDayMap[region] = [0,0,0,0,0,0,0];
         }
-        let html = `<div style="margin-bottom:10px;color:#888;">Week: ${d.week_start} to ${d.week_end}</div>`;
-        html += '<table><thead><tr><th>Region</th>';
-        d.days.forEach(day => html += `<th>${day}</th>`);
-        html += '<th>Total</th></tr></thead><tbody>';
-        const regions = d.regions;
-        const totals = d.totals;
-        for (let region in regions) {
-            let counts = regions[region];
-            let rowSum = counts.reduce((a,b)=>a+b,0);
-            html += `<tr><td class="region-name">${region}</td>`;
-            counts.forEach(c => html += `<td>${c}</td>`);
-            html += `<td><b>${rowSum}</b></td></tr>`;
-        }
-        // Totals row
-        html += `<tr class="totals-row"><td>TOTAL</td>`;
-        totals.forEach(t => html += `<td><b>${t}</b></td>`);
-        let grandTotal = totals.reduce((a,b)=>a+b,0);
-        html += `<td><b>${grandTotal}</b></td></tr>`;
-        html += '</tbody></table>';
-        document.getElementById('tableContainer').innerHTML = html;
-    } catch(e) {
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('tableContainer').innerHTML = `<div style="color:#EF4444;">Error: ${e.message}</div>`;
-    }
-}
-</script>
-</body>
-</html>'''
+        regionDayMap[region][idx] += 1;
+    });
 
-REGION_SUMMARY_HTML = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>🌍 Region Summary</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#3b82f6;--muted:#71717A;--input-bg:#050505;}
-        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
-        .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
-        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
-        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
-        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
-        .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-        .control-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px;display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;}
-        .f-group{display:flex;flex-direction:column;gap:5px;}
-        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;}
-        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';}
-        .btn{background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
-        .btn:hover{opacity:0.8;}
-        table{width:100%;border-collapse:collapse;background:#111;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
-        th{background:#050505;padding:12px;font-size:11px;color:#888;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:left;}
-        td{padding:12px;border-bottom:1px solid #222;color:#ccc;}
-        .totals-row{background:#1a1a1a;font-weight:700;}
-        .loader{width:30px;height:30px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto;}
-        @keyframes spin{to{transform:rotate(360deg);}}
-    </style>
-</head>
-<body>
-<div class="header">
-    <div>
-        <h1 style="margin:0;font-size:26px;">🌍 Region Summary</h1>
-        <p style="color:#888;">Total orders per region for custom date range</p>
-    </div>
-    <a href="/" class="nav-tab" style="background:#1A1A1A;">🏠 Main Dash</a>
-</div>
-
-<div class="nav-tabs">
-    <a href="/bundling" class="nav-tab">📦 Bundle</a>
-    <a href="/bundling/status" class="nav-tab">📡 Status</a>
-    <a href="/bundling/summary" class="nav-tab">📅 Summary</a>
-    <a href="/bundling/region_weekly" class="nav-tab">📊 Region Weekly</a>
-    <a href="/bundling/region_summary" class="nav-tab active">🌍 Region Summary</a>
-</div>
-
-<div class="control-panel">
-    <div class="f-group">
-        <div class="f-label">From Date</div>
-        <input type="date" id="fromDate" class="f-input" value="2025-01-01">
-    </div>
-    <div class="f-group">
-        <div class="f-label">To Date</div>
-        <input type="date" id="toDate" class="f-input" value="2025-12-31">
-    </div>
-    <button class="btn" onclick="loadSummary()">Load</button>
-</div>
-
-<div id="loading" style="display:none;"><div class="loader"></div></div>
-<div id="tableContainer"></div>
-
-<script>
-window.onload = function() {
-    const today = new Date();
-    const year = today.getFullYear();
-    document.getElementById('fromDate').value = year + '-01-01';
-    document.getElementById('toDate').value = year + '-12-31';
-    loadSummary();
-}
-
-async function loadSummary() {
-    const from = document.getElementById('fromDate').value;
-    const to = document.getElementById('toDate').value;
-    if (!from || !to) return;
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('tableContainer').innerHTML = '';
-    try {
-        const r = await fetch(`/api/nexus/region_summary?start_date=${from}&end_date=${to}`);
-        const d = await r.json();
-        document.getElementById('loading').style.display = 'none';
-        if (!d.success) {
-            document.getElementById('tableContainer').innerHTML = `<div style="color:#EF4444;">${d.message}</div>`;
-            return;
-        }
-        let html = `<div style="margin-bottom:10px;color:#888;">Period: ${d.start_date} to ${d.end_date}</div>`;
-        html += '<table><thead><tr><th>Region</th><th>Order Count</th></tr></thead><tbody>';
-        let total = 0;
-        d.data.forEach(item => {
-            html += `<tr><td>${item.region}</td><td><b>${item.count}</b></td></tr>`;
-            total += item.count;
+    // Build table
+    let html = '<table><thead><tr><th>Region</th>';
+    days.forEach(d => html += `<th>${d}</th>`);
+    html += '<th>Total</th></tr></thead><tbody>';
+    let totals = [0,0,0,0,0,0,0];
+    let grandTotal = 0;
+    for (let region in regionDayMap) {
+        let counts = regionDayMap[region];
+        let rowSum = counts.reduce((a,b)=>a+b,0);
+        html += `<tr><td class="region-name">${region}</td>`;
+        counts.forEach((c,i) => {
+            html += `<td>${c}</td>`;
+            totals[i] += c;
         });
-        html += `<tr class="totals-row"><td>TOTAL</td><td><b>${total}</b></td></tr>`;
-        html += '</tbody></table>';
-        document.getElementById('tableContainer').innerHTML = html;
-    } catch(e) {
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('tableContainer').innerHTML = `<div style="color:#EF4444;">Error: ${e.message}</div>`;
+        html += `<td><b>${rowSum}</b></td></tr>`;
+        grandTotal += rowSum;
     }
+    // Totals row
+    html += `<tr class="totals-row"><td>TOTAL</td>`;
+    totals.forEach(t => html += `<td><b>${t}</b></td>`);
+    html += `<td><b>${grandTotal}</b></td></tr>`;
+    html += '</tbody></table>';
+    document.getElementById('weeklyTable').innerHTML = html;
+    document.getElementById('weeklyLoader').style.display = 'none';
 }
+
+// Initialize
+window.onload = fetchAllData;
 </script>
 </body>
 </html>'''
