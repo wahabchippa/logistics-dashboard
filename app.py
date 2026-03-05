@@ -4656,8 +4656,51 @@ def api_order_journey(order_id):
     dt_freight    = parse_journey_date(row['freight_at'])
     dt_courier    = parse_journey_date(row['courier_at'])
     dt_delivered  = parse_journey_date(row['delivered_at'])
+
+    # Compute step‑by‑step intervals
+    steps = [
+        ("Created → Accepted", dt_created, dt_accepted),
+        ("Accepted → Pickup Ready", dt_accepted, dt_pickup),
+        ("Pickup Ready → QC Pending", dt_pickup, dt_qc_pending),
+        ("QC Pending → QC Approved", dt_qc_pending, dt_qc_appr),
+        ("QC Approved → Handover", dt_qc_appr, dt_handed),
+        ("Handover → Freight", dt_handed, dt_freight),
+        ("Freight → Courier", dt_freight, dt_courier),
+        ("Courier → Delivered", dt_courier, dt_delivered),
+    ]
+    step_metrics = []
+    for label, start, end in steps:
+        if start and end:
+            diff = days_between(start, end)
+            step_metrics.append({"label": label, "duration": diff})
+        else:
+            step_metrics.append({"label": label, "duration": None})
+
+    # Determine last known event (the latest timestamp that exists)
+    last_event = None
+    last_event_label = None
+    events = [
+        ("Created", dt_created),
+        ("Accepted", dt_accepted),
+        ("Pickup Ready", dt_pickup),
+        ("QC Pending", dt_qc_pending),
+        ("QC Approved", dt_qc_appr),
+        ("Handed Over", dt_handed),
+        ("Freight", dt_freight),
+        ("Courier", dt_courier),
+        ("Delivered", dt_delivered),
+    ]
+    for label, dt in reversed(events):
+        if dt:
+            last_event = dt
+            last_event_label = label
+            break
+
+    total_journey = days_between(dt_created, dt_delivered or last_event)
+
     return jsonify({
-        "success": True, "order_id": order_id,
+        "success": True,
+        "order_id": order_id,
         "is_cancelled": bool(dt_cancelled),
         "timeline": {
             "created_at":      fmt_journey_date(dt_created),
@@ -4671,10 +4714,15 @@ def api_order_journey(order_id):
             "courier_at":      fmt_journey_date(dt_courier),
             "delivered_at":    fmt_journey_date(dt_delivered),
         },
+        "step_metrics": step_metrics,
+        "last_event": {
+            "label": last_event_label,
+            "date": fmt_journey_date(last_event)
+        },
         "key_metrics": {
             "qc_to_handover":      days_between(dt_qc_appr, dt_handed),
             "handover_to_freight": days_between(dt_handed,  dt_freight),
-            "total_journey":       days_between(dt_created, dt_delivered or dt_courier or dt_freight or dt_handed),
+            "total_journey":       total_journey,
         }
     })
 
@@ -4860,7 +4908,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
         .title-preview{font-size:10px;color:#666;margin-top:2px;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
         .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;backdrop-filter:blur(4px);justify-content:center;align-items:center;}
         .modal-overlay.open{display:flex;}
-        .modal{background:#0A0A0A;border:1px solid #2A2A2A;border-radius:16px;padding:32px;width:100%;max-width:580px;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 30px 60px rgba(0,0,0,0.8);}
+        .modal{background:#0A0A0A;border:1px solid #2A2A2A;border-radius:16px;padding:32px;width:100%;max-width:650px;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 30px 60px rgba(0,0,0,0.8);}
         .modal-close{position:absolute;top:16px;right:16px;background:#1A1A1A;border:1px solid #333;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;}
         .modal-close:hover{background:#EF4444;border-color:#EF4444;}
         .modal-title{font-size:20px;font-weight:800;margin-bottom:4px;}
@@ -4875,13 +4923,18 @@ BUNDLING_HTML = '''<!DOCTYPE html>
         .tl-value{font-size:13px;color:#fff;font-weight:600;margin-top:2px;}
         .tl-value.pending-val{color:#444;font-style:italic;}
         .tl-value.cancelled-val{color:#EF4444;font-weight:700;}
-        .metrics-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px;}
+        .metrics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;}
         .metric-card{background:#111;border:1px solid #1A1A1A;border-radius:10px;padding:14px;text-align:center;}
         .metric-val{font-size:22px;font-weight:900;color:#10B981;}
         .metric-val.warn{color:#F59E0B;}
         .metric-val.danger{color:#EF4444;}
         .metric-val.na{color:#444;font-size:16px;}
         .metric-lbl{font-size:10px;color:#666;text-transform:uppercase;font-weight:700;margin-top:4px;line-height:1.3;}
+        .step-metrics-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px;}
+        .step-card{background:#111;border:1px solid #1A1A1A;border-radius:8px;padding:10px;text-align:center;}
+        .step-label{font-size:9px;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:4px;}
+        .step-val{font-size:16px;font-weight:700;color:#fff;}
+        .step-val.missing{color:#444;}
         .cancelled-banner{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;color:#EF4444;font-weight:700;font-size:13px;}
         .section-hd{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#10B981;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #1A1A1A;}
         .loader{width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:50px auto;}
@@ -5100,7 +5153,7 @@ async function openJourney(orderId) {
             document.getElementById('modalBody').innerHTML = `<div style="text-align:center;padding:30px;"><div style="font-size:40px;margin-bottom:12px;">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;">Order Not Found</div><div style="font-size:13px;color:#666;">${d.message}</div></div>`;
             return;
         }
-        const tl = d.timeline, km = d.key_metrics;
+        const tl = d.timeline, km = d.key_metrics, steps = d.step_metrics || [];
         function mColor(val) {
             if (!val||val==='N/A') return 'na';
             const n = parseFloat(val);
@@ -5115,6 +5168,18 @@ async function openJourney(orderId) {
             if(type==='cancelled'){dc=val?'cancelled':'pending';vc=val?'cancelled-val':'pending-val';}
             return `<div class="tl-item"><div class="tl-dot ${dc}"></div><div class="tl-label">${label}</div><div class="tl-value ${vc}">${val||'— Not yet'}</div></div>`;
         }
+        
+        // Build step metrics grid
+        let stepHtml = '';
+        if (steps.length) {
+            stepHtml = '<div class="section-hd">⏱️ Step Durations</div><div class="step-metrics-grid">';
+            steps.forEach(s => {
+                let valClass = s.duration ? '' : 'missing';
+                stepHtml += `<div class="step-card"><div class="step-label">${s.label}</div><div class="step-val ${valClass}">${s.duration || '—'}</div></div>`;
+            });
+            stepHtml += '</div>';
+        }
+
         document.getElementById('modalBody').innerHTML = `
             <div class="modal-title">📦 Order Journey</div>
             <div style="font-family:monospace;color:#10B981;font-size:13px;margin-bottom:20px;">${d.order_id}</div>
@@ -5123,8 +5188,9 @@ async function openJourney(orderId) {
             <div class="metrics-grid">
                 <div class="metric-card"><div class="metric-val ${mColor(km.qc_to_handover)}">${km.qc_to_handover||'N/A'}</div><div class="metric-lbl">QC Approved → Handover</div></div>
                 <div class="metric-card"><div class="metric-val ${mColor(km.handover_to_freight)}">${km.handover_to_freight||'N/A'}</div><div class="metric-lbl">Handover → Freight</div></div>
-                <div class="metric-card"><div class="metric-val">${km.total_journey||'N/A'}</div><div class="metric-lbl">Total Journey Duration</div></div>
+                <div class="metric-card"><div class="metric-val ${mColor(km.total_journey)}">${km.total_journey||'N/A'}</div><div class="metric-lbl">Total Journey</div></div>
             </div>
+            ${stepHtml}
             <div class="section-hd">🗺️ Full Timeline</div>
             <div class="timeline">
                 ${tlItem('📋 Order Created',tl.created_at,'normal')}
