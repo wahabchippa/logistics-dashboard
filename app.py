@@ -4343,7 +4343,7 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - 100% PERFECT MAPPING & FINANCIAL SAVINGS (£ GBP)
+# 📦 BUNDLING INTELLIGENCE HUB - OPTIMIZED FOR SPEED & DISPLAY
 # ==============================================================================
 import urllib.request
 import csv
@@ -4358,7 +4358,7 @@ from flask import jsonify, request, session, render_template_string
 _bundling_cache = {'data': None, 'time': 0}
 _journey_cache  = {'data': None, 'time': 0}
 _status_cache   = {'data': None, 'time': 0}
-BUNDLING_CACHE_DURATION = 300  # 5 minutes
+BUNDLING_CACHE_DURATION = 600  # 10 minutes (was 300)
 
 JOURNEY_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRsiVaciOMON0xaXXEi1guBYrqfVNpD-j4My_9YokGd5kftqjAXvri5c_gLB_VRXeoDLzEtz9h5y8x/pub?gid=1409345116&single=true&output=csv"
 STATUS_SHEET_URL  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1570463436&single=true&output=csv"
@@ -4431,7 +4431,7 @@ def fmt_journey_date(dt):
     return dt.strftime('%d %b %Y, %H:%M')
 
 # ==============================================================================
-# DATA FETCHERS (SEQUENTIAL + RETRIES)
+# DATA FETCHERS (OPTIMIZED: PARALLEL + SHORTER TIMEOUTS)
 # ==============================================================================
 
 def fetch_rates_sheet(ctx):
@@ -4439,7 +4439,7 @@ def fetch_rates_sheet(ctx):
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
             rates_map = {}
             for row in data[1:]:
@@ -4465,7 +4465,7 @@ def fetch_status_sheet_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(STATUS_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
         status_map = {}
         for row in data[1:]:
@@ -4492,7 +4492,7 @@ def fetch_journey_sheet_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(JOURNEY_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
         journey_map = {}
         for row in data[1:]:
@@ -4520,11 +4520,11 @@ def fetch_journey_sheet_data():
         return {}
 
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
-    """Fetch a single sheet with retry logic (called sequentially now)"""
-    for attempt in range(3):  # retry up to 3 times
+    """Fetch a single sheet with timeout and retry (used in threads)"""
+    for attempt in range(2):  # only 2 retries now
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
+            with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
                 data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
                 processed = []
                 last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
@@ -4577,9 +4577,9 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
                 return name, processed
         except Exception as e:
             print(f"[WARN] {name} attempt {attempt+1} failed: {e}")
-            time.sleep(2)  # wait before retry
-    print(f"[ERROR] {name} failed after 3 attempts")
-    return name, []  # return empty after all retries
+            time.sleep(1)  # shorter wait between retries
+    print(f"[ERROR] {name} failed after 2 attempts, returning empty")
+    return name, []
 
 def fetch_bundling_standalone_data():
     global _bundling_cache
@@ -4596,8 +4596,7 @@ def fetch_bundling_standalone_data():
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 
-            0   # start at row 0 (no header)
+            {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 0
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
@@ -4614,15 +4613,23 @@ def fetch_bundling_standalone_data():
     ctx.verify_mode = ssl.CERT_NONE
 
     res = {}
-    # Fetch sequentially to avoid overwhelming the network
-    for name, (url, col, start_idx) in BUNDLING_SOURCES.items():
-        name, data = fetch_single_bundling_sheet(name, url, col, start_idx, ctx)
-        res[name] = data
-        time.sleep(0.5)  # small delay between requests
+    # Use threading with a small pool to fetch in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {
+            executor.submit(fetch_single_bundling_sheet, name, url, col, start_idx, ctx): name
+            for name, (url, col, start_idx) in BUNDLING_SOURCES.items()
+        }
+        # Also fetch rates in parallel
+        futures[executor.submit(fetch_rates_sheet, ctx)] = "RATES"
 
-    # Fetch rates separately
-    rates_name, rates_data = fetch_rates_sheet(ctx)
-    res[rates_name] = rates_data
+        for future in concurrent.futures.as_completed(futures, timeout=25):  # overall timeout 25s
+            name = futures[future]
+            try:
+                n, data = future.result(timeout=5)  # per‑future timeout
+                res[n] = data
+            except Exception as e:
+                print(f"[ERROR] {name} failed: {e}")
+                res[name] = [] if name != "RATES" else {}
 
     _bundling_cache['data'] = res
     _bundling_cache['time'] = now
@@ -5468,7 +5475,7 @@ def add_bundling_floating_btn(response):
 # ==============================================================================
 # 🛑 BUNDLING BLOCK END
 # ==============================================================================
- 
+
 
 
 if __name__ == '__main__':
