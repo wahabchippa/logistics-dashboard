@@ -4984,7 +4984,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
     </div>
     <div style="display:flex;gap:15px;">
         <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
-        <button onclick="loadBundles()" class="btn-top" style="background:#10B981;color:#fff;">🔄 Refresh Data</button>
+        <button onclick="refreshData()" class="btn-top" style="background:#10B981;color:#fff;">🔄 Refresh Data</button>
     </div>
 </div>
 
@@ -5046,8 +5046,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
     <div class="kpi-card" style="border-left-color:#10B981"><div class="kpi-val" id="kpi-money" style="color:#10B981">£0</div><div class="kpi-lbl" style="color:#10B981;">💰 Total Saved (Est)</div></div>
 </div>
 
-<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888;">AI Calculating Savings & Merging Data...</p></div>
-
+<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888;">Loading data...</p></div>
 <div id="content" style="display:none;">
     <table>
         <thead>
@@ -5063,7 +5062,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
 </div>
 
 <!-- JOURNEY MODAL -->
-<div class="modal-overlay" id="journeyModal" onclick="closeModal(event)">
+<div class="modal-overlay" id="journeyModal" onclick="if(event.target===this) closeModalDirect()">
     <div class="modal">
         <button class="modal-close" onclick="closeModalDirect()">✕</button>
         <div id="modalBody"><div class="modal-loader"></div></div>
@@ -5071,7 +5070,74 @@ BUNDLING_HTML = '''<!DOCTYPE html>
 </div>
 
 <script>
+// Cache keys
+const BUNDLE_CACHE_KEY = 'bundling_data';
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+
 let allBundles = [];
+
+function getCachedData() {
+    const cached = localStorage.getItem(BUNDLE_CACHE_KEY);
+    if (!cached) return null;
+    try {
+        const { timestamp, data } = JSON.parse(cached);
+        if (Date.now() - timestamp < CACHE_DURATION) {
+            return data;
+        }
+    } catch (e) {}
+    return null;
+}
+
+function setCachedData(data) {
+    const cache = { timestamp: Date.now(), data };
+    localStorage.setItem(BUNDLE_CACHE_KEY, JSON.stringify(cache));
+}
+
+async function loadBundles(forceRefresh = false) {
+    document.getElementById('content').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+
+    if (!forceRefresh) {
+        const cached = getCachedData();
+        if (cached) {
+            renderData(cached);
+            return;
+        }
+    }
+
+    try {
+        const r = await fetch('/api/nexus/bundling_data');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        setCachedData(d);
+        renderData(d);
+    } catch(e) {
+        console.error(e);
+        document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data. Check console.</div>';
+    }
+}
+
+function renderData(d) {
+    allBundles = d.bundles || [];
+    let s = d.source_stats || {};
+    document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
+    document.getElementById('kpi-orders').innerText  = d.kpi?.total_orders_bundled || 0;
+    document.getElementById('kpi-saved').innerText   = d.kpi?.saved_shipments || 0;
+    let money = d.kpi?.total_savings_gbp || 0;
+    document.getElementById('kpi-money').innerText = '£' + money.toLocaleString(undefined,{minimumFractionDigits:2});
+    document.getElementById('qc-orders').innerText = s['ECL QC Center']?.orders || 0;
+    document.getElementById('qc-boxes').innerText  = s['ECL QC Center']?.boxes  || 0;
+    document.getElementById('pk-orders').innerText = s['PK Zone']?.orders || 0;
+    document.getElementById('pk-boxes').innerText  = s['PK Zone']?.boxes  || 0;
+    applyFilters();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+}
+
+function refreshData() {
+    localStorage.removeItem(BUNDLE_CACHE_KEY);
+    loadBundles(true);
+}
 
 function statusPill(status) {
     if (!status || status === '—') return '';
@@ -5085,30 +5151,6 @@ function statusPill(status) {
     else if (s.includes('hand'))     { bg='rgba(59,130,246,0.15)';  color='#60a5fa'; }
     else if (s.includes('pending'))  { bg='rgba(245,158,11,0.12)';  color='#f59e0b'; }
     return `<span class="status-pill" style="background:${bg};color:${color}">📡 ${status}</span>`;
-}
-
-async function loadBundles() {
-    document.getElementById('content').style.display = 'none';
-    document.getElementById('loading').style.display = 'block';
-    try {
-        const r = await fetch('/api/nexus/bundling_data');
-        const d = await r.json();
-        allBundles = d.bundles || [];
-        let s = d.source_stats || {};
-        document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
-        document.getElementById('kpi-orders').innerText  = d.kpi?.total_orders_bundled || 0;
-        document.getElementById('kpi-saved').innerText   = d.kpi?.saved_shipments || 0;
-        let money = d.kpi?.total_savings_gbp || 0;
-        document.getElementById('kpi-money').innerText = '£' + money.toLocaleString(undefined,{minimumFractionDigits:2});
-        document.getElementById('qc-orders').innerText = s['ECL QC Center']?.orders || 0;
-        document.getElementById('qc-boxes').innerText  = s['ECL QC Center']?.boxes  || 0;
-        document.getElementById('pk-orders').innerText = s['PK Zone']?.orders || 0;
-        document.getElementById('pk-boxes').innerText  = s['PK Zone']?.boxes  || 0;
-        applyFilters();
-    } catch(e) {
-        console.error(e);
-        document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data. Check console for details.</div>';
-    }
 }
 
 function applyFilters() {
@@ -5128,8 +5170,6 @@ function applyFilters() {
         return true;
     });
     renderTable(filtered);
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('content').style.display = 'block';
 }
 
 function renderTable(bundles) {
@@ -5200,7 +5240,6 @@ async function openJourney(orderId) {
             if(type==='cancelled'){dc=val?'cancelled':'pending';vc=val?'cancelled-val':'pending-val';}
             return `<div class="tl-item"><div class="tl-dot ${dc}"></div><div class="tl-label">${label}</div><div class="tl-value ${vc}">${val||'— Not yet'}</div></div>`;
         }
-        
         let stepHtml = '';
         if (steps.length) {
             stepHtml = '<div class="section-hd">⏱️ Step Durations</div><div class="step-metrics-grid">';
@@ -5210,7 +5249,6 @@ async function openJourney(orderId) {
             });
             stepHtml += '</div>';
         }
-
         document.getElementById('modalBody').innerHTML = `
             <div class="modal-title">📦 Order Journey</div>
             <div style="font-family:monospace;color:#10B981;font-size:13px;margin-bottom:20px;">${d.order_id}</div>
@@ -5239,894 +5277,10 @@ async function openJourney(orderId) {
         document.getElementById('modalBody').innerHTML = `<div style="color:#EF4444;text-align:center;padding:30px;">Error: ${e.message}</div>`;
     }
 }
-function closeModal(e) { if(e.target===document.getElementById('journeyModal')) closeModalDirect(); }
 function closeModalDirect() { document.getElementById('journeyModal').classList.remove('open'); }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModalDirect(); });
-window.onload = loadBundles;
 document.getElementById('searchInput').addEventListener('keyup',e=>{ if(e.key==='Enter') applyFilters(); });
-</script>
-</body>
-</html>'''
-
-STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>📡 Status Intelligence</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#6366f1;--muted:#71717A;--input-bg:#050505;}
-        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
-        .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
-        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
-        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
-        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
-        .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-        .filter-bar{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:24px;}
-        .filter-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;}
-        .filter-row:last-child{margin-bottom:0;}
-        .f-group{display:flex;flex-direction:column;gap:5px;}
-        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
-        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:7px;font-family:'Inter';outline:none;font-size:13px;}
-        .f-input:focus{border-color:var(--accent);}
-        .f-grow{flex:1;min-width:200px;}
-        .quick-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
-        .qbtn{padding:6px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#666;font-size:12px;font-family:'Inter';font-weight:600;cursor:pointer;transition:all 0.2s;}
-        .qbtn:hover{background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#818cf8;}
-        .qbtn.active{background:rgba(99,102,241,0.18);border-color:rgba(99,102,241,0.5);color:#818cf8;}
-        .apply-btn{padding:8px 20px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;border-radius:7px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter';}
-        .apply-btn:hover{opacity:0.85;}
-        .clear-btn{padding:8px 16px;background:rgba(255,255,255,0.05);border:1px solid #333;border-radius:7px;color:#888;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter';}
-        .clear-btn:hover{background:rgba(239,68,68,0.1);border-color:#ef4444;color:#ef4444;}
-        .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
-        .sum-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;border-left:3px solid var(--accent);}
-        .sum-val{font-size:28px;font-weight:900;color:#fff;margin-bottom:2px;}
-        .sum-lbl{font-size:11px;color:#666;text-transform:uppercase;font-weight:700;}
-        .status-breakdown{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:24px;}
-        .sb-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;}
-        .sb-pills{display:flex;flex-wrap:wrap;gap:8px;}
-        .sb-pill{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:all 0.2s;}
-        .sb-pill:hover{transform:translateY(-1px);}
-        .sb-pill.selected{box-shadow:0 0 0 2px #fff;}
-        .result-count{font-size:13px;color:#666;margin-bottom:12px;}
-        .result-count b{color:#fff;}
-        table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;border:1px solid var(--border);overflow:hidden;}
-        th{background:#050505;padding:12px 16px;font-size:10px;color:#666;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;letter-spacing:0.5px;}
-        td{padding:12px 16px;border-bottom:1px solid #111;vertical-align:middle;font-size:13px;}
-        tr:hover td{background:#0d0d0d;}
-        .order-id{font-family:monospace;font-weight:800;color:#a5b4fc;}
-        .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;}
-        .src-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:#888;}
-        .loader{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:40px auto;}
-        @keyframes spin{to{transform:rotate(360deg);}}
-        .empty{text-align:center;padding:60px;color:#444;}
-        .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
-    </style>
-</head>
-<body>
-<div class="header">
-    <div>
-        <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-1px;">📡 Status Intelligence</h1>
-        <p style="color:#888;margin-top:4px;">Filter orders by date range & latest status</p>
-    </div>
-    <div style="display:flex;gap:12px;">
-        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
-        <button onclick="loadData()" class="btn-top" style="background:#6366f1;color:#fff;">🔄 Refresh</button>
-    </div>
-</div>
-
-<div class="nav-tabs">
-    <a href="/bundling" class="nav-tab">📦 Bundle Intelligence</a>
-    <a href="/bundling/status" class="nav-tab active">📡 Status Intelligence</a>
-    <a href="/bundling/summary" class="nav-tab">📊 Summary</a>
-</div>
-
-<div class="filter-bar">
-    <div class="filter-row">
-        <div class="f-group" style="flex:1">
-            <div class="f-label">⚡ Quick Select</div>
-            <div class="quick-btns">
-                <button class="qbtn" onclick="quickDate(this,'today')">Today</button>
-                <button class="qbtn" onclick="quickDate(this,'7d')">Last 7 Days</button>
-                <button class="qbtn" onclick="quickDate(this,'15d')">Last 15 Days</button>
-                <button class="qbtn" onclick="quickDate(this,'30d')">Last 30 Days</button>
-                <button class="qbtn" onclick="quickDate(this,'week')">This Week</button>
-                <button class="qbtn" onclick="quickDate(this,'month')">This Month</button>
-            </div>
-        </div>
-    </div>
-    <div class="filter-row">
-        <div class="f-group">
-            <div class="f-label">📅 From Date</div>
-            <input type="date" id="dateFrom" class="f-input">
-        </div>
-        <div class="f-group">
-            <div class="f-label">📅 To Date</div>
-            <input type="date" id="dateTo" class="f-input">
-        </div>
-        <div class="f-group f-grow">
-            <div class="f-label">🔍 Search Order / Customer</div>
-            <input type="text" id="searchInput" class="f-input" placeholder="Order ID or customer name...">
-        </div>
-        <div class="f-group">
-            <div class="f-label">🏷️ Source</div>
-            <select id="sourceSelect" class="f-input">
-                <option value="all">All Sources</option>
-                <option value="ECL QC Center">ECL QC Center</option>
-                <option value="ECL Zone">ECL Zone</option>
-                <option value="GE Zone">GE Zone</option>
-            </select>
-        </div>
-        <div class="f-group" style="flex-direction:row;gap:8px;align-items:flex-end;">
-            <button class="clear-btn" onclick="clearFilters()">Clear</button>
-            <button class="apply-btn" onclick="applyFilters()">Apply Filters</button>
-        </div>
-    </div>
-</div>
-
-<div class="status-breakdown" id="statusBreakdown" style="display:none;">
-    <div class="sb-title">📊 Filter by Status — click to select/deselect</div>
-    <div class="sb-pills" id="statusPills"></div>
-</div>
-
-<div class="summary-grid">
-    <div class="sum-card"><div class="sum-val" id="s-total">0</div><div class="sum-lbl">Total Orders</div></div>
-    <div class="sum-card" style="border-left-color:#10B981"><div class="sum-val" id="s-delivered" style="color:#10B981">0</div><div class="sum-lbl">Delivered</div></div>
-    <div class="sum-card" style="border-left-color:#F59E0B"><div class="sum-val" id="s-transit" style="color:#F59E0B">0</div><div class="sum-lbl">In Transit / Freight</div></div>
-    <div class="sum-card" style="border-left-color:#EF4444"><div class="sum-val" id="s-cancelled" style="color:#EF4444">0</div><div class="sum-lbl">Cancelled</div></div>
-</div>
-
-<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#666;font-size:13px;">Loading orders & statuses...</p></div>
-
-<div id="content" style="display:none;">
-    <div class="result-count" id="resultCount"></div>
-    <table>
-        <thead>
-            <tr>
-                <th>#</th>
-                <th>Order ID</th>
-                <th>Date</th>
-                <th>Latest Status</th>
-                <th>Source</th>
-                <th>Customer</th>
-                <th>Country</th>
-                <th>Weight</th>
-            </tr>
-        </thead>
-        <tbody id="tb"></tbody>
-    </table>
-</div>
-
-<script>
-let allOrders = [];
-let selectedStatus = null;
-
-function getStatusStyle(status) {
-    if (!status || status === '—') return {bg:'rgba(255,255,255,0.05)',color:'#555'};
-    const s = status.toLowerCase();
-    if (s.includes('deliver'))  return {bg:'rgba(16,185,129,0.15)',  color:'#10B981'};
-    if (s.includes('freight'))  return {bg:'rgba(99,102,241,0.15)',  color:'#818cf8'};
-    if (s.includes('courier'))  return {bg:'rgba(139,92,246,0.15)',  color:'#a78bfa'};
-    if (s.includes('cancel'))   return {bg:'rgba(239,68,68,0.15)',   color:'#f87171'};
-    if (s.includes('qc'))       return {bg:'rgba(245,158,11,0.15)',  color:'#fbbf24'};
-    if (s.includes('hand'))     return {bg:'rgba(59,130,246,0.15)',  color:'#60a5fa'};
-    if (s.includes('pending'))  return {bg:'rgba(245,158,11,0.12)',  color:'#f59e0b'};
-    return {bg:'rgba(255,255,255,0.06)', color:'#94a3b8'};
-}
-
-function fmtIso(d){ return d.toISOString().split('T')[0]; }
-function getMonday(d){ const day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1); return new Date(d.setDate(diff)); }
-
-function quickDate(btn, period) {
-    document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    const today = new Date(); today.setHours(0,0,0,0);
-    let from, to = new Date(today);
-    switch(period){
-        case 'today': from = new Date(today); break;
-        case '7d':    from = new Date(today); from.setDate(from.getDate()-6); break;
-        case '15d':   from = new Date(today); from.setDate(from.getDate()-14); break;
-        case '30d':   from = new Date(today); from.setDate(from.getDate()-29); break;
-        case 'week':  from = getMonday(new Date(today)); to = new Date(from); to.setDate(to.getDate()+6); break;
-        case 'month': from = new Date(today.getFullYear(),today.getMonth(),1);
-                      to   = new Date(today.getFullYear(),today.getMonth()+1,0); break;
-    }
-    document.getElementById('dateFrom').value = fmtIso(from);
-    document.getElementById('dateTo').value   = fmtIso(to);
-}
-
-function clearFilters() {
-    document.getElementById('dateFrom').value    = '';
-    document.getElementById('dateTo').value      = '';
-    document.getElementById('searchInput').value = '';
-    document.getElementById('sourceSelect').value = 'all';
-    document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
-    selectedStatus = null;
-    document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
-    applyFilters();
-}
-
-function selectStatus(pill, status) {
-    if (selectedStatus === status) {
-        selectedStatus = null;
-        document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
-    } else {
-        selectedStatus = status;
-        document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
-        pill.classList.add('selected');
-    }
-    applyFilters();
-}
-
-function buildStatusPills(orders) {
-    const counts = {};
-    orders.forEach(o => { counts[o.status] = (counts[o.status]||0)+1; });
-    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
-    let html = '';
-    sorted.forEach(([status, count]) => {
-        const st = getStatusStyle(status);
-        const esc = status.replace(/'/g,"\\'");
-        html += `<span class="sb-pill" onclick="selectStatus(this,'${esc}')"
-            style="background:${st.bg};color:${st.color};border-color:${st.color}33">
-            ${status} <b style="margin-left:4px;opacity:0.8">${count}</b>
-        </span>`;
-    });
-    document.getElementById('statusPills').innerHTML = html;
-    document.getElementById('statusBreakdown').style.display = sorted.length ? 'block' : 'none';
-}
-
-function applyFilters() {
-    const search = document.getElementById('searchInput').value.toLowerCase().trim();
-    const from   = document.getElementById('dateFrom').value;
-    const to     = document.getElementById('dateTo').value;
-    const source = document.getElementById('sourceSelect').value;
-    let filtered = allOrders.filter(o => {
-        if (source !== 'all' && o.source !== source) return false;
-        if (from && o.date_std < from) return false;
-        if (to   && o.date_std > to)   return false;
-        if (selectedStatus && o.status !== selectedStatus) return false;
-        if (search) {
-            return o.order_id.toLowerCase().includes(search) ||
-                   (o.customer && o.customer.toLowerCase().includes(search));
-        }
-        return true;
-    });
-    const delivered = filtered.filter(o=>o.status.toLowerCase().includes('deliver')).length;
-    const transit   = filtered.filter(o=>o.status.toLowerCase().includes('freight')||o.status.toLowerCase().includes('courier')).length;
-    const cancelled = filtered.filter(o=>o.status.toLowerCase().includes('cancel')).length;
-    document.getElementById('s-total').innerText     = filtered.length.toLocaleString();
-    document.getElementById('s-delivered').innerText = delivered.toLocaleString();
-    document.getElementById('s-transit').innerText   = transit.toLocaleString();
-    document.getElementById('s-cancelled').innerText = cancelled.toLocaleString();
-    buildStatusPills(filtered);
-    document.getElementById('resultCount').innerHTML = `Showing <b>${filtered.length.toLocaleString()}</b> of <b>${allOrders.length.toLocaleString()}</b> orders`;
-    renderTable(filtered);
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('content').style.display = 'block';
-}
-
-function renderTable(orders) {
-    if (!orders.length) {
-        document.getElementById('tb').innerHTML = `<tr><td colspan="8"><div class="empty"><div style="font-size:40px;margin-bottom:12px;">🔍</div><div>No orders found</div></div></td></tr>`;
-        return;
-    }
-    let h = '';
-    orders.forEach((o,i) => {
-        const st = getStatusStyle(o.status);
-        h += `<tr>
-            <td style="color:#555;font-size:11px;">${i+1}</td>
-            <td><span class="order-id">${o.order_id}</span></td>
-            <td style="color:#888;white-space:nowrap;">${o.date||'—'}</td>
-            <td><span class="status-pill" style="background:${st.bg};color:${st.color}">${o.status}</span></td>
-            <td><span class="src-badge">${o.source}</span></td>
-            <td style="color:#ccc;">${o.customer||'—'}</td>
-            <td style="color:#888;">${o.country||'—'}</td>
-            <td style="color:#888;">${o.weight||'—'} kg</td>
-        </tr>`;
-    });
-    document.getElementById('tb').innerHTML = h;
-}
-
-async function loadData() {
-    document.getElementById('content').style.display = 'none';
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('statusBreakdown').style.display = 'none';
-    try {
-        const r = await fetch('/api/nexus/status_intelligence');
-        const d = await r.json();
-        allOrders = d.orders || [];
-        applyFilters();
-    } catch(e) {
-        document.getElementById('loading').innerHTML = `<div style="color:#EF4444;text-align:center;padding:40px;">Error: ${e.message}</div>`;
-    }
-}
-
-document.getElementById('searchInput').addEventListener('keyup',e=>{ if(e.key==='Enter') applyFilters(); });
-window.onload = loadData;
-</script>
-</body>
-</html>'''
-
-# ==============================================================================
-# NEW SUMMARY HTML
-# ==============================================================================
-
-SUMMARY_HTML = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>📊 Region Summary</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #0f0f0f;
-            color: #f0f0f0;
-            padding: 30px;
-        }
-        .app-container {
-            max-width: 1600px;
-            margin: 0 auto;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #2a2a2a;
-        }
-        .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        .logo-area img {
-            height: 45px;
-            display: none; /* Hidden by default, enable if you have logo */
-        }
-        .logo-area h1 {
-            font-size: 26px;
-            font-weight: 700;
-            color: #f97316;
-        }
-        .main-dash-btn {
-            background: #1f1f1f;
-            border: 1px solid #2a2a2a;
-            color: #f0f0f0;
-            padding: 10px 22px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .main-dash-btn:hover {
-            border-color: #f97316;
-            color: #f97316;
-        }
-        .nav-tabs {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 30px;
-        }
-        .nav-tab {
-            padding: 10px 24px;
-            border-radius: 8px;
-            font-weight: 600;
-            text-decoration: none;
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            color: #aaa;
-        }
-        .nav-tab.active {
-            background: #f97316;
-            color: #000;
-            border-color: #f97316;
-        }
-        .sub-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 25px;
-            border-bottom: 1px solid #2a2a2a;
-            padding-bottom: 10px;
-        }
-        .sub-tab {
-            padding: 8px 20px;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            color: #aaa;
-        }
-        .sub-tab.active {
-            background: #f97316;
-            color: #000;
-        }
-        .control-panel {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 30px;
-            display: flex;
-            gap: 25px;
-            align-items: flex-end;
-            flex-wrap: wrap;
-        }
-        .f-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .f-label {
-            font-size: 11px;
-            color: #aaa;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .f-input {
-            background: #0f0f0f;
-            border: 1px solid #2a2a2a;
-            color: #f0f0f0;
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-family: inherit;
-            font-size: 14px;
-        }
-        .f-input:focus {
-            outline: none;
-            border-color: #f97316;
-        }
-        .btn {
-            background: #f97316;
-            color: #000;
-            border: none;
-            padding: 10px 28px;
-            border-radius: 8px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-        .btn:hover {
-            opacity: 0.9;
-        }
-        .table-wrapper {
-            background: #1a1a1a;
-            border-radius: 12px;
-            border: 1px solid #2a2a2a;
-            overflow-x: auto;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 800px;
-        }
-        th {
-            background: #0f0f0f;
-            padding: 16px 12px;
-            font-size: 12px;
-            color: #aaa;
-            text-transform: uppercase;
-            border-bottom: 1px solid #2a2a2a;
-            text-align: center;
-        }
-        td {
-            padding: 14px 12px;
-            border-bottom: 1px solid #2a2a2a;
-            color: #f0f0f0;
-            text-align: center;
-        }
-        tr:hover td {
-            background: #2a2a2a;
-        }
-        .region-name {
-            font-weight: 700;
-            color: #f97316;
-            text-align: left;
-        }
-        .totals-row {
-            background: #0f0f0f;
-            font-weight: 700;
-        }
-        .totals-row td {
-            color: #f97316;
-        }
-        .clickable {
-            cursor: pointer;
-            text-decoration: underline;
-            text-decoration-color: #f97316;
-            font-weight: 600;
-        }
-        .clickable:hover {
-            color: #f97316;
-        }
-        .loader {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #2a2a2a;
-            border-top-color: #f97316;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 30px auto;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .no-data {
-            text-align: center;
-            padding: 50px;
-            color: #aaa;
-        }
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9);
-            z-index: 10000;
-            backdrop-filter: blur(5px);
-            justify-content: center;
-            align-items: center;
-        }
-        .modal-overlay.open {
-            display: flex;
-        }
-        .modal {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 16px;
-            padding: 28px;
-            width: 100%;
-            max-width: 900px;
-            max-height: 80vh;
-            overflow-y: auto;
-            position: relative;
-        }
-        .modal-close {
-            position: absolute;
-            top: 16px; right: 16px;
-            background: #2a2a2a;
-            border: 1px solid #2a2a2a;
-            color: #fff;
-            width: 34px; height: 34px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-close:hover {
-            background: #ef4444;
-        }
-        .modal-title {
-            font-size: 22px;
-            font-weight: 800;
-            margin-bottom: 20px;
-            color: #f97316;
-        }
-    </style>
-</head>
-<body>
-<div class="app-container">
-    <div class="header">
-        <div class="logo-area">
-            <img src="/static/3pl-logo.png" alt="3PL Logo" style="display:none;">
-            <h1>Region Summary</h1>
-        </div>
-        <a href="/" class="main-dash-btn">🏠 Main Dash</a>
-    </div>
-
-    <div class="nav-tabs">
-        <a href="/bundling" class="nav-tab">📦 Bundle</a>
-        <a href="/bundling/status" class="nav-tab">📡 Status</a>
-        <a href="/bundling/summary" class="nav-tab active">📊 Summary</a>
-    </div>
-
-    <div class="sub-tabs">
-        <div class="sub-tab active" onclick="switchTab('daily')">Daily Region</div>
-        <div class="sub-tab" onclick="switchTab('weekly')">Weekly Matrix</div>
-    </div>
-
-    <div id="dailyPanel">
-        <div class="control-panel">
-            <div class="f-group">
-                <div class="f-label">From Date</div>
-                <input type="date" id="dailyFrom" class="f-input">
-            </div>
-            <div class="f-group">
-                <div class="f-label">To Date</div>
-                <input type="date" id="dailyTo" class="f-input">
-            </div>
-            <button class="btn" onclick="loadDaily()">Apply</button>
-        </div>
-        <div id="dailyLoader" style="display:none;"><div class="loader"></div></div>
-        <div id="dailyTable"></div>
-    </div>
-
-    <div id="weeklyPanel" style="display:none;">
-        <div class="control-panel">
-            <div class="f-group">
-                <div class="f-label">Week Starting (Monday)</div>
-                <input type="date" id="weekStart" class="f-input">
-            </div>
-            <button class="btn" onclick="loadWeekly()">Load Week</button>
-        </div>
-        <div id="weeklyLoader" style="display:none;"><div class="loader"></div></div>
-        <div id="weeklyTable"></div>
-    </div>
-</div>
-
-<div class="modal-overlay" id="orderModal" onclick="if(event.target===this) closeModal()">
-    <div class="modal">
-        <button class="modal-close" onclick="closeModal()">✕</button>
-        <div class="modal-title" id="modalTitle">Region Orders</div>
-        <div id="modalContent"></div>
-    </div>
-</div>
-
-<script>
-// ==================== CLIENT-SIDE CACHE ====================
-const CACHE_KEY = 'bundling_summary_cache';
-const CACHE_DURATION = 10 * 60 * 1000;
-
-function getCachedData() {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (!cached) return null;
-    try {
-        const { timestamp, bundles, journey } = JSON.parse(cached);
-        if (Date.now() - timestamp < CACHE_DURATION) {
-            return { bundles, journey };
-        }
-    } catch (e) {}
-    return null;
-}
-
-function setCachedData(bundles, journey) {
-    const cache = {
-        timestamp: Date.now(),
-        bundles: bundles,
-        journey: journey
-    };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-}
-
-let bundlesData = null;
-let journeyData = null;
-let currentTab = 'daily';
-
-function getRegionFromCountry(country) {
-    if (!country) return 'EU';
-    const c = country.trim().toLowerCase();
-    const specific = [
-        'united kingdom', 'united states', 'australia', 'switzerland', 'new zealand',
-        'canada', 'china', 'ghana', 'japan', 'india', 'philippines', 'saudia arabia',
-        'singapore', 'south africa', 'south korea', 'thailand'
-    ];
-    if (specific.includes(c)) {
-        const match = {
-            'united kingdom': 'United Kingdom',
-            'united states': 'United States',
-            'australia': 'Australia',
-            'switzerland': 'Switzerland',
-            'new zealand': 'New Zealand',
-            'canada': 'Canada',
-            'china': 'China',
-            'ghana': 'Ghana',
-            'japan': 'Japan',
-            'india': 'India',
-            'philippines': 'Philippines',
-            'saudia arabia': 'Saudia Arabia',
-            'singapore': 'Singapore',
-            'south africa': 'South Africa',
-            'south korea': 'South Korea',
-            'thailand': 'Thailand'
-        };
-        return match[c];
-    }
-    return 'EU';
-}
-
-async function fetchAllData() {
-    const cached = getCachedData();
-    if (cached) {
-        bundlesData = cached.bundles;
-        journeyData = cached.journey;
-        setDefaultDates();
-        if (currentTab === 'daily') loadDaily();
-        else loadWeekly();
-        return;
-    }
-    try {
-        const [bRes, jRes] = await Promise.all([
-            fetch('/api/nexus/bundling_data'),
-            fetch('/api/nexus/all_journey')
-        ]);
-        const bJson = await bRes.json();
-        const jJson = await jRes.json();
-        bundlesData = bJson.bundles || [];
-        journeyData = jJson.data || [];
-        setCachedData(bundlesData, journeyData);
-        setDefaultDates();
-        if (currentTab === 'daily') loadDaily();
-        else loadWeekly();
-    } catch(e) {
-        console.error(e);
-        alert('Error loading data. Please refresh.');
-    }
-}
-
-function setDefaultDates() {
-    const today = new Date();
-    const year = today.getFullYear();
-    document.getElementById('dailyFrom').value = year + '-01-01';
-    document.getElementById('dailyTo').value = year + '-12-31';
-    const monday = getMonday(today);
-    const yyyy = monday.getFullYear();
-    const mm = String(monday.getMonth() + 1).padStart(2, '0');
-    const dd = String(monday.getDate()).padStart(2, '0');
-    document.getElementById('weekStart').value = `${yyyy}-${mm}-${dd}`;
-}
-
-function getMonday(d) {
-    d = new Date(d);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setDate(diff));
-}
-
-function switchTab(tab) {
-    currentTab = tab;
-    document.querySelectorAll('.sub-tab').forEach(el => el.classList.remove('active'));
-    event.target.classList.add('active');
-    document.getElementById('dailyPanel').style.display = tab === 'daily' ? 'block' : 'none';
-    document.getElementById('weeklyPanel').style.display = tab === 'weekly' ? 'block' : 'none';
-    if (tab === 'daily') loadDaily();
-    else loadWeekly();
-}
-
-function loadDaily() {
-    const from = document.getElementById('dailyFrom').value;
-    const to = document.getElementById('dailyTo').value;
-    if (!from || !to) return;
-    document.getElementById('dailyLoader').style.display = 'block';
-    document.getElementById('dailyTable').innerHTML = '';
-
-    const start = new Date(from);
-    const end = new Date(to);
-    end.setHours(23,59,59,999);
-
-    const filtered = bundlesData.filter(b => {
-        const d = new Date(b.date_std);
-        return d >= start && d <= end;
-    });
-
-    const regionMap = {};
-    filtered.forEach(b => {
-        const region = getRegionFromCountry(b.country);
-        if (!regionMap[region]) {
-            regionMap[region] = { orders:0, boxes:0, weight:0, lt20:0, ge20:0, ordersList: [] };
-        }
-        regionMap[region].boxes += 1;
-        regionMap[region].orders += b.orders.length;
-        regionMap[region].weight += b.bundle_weight_kg || 0;
-        if (b.bundle_weight_kg < 20) regionMap[region].lt20 += 1;
-        else regionMap[region].ge20 += 1;
-        b.orders.forEach(o => {
-            regionMap[region].ordersList.push({
-                order_id: o.order_id,
-                weight: o.weight,
-                status: o.status,
-                date: b.date_std
-            });
-        });
-    });
-
-    const sorted = Object.keys(regionMap).sort();
-    let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20kg</th><th>20+kg</th></tr></thead><tbody>';
-    let totalOrders = 0, totalBoxes = 0, totalWeight = 0, totalLt20 = 0, totalGe20 = 0;
-    sorted.forEach(region => {
-        let r = regionMap[region];
-        html += `<tr><td class="region-name">${region}</td>`;
-        html += `<td class="clickable" onclick="showRegionOrders('${region}', 'orders')">${r.orders.toLocaleString()}</td>`;
-        html += `<td class="clickable" onclick="showRegionOrders('${region}', 'boxes')">${r.boxes.toLocaleString()}</td>`;
-        html += `<td class="clickable" onclick="showRegionOrders('${region}', 'weight')">${r.weight.toFixed(1)}</td>`;
-        html += `<td>${r.lt20.toLocaleString()}</td>`;
-        html += `<td>${r.ge20.toLocaleString()}</td></tr>`;
-        totalOrders += r.orders;
-        totalBoxes += r.boxes;
-        totalWeight += r.weight;
-        totalLt20 += r.lt20;
-        totalGe20 += r.ge20;
-        window['regionData_' + region] = r.ordersList;
-    });
-    html += `<tr class="totals-row"><td>TOTAL</td><td>${totalOrders.toLocaleString()}</td><td>${totalBoxes.toLocaleString()}</td><td>${totalWeight.toFixed(1)}</td><td>${totalLt20.toLocaleString()}</td><td>${totalGe20.toLocaleString()}</td></tr>`;
-    html += '</tbody></table></div>';
-    document.getElementById('dailyTable').innerHTML = html;
-    document.getElementById('dailyLoader').style.display = 'none';
-}
-
-function loadWeekly() {
-    const weekStart = document.getElementById('weekStart').value;
-    if (!weekStart) return;
-    document.getElementById('weeklyLoader').style.display = 'block';
-    document.getElementById('weeklyTable').innerHTML = '';
-
-    const start = new Date(weekStart);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    end.setHours(23,59,59,999);
-    const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-
-    const filtered = journeyData.filter(j => {
-        const d = new Date(j.date);
-        return d >= start && d <= end;
-    });
-
-    const regionDayMap = {};
-    filtered.forEach(j => {
-        const region = j.region || 'Unknown';
-        const d = new Date(j.date);
-        const dayIndex = d.getDay();
-        let idx = dayIndex === 0 ? 6 : dayIndex - 1;
-        if (!regionDayMap[region]) {
-            regionDayMap[region] = [0,0,0,0,0,0,0];
-        }
-        regionDayMap[region][idx] += 1;
-    });
-
-    const regions = Object.keys(regionDayMap);
-    let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th>';
-    days.forEach(d => html += `<th>${d}</th>`);
-    html += '<th>Total</th></tr></thead><tbody>';
-    let totals = [0,0,0,0,0,0,0];
-    let grandTotal = 0;
-    regions.forEach(region => {
-        let counts = regionDayMap[region];
-        let rowSum = counts.reduce((a,b)=>a+b,0);
-        html += `<tr><td class="region-name">${region}</td>`;
-        counts.forEach((c,i) => {
-            html += `<td>${c.toLocaleString()}</td>`;
-            totals[i] += c;
-        });
-        html += `<td><b>${rowSum.toLocaleString()}</b></td></tr>`;
-        grandTotal += rowSum;
-    });
-    html += `<tr class="totals-row"><td>TOTAL</td>`;
-    totals.forEach(t => html += `<td><b>${t.toLocaleString()}</b></td>`);
-    html += `<td><b>${grandTotal.toLocaleString()}</b></td></tr>`;
-    html += '</tbody></table></div>';
-    document.getElementById('weeklyTable').innerHTML = html;
-    document.getElementById('weeklyLoader').style.display = 'none';
-}
-
-function showRegionOrders(region, type) {
-    const ordersList = window['regionData_' + region];
-    if (!ordersList || ordersList.length === 0) {
-        alert('No orders found for this region.');
-        return;
-    }
-    let title = `Orders in ${region}`;
-    if (type === 'boxes') title = `Boxes in ${region}`;
-    else if (type === 'weight') title = `Weight details in ${region}`;
-    document.getElementById('modalTitle').innerText = title;
-
-    let tableHtml = '<div class="table-wrapper"><table><thead><tr><th>Order ID</th><th>Date</th><th>Weight (kg)</th><th>Status</th></tr></thead><tbody>';
-    ordersList.forEach(o => {
-        tableHtml += `<tr><td>${o.order_id}</td><td>${o.date}</td><td>${o.weight}</td><td>${o.status || '—'}</td></tr>`;
-    });
-    tableHtml += '</tbody></table></div>';
-    document.getElementById('modalContent').innerHTML = tableHtml;
-    document.getElementById('orderModal').classList.add('open');
-}
-
-function closeModal() {
-    document.getElementById('orderModal').classList.remove('open');
-}
-
-window.onload = fetchAllData;
+window.onload = () => loadBundles();
 </script>
 </body>
 </html>'''
