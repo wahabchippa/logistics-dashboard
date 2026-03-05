@@ -4343,11 +4343,14 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# BUNDLING INTELLIGENCE HUB — COMPLETE FINAL VERSION
+# BUNDLING INTELLIGENCE HUB — COMPLETE FINAL VERSION (WITH ANALYTICS)
 # ==============================================================================
+from flask import Flask, jsonify, request, session, render_template_string
 import urllib.request, csv, re, ssl, time, math, concurrent.futures
 from datetime import datetime, timedelta
-from flask import jsonify, request, session, render_template_string
+
+app = Flask(__name__)
+app.secret_key = 'your-secret-key-here'
 
 _bc={"data":None,"time":0}; _jc={"data":None,"time":0}; _sc={"data":None,"time":0}
 CD=600
@@ -4493,7 +4496,6 @@ def fetch_all():
     global _bc
     now=time.time()
     if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
-    # ⚠️ CORRECT MAPPINGS — GE Zone weight=col 6 (H is index 7 but user confirmed col 6)
     SOURCES={
         "ECL QC Center":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
             {"o":0,"d":1,"b":3,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
@@ -4516,7 +4518,7 @@ def fetch_all():
                 if not f.done(): f.cancel(); res[futs[f]]=[] if futs[f]!="RATES" else {}
     _bc["data"]=res; _bc["time"]=now; return res
 
-# --- API ---
+# --- API ROUTES ---
 @app.route("/api/nexus/app_data")
 def api_app_data():
     sheets=fetch_all(); sm=fetch_status(); rm=sheets.get("RATES",{}); DR=4.50
@@ -4650,7 +4652,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 .frow{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;}
 .frow:last-child{margin-bottom:0;}
 .fg{display:flex;flex-direction:column;gap:4px;}
-.fl{font-size:10px;color:var(--t3);font-weight:700;text-uppercase:uppercase;letter-spacing:.8px;}
+.fl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
 .fi{background:var(--bg);border:1px solid var(--bd);color:var(--t1);padding:8px 11px;border-radius:7px;
   font-family:inherit;outline:none;font-size:13px;transition:.2s;}
 .fi:focus{border-color:var(--acc);}
@@ -4669,14 +4671,14 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 .kc{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:20px 18px;
   border-left:3px solid var(--green);}
 .kv{font-size:34px;font-weight:900;letter-spacing:-1.5px;margin-bottom:4px;color:var(--t1);}
-.kl{font-size:10px;color:var(--t3);font-weight:700;text-uppercase:uppercase;letter-spacing:.5px;}
+.kl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
 .sg{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
 .sc{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px;
   border-left:3px solid var(--green);}
 .sct{font-size:12px;font-weight:800;color:var(--green);margin-bottom:12px;}
 .scst{display:flex;justify-content:space-around;text-align:center;}
 .scv{font-size:22px;font-weight:900;color:var(--t1);}
-.scl{font-size:10px;color:var(--t3);font-weight:700;text-uppercase:uppercase;}
+.scl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;}
 /* MAIN TABLE */
 .tw{overflow-x:auto;}
 table.mt{width:100%;border-collapse:collapse;background:var(--s1);border-radius:12px;
@@ -4808,10 +4810,12 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 /* WEEK LABEL */
 .wklabel{font-size:11px;color:var(--t3);background:var(--bg);border:1px solid var(--bd);
   border-radius:6px;padding:4px 12px;display:inline-block;margin-bottom:18px;}
+
 /* ============ ANALYTICS STYLES ============ */
 .analytics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
 .acard{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;
-  position:relative;overflow:hidden;}
+  position:relative;overflow:hidden;transition:transform .2s ease,box-shadow .2s ease;}
+.acard:hover{transform:translateY(-4px);box-shadow:0 12px 30px rgba(0,0,0,.3);}
 .acard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
   background:linear-gradient(90deg,var(--blue),var(--purple));}
 .acard.blue::before{background:linear-gradient(90deg,#448aff,#2979ff);}
@@ -4829,7 +4833,9 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 .trend.down{color:var(--red);}
 
 .an-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
-.an-card{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;}
+.an-card{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;
+  transition:transform .2s ease,box-shadow .2s ease;}
+.an-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.25);}
 .an-card-title{font-size:14px;font-weight:800;color:var(--t1);margin-bottom:16px;
   display:flex;align-items:center;gap:8px;}
 .an-card-title .icon{width:28px;height:28px;background:linear-gradient(135deg,var(--blue),var(--purple));
@@ -4868,7 +4874,7 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 .top-list{display:flex;flex-direction:column;gap:8px;}
 .top-item{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg);
   border-radius:8px;border:1px solid var(--bd);transition:.15s;}
-.top-item:hover{border-color:var(--acc);background:rgba(92,107,192,.08);}
+.top-item:hover{border-color:var(--acc);background:rgba(92,107,192,.08);transform:translateX(4px);}
 .top-rank{width:24px;height:24px;background:var(--s2);border-radius:6px;display:flex;
   align-items:center;justify-content:center;font-size:11px;font-weight:900;color:var(--t3);}
 .top-rank.gold{background:linear-gradient(135deg,#ffd740,#ffab00);color:#000;}
@@ -4883,24 +4889,26 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 .trend-chart{height:180px;display:flex;align-items:flex-end;gap:4px;padding:10px 0;}
 .trend-bar{flex:1;background:linear-gradient(180deg,var(--blue),rgba(68,138,255,.3));
   border-radius:4px 4px 0 0;min-height:4px;position:relative;cursor:pointer;transition:.2s;}
-.trend-bar:hover{filter:brightness(1.2);}
+.trend-bar:hover{filter:brightness(1.2);transform:scale(1.02);}
 .trend-bar::after{content:attr(data-val);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);
   background:var(--s2);padding:4px 8px;border-radius:4px;font-size:10px;font-weight:700;
-  color:var(--t1);white-space:nowrap;opacity:0;pointer-events:none;transition:.2s;margin-bottom:4px;}
+  color:var(--t1);white-space:nowrap;opacity:0;pointer-events:none;transition:.2s;margin-bottom:4px;box-shadow:0 4px 12px rgba(0,0,0,.3);}
 .trend-bar:hover::after{opacity:1;}
 .trend-labels{display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--bd);margin-top:8px;}
 .trend-label{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;}
 
 /* SAVINGS GRID */
 .savings-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.saving-card{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:14px;text-align:center;}
+.saving-card{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:14px;text-align:center;transition:transform .2s ease;}
+.saving-card:hover{transform:translateY(-3px);border-color:var(--acc);}
 .saving-card-header{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-bottom:6px;}
 .saving-card-value{font-size:22px;font-weight:900;color:var(--green);}
 .saving-card-sub{font-size:10px;color:var(--t3);margin-top:4px;}
 
 /* STATS ROW */
 .stats-row{display:flex;gap:20px;flex-wrap:wrap;}
-.stat-box{flex:1;min-width:120px;background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:16px;text-align:center;}
+.stat-box{flex:1;min-width:120px;background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:16px;text-align:center;transition:transform .2s ease;}
+.stat-box:hover{transform:translateY(-3px);border-color:var(--acc);}
 .stat-box-icon{font-size:24px;margin-bottom:8px;}
 .stat-box-value{font-size:24px;font-weight:900;color:var(--t1);}
 .stat-box-label{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:4px;}
@@ -5074,7 +5082,7 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
     <div id="regCards"></div>
   </div>
 
-  <!-- ANALYTICS TAB -->
+  <!-- ==================== ANALYTICS TAB ==================== -->
   <div class="pane" id="pane-analytics">
     <div class="fbar">
       <div class="frow">
@@ -5337,7 +5345,6 @@ function buildCard(src,bundles,wkLabel){
   const totO=sb.reduce((a,b)=>a+b.orders.length,0);
   const totB=sb.length;
   const totW=sb.reduce((a,b)=>a+(b.weight_kg||0),0);
-  // compute prev week approx for badge
   const rm={};
   sb.forEach(b=>{
     const rg=b.region||"EU"; const d=new Date(b.date_std);
@@ -5357,14 +5364,7 @@ function buildCard(src,bundles,wkLabel){
   }));
   const uid=(src+"_"+wkLabel).replace(/[\s\/\-]/g,"_");
   window["RM_"+uid]=rm; window["RM_"+uid+"_dt"]=dt;
-  window["RM_"+uid+"_all"]=sb; // all bundles for this src+week
-
-  function dCell(v,cls,rg,di){
-    if(!v) return `<td class="dash">-</td>`;
-    const disp=Number.isInteger(v)?v:v.toFixed(1);
-    if(rg!=null) return `<td class="${cls} clk" onclick="showOrd('${uid}','${rg}',${di})">${disp}</td>`;
-    return `<td class="${cls}">${disp}</td>`;
-  }
+  window["RM_"+uid+"_all"]=sb;
 
   let rows="";
   regs.forEach(rg=>{
@@ -5376,7 +5376,6 @@ function buildCard(src,bundles,wkLabel){
     });
     rows+="</tr>";
   });
-  // TOTAL ROW — all clickable
   rows+=`<tr class="ttr"><td class="rc">TOTAL</td>`;
   dt.forEach((t,di)=>{
     const sep=di>0?"ds":"";
@@ -5484,10 +5483,8 @@ function rRegional(){
   const mon=new Date(ws);mon.setHours(0,0,0,0);
   const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
   const bundles=wkBundles(mon);
-  // Group: QC Center = ECL QC Center, PK Zone = ECL Zone + GE Zone
   const groups={"QC Center":["ECL QC Center"],"PK Zone":["ECL Zone","GE Zone"]};
   let html=`<div class="wklabel">📅 ${wl}</div>`;
-  // Summary bar charts
   const regTotals={};
   bundles.forEach(b=>{
     const rg=b.region||"EU";
@@ -5516,7 +5513,6 @@ function rRegional(){
       ${buildWeekStats(bundles)}
     </div>
   </div>`;
-  // Provider cards
   Object.entries(groups).forEach(([gname,srcs])=>{
     const gb=bundles.filter(b=>srcs.includes(b.source));
     html+=buildRegCard(gname,gb,wl);
@@ -5631,7 +5627,7 @@ function buildRegCard(gname,bundles,wl){
 }
 
 // ============================================================
-// ANALYTICS TAB
+// ANALYTICS TAB FUNCTIONS
 // ============================================================
 function rAnalytics(){
   if(!D) return;
@@ -5911,7 +5907,6 @@ function rAnalytics(){
   html+=`</div>`;
   
   // ========== DAILY TREND ==========
-  // Get last 30 days of data
   const dailyEntries=Object.entries(dailyStats).sort((a,b)=>a[0].localeCompare(b[0]));
   let trendBars='';
   const maxDailyOrders=Math.max(...dailyEntries.map(d=>d[1].orders),1);
@@ -5920,7 +5915,6 @@ function rAnalytics(){
     trendBars+=`<div class="trend-bar" style="height:${h}%" data-val="${data.orders} orders"></div>`;
   });
   
-  // Get labels (show every 5th day)
   const labelIndices=[0,Math.floor(dailyEntries.length/4),Math.floor(dailyEntries.length/2),Math.floor(dailyEntries.length*3/4),dailyEntries.length-1];
   let trendLabels='';
   labelIndices.forEach(i=>{
@@ -6074,7 +6068,11 @@ async function openJ(oid){
 function cMod(id){document.getElementById(id).classList.remove("open");}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){cMod("jMov");cMod("oMov");}});
 window.onload=init;
-</script></body></html>"""
+</script></body>
+</html>"""
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
