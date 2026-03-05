@@ -4343,7 +4343,7 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - SAFE MODULAR BLOCK (NO ROOT ROUTE INTERFERENCE)
+# 📦 BUNDLING INTELLIGENCE HUB - COMPLETE APP (BUNDLING + STATUS + SUMMARY)
 # ==============================================================================
 import urllib.request
 import csv
@@ -4352,7 +4352,8 @@ import ssl
 import time
 import math
 import concurrent.futures
-from datetime import datetime
+from datetime import datetime, timedelta
+from flask import jsonify, request, session, render_template_string
 
 # ---------- Configuration ----------
 _bundling_cache = {'data': None, 'time': 0}
@@ -4572,7 +4573,7 @@ def fetch_bundling_standalone_data():
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
 
-    # 🚨 PERFECT ALPHABET MAPPING (GE ZONE WEIGHT IS 6 AS YOU SAID) 🚨
+    # 🚨 EXACT ALPHABET MAPPING CONFIRMED (GE Zone Weight = 6) 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -4810,10 +4811,11 @@ def api_nexus_bundling_data():
             try:   tq += int(float(re.sub(r'[^0-9.]','',str(o['item_count']))))
             except: pass
             
+            # 🔥 500KG SAFETY NET INSTALLED 🔥
             try:
                 wt_str = re.sub(r'[^0-9.]','',str(o['weight']))
                 wt = float(wt_str) if wt_str else 0.0
-                if wt > 500: wt = 0.0  # SAFETY NET for Tracking IDs
+                if wt > 500: wt = 0.0  
             except: wt = 0.0
                 
             bundle_weight_sum += wt
@@ -4842,6 +4844,10 @@ def api_nexus_bundling_data():
 # ---------- View Routes ----------
 @app.route('/bundling')
 def bundling_dashboard_view():
+    u = session.get('username') or session.get('user') or session.get('role')
+    # Temporarily bypassed authentication for testing, uncomment if you want to lock it down
+    # if not u or str(u).lower() != 'admin':
+    #     return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
     return render_template_string(BUNDLING_HTML)
 
 @app.route('/bundling/status')
@@ -5854,6 +5860,7 @@ function showRegionOrders(region, type) {
     document.getElementById('orderModal').classList.add('open');
 }
 function closeModal() { document.getElementById('orderModal').classList.remove('open'); }
+window.onload = () => fetchAllData();
 </script>
 </body>
 </html>'''
@@ -5863,6 +5870,8 @@ function closeModal() { document.getElementById('orderModal').classList.remove('
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
         user_val = session.get('username') or session.get('user') or session.get('role')
+        # temporarily bypassing admin check if needed, uncomment below lines to enforce
+        # if user_val and str(user_val).lower() == 'admin':
         html = response.get_data(as_text=True)
         btn = '''
         <div style="position:fixed;bottom:30px;right:30px;display:flex;flex-direction:column;gap:12px;z-index:99999;">
