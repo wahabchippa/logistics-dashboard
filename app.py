@@ -4764,6 +4764,19 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 .bar-track{flex:1;height:14px;background:var(--s2);border-radius:7px;overflow:hidden;}
 .bar-fill{height:100%;border-radius:7px;transition:.5s;}
 .bar-val{font-size:11px;font-weight:700;width:50px;text-align:right;}
+/* ANALYTICS SPECIFIC */
+.ana-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-bottom:20px;}
+.ana-card{background:var(--s1);border:1px solid var(--bd);border-radius:16px;overflow:hidden;}
+.ana-hdr{padding:16px 20px;background:linear-gradient(135deg,rgba(92,107,192,.15),rgba(57,73,171,.15));border-bottom:1px solid var(--bd);font-size:14px;font-weight:800;color:var(--t1);display:flex;align-items:center;gap:10px;}
+.ana-body{padding:20px;}
+.ana-kv{font-size:28px;font-weight:900;color:var(--green);margin-bottom:4px;}
+.ana-kl{font-size:11px;color:var(--t3);text-transform:uppercase;font-weight:700;}
+.ana-bar{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.ana-bar-label{font-size:12px;color:var(--t2);font-weight:600;min-width:120px;}
+.ana-bar-fill{width:100%;height:12px;background:var(--s2);border-radius:6px;overflow:hidden;border:1px solid var(--bd);}
+.ana-bar-progress{height:100%;background:linear-gradient(90deg,var(--blue),var(--purple));border-radius:6px;transition:.3s;}
+.ana-pie-container{width:200px;height:200px;margin:20px auto;border-radius:50%;background:conic-gradient(var(--green) 0% 40%, var(--blue) 40% 70%, var(--yellow) 70% 100%);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:var(--t1);position:relative;}
+.ana-pie-container::before{content:'';position:absolute;width:140px;height:140px;border-radius:50%;background:var(--s1);}
 /* LOADER */
 .lw{text-align:center;padding:60px;}
 .ld{width:42px;height:42px;border:3px solid var(--bd);border-top-color:var(--acc);
@@ -4830,6 +4843,7 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
     <div class="tab" onclick="sw('summary',this)">📊 Weekly Summary</div>
     <div class="tab" onclick="sw('week4',this)">📅 4-Week Summary</div>
     <div class="tab" onclick="sw('regional',this)">🌍 Regional View</div>
+    <div class="tab" onclick="sw('analytics',this)">📈 Analytics</div>
   </div>
 </div>
 <div class="main">
@@ -4973,6 +4987,13 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
     </div>
     <div id="regCards"></div>
   </div>
+
+  <!-- ANALYTICS TAB -->
+  <div class="pane" id="pane-analytics">
+    <div class="ana-grid" id="anaContent">
+      <!-- Analytics content will be rendered here -->
+    </div>
+  </div>
 </div>
 
 <!-- JOURNEY MODAL -->
@@ -5013,7 +5034,7 @@ async function init(){
     g("pane-bundle").classList.add("active");
     rBundle();
     // pre-render others in bg
-    setTimeout(()=>{rSummary();rW4();rRegional();},200);
+    setTimeout(()=>{rSummary();rW4();rRegional();rAnalytics();},200);
   }catch(e){
     g("gLoad").innerHTML=`<div style="color:var(--red);font-size:14px">❌ ${e.message}<br><br><button class="abtn" onclick="init()">Retry</button></div>`;
   }
@@ -5031,6 +5052,7 @@ function sw(name,tab){
   requestAnimationFrame(()=>{
     g("pane-"+name).classList.add("active");
     if(name==="status"&&D) rStatus();
+    if(name==="analytics"&&D) rAnalytics();
   });
 }
 
@@ -5591,6 +5613,170 @@ async function openJ(oid){
 
 function cMod(id){document.getElementById(id).classList.remove("open");}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){cMod("jMov");cMod("oMov");}});
+
+// ============================================================
+// ANALYTICS TAB
+// ============================================================
+function rAnalytics(){
+  if(!D || !D.bundles || D.bundles.length === 0) {
+    g("anaContent").innerHTML = '<div style="text-align:center;padding:60px;color:var(--t3);">No data available for analytics.</div>';
+    return;
+  }
+
+  // Compute analytics data
+  const bundles = D.bundles;
+  const kpi = D.kpi || {};
+  const sourceStats = D.source_stats || {};
+
+  // Overall stats
+  const totalOrders = kpi.total_orders_bundled || 0;
+  const totalBundles = kpi.total_bundles || 0;
+  const totalSavings = kpi.total_savings_gbp || 0;
+  const avgOrdersPerBundle = totalOrders > 0 ? (totalOrders / totalBundles).toFixed(1) : 0;
+  const totalWeight = bundles.reduce((sum, b) => sum + (b.weight_kg || 0), 0).toFixed(2);
+  const avgWeightPerBundle = totalBundles > 0 ? (totalWeight / totalBundles).toFixed(2) : 0;
+
+  // By source
+  const srcBreakdown = {};
+  bundles.forEach(b => {
+    const src = b.source;
+    if (!srcBreakdown[src]) srcBreakdown[src] = { orders: 0, bundles: 1, savings: b.savings_gbp || 0, weight: b.weight_kg || 0 };
+    else {
+      srcBreakdown[src].orders += b.orders.length;
+      srcBreakdown[src].bundles += 1;
+      srcBreakdown[src].savings += b.savings_gbp || 0;
+      srcBreakdown[src].weight += b.weight_kg || 0;
+    }
+  });
+
+  // By region
+  const regBreakdown = {};
+  bundles.forEach(b => {
+    const reg = b.region || 'EU';
+    if (!regBreakdown[reg]) regBreakdown[reg] = { orders: 0, bundles: 1, savings: b.savings_gbp || 0 };
+    else {
+      regBreakdown[reg].orders += b.orders.length;
+      regBreakdown[reg].bundles += 1;
+      regBreakdown[reg].savings += b.savings_gbp || 0;
+    }
+  });
+
+  // Top 5 vendors/customers by orders
+  const vendorMap = {};
+  const customerMap = {};
+  bundles.forEach(b => {
+    const vendor = b.vendor || 'Unknown';
+    const customer = b.customer || 'Unknown';
+    if (!vendorMap[vendor]) vendorMap[vendor] = 0;
+    vendorMap[vendor] += b.orders.length;
+    if (!customerMap[customer]) customerMap[customer] = 0;
+    customerMap[customer] += b.orders.length;
+  });
+  const topVendors = Object.entries(vendorMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const topCustomers = Object.entries(customerMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  // Savings distribution (e.g., percentage of bundles with savings > £10)
+  const highSavingsBundles = bundles.filter(b => (b.savings_gbp || 0) > 10).length;
+  const savingsPct = totalBundles > 0 ? ((highSavingsBundles / totalBundles) * 100).toFixed(1) : 0;
+
+  // Render HTML
+  let html = `
+    <div class="ana-card">
+      <div class="ana-hdr">📊 Overall Performance</div>
+      <div class="ana-body">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
+          <div><div class="ana-kv">${totalBundles.toLocaleString()}</div><div class="ana-kl">Total Bundles</div></div>
+          <div><div class="ana-kv">${totalOrders.toLocaleString()}</div><div class="ana-kl">Total Orders</div></div>
+          <div><div class="ana-kv">${avgOrdersPerBundle}x</div><div class="ana-kl">Avg Orders/Bundle</div></div>
+          <div><div class="ana-kv">£${totalSavings.toLocaleString(undefined, {minimumFractionDigits: 2})}</div><div class="ana-kl">Total Savings</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ana-card">
+      <div class="ana-hdr">📦 Weight Analytics</div>
+      <div class="ana-body">
+        <div><div class="ana-kv">${totalWeight} kg</div><div class="ana-kl">Total Weight</div></div>
+        <div style="margin-top:12px;"><div class="ana-kv">${avgWeightPerBundle} kg</div><div class="ana-kl">Avg Weight/Bundle</div></div>
+      </div>
+    </div>
+
+    <div class="ana-card">
+      <div class="ana-hdr">🌍 Breakdown by Region</div>
+      <div class="ana-body">
+        ${Object.entries(regBreakdown).map(([reg, data]) => {
+          const pct = totalOrders > 0 ? ((data.orders / totalOrders) * 100).toFixed(1) : 0;
+          return `
+            <div class="ana-bar">
+              <div class="ana-bar-label">${reg}</div>
+              <div class="ana-bar-fill"><div class="ana-bar-progress" style="width:${pct}%"></div></div>
+              <div style="font-size:11px;font-weight:700;color:var(--t1);min-width:40px;">${data.orders} (${pct}%)</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="ana-card">
+      <div class="ana-hdr">🏭 Breakdown by Source</div>
+      <div class="ana-body">
+        ${Object.entries(srcBreakdown).map(([src, data]) => {
+          const pct = totalOrders > 0 ? ((data.orders / totalOrders) * 100).toFixed(1) : 0;
+          return `
+            <div class="ana-bar">
+              <div class="ana-bar-label">${src}</div>
+              <div class="ana-bar-fill"><div class="ana-bar-progress" style="width:${pct}%"></div></div>
+              <div style="font-size:11px;font-weight:700;color:var(--t1);min-width:60px;">${data.orders} orders</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="ana-card">
+      <div class="ana-hdr">💼 Top 5 Vendors</div>
+      <div class="ana-body">
+        ${topVendors.map(([vendor, orders]) => `
+          <div class="ana-bar">
+            <div class="ana-bar-label">${vendor}</div>
+            <div class="ana-bar-fill"><div class="ana-bar-progress" style="width:100%"></div></div>
+            <div style="font-size:11px;font-weight:700;color:var(--green);">${orders} orders</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="ana-card">
+      <div class="ana-hdr">👥 Top 5 Customers</div>
+      <div class="ana-body">
+        ${topCustomers.map(([customer, orders]) => `
+          <div class="ana-bar">
+            <div class="ana-bar-label">${customer}</div>
+            <div class="ana-bar-fill"><div class="ana-bar-progress" style="width:100%"></div></div>
+            <div style="font-size:11px;font-weight:700;color:var(--blue);">${orders} orders</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="ana-card">
+      <div class="ana-hdr">💰 Savings Insights</div>
+      <div class="ana-body">
+        <div style="text-align:center;margin-bottom:20px;">
+          <div class="ana-pie-container">📈</div>
+          <div style="font-size:12px;color:var(--t3);">Savings Distribution<br><span style="color:var(--green);font-weight:700;">${savingsPct}%</span> bundles saved > £10</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div><div class="ana-kv">£${Math.max(...bundles.map(b => b.savings_gbp || 0)).toFixed(2)}</div><div class="ana-kl">Max Savings/Bundle</div></div>
+          <div><div class="ana-kv">£${(totalSavings / totalBundles || 0).toFixed(2)}</div><div class="ana-kl">Avg Savings/Bundle</div></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  g("anaContent").innerHTML = html;
+}
+
 window.onload=init;
 </script></body></html>"""
 
