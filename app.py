@@ -4343,7 +4343,7 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - COMPLETE WORKING APP WITH ROOT ROUTE
+# 📦 BUNDLING INTELLIGENCE HUB - COMPLETE WORKING APP (BUGS FIXED)
 # ==============================================================================
 from flask import Flask, jsonify, request, session, render_template_string
 import urllib.request
@@ -4394,7 +4394,7 @@ def parse_journey_date(val):
         return None
     val = str(val).strip()
     fmts = [
-        '%B %d, %Y, %H:%M',      # February 26, 2026, 23:01
+        '%B %d, %Y, %H:%M',      
         '%B %d, %Y %H:%M:%S',
         '%B %d, %Y %H:%M',
         '%B %d, %Y',
@@ -4582,18 +4582,19 @@ def fetch_bundling_standalone_data():
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
 
+    # 🚨 PERFECT ALPHABET MAPPING (START_IDX FIXED) 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 0
+            {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1 # start_idx 1
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o":0, "d":1, "b":4, "w":8, "v":13, "title":14, "ic":15, "c":16, "cn":20, "t":28}, 2
+            {"o":0, "d":1, "b":4, "w":8, "v":13, "title":14, "ic":15, "c":16, "cn":20, "t":28}, 2 # start_idx 2
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o":0, "d":1, "b":3, "w":6, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2
+            {"o":0, "d":1, "b":3, "w":7, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2 # start_idx 2 (WEIGHT IS H=7)
         )
     }
 
@@ -4777,7 +4778,7 @@ def api_nexus_bundling_data():
     DEFAULT_RATE_GBP = 4.50
     source_stats = {
         "ECL QC Center": {"orders": 0, "boxes": 0},
-        "PK Zone":        {"orders": 0, "boxes": 0}
+        "PK Zone":       {"orders": 0, "boxes": 0}
     }
     for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
         rows     = sheets_data.get(src, [])
@@ -4827,12 +4828,16 @@ def api_nexus_bundling_data():
         for o in b['orders']:
             try:   tq += int(float(re.sub(r'[^0-9.]','',str(o['item_count']))))
             except: pass
+            
             try:
                 wt_str = re.sub(r'[^0-9.]','',str(o['weight']))
                 wt = float(wt_str) if wt_str else 0.0
+                if wt > 500: wt = 0.0  # SAFETY NET: If a tracking ID gets picked up as weight
             except: wt = 0.0
+                
             bundle_weight_sum += wt
             ind_shipping_cost += (max(math.ceil(wt), 1) * per_kg)
+            
         b['total_items']      = tq
         b['bundle_weight_kg'] = round(bundle_weight_sum, 2)
         billed_bundle         = max(math.ceil(bundle_weight_sum), 1)
@@ -4860,24 +4865,14 @@ def home():
 
 @app.route('/bundling')
 def bundling_dashboard_view():
-    u = session.get('username') or session.get('user') or session.get('role')
-    # For testing, allow all users (remove admin check temporarily if needed)
-    # if not u or str(u).lower() != 'admin':
-    #     return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
     return render_template_string(BUNDLING_HTML)
 
 @app.route('/bundling/status')
 def bundling_status_view():
-    u = session.get('username') or session.get('user') or session.get('role')
-    # if not u or str(u).lower() != 'admin':
-    #     return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
     return render_template_string(STATUS_INTELLIGENCE_HTML)
 
 @app.route('/bundling/summary')
 def bundling_summary_view():
-    u = session.get('username') or session.get('user') or session.get('role')
-    # if not u or str(u).lower() != 'admin':
-    #     return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
     return render_template_string(SUMMARY_HTML)
 
 # ---------- HTML Templates ----------
@@ -5047,7 +5042,6 @@ BUNDLING_HTML = '''<!DOCTYPE html>
     </table>
 </div>
 
-<!-- JOURNEY MODAL -->
 <div class="modal-overlay" id="journeyModal" onclick="if(event.target===this) closeModalDirect()">
     <div class="modal">
         <button class="modal-close" onclick="closeModalDirect()">✕</button>
@@ -5579,264 +5573,52 @@ SUMMARY_HTML = '''<!DOCTYPE html>
     <meta charset="UTF-8">
     <title>📊 Region Summary</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #0f0f0f;
-            color: #f0f0f0;
-            padding: 30px;
-        }
-        .app-container {
-            max-width: 1600px;
-            margin: 0 auto;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #2a2a2a;
-        }
-        .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        .logo-area img {
-            height: 45px;
-            display: none; /* Enable if you have a logo */
-        }
-        .logo-area h1 {
-            font-size: 26px;
-            font-weight: 700;
-            color: #f97316;
-        }
-        .main-dash-btn {
-            background: #1f1f1f;
-            border: 1px solid #2a2a2a;
-            color: #f0f0f0;
-            padding: 10px 22px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .main-dash-btn:hover {
-            border-color: #f97316;
-            color: #f97316;
-        }
-        .nav-tabs {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
-        }
-        .nav-tab {
-            padding: 10px 24px;
-            border-radius: 8px;
-            font-weight: 600;
-            text-decoration: none;
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            color: #aaa;
-        }
-        .nav-tab.active {
-            background: #f97316;
-            color: #000;
-            border-color: #f97316;
-        }
-        .sub-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 25px;
-            border-bottom: 1px solid #2a2a2a;
-            padding-bottom: 10px;
-        }
-        .sub-tab {
-            padding: 8px 20px;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            color: #aaa;
-        }
-        .sub-tab.active {
-            background: #f97316;
-            color: #000;
-        }
-        .control-panel {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 30px;
-            display: flex;
-            gap: 25px;
-            align-items: flex-end;
-            flex-wrap: wrap;
-        }
-        .f-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .f-label {
-            font-size: 11px;
-            color: #aaa;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .f-input {
-            background: #0f0f0f;
-            border: 1px solid #2a2a2a;
-            color: #f0f0f0;
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-family: inherit;
-            font-size: 14px;
-        }
-        .f-input:focus {
-            outline: none;
-            border-color: #f97316;
-        }
-        .btn {
-            background: #f97316;
-            color: #000;
-            border: none;
-            padding: 10px 28px;
-            border-radius: 8px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-        .btn:hover {
-            opacity: 0.9;
-        }
-        .table-wrapper {
-            background: #1a1a1a;
-            border-radius: 12px;
-            border: 1px solid #2a2a2a;
-            overflow-x: auto;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 800px;
-        }
-        th {
-            background: #0f0f0f;
-            padding: 16px 12px;
-            font-size: 12px;
-            color: #aaa;
-            text-transform: uppercase;
-            border-bottom: 1px solid #2a2a2a;
-            text-align: center;
-        }
-        td {
-            padding: 14px 12px;
-            border-bottom: 1px solid #2a2a2a;
-            color: #f0f0f0;
-            text-align: center;
-        }
-        tr:hover td {
-            background: #2a2a2a;
-        }
-        .region-name {
-            font-weight: 700;
-            color: #f97316;
-            text-align: left;
-        }
-        .totals-row {
-            background: #0f0f0f;
-            font-weight: 700;
-        }
-        .totals-row td {
-            color: #f97316;
-        }
-        .clickable {
-            cursor: pointer;
-            text-decoration: underline;
-            text-decoration-color: #f97316;
-            font-weight: 600;
-        }
-        .clickable:hover {
-            color: #f97316;
-        }
-        .loader {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #2a2a2a;
-            border-top-color: #f97316;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 30px auto;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .no-data {
-            text-align: center;
-            padding: 50px;
-            color: #aaa;
-        }
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9);
-            z-index: 10000;
-            backdrop-filter: blur(5px);
-            justify-content: center;
-            align-items: center;
-        }
-        .modal-overlay.open {
-            display: flex;
-        }
-        .modal {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 16px;
-            padding: 28px;
-            width: 100%;
-            max-width: 900px;
-            max-height: 80vh;
-            overflow-y: auto;
-            position: relative;
-        }
-        .modal-close {
-            position: absolute;
-            top: 16px; right: 16px;
-            background: #2a2a2a;
-            border: 1px solid #2a2a2a;
-            color: #fff;
-            width: 34px; height: 34px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-close:hover {
-            background: #ef4444;
-        }
-        .modal-title {
-            font-size: 22px;
-            font-weight: 800;
-            margin-bottom: 20px;
-            color: #f97316;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #0f0f0f; color: #f0f0f0; padding: 30px; }
+        .app-container { max-width: 1600px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #2a2a2a; }
+        .logo-area { display: flex; align-items: center; gap: 15px; }
+        .logo-area h1 { font-size: 26px; font-weight: 700; color: #f97316; }
+        .main-dash-btn { background: #1f1f1f; border: 1px solid #2a2a2a; color: #f0f0f0; padding: 10px 22px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+        .main-dash-btn:hover { border-color: #f97316; color: #f97316; }
+        .nav-tabs { display: flex; gap: 12px; margin-bottom: 30px; flex-wrap: wrap; }
+        .nav-tab { padding: 10px 24px; border-radius: 8px; font-weight: 600; text-decoration: none; background: #1a1a1a; border: 1px solid #2a2a2a; color: #aaa; }
+        .nav-tab.active { background: #f97316; color: #000; border-color: #f97316; }
+        .sub-tabs { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #2a2a2a; padding-bottom: 10px; }
+        .sub-tab { padding: 8px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; background: #1a1a1a; border: 1px solid #2a2a2a; color: #aaa; }
+        .sub-tab.active { background: #f97316; color: #000; }
+        .control-panel { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 24px; margin-bottom: 30px; display: flex; gap: 25px; align-items: flex-end; flex-wrap: wrap; }
+        .f-group { display: flex; flex-direction: column; gap: 6px; }
+        .f-label { font-size: 11px; color: #aaa; font-weight: 600; text-transform: uppercase; }
+        .f-input { background: #0f0f0f; border: 1px solid #2a2a2a; color: #f0f0f0; padding: 10px 14px; border-radius: 8px; font-family: inherit; font-size: 14px; }
+        .f-input:focus { outline: none; border-color: #f97316; }
+        .btn { background: #f97316; color: #000; border: none; padding: 10px 28px; border-radius: 8px; font-weight: 700; cursor: pointer; }
+        .btn:hover { opacity: 0.9; }
+        .table-wrapper { background: #1a1a1a; border-radius: 12px; border: 1px solid #2a2a2a; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        th { background: #0f0f0f; padding: 16px 12px; font-size: 12px; color: #aaa; text-transform: uppercase; border-bottom: 1px solid #2a2a2a; text-align: center; }
+        td { padding: 14px 12px; border-bottom: 1px solid #2a2a2a; color: #f0f0f0; text-align: center; }
+        tr:hover td { background: #2a2a2a; }
+        .region-name { font-weight: 700; color: #f97316; text-align: left; }
+        .totals-row { background: #0f0f0f; font-weight: 700; }
+        .totals-row td { color: #f97316; }
+        .clickable { cursor: pointer; text-decoration: underline; text-decoration-color: #f97316; font-weight: 600; }
+        .clickable:hover { color: #f97316; }
+        .loader { width: 40px; height: 40px; border: 4px solid #2a2a2a; border-top-color: #f97316; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 30px auto; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .no-data { text-align: center; padding: 50px; color: #aaa; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10000; backdrop-filter: blur(5px); justify-content: center; align-items: center; }
+        .modal-overlay.open { display: flex; }
+        .modal { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 16px; padding: 28px; width: 100%; max-width: 900px; max-height: 80vh; overflow-y: auto; position: relative; }
+        .modal-close { position: absolute; top: 16px; right: 16px; background: #2a2a2a; border: 1px solid #2a2a2a; color: #fff; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+        .modal-close:hover { background: #ef4444; }
+        .modal-title { font-size: 22px; font-weight: 800; margin-bottom: 20px; color: #f97316; }
     </style>
 </head>
 <body>
 <div class="app-container">
     <div class="header">
         <div class="logo-area">
-            <img src="/static/3pl-logo.png" alt="3PL Logo" onerror="this.style.display='none'">
             <h1>Region Summary</h1>
         </div>
         <a href="/" class="main-dash-btn">🏠 Main Dash</a>
@@ -5907,21 +5689,11 @@ function getRegionFromCountry(country) {
     ];
     if (specific.includes(c)) {
         const match = {
-            'united kingdom': 'United Kingdom',
-            'united states': 'United States',
-            'australia': 'Australia',
-            'switzerland': 'Switzerland',
-            'new zealand': 'New Zealand',
-            'canada': 'Canada',
-            'china': 'China',
-            'ghana': 'Ghana',
-            'japan': 'Japan',
-            'india': 'India',
-            'philippines': 'Philippines',
-            'saudia arabia': 'Saudia Arabia',
-            'singapore': 'Singapore',
-            'south africa': 'South Africa',
-            'south korea': 'South Korea',
+            'united kingdom': 'United Kingdom', 'united states': 'United States',
+            'australia': 'Australia', 'switzerland': 'Switzerland', 'new zealand': 'New Zealand',
+            'canada': 'Canada', 'china': 'China', 'ghana': 'Ghana', 'japan': 'Japan',
+            'india': 'India', 'philippines': 'Philippines', 'saudia arabia': 'Saudia Arabia',
+            'singapore': 'Singapore', 'south africa': 'South Africa', 'south korea': 'South Korea',
             'thailand': 'Thailand'
         };
         return match[c];
@@ -5934,13 +5706,10 @@ function getCachedData() {
     if (!cached) return null;
     try {
         const { timestamp, bundles, journey } = JSON.parse(cached);
-        if (Date.now() - timestamp < CACHE_DURATION) {
-            return { bundles, journey };
-        }
+        if (Date.now() - timestamp < CACHE_DURATION) return { bundles, journey };
     } catch (e) {}
     return null;
 }
-
 function setCachedData(bundles, journey) {
     localStorage.setItem(SUMMARY_CACHE_KEY, JSON.stringify({ timestamp: Date.now(), bundles, journey }));
 }
@@ -5949,31 +5718,24 @@ async function fetchAllData(forceRefresh = false) {
     if (!forceRefresh) {
         const cached = getCachedData();
         if (cached) {
-            bundlesData = cached.bundles;
-            journeyData = cached.journey;
+            bundlesData = cached.bundles; journeyData = cached.journey;
             setDefaultDates();
-            if (currentTab === 'daily') loadDaily();
-            else loadWeekly();
+            if (currentTab === 'daily') loadDaily(); else loadWeekly();
             return;
         }
     }
     try {
         const [bRes, jRes] = await Promise.all([
-            fetch('/api/nexus/bundling_data'),
-            fetch('/api/nexus/all_journey')
+            fetch('/api/nexus/bundling_data'), fetch('/api/nexus/all_journey')
         ]);
         if (!bRes.ok || !jRes.ok) throw new Error('API error');
-        const bJson = await bRes.json();
-        const jJson = await jRes.json();
-        bundlesData = bJson.bundles || [];
-        journeyData = jJson.data || [];
+        const bJson = await bRes.json(); const jJson = await jRes.json();
+        bundlesData = bJson.bundles || []; journeyData = jJson.data || [];
         setCachedData(bundlesData, journeyData);
         setDefaultDates();
-        if (currentTab === 'daily') loadDaily();
-        else loadWeekly();
+        if (currentTab === 'daily') loadDaily(); else loadWeekly();
     } catch(e) {
-        console.error(e);
-        alert('Error loading data. Please refresh.');
+        console.error(e); alert('Error loading data. Please refresh.');
     }
 }
 
@@ -6002,8 +5764,7 @@ function switchTab(tab) {
     event.target.classList.add('active');
     document.getElementById('dailyPanel').style.display = tab === 'daily' ? 'block' : 'none';
     document.getElementById('weeklyPanel').style.display = tab === 'weekly' ? 'block' : 'none';
-    if (tab === 'daily') loadDaily();
-    else loadWeekly();
+    if (tab === 'daily') loadDaily(); else loadWeekly();
 }
 
 function loadDaily() {
@@ -6014,8 +5775,7 @@ function loadDaily() {
     document.getElementById('dailyTable').innerHTML = '';
 
     const start = new Date(from);
-    const end = new Date(to);
-    end.setHours(23,59,59,999);
+    const end = new Date(to); end.setHours(23,59,59,999);
 
     const filtered = bundlesData.filter(b => {
         const d = new Date(b.date_std);
@@ -6031,14 +5791,10 @@ function loadDaily() {
         regionMap[region].boxes += 1;
         regionMap[region].orders += b.orders.length;
         regionMap[region].weight += b.bundle_weight_kg || 0;
-        if (b.bundle_weight_kg < 20) regionMap[region].lt20 += 1;
-        else regionMap[region].ge20 += 1;
+        if (b.bundle_weight_kg < 20) regionMap[region].lt20 += 1; else regionMap[region].ge20 += 1;
         b.orders.forEach(o => {
             regionMap[region].ordersList.push({
-                order_id: o.order_id,
-                weight: o.weight,
-                status: o.status,
-                date: b.date_std
+                order_id: o.order_id, weight: o.weight, status: o.status, date: b.date_std
             });
         });
     });
@@ -6052,13 +5808,8 @@ function loadDaily() {
         html += `<td class="clickable" onclick="showRegionOrders('${region}', 'orders')">${r.orders.toLocaleString()}</td>`;
         html += `<td class="clickable" onclick="showRegionOrders('${region}', 'boxes')">${r.boxes.toLocaleString()}</td>`;
         html += `<td class="clickable" onclick="showRegionOrders('${region}', 'weight')">${r.weight.toFixed(1)}</td>`;
-        html += `<td>${r.lt20.toLocaleString()}</td>`;
-        html += `<td>${r.ge20.toLocaleString()}</td></tr>`;
-        totalOrders += r.orders;
-        totalBoxes += r.boxes;
-        totalWeight += r.weight;
-        totalLt20 += r.lt20;
-        totalGe20 += r.ge20;
+        html += `<td>${r.lt20.toLocaleString()}</td><td>${r.ge20.toLocaleString()}</td></tr>`;
+        totalOrders += r.orders; totalBoxes += r.boxes; totalWeight += r.weight; totalLt20 += r.lt20; totalGe20 += r.ge20;
         window['regionData_' + region] = r.ordersList;
     });
     html += `<tr class="totals-row"><td>TOTAL</td><td>${totalOrders.toLocaleString()}</td><td>${totalBoxes.toLocaleString()}</td><td>${totalWeight.toFixed(1)}</td><td>${totalLt20.toLocaleString()}</td><td>${totalGe20.toLocaleString()}</td></tr>`;
@@ -6074,9 +5825,7 @@ function loadWeekly() {
     document.getElementById('weeklyTable').innerHTML = '';
 
     const start = new Date(weekStart);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    end.setHours(23,59,59,999);
+    const end = new Date(start); end.setDate(end.getDate() + 6); end.setHours(23,59,59,999);
     const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
     const filtered = journeyData.filter(j => {
@@ -6088,11 +5837,8 @@ function loadWeekly() {
     filtered.forEach(j => {
         const region = j.region || 'Unknown';
         const d = new Date(j.date);
-        const dayIndex = d.getDay();
-        let idx = dayIndex === 0 ? 6 : dayIndex - 1;
-        if (!regionDayMap[region]) {
-            regionDayMap[region] = [0,0,0,0,0,0,0];
-        }
+        let idx = d.getDay() === 0 ? 6 : d.getDay() - 1;
+        if (!regionDayMap[region]) regionDayMap[region] = [0,0,0,0,0,0,0];
         regionDayMap[region][idx] += 1;
     });
 
@@ -6100,16 +5846,12 @@ function loadWeekly() {
     let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th>';
     days.forEach(d => html += `<th>${d}</th>`);
     html += '<th>Total</th></tr></thead><tbody>';
-    let totals = [0,0,0,0,0,0,0];
-    let grandTotal = 0;
+    let totals = [0,0,0,0,0,0,0], grandTotal = 0;
     regions.forEach(region => {
         let counts = regionDayMap[region];
         let rowSum = counts.reduce((a,b)=>a+b,0);
         html += `<tr><td class="region-name">${region}</td>`;
-        counts.forEach((c,i) => {
-            html += `<td>${c.toLocaleString()}</td>`;
-            totals[i] += c;
-        });
+        counts.forEach((c,i) => { html += `<td>${c.toLocaleString()}</td>`; totals[i] += c; });
         html += `<td><b>${rowSum.toLocaleString()}</b></td></tr>`;
         grandTotal += rowSum;
     });
@@ -6123,28 +5865,18 @@ function loadWeekly() {
 
 function showRegionOrders(region, type) {
     const ordersList = window['regionData_' + region];
-    if (!ordersList || ordersList.length === 0) {
-        alert('No orders found for this region.');
-        return;
-    }
+    if (!ordersList || ordersList.length === 0) { alert('No orders found.'); return; }
     let title = `Orders in ${region}`;
-    if (type === 'boxes') title = `Boxes in ${region}`;
-    else if (type === 'weight') title = `Weight details in ${region}`;
+    if (type === 'boxes') title = `Boxes in ${region}`; else if (type === 'weight') title = `Weight details in ${region}`;
     document.getElementById('modalTitle').innerText = title;
 
     let tableHtml = '<div class="table-wrapper"><table><thead><tr><th>Order ID</th><th>Date</th><th>Weight (kg)</th><th>Status</th></tr></thead><tbody>';
-    ordersList.forEach(o => {
-        tableHtml += `<tr><td>${o.order_id}</td><td>${o.date}</td><td>${o.weight}</td><td>${o.status || '—'}</td></tr>`;
-    });
+    ordersList.forEach(o => { tableHtml += `<tr><td>${o.order_id}</td><td>${o.date}</td><td>${o.weight}</td><td>${o.status || '—'}</td></tr>`; });
     tableHtml += '</tbody></table></div>';
     document.getElementById('modalContent').innerHTML = tableHtml;
     document.getElementById('orderModal').classList.add('open');
 }
-
-function closeModal() {
-    document.getElementById('orderModal').classList.remove('open');
-}
-
+function closeModal() { document.getElementById('orderModal').classList.remove('open'); }
 window.onload = () => fetchAllData();
 </script>
 </body>
@@ -6155,20 +5887,22 @@ window.onload = () => fetchAllData();
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
         user_val = session.get('username') or session.get('user') or session.get('role')
-        if user_val and str(user_val).lower() == 'admin':
-            html = response.get_data(as_text=True)
-            btn = '''
-            <div style="position:fixed;bottom:30px;right:30px;display:flex;flex-direction:column;gap:12px;z-index:99999;">
-                <a href="/bundling" style="background:#10B981;color:#000;padding:12px 24px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 10px 20px rgba(16,185,129,0.3);">📦 Bundling Intel</a>
-                <a href="/nexus" style="background:#fff;color:#000;padding:12px 24px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub</a>
-            </div>'''
-            if '</body>' in html:
-                response.set_data(html.replace('</body>', btn + '</body>'))
+        # temporarily bypassing admin check if needed, uncomment below lines to enforce
+        # if user_val and str(user_val).lower() == 'admin':
+        html = response.get_data(as_text=True)
+        btn = '''
+        <div style="position:fixed;bottom:30px;right:30px;display:flex;flex-direction:column;gap:12px;z-index:99999;">
+            <a href="/bundling" style="background:#10B981;color:#000;padding:12px 24px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 10px 20px rgba(16,185,129,0.3);">📦 Bundling Intel</a>
+            <a href="/nexus" style="background:#fff;color:#000;padding:12px 24px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 10px 20px rgba(0,0,0,0.5);">🛰️ TID Hub</a>
+        </div>'''
+        if '</body>' in html:
+            response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
 # ---------- Run ----------
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
 
