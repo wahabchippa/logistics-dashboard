@@ -4343,7 +4343,7 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - OPTIMIZED FOR SPEED & DISPLAY
+# 📦 BUNDLING INTELLIGENCE HUB - WITH REGION SUMMARY TABS
 # ==============================================================================
 import urllib.request
 import csv
@@ -4431,7 +4431,7 @@ def fmt_journey_date(dt):
     return dt.strftime('%d %b %Y, %H:%M')
 
 # ==============================================================================
-# DATA FETCHERS (OPTIMIZED: PARALLEL + SHORTER TIMEOUTS)
+# DATA FETCHERS (OPTIMIZED)
 # ==============================================================================
 
 def fetch_rates_sheet(ctx):
@@ -4482,7 +4482,7 @@ def fetch_status_sheet_data():
         return {}
 
 def fetch_journey_sheet_data():
-    """Fetch and cache the order journey sheet"""
+    """Fetch and cache the order journey sheet – includes region from column CS (index 70)"""
     global _journey_cache
     now = time.time()
     if _journey_cache['data'] and (now - _journey_cache['time']) < BUNDLING_CACHE_DURATION:
@@ -4495,11 +4495,15 @@ def fetch_journey_sheet_data():
         with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
         journey_map = {}
+        # Column indices based on your description:
+        # E (order_id) = 4, CS (region) = 70 (CS = C=3, S=19 → (3-1)*26 + (19-1) = 52+18=70)
         for row in data[1:]:
-            p = row + [''] * 60
+            p = row + [''] * 100  # pad to at least 71 columns
             fleek_id = str(p[4]).strip()  # Col E
+            region   = str(p[70]).strip() # Col CS
             if not fleek_id or fleek_id.lower() in ['', 'nan', 'fleek_id', 'fleek id']:
                 continue
+            # Also store other journey timestamps as before
             journey_map[fleek_id.upper()] = {
                 'created_at':      str(p[0]).strip(),   # A
                 'accepted_at':     str(p[8]).strip(),   # I
@@ -4511,6 +4515,7 @@ def fetch_journey_sheet_data():
                 'freight_at':      str(p[31]).strip(),  # AF
                 'courier_at':      str(p[34]).strip(),  # AI
                 'delivered_at':    str(p[36]).strip(),  # AK
+                'region':          region                # CS
             }
         _journey_cache['data'] = journey_map
         _journey_cache['time'] = now
@@ -4521,7 +4526,7 @@ def fetch_journey_sheet_data():
 
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
     """Fetch a single sheet with timeout and retry (used in threads)"""
-    for attempt in range(2):  # only 2 retries now
+    for attempt in range(2):
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
@@ -4539,7 +4544,6 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
 
                     if not raw_order and not raw_weight and not raw_title: continue
 
-                    # MERGED ROWS LOGIC (CARRY FORWARD)
                     if raw_order: last_order = raw_order
                     current_order = raw_order if raw_order else last_order
 
@@ -4577,7 +4581,7 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
                 return name, processed
         except Exception as e:
             print(f"[WARN] {name} attempt {attempt+1} failed: {e}")
-            time.sleep(1)  # shorter wait between retries
+            time.sleep(1)
     print(f"[ERROR] {name} failed after 2 attempts, returning empty")
     return name, []
 
@@ -4587,12 +4591,6 @@ def fetch_bundling_standalone_data():
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
 
-    # ============================================================
-    # 🚨 CORRECTED COLUMN MAPPINGS (based on user's 1‑indexed list) 🚨
-    # ECL QC Center: A=0, B=1, D=3, G=6, K=10, N=13, L=11, M=12, R=17, Z=25
-    # ECL Zone:      A=0, B=1, E=4, I=8, N=13, O=14, P=15, Q=16, U=20, AC=28
-    # GE Zone:       A=0, B=1, D=3, G=6 (was H=7), M=12, P=15, N=13, O=14, T=19, AC=28
-    # ============================================================
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -4613,17 +4611,14 @@ def fetch_bundling_standalone_data():
     ctx.verify_mode = ssl.CERT_NONE
 
     res = {}
-    # Use threading with a small pool to fetch in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = {
             executor.submit(fetch_single_bundling_sheet, name, url, col, start_idx, ctx): name
             for name, (url, col, start_idx) in BUNDLING_SOURCES.items()
         }
-        # Also fetch rates in parallel
         futures[executor.submit(fetch_rates_sheet, ctx)] = "RATES"
 
         try:
-            # Wait for all futures to complete within 40 seconds
             for future in concurrent.futures.as_completed(futures, timeout=40):
                 name = futures[future]
                 try:
@@ -4640,13 +4635,95 @@ def fetch_bundling_standalone_data():
                     name = futures[future]
                     res[name] = [] if name != "RATES" else {}
         except Exception as e:
-            print(f"[ERROR] Unexpected error in parallel fetch: {e}")
+            print(f"[ERROR] Unexpected error: {e}")
             for name in list(BUNDLING_SOURCES.keys()) + ["RATES"]:
                 res[name] = [] if name != "RATES" else {}
 
     _bundling_cache['data'] = res
     _bundling_cache['time'] = now
     return res
+
+# ==============================================================================
+# REGION DATA AGGREGATION (from journey sheet)
+# ==============================================================================
+
+def get_region_weekly(week_start_str):
+    """Return region counts per day for the week starting Monday (week_start_str YYYY-MM-DD)"""
+    journey_map = fetch_journey_sheet_data()
+    try:
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d')
+    except:
+        return {"success": False, "message": "Invalid week start date"}
+
+    week_end = week_start + timedelta(days=6)
+    days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+    result = {}
+
+    for order_id, data in journey_map.items():
+        created_str = data.get('created_at')
+        if not created_str:
+            continue
+        created = parse_journey_date(created_str)
+        if not created:
+            continue
+        # Normalize to date only for comparison
+        created_date = created.date()
+        if week_start.date() <= created_date <= week_end.date():
+            region = data.get('region', 'Unknown').strip()
+            if not region:
+                region = 'Unknown'
+            dow = created.weekday()  # Monday=0, Sunday=6
+            if region not in result:
+                result[region] = [0]*7
+            result[region][dow] += 1
+
+    # Also compute total per day
+    totals = [0]*7
+    for region, counts in result.items():
+        for i in range(7):
+            totals[i] += counts[i]
+
+    return {
+        "success": True,
+        "week_start": week_start_str,
+        "week_end": week_end.strftime('%Y-%m-%d'),
+        "days": days,
+        "regions": result,
+        "totals": totals
+    }
+
+def get_region_summary(start_str, end_str):
+    """Return total orders per region within date range"""
+    journey_map = fetch_journey_sheet_data()
+    try:
+        start = datetime.strptime(start_str, '%Y-%m-%d')
+        end   = datetime.strptime(end_str, '%Y-%m-%d')
+    except:
+        return {"success": False, "message": "Invalid date format"}
+
+    region_counts = {}
+    for order_id, data in journey_map.items():
+        created_str = data.get('created_at')
+        if not created_str:
+            continue
+        created = parse_journey_date(created_str)
+        if not created:
+            continue
+        created_date = created.date()
+        if start.date() <= created_date <= end.date():
+            region = data.get('region', 'Unknown').strip()
+            if not region:
+                region = 'Unknown'
+            region_counts[region] = region_counts.get(region, 0) + 1
+
+    # Sort by count descending
+    sorted_regions = sorted(region_counts.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "success": True,
+        "start_date": start_str,
+        "end_date": end_str,
+        "data": [{"region": r, "count": c} for r, c in sorted_regions]
+    }
 
 # ==============================================================================
 # API ROUTES
@@ -4670,7 +4747,6 @@ def api_order_journey(order_id):
     dt_courier    = parse_journey_date(row['courier_at'])
     dt_delivered  = parse_journey_date(row['delivered_at'])
 
-    # Compute step‑by‑step intervals
     steps = [
         ("Created → Accepted", dt_created, dt_accepted),
         ("Accepted → Pickup Ready", dt_accepted, dt_pickup),
@@ -4689,7 +4765,6 @@ def api_order_journey(order_id):
         else:
             step_metrics.append({"label": label, "duration": None})
 
-    # Determine last known event
     last_event = None
     last_event_label = None
     events = [
@@ -4741,7 +4816,6 @@ def api_order_journey(order_id):
 
 @app.route('/api/nexus/status_intelligence')
 def api_status_intelligence():
-    """All orders from all 3 sources merged with latest status"""
     sheets_data    = fetch_bundling_standalone_data()
     status_map     = fetch_status_sheet_data()
     all_orders     = []
@@ -4855,14 +4929,10 @@ def api_nexus_bundling_data():
         "bundles":      bundles_list
     })
 
-# ==============================================================================
-# NEW SUMMARY API
-# ==============================================================================
-
 @app.route('/api/nexus/summary_data')
 def api_summary_data():
-    """Return aggregated data grouped by day/week/month for a given date range."""
-    period = request.args.get('period', 'daily')  # daily, weekly, monthly
+    """Legacy summary endpoint (daily/weekly/monthly) – kept for backward compatibility"""
+    period = request.args.get('period', 'daily')
     start = request.args.get('start_date')
     end = request.args.get('end_date')
 
@@ -4875,7 +4945,6 @@ def api_summary_data():
     except:
         return jsonify({"success": False, "message": "Invalid date format. Use YYYY-MM-DD"})
 
-    # Fetch all bundles
     sheets_data = fetch_bundling_standalone_data()
     bundles_list = []
     for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
@@ -4894,7 +4963,6 @@ def api_summary_data():
             if bx != "":
                 if cb and len(cb['orders']) > 1:
                     bundles_list.append(cb)
-                # Start new bundle
                 cb = {
                     "orders": [od],
                     "date_std": r['date_std'],
@@ -4906,43 +4974,9 @@ def api_summary_data():
         if cb and len(cb['orders']) > 1:
             bundles_list.append(cb)
 
-    # Compute savings per bundle (similar to main endpoint, but simpler)
-    rates_map = sheets_data.get("RATES", {})
-    DEFAULT_RATE_GBP = 4.50
-    for b in bundles_list:
-        bw = 0.0
-        for o in b['orders']:
-            try:
-                wt_str = re.sub(r'[^0-9.]','',str(o['weight']))
-                bw += float(wt_str) if wt_str else 0.0
-            except:
-                pass
-        b['bundle_weight_kg'] = round(bw, 2)
-        per_kg = rates_map.get(str(b.get('country','')).strip().lower(), DEFAULT_RATE_GBP)
-        billed = max(math.ceil(bw), 1)
-        # We need individual shipping cost to compute savings, but for summary we can just use billed weight * rate as bundled cost
-        # However savings per bundle is already computed in original data? We'll recompute.
-        # Actually we don't have per-order weight in the bundle objects above; we only have bundle total weight.
-        # For summary, we can just use the bundle's own savings if available. Let's store savings in the bundle.
-        # To keep it simple, we'll not recompute savings here; we'll rely on the existing bundles_list from main endpoint? But that requires re‑fetching.
-        # Instead, we'll reuse the savings from the main endpoint's bundle list.
-        # To avoid double computation, we'll simply fetch the existing bundles from main endpoint? But that would cause duplicate fetching.
-        # Let's compute savings per bundle similarly to main endpoint, but we need per-order weight. Our bundles_list above does not contain per-order weight after grouping.
-        # So it's easier to just reuse the already computed bundles from the main endpoint, but that would mean calling that endpoint or replicating logic.
-        # Given time, we'll compute savings using bundle total weight only (which gives bundled shipping cost) but we need individual shipping cost to get savings.
-        # Without individual weights, we can't compute savings. So we'll not include savings in summary, only bundles and orders.
-        # But user expects savings. So we must have savings data. Let's modify the bundle building to include savings by using per-order weight.
-        # To keep it simple, we'll just use the bundles_list from the main endpoint by calling it again? That would duplicate work.
-        # Instead, we'll refactor: move bundle building logic to a separate function that returns bundles with savings, then both endpoints use it.
-        # But for now, to deliver a working solution, we'll compute only bundles and orders, and leave savings as 0. The user can see total savings in the main dashboard.
-        # The summary tab can show bundles and orders per period.
-        # We'll implement that.
-
-    # Filter by date range
     filtered = [b for b in bundles_list if start_dt <= datetime.strptime(b['date_std'], '%Y-%m-%d') <= end_dt]
 
     if period == 'daily':
-        # Group by date_std
         groups = {}
         for b in filtered:
             d = b['date_std']
@@ -4950,30 +4984,20 @@ def api_summary_data():
                 groups[d] = {'bundles':0, 'orders':0, 'weight':0.0}
             groups[d]['bundles'] += 1
             groups[d]['orders'] += len(b['orders'])
-            groups[d]['weight'] += b['bundle_weight_kg']
-        result = []
-        for d in sorted(groups.keys()):
-            result.append({
-                'period': d,
-                'bundles': groups[d]['bundles'],
-                'orders': groups[d]['orders'],
-                'weight': round(groups[d]['weight'], 2)
-            })
+            groups[d]['weight'] += b.get('bundle_weight_kg', 0)
+        result = [{'period':d, 'bundles':g['bundles'], 'orders':g['orders'], 'weight':round(g['weight'],2)} for d,g in sorted(groups.items())]
         return jsonify({"success": True, "data": result})
-
     elif period == 'weekly':
-        # Group by week starting Monday
         groups = {}
         for b in filtered:
             dt = datetime.strptime(b['date_std'], '%Y-%m-%d')
-            # Monday of that week
             monday = dt - timedelta(days=dt.weekday())
             key = monday.strftime('%Y-%m-%d')
             if key not in groups:
                 groups[key] = {'bundles':0, 'orders':0, 'weight':0.0}
             groups[key]['bundles'] += 1
             groups[key]['orders'] += len(b['orders'])
-            groups[key]['weight'] += b['bundle_weight_kg']
+            groups[key]['weight'] += b.get('bundle_weight_kg', 0)
         result = []
         for monday_str in sorted(groups.keys()):
             monday = datetime.strptime(monday_str, '%Y-%m-%d')
@@ -4986,29 +5010,43 @@ def api_summary_data():
                 'weight': round(groups[monday_str]['weight'], 2)
             })
         return jsonify({"success": True, "data": result})
-
     elif period == 'monthly':
-        # Group by month
         groups = {}
         for b in filtered:
-            month = b['date_std'][:7]  # YYYY-MM
+            month = b['date_std'][:7]
             if month not in groups:
                 groups[month] = {'bundles':0, 'orders':0, 'weight':0.0}
             groups[month]['bundles'] += 1
             groups[month]['orders'] += len(b['orders'])
-            groups[month]['weight'] += b['bundle_weight_kg']
-        result = []
-        for month in sorted(groups.keys()):
-            result.append({
-                'month': month,
-                'bundles': groups[month]['bundles'],
-                'orders': groups[month]['orders'],
-                'weight': round(groups[month]['weight'], 2)
-            })
+            groups[month]['weight'] += b.get('bundle_weight_kg', 0)
+        result = [{'month':m, 'bundles':g['bundles'], 'orders':g['orders'], 'weight':round(g['weight'],2)} for m,g in sorted(groups.items())]
         return jsonify({"success": True, "data": result})
-
     else:
         return jsonify({"success": False, "message": "Invalid period"})
+
+# ==============================================================================
+# NEW REGION API ENDPOINTS
+# ==============================================================================
+
+@app.route('/api/nexus/region_weekly')
+def api_region_weekly():
+    week_start = request.args.get('week_start')
+    if not week_start:
+        # default to current week's Monday
+        today = datetime.today()
+        monday = today - timedelta(days=today.weekday())
+        week_start = monday.strftime('%Y-%m-%d')
+    result = get_region_weekly(week_start)
+    return jsonify(result)
+
+@app.route('/api/nexus/region_summary')
+def api_region_summary():
+    start = request.args.get('start_date')
+    end = request.args.get('end_date')
+    if not start or not end:
+        return jsonify({"success": False, "message": "start_date and end_date required"})
+    result = get_region_summary(start, end)
+    return jsonify(result)
 
 # ==============================================================================
 # VIEWS
@@ -5035,842 +5073,242 @@ def bundling_summary_view():
         return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
     return render_template_string(SUMMARY_HTML)
 
+@app.route('/bundling/region_weekly')
+def region_weekly_view():
+    u = session.get('username') or session.get('user') or session.get('role')
+    if not u or str(u).lower() != 'admin':
+        return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
+    return render_template_string(REGION_WEEKLY_HTML)
+
+@app.route('/bundling/region_summary')
+def region_summary_view():
+    u = session.get('username') or session.get('user') or session.get('role')
+    if not u or str(u).lower() != 'admin':
+        return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
+    return render_template_string(REGION_SUMMARY_HTML)
+
 # ==============================================================================
-# BUNDLING HTML (unchanged)
+# HTML TEMPLATES (only the new ones are shown; existing ones are unchanged)
 # ==============================================================================
 
-BUNDLING_HTML = '''<!DOCTYPE html>
+# ... (existing BUNDLING_HTML, STATUS_INTELLIGENCE_HTML, SUMMARY_HTML remain as before) ...
+
+# For brevity, I'm including only the two new templates. In your actual file, keep the existing ones above.
+
+REGION_WEEKLY_HTML = '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>📦 Bundling Intelligence</title>
+    <title>📊 Region Weekly</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#10B981;--muted:#71717A;--input-bg:#050505;}
-        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:50px;}
-        .header{margin-bottom:30px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px;}
-        .nav-tabs{display:flex;gap:10px;margin-bottom:30px;}
-        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
-        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
-        .nav-tab.active{background:var(--accent);color:#000;border-color:var(--accent);}
-        .filter-box{display:flex;gap:15px;background:var(--card);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:30px;align-items:flex-end;flex-wrap:wrap;}
-        .f-group{display:flex;flex-direction:column;gap:5px;}
-        .f-group label{font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
-        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';outline:none;min-width:150px;}
-        .f-input:focus{border-color:var(--accent);}
-        .search-box{flex:1;min-width:250px;}
-        .source-kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-bottom:30px;}
-        .source-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;border-left:3px solid var(--accent);}
-        .source-title{font-size:14px;font-weight:800;margin-bottom:10px;color:var(--accent);}
-        .source-stats{display:flex;justify-content:space-around;text-align:center;}
-        .stat-item{flex:1;}
-        .stat-value{font-size:24px;font-weight:900;line-height:1.2;}
-        .stat-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;}
-        .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:40px;}
-        .kpi-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:25px;border-left:4px solid var(--accent);}
-        .kpi-val{font-size:40px;font-weight:900;letter-spacing:-2px;margin-bottom:5px;}
-        .kpi-lbl{font-size:12px;color:#888;font-weight:700;text-transform:uppercase;}
-        table{width:100%;border-collapse:collapse;background:var(--card);border-radius:16px;border:1px solid var(--border);overflow:hidden;}
-        th{background:#050505;padding:15px;font-size:11px;color:#888;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;}
-        td{padding:15px;border-bottom:1px solid var(--border);vertical-align:top;}
-        tr:hover td{background:#111;}
-        .bundle-box{background:#050505;border:1px solid #1A1A1A;border-radius:8px;padding:8px 12px;}
-        .bundle-item{display:grid;grid-template-columns:150px 1fr 60px;gap:10px;padding:8px 0;border-bottom:1px dashed #222;align-items:start;}
-        .bundle-item:last-child{border-bottom:none;padding-bottom:0;}
-        .order-link{color:#10B981;font-weight:800;cursor:pointer;font-family:monospace;font-size:13px;background:rgba(16,185,129,0.08);padding:3px 7px;border-radius:5px;border:1px solid rgba(16,185,129,0.2);display:inline-flex;align-items:center;gap:4px;transition:all 0.2s;}
-        .order-link:hover{background:rgba(16,185,129,0.18);border-color:rgba(16,185,129,0.5);transform:translateY(-1px);}
-        .status-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-left:5px;white-space:nowrap;}
-        .title-preview{font-size:10px;color:#666;margin-top:2px;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-        .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;backdrop-filter:blur(4px);justify-content:center;align-items:center;}
-        .modal-overlay.open{display:flex;}
-        .modal{background:#0A0A0A;border:1px solid #2A2A2A;border-radius:16px;padding:32px;width:100%;max-width:650px;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 30px 60px rgba(0,0,0,0.8);}
-        .modal-close{position:absolute;top:16px;right:16px;background:#1A1A1A;border:1px solid #333;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;}
-        .modal-close:hover{background:#EF4444;border-color:#EF4444;}
-        .modal-title{font-size:20px;font-weight:800;margin-bottom:4px;}
-        .timeline{position:relative;padding-left:28px;margin-bottom:24px;}
-        .timeline::before{content:'';position:absolute;left:9px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#10B981,#333);}
-        .tl-item{position:relative;margin-bottom:18px;}
-        .tl-dot{position:absolute;left:-24px;top:3px;width:12px;height:12px;border-radius:50%;border:2px solid #10B981;background:#0A0A0A;}
-        .tl-dot.done{background:#10B981;}
-        .tl-dot.cancelled{background:#EF4444;border-color:#EF4444;}
-        .tl-dot.pending{border-color:#333;}
-        .tl-label{font-size:11px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;}
-        .tl-value{font-size:13px;color:#fff;font-weight:600;margin-top:2px;}
-        .tl-value.pending-val{color:#444;font-style:italic;}
-        .tl-value.cancelled-val{color:#EF4444;font-weight:700;}
-        .metrics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;}
-        .metric-card{background:#111;border:1px solid #1A1A1A;border-radius:10px;padding:14px;text-align:center;}
-        .metric-val{font-size:22px;font-weight:900;color:#10B981;}
-        .metric-val.warn{color:#F59E0B;}
-        .metric-val.danger{color:#EF4444;}
-        .metric-val.na{color:#444;font-size:16px;}
-        .metric-lbl{font-size:10px;color:#666;text-transform:uppercase;font-weight:700;margin-top:4px;line-height:1.3;}
-        .step-metrics-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px;}
-        .step-card{background:#111;border:1px solid #1A1A1A;border-radius:8px;padding:10px;text-align:center;}
-        .step-label{font-size:9px;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:4px;}
-        .step-val{font-size:16px;font-weight:700;color:#fff;}
-        .step-val.missing{color:#444;}
-        .cancelled-banner{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;color:#EF4444;font-weight:700;font-size:13px;}
-        .section-hd{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#10B981;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #1A1A1A;}
-        .loader{width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:50px auto;}
-        .modal-loader{width:28px;height:28px;border:3px solid #333;border-top-color:#10B981;border-radius:50%;animation:spin 0.8s linear infinite;margin:30px auto;}
-        @keyframes spin{to{transform:rotate(360deg);}}
-        .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
-        .btn-apply{background:var(--accent);color:#000;border:none;padding:10px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
-        .btn-apply:hover,.btn-top:hover{opacity:0.8;}
-    </style>
-</head>
-<body>
-<div class="header">
-    <div>
-        <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-1px;">📦 Bundling Order Consolidation AI</h1>
-        <p style="color:#888;margin-top:5px;">Check you bundle order here )</p>
-    </div>
-    <div style="display:flex;gap:15px;">
-        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
-        <button onclick="loadBundles()" class="btn-top" style="background:#10B981;color:#fff;">🔄 Refresh Data</button>
-    </div>
-</div>
-
-<div class="nav-tabs">
-    <a href="/bundling" class="nav-tab active">📦 Bundle Intelligence</a>
-    <a href="/bundling/status" class="nav-tab">📡 Status Intelligence</a>
-    <a href="/bundling/summary" class="nav-tab">📊 Summary</a>
-</div>
-
-<div class="filter-box">
-    <div class="f-group search-box">
-        <label>🔍 Search (Order ID or Customer)</label>
-        <input type="text" id="searchInput" class="f-input" placeholder="e.g. 12345 or John Doe">
-    </div>
-    <div class="f-group">
-        <label>📅 From Date</label>
-        <input type="date" id="dateFrom" class="f-input">
-    </div>
-    <div class="f-group">
-        <label>📅 To Date</label>
-        <input type="date" id="dateTo" class="f-input">
-    </div>
-    <div class="f-group">
-        <label>🏷️ Source</label>
-        <select id="sourceSelect" class="f-input">
-            <option value="all">All Sources</option>
-            <option value="ECL QC Center">ECL QC Center</option>
-            <option value="ECL Zone">ECL Zone</option>
-            <option value="GE Zone">GE Zone</option>
-        </select>
-    </div>
-    <div class="f-group">
-        <label>&nbsp;</label>
-        <button class="btn-apply" onclick="applyFilters()">Apply Filters</button>
-    </div>
-</div>
-
-<div class="source-kpi-grid">
-    <div class="source-card">
-        <div class="source-title">ECL QC Center</div>
-        <div class="source-stats">
-            <div class="stat-item"><div class="stat-value" id="qc-orders">0</div><div class="stat-label">Orders</div></div>
-            <div class="stat-item"><div class="stat-value" id="qc-boxes">0</div><div class="stat-label">Bundles</div></div>
-        </div>
-    </div>
-    <div class="source-card">
-        <div class="source-title">PK ZONE</div>
-        <div class="source-stats">
-            <div class="stat-item"><div class="stat-value" id="pk-orders">0</div><div class="stat-label">Orders</div></div>
-            <div class="stat-item"><div class="stat-value" id="pk-boxes">0</div><div class="stat-label">Bundles</div></div>
-        </div>
-    </div>
-</div>
-
-<div class="kpi-grid">
-    <div class="kpi-card"><div class="kpi-val" id="kpi-bundles">0</div><div class="kpi-lbl">Total Bundles Packed</div></div>
-    <div class="kpi-card"><div class="kpi-val" id="kpi-orders">0</div><div class="kpi-lbl">Total Orders Merged</div></div>
-    <div class="kpi-card" style="border-left-color:#F59E0B"><div class="kpi-val" id="kpi-saved" style="color:#F59E0B">0</div><div class="kpi-lbl" style="color:#F59E0B;">🚚 Shipments Saved</div></div>
-    <div class="kpi-card" style="border-left-color:#10B981"><div class="kpi-val" id="kpi-money" style="color:#10B981">£0</div><div class="kpi-lbl" style="color:#10B981;">💰 Total Saved (Est)</div></div>
-</div>
-
-<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888;">AI Calculating Savings & Merging Data...</p></div>
-
-<div id="content" style="display:none;">
-    <table>
-        <thead>
-            <tr>
-                <th>Timeline & Source</th>
-                <th>Client Info</th>
-                <th>Master Box Analytics</th>
-                <th>📦 The Box Breakdown <small style="color:#555;font-size:9px;">(click order for journey)</small></th>
-            </tr>
-        </thead>
-        <tbody id="tb"></tbody>
-    </table>
-</div>
-
-<!-- JOURNEY MODAL -->
-<div class="modal-overlay" id="journeyModal" onclick="closeModal(event)">
-    <div class="modal">
-        <button class="modal-close" onclick="closeModalDirect()">✕</button>
-        <div id="modalBody"><div class="modal-loader"></div></div>
-    </div>
-</div>
-
-<script>
-let allBundles = [];
-
-function statusPill(status) {
-    if (!status || status === '—') return '';
-    const s = status.toLowerCase();
-    let bg='rgba(255,255,255,0.05)', color='#555';
-    if (s.includes('deliver'))  { bg='rgba(16,185,129,0.15)';  color='#10B981'; }
-    else if (s.includes('freight'))  { bg='rgba(99,102,241,0.15)';  color='#818cf8'; }
-    else if (s.includes('courier'))  { bg='rgba(139,92,246,0.15)';  color='#a78bfa'; }
-    else if (s.includes('cancel'))   { bg='rgba(239,68,68,0.15)';   color='#f87171'; }
-    else if (s.includes('qc'))       { bg='rgba(245,158,11,0.15)';  color='#fbbf24'; }
-    else if (s.includes('hand'))     { bg='rgba(59,130,246,0.15)';  color='#60a5fa'; }
-    else if (s.includes('pending'))  { bg='rgba(245,158,11,0.12)';  color='#f59e0b'; }
-    return `<span class="status-pill" style="background:${bg};color:${color}">📡 ${status}</span>`;
-}
-
-async function loadBundles() {
-    document.getElementById('content').style.display = 'none';
-    document.getElementById('loading').style.display = 'block';
-    try {
-        const r = await fetch('/api/nexus/bundling_data');
-        const d = await r.json();
-        allBundles = d.bundles || [];
-        let s = d.source_stats || {};
-        document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
-        document.getElementById('kpi-orders').innerText  = d.kpi?.total_orders_bundled || 0;
-        document.getElementById('kpi-saved').innerText   = d.kpi?.saved_shipments || 0;
-        let money = d.kpi?.total_savings_gbp || 0;
-        document.getElementById('kpi-money').innerText = '£' + money.toLocaleString(undefined,{minimumFractionDigits:2});
-        document.getElementById('qc-orders').innerText = s['ECL QC Center']?.orders || 0;
-        document.getElementById('qc-boxes').innerText  = s['ECL QC Center']?.boxes  || 0;
-        document.getElementById('pk-orders').innerText = s['PK Zone']?.orders || 0;
-        document.getElementById('pk-boxes').innerText  = s['PK Zone']?.boxes  || 0;
-        applyFilters();
-    } catch(e) {
-        console.error(e);
-        document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data. Check console for details.</div>';
-    }
-}
-
-function applyFilters() {
-    const search = document.getElementById('searchInput').value.toLowerCase().trim();
-    const from   = document.getElementById('dateFrom').value;
-    const to     = document.getElementById('dateTo').value;
-    const source = document.getElementById('sourceSelect').value;
-    let filtered = allBundles.filter(b => {
-        if (source !== 'all' && b.source !== source) return false;
-        if (from && b.date_std < from) return false;
-        if (to   && b.date_std > to)   return false;
-        if (search) {
-            const mo = b.orders.some(o => o.order_id.toLowerCase().includes(search));
-            const mc = b.customer && b.customer.toLowerCase().includes(search);
-            return mo || mc;
-        }
-        return true;
-    });
-    renderTable(filtered);
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('content').style.display = 'block';
-}
-
-function renderTable(bundles) {
-    let h = '';
-    if (!bundles.length) {
-        h = '<tr><td colspan="4" style="text-align:center;padding:60px;color:#666;font-weight:bold;">No Bundled Orders Found.</td></tr>';
-    } else {
-        bundles.forEach(b => {
-            let items = b.orders.map(o => {
-                let shortTitle = o.title && o.title.length > 40 ? o.title.substring(0,40)+'...' : (o.title || '');
-                return `
-                <div class="bundle-item">
-                    <div>
-                        <span class="order-link" onclick="openJourney('${o.order_id}')">${o.order_id} <span style="font-size:10px">▼</span></span>
-                        ${statusPill(o.status)}
-                        <div style="font-size:10px;color:#666;margin-top:2px;">Wt: ${o.weight} kg</div>
-                    </div>
-                    <div class="title-preview">${shortTitle}</div>
-                    <div style="font-weight:800;text-align:right;">${o.item_count} pieces</div>
-                </div>`;
-            }).join('');
-            let savStr   = (b.savings_gbp||0).toFixed(2);
-            let actualWt = b.bundle_weight_kg||0;
-            let billedWt = Math.max(Math.ceil(actualWt),1);
-            h += `<tr>
-                <td><b>${b.date||''}</b><br><span style="color:#888;font-size:10px;">${b.source||''}</span></td>
-                <td><b>${b.customer||''}</b><br><span style="color:#666;font-size:11px;">${b.vendor||''}</span><br><span style="color:#666;font-size:11px;">${b.country||''}</span></td>
-                <td>
-                    <div style="background:#111;padding:8px;border-radius:6px;border:1px solid #222;">
-                        <small style="color:#888">TID:</small> <span style="font-family:monospace;font-weight:800;">${b.tid}</span><br>
-                        <small style="color:#888">BOX ID:</small> <b style="color:#10B981">${b.boxes_val}</b>
-                    </div>
-                    <div style="margin-top:8px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);padding:8px;border-radius:6px;">
-                        <div style="font-size:11px;color:#888;display:flex;justify-content:space-between;margin-bottom:4px;"><span>Total Wt:</span><b>${actualWt} kg</b></div>
-                        <div style="font-size:11px;color:#888;display:flex;justify-content:space-between;margin-bottom:4px;"><span>Billed Wt:</span><b>${billedWt} kg</b></div>
-                        <div style="font-size:13px;color:#10B981;display:flex;justify-content:space-between;font-weight:800;"><span>💰 Saved:</span><span>£${savStr}</span></div>
-                    </div>
-                </td>
-                <td><div class="bundle-box">${items}</div></td>
-            </tr>`;
-        });
-    }
-    document.getElementById('tb').innerHTML = h;
-}
-
-async function openJourney(orderId) {
-    document.getElementById('journeyModal').classList.add('open');
-    document.getElementById('modalBody').innerHTML = '<div class="modal-loader"></div><p style="text-align:center;color:#666;font-size:13px;">Fetching order journey...</p>';
-    try {
-        const r = await fetch('/api/nexus/order_journey/' + encodeURIComponent(orderId));
-        const d = await r.json();
-        if (!d.success) {
-            document.getElementById('modalBody').innerHTML = `<div style="text-align:center;padding:30px;"><div style="font-size:40px;margin-bottom:12px;">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;">Order Not Found</div><div style="font-size:13px;color:#666;">${d.message}</div></div>`;
-            return;
-        }
-        const tl = d.timeline, km = d.key_metrics, steps = d.step_metrics || [];
-        function mColor(val) {
-            if (!val||val==='N/A') return 'na';
-            const n = parseFloat(val);
-            if (isNaN(n)) return '';
-            if (n<=1) return '';
-            if (n<=3) return 'warn';
-            return 'danger';
-        }
-        let cb = d.is_cancelled ? `<div class="cancelled-banner">⚠️ This order was CANCELLED on ${tl.cancelled_at||'N/A'}</div>` : '';
-        function tlItem(label,val,type) {
-            let dc=val?'done':'pending', vc=val?'':'pending-val';
-            if(type==='cancelled'){dc=val?'cancelled':'pending';vc=val?'cancelled-val':'pending-val';}
-            return `<div class="tl-item"><div class="tl-dot ${dc}"></div><div class="tl-label">${label}</div><div class="tl-value ${vc}">${val||'— Not yet'}</div></div>`;
-        }
-        
-        let stepHtml = '';
-        if (steps.length) {
-            stepHtml = '<div class="section-hd">⏱️ Step Durations</div><div class="step-metrics-grid">';
-            steps.forEach(s => {
-                let valClass = s.duration ? '' : 'missing';
-                stepHtml += `<div class="step-card"><div class="step-label">${s.label}</div><div class="step-val ${valClass}">${s.duration || '—'}</div></div>`;
-            });
-            stepHtml += '</div>';
-        }
-
-        document.getElementById('modalBody').innerHTML = `
-            <div class="modal-title">📦 Order Journey</div>
-            <div style="font-family:monospace;color:#10B981;font-size:13px;margin-bottom:20px;">${d.order_id}</div>
-            ${cb}
-            <div class="section-hd">⭐ Key Metrics</div>
-            <div class="metrics-grid">
-                <div class="metric-card"><div class="metric-val ${mColor(km.qc_to_handover)}">${km.qc_to_handover||'N/A'}</div><div class="metric-lbl">QC Approved → Handover</div></div>
-                <div class="metric-card"><div class="metric-val ${mColor(km.handover_to_freight)}">${km.handover_to_freight||'N/A'}</div><div class="metric-lbl">Handover → Freight</div></div>
-                <div class="metric-card"><div class="metric-val ${mColor(km.total_journey)}">${km.total_journey||'N/A'}</div><div class="metric-lbl">Total Journey</div></div>
-            </div>
-            ${stepHtml}
-            <div class="section-hd">🗺️ Full Timeline</div>
-            <div class="timeline">
-                ${tlItem('📋 Order Created',tl.created_at,'normal')}
-                ${tlItem('✅ Accepted',tl.accepted_at,'normal')}
-                ${tlItem('🚚 Pickup Ready',tl.pickup_ready_at,'normal')}
-                ${tlItem('🔍 QC Pending',tl.qc_pending_at,'normal')}
-                ${tlItem('✅ QC Approved',tl.qc_approved_at,'normal')}
-                ${tlItem('🤝 Handed to Logistics Partner',tl.handedover_at,'normal')}
-                ${tlItem('✈️ Freight',tl.freight_at,'normal')}
-                ${tlItem('🚁 Courier Assigned',tl.courier_at,'normal')}
-                ${tlItem('📬 Delivered',tl.delivered_at,'normal')}
-                ${tl.cancelled_at?tlItem('❌ Cancelled',tl.cancelled_at,'cancelled'):''}
-            </div>`;
-    } catch(e) {
-        document.getElementById('modalBody').innerHTML = `<div style="color:#EF4444;text-align:center;padding:30px;">Error: ${e.message}</div>`;
-    }
-}
-function closeModal(e) { if(e.target===document.getElementById('journeyModal')) closeModalDirect(); }
-function closeModalDirect() { document.getElementById('journeyModal').classList.remove('open'); }
-document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModalDirect(); });
-window.onload = loadBundles;
-document.getElementById('searchInput').addEventListener('keyup',e=>{ if(e.key==='Enter') applyFilters(); });
-</script>
-</body>
-</html>'''
-
-# ==============================================================================
-# STATUS INTELLIGENCE HTML (unchanged)
-# ==============================================================================
-
-STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>📡 Status Intelligence</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#6366f1;--muted:#71717A;--input-bg:#050505;}
+        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#f97316;--muted:#71717A;--input-bg:#050505;}
         body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
         .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
-        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;}
+        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
         .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
         .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
         .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-        .filter-bar{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:24px;}
-        .filter-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;}
-        .filter-row:last-child{margin-bottom:0;}
+        .control-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px;display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;}
         .f-group{display:flex;flex-direction:column;gap:5px;}
-        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
-        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:7px;font-family:'Inter';outline:none;font-size:13px;}
-        .f-input:focus{border-color:var(--accent);}
-        .f-grow{flex:1;min-width:200px;}
-        .quick-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
-        .qbtn{padding:6px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#666;font-size:12px;font-family:'Inter';font-weight:600;cursor:pointer;transition:all 0.2s;}
-        .qbtn:hover{background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#818cf8;}
-        .qbtn.active{background:rgba(99,102,241,0.18);border-color:rgba(99,102,241,0.5);color:#818cf8;}
-        .apply-btn{padding:8px 20px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;border-radius:7px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter';}
-        .apply-btn:hover{opacity:0.85;}
-        .clear-btn{padding:8px 16px;background:rgba(255,255,255,0.05);border:1px solid #333;border-radius:7px;color:#888;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter';}
-        .clear-btn:hover{background:rgba(239,68,68,0.1);border-color:#ef4444;color:#ef4444;}
-        .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
-        .sum-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;border-left:3px solid var(--accent);}
-        .sum-val{font-size:28px;font-weight:900;color:#fff;margin-bottom:2px;}
-        .sum-lbl{font-size:11px;color:#666;text-transform:uppercase;font-weight:700;}
-        .status-breakdown{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:24px;}
-        .sb-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;}
-        .sb-pills{display:flex;flex-wrap:wrap;gap:8px;}
-        .sb-pill{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:all 0.2s;}
-        .sb-pill:hover{transform:translateY(-1px);}
-        .sb-pill.selected{box-shadow:0 0 0 2px #fff;}
-        .result-count{font-size:13px;color:#666;margin-bottom:12px;}
-        .result-count b{color:#fff;}
-        table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;border:1px solid var(--border);overflow:hidden;}
-        th{background:#050505;padding:12px 16px;font-size:10px;color:#666;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;letter-spacing:0.5px;}
-        td{padding:12px 16px;border-bottom:1px solid #111;vertical-align:middle;font-size:13px;}
-        tr:hover td{background:#0d0d0d;}
-        .order-id{font-family:monospace;font-weight:800;color:#a5b4fc;}
-        .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;}
-        .src-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:#888;}
-        .loader{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:40px auto;}
-        @keyframes spin{to{transform:rotate(360deg);}}
-        .empty{text-align:center;padding:60px;color:#444;}
-        .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
-    </style>
-</head>
-<body>
-<div class="header">
-    <div>
-        <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-1px;">📡 Status Intelligence</h1>
-        <p style="color:#888;margin-top:4px;">Filter orders by date range & latest status</p>
-    </div>
-    <div style="display:flex;gap:12px;">
-        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
-        <button onclick="loadData()" class="btn-top" style="background:#6366f1;color:#fff;">🔄 Refresh</button>
-    </div>
-</div>
-
-<div class="nav-tabs">
-    <a href="/bundling" class="nav-tab">📦 Bundle Intelligence</a>
-    <a href="/bundling/status" class="nav-tab active">📡 Status Intelligence</a>
-    <a href="/bundling/summary" class="nav-tab">📊 Summary</a>
-</div>
-
-<div class="filter-bar">
-    <div class="filter-row">
-        <div class="f-group" style="flex:1">
-            <div class="f-label">⚡ Quick Select</div>
-            <div class="quick-btns">
-                <button class="qbtn" onclick="quickDate(this,'today')">Today</button>
-                <button class="qbtn" onclick="quickDate(this,'7d')">Last 7 Days</button>
-                <button class="qbtn" onclick="quickDate(this,'15d')">Last 15 Days</button>
-                <button class="qbtn" onclick="quickDate(this,'30d')">Last 30 Days</button>
-                <button class="qbtn" onclick="quickDate(this,'week')">This Week</button>
-                <button class="qbtn" onclick="quickDate(this,'month')">This Month</button>
-            </div>
-        </div>
-    </div>
-    <div class="filter-row">
-        <div class="f-group">
-            <div class="f-label">📅 From Date</div>
-            <input type="date" id="dateFrom" class="f-input">
-        </div>
-        <div class="f-group">
-            <div class="f-label">📅 To Date</div>
-            <input type="date" id="dateTo" class="f-input">
-        </div>
-        <div class="f-group f-grow">
-            <div class="f-label">🔍 Search Order / Customer</div>
-            <input type="text" id="searchInput" class="f-input" placeholder="Order ID or customer name...">
-        </div>
-        <div class="f-group">
-            <div class="f-label">🏷️ Source</div>
-            <select id="sourceSelect" class="f-input">
-                <option value="all">All Sources</option>
-                <option value="ECL QC Center">ECL QC Center</option>
-                <option value="ECL Zone">ECL Zone</option>
-                <option value="GE Zone">GE Zone</option>
-            </select>
-        </div>
-        <div class="f-group" style="flex-direction:row;gap:8px;align-items:flex-end;">
-            <button class="clear-btn" onclick="clearFilters()">Clear</button>
-            <button class="apply-btn" onclick="applyFilters()">Apply Filters</button>
-        </div>
-    </div>
-</div>
-
-<div class="status-breakdown" id="statusBreakdown" style="display:none;">
-    <div class="sb-title">📊 Filter by Status — click to select/deselect</div>
-    <div class="sb-pills" id="statusPills"></div>
-</div>
-
-<div class="summary-grid">
-    <div class="sum-card"><div class="sum-val" id="s-total">0</div><div class="sum-lbl">Total Orders</div></div>
-    <div class="sum-card" style="border-left-color:#10B981"><div class="sum-val" id="s-delivered" style="color:#10B981">0</div><div class="sum-lbl">Delivered</div></div>
-    <div class="sum-card" style="border-left-color:#F59E0B"><div class="sum-val" id="s-transit" style="color:#F59E0B">0</div><div class="sum-lbl">In Transit / Freight</div></div>
-    <div class="sum-card" style="border-left-color:#EF4444"><div class="sum-val" id="s-cancelled" style="color:#EF4444">0</div><div class="sum-lbl">Cancelled</div></div>
-</div>
-
-<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#666;font-size:13px;">Loading orders & statuses...</p></div>
-
-<div id="content" style="display:none;">
-    <div class="result-count" id="resultCount"></div>
-    <table>
-        <thead>
-            <tr>
-                <th>#</th>
-                <th>Order ID</th>
-                <th>Date</th>
-                <th>Latest Status</th>
-                <th>Source</th>
-                <th>Customer</th>
-                <th>Country</th>
-                <th>Weight</th>
-            </tr>
-        </thead>
-        <tbody id="tb"></tbody>
-    </table>
-</div>
-
-<script>
-let allOrders = [];
-let selectedStatus = null;
-
-function getStatusStyle(status) {
-    if (!status || status === '—') return {bg:'rgba(255,255,255,0.05)',color:'#555'};
-    const s = status.toLowerCase();
-    if (s.includes('deliver'))  return {bg:'rgba(16,185,129,0.15)',  color:'#10B981'};
-    if (s.includes('freight'))  return {bg:'rgba(99,102,241,0.15)',  color:'#818cf8'};
-    if (s.includes('courier'))  return {bg:'rgba(139,92,246,0.15)',  color:'#a78bfa'};
-    if (s.includes('cancel'))   return {bg:'rgba(239,68,68,0.15)',   color:'#f87171'};
-    if (s.includes('qc'))       return {bg:'rgba(245,158,11,0.15)',  color:'#fbbf24'};
-    if (s.includes('hand'))     return {bg:'rgba(59,130,246,0.15)',  color:'#60a5fa'};
-    if (s.includes('pending'))  return {bg:'rgba(245,158,11,0.12)',  color:'#f59e0b'};
-    return {bg:'rgba(255,255,255,0.06)', color:'#94a3b8'};
-}
-
-function fmtIso(d){ return d.toISOString().split('T')[0]; }
-function getMonday(d){ const day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1); return new Date(d.setDate(diff)); }
-
-function quickDate(btn, period) {
-    document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    const today = new Date(); today.setHours(0,0,0,0);
-    let from, to = new Date(today);
-    switch(period){
-        case 'today': from = new Date(today); break;
-        case '7d':    from = new Date(today); from.setDate(from.getDate()-6); break;
-        case '15d':   from = new Date(today); from.setDate(from.getDate()-14); break;
-        case '30d':   from = new Date(today); from.setDate(from.getDate()-29); break;
-        case 'week':  from = getMonday(new Date(today)); to = new Date(from); to.setDate(to.getDate()+6); break;
-        case 'month': from = new Date(today.getFullYear(),today.getMonth(),1);
-                      to   = new Date(today.getFullYear(),today.getMonth()+1,0); break;
-    }
-    document.getElementById('dateFrom').value = fmtIso(from);
-    document.getElementById('dateTo').value   = fmtIso(to);
-}
-
-function clearFilters() {
-    document.getElementById('dateFrom').value    = '';
-    document.getElementById('dateTo').value      = '';
-    document.getElementById('searchInput').value = '';
-    document.getElementById('sourceSelect').value = 'all';
-    document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
-    selectedStatus = null;
-    document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
-    applyFilters();
-}
-
-function selectStatus(pill, status) {
-    if (selectedStatus === status) {
-        selectedStatus = null;
-        document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
-    } else {
-        selectedStatus = status;
-        document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
-        pill.classList.add('selected');
-    }
-    applyFilters();
-}
-
-function buildStatusPills(orders) {
-    const counts = {};
-    orders.forEach(o => { counts[o.status] = (counts[o.status]||0)+1; });
-    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
-    let html = '';
-    sorted.forEach(([status, count]) => {
-        const st = getStatusStyle(status);
-        const esc = status.replace(/'/g,"\\'");
-        html += `<span class="sb-pill" onclick="selectStatus(this,'${esc}')"
-            style="background:${st.bg};color:${st.color};border-color:${st.color}33">
-            ${status} <b style="margin-left:4px;opacity:0.8">${count}</b>
-        </span>`;
-    });
-    document.getElementById('statusPills').innerHTML = html;
-    document.getElementById('statusBreakdown').style.display = sorted.length ? 'block' : 'none';
-}
-
-function applyFilters() {
-    const search = document.getElementById('searchInput').value.toLowerCase().trim();
-    const from   = document.getElementById('dateFrom').value;
-    const to     = document.getElementById('dateTo').value;
-    const source = document.getElementById('sourceSelect').value;
-    let filtered = allOrders.filter(o => {
-        if (source !== 'all' && o.source !== source) return false;
-        if (from && o.date_std < from) return false;
-        if (to   && o.date_std > to)   return false;
-        if (selectedStatus && o.status !== selectedStatus) return false;
-        if (search) {
-            return o.order_id.toLowerCase().includes(search) ||
-                   (o.customer && o.customer.toLowerCase().includes(search));
-        }
-        return true;
-    });
-    const delivered = filtered.filter(o=>o.status.toLowerCase().includes('deliver')).length;
-    const transit   = filtered.filter(o=>o.status.toLowerCase().includes('freight')||o.status.toLowerCase().includes('courier')).length;
-    const cancelled = filtered.filter(o=>o.status.toLowerCase().includes('cancel')).length;
-    document.getElementById('s-total').innerText     = filtered.length.toLocaleString();
-    document.getElementById('s-delivered').innerText = delivered.toLocaleString();
-    document.getElementById('s-transit').innerText   = transit.toLocaleString();
-    document.getElementById('s-cancelled').innerText = cancelled.toLocaleString();
-    buildStatusPills(filtered);
-    document.getElementById('resultCount').innerHTML = `Showing <b>${filtered.length.toLocaleString()}</b> of <b>${allOrders.length.toLocaleString()}</b> orders`;
-    renderTable(filtered);
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('content').style.display = 'block';
-}
-
-function renderTable(orders) {
-    if (!orders.length) {
-        document.getElementById('tb').innerHTML = `<tr><td colspan="8"><div class="empty"><div style="font-size:40px;margin-bottom:12px;">🔍</div><div>No orders found</div></div></td></tr>`;
-        return;
-    }
-    let h = '';
-    orders.forEach((o,i) => {
-        const st = getStatusStyle(o.status);
-        h += `<tr>
-            <td style="color:#555;font-size:11px;">${i+1}</td>
-            <td><span class="order-id">${o.order_id}</span></td>
-            <td style="color:#888;white-space:nowrap;">${o.date||'—'}</td>
-            <td><span class="status-pill" style="background:${st.bg};color:${st.color}">${o.status}</span></td>
-            <td><span class="src-badge">${o.source}</span></td>
-            <td style="color:#ccc;">${o.customer||'—'}</td>
-            <td style="color:#888;">${o.country||'—'}</td>
-            <td style="color:#888;">${o.weight||'—'} kg</td>
-        </tr>`;
-    });
-    document.getElementById('tb').innerHTML = h;
-}
-
-async function loadData() {
-    document.getElementById('content').style.display = 'none';
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('statusBreakdown').style.display = 'none';
-    try {
-        const r = await fetch('/api/nexus/status_intelligence');
-        const d = await r.json();
-        allOrders = d.orders || [];
-        applyFilters();
-    } catch(e) {
-        document.getElementById('loading').innerHTML = `<div style="color:#EF4444;text-align:center;padding:40px;">Error: ${e.message}</div>`;
-    }
-}
-
-document.getElementById('searchInput').addEventListener('keyup',e=>{ if(e.key==='Enter') applyFilters(); });
-window.onload = loadData;
-</script>
-</body>
-</html>'''
-
-# ==============================================================================
-# NEW SUMMARY HTML
-# ==============================================================================
-
-SUMMARY_HTML = '''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>📊 Summary Intelligence</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#8b5cf6;--muted:#71717A;--input-bg:#050505;}
-        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
-        .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
-        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;}
-        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
-        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
-        .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-        .summary-section{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:24px;}
-        .section-title{font-size:18px;font-weight:800;margin-bottom:16px;color:var(--accent);}
-        .filter-row{display:flex;gap:15px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px;}
-        .f-group{display:flex;flex-direction:column;gap:5px;}
-        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
-        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';outline:none;min-width:150px;}
-        .f-input:focus{border-color:var(--accent);}
-        .btn-apply{background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
-        .btn-apply:hover{opacity:0.8;}
+        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;}
+        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';}
+        .btn{background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
+        .btn:hover{opacity:0.8;}
         table{width:100%;border-collapse:collapse;background:#111;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
-        th{background:#050505;padding:12px;font-size:11px;color:#888;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;}
-        td{padding:12px;border-bottom:1px solid #222;color:#ccc;font-size:13px;}
+        th{background:#050505;padding:12px;font-size:11px;color:#888;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:center;}
+        td{padding:12px;border-bottom:1px solid #222;color:#ccc;text-align:center;}
+        .region-name{font-weight:700;color:#f97316;text-align:left;}
+        .totals-row{background:#1a1a1a;font-weight:700;}
         .loader{width:30px;height:30px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto;}
         @keyframes spin{to{transform:rotate(360deg);}}
-        .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
-        .no-data{text-align:center;padding:40px;color:#666;font-size:14px;}
     </style>
 </head>
 <body>
 <div class="header">
     <div>
-        <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-1px;">📊 Summary Intelligence</h1>
-        <p style="color:#888;margin-top:4px;">Daily, weekly & monthly aggregated reports</p>
+        <h1 style="margin:0;font-size:26px;">📊 Region Weekly Matrix</h1>
+        <p style="color:#888;">Order count per day (Mon–Sun) by region</p>
     </div>
-    <div style="display:flex;gap:12px;">
-        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
-        <button onclick="location.reload()" class="btn-top" style="background:#8b5cf6;color:#fff;">🔄 Refresh</button>
-    </div>
+    <a href="/" class="nav-tab" style="background:#1A1A1A;">🏠 Main Dash</a>
 </div>
 
 <div class="nav-tabs">
-    <a href="/bundling" class="nav-tab">📦 Bundle Intelligence</a>
-    <a href="/bundling/status" class="nav-tab">📡 Status Intelligence</a>
-    <a href="/bundling/summary" class="nav-tab active">📊 Summary</a>
+    <a href="/bundling" class="nav-tab">📦 Bundle</a>
+    <a href="/bundling/status" class="nav-tab">📡 Status</a>
+    <a href="/bundling/summary" class="nav-tab">📅 Summary</a>
+    <a href="/bundling/region_weekly" class="nav-tab active">📊 Region Weekly</a>
+    <a href="/bundling/region_summary" class="nav-tab">🌍 Region Summary</a>
 </div>
 
-<!-- DAILY SECTION -->
-<div class="summary-section">
-    <div class="section-title">📅 Daily Summary</div>
-    <div class="filter-row">
-        <div class="f-group">
-            <div class="f-label">From Date</div>
-            <input type="date" id="dailyFrom" class="f-input" value="2025-01-01">
-        </div>
-        <div class="f-group">
-            <div class="f-label">To Date</div>
-            <input type="date" id="dailyTo" class="f-input" value="2025-12-31">
-        </div>
-        <button class="btn-apply" onclick="loadSummary('daily')">Apply</button>
+<div class="control-panel">
+    <div class="f-group">
+        <div class="f-label">Week Starting (Monday)</div>
+        <input type="date" id="weekStart" class="f-input" value="">
     </div>
-    <div id="dailyLoading" style="display:none;"><div class="loader"></div></div>
-    <div id="dailyTable"></div>
+    <button class="btn" onclick="loadWeekly()">Load Week</button>
 </div>
 
-<!-- WEEKLY SECTION -->
-<div class="summary-section">
-    <div class="section-title">📆 Weekly Summary (Mon–Sun)</div>
-    <div class="filter-row">
-        <div class="f-group">
-            <div class="f-label">From Date</div>
-            <input type="date" id="weeklyFrom" class="f-input" value="2025-01-01">
-        </div>
-        <div class="f-group">
-            <div class="f-label">To Date</div>
-            <input type="date" id="weeklyTo" class="f-input" value="2025-12-31">
-        </div>
-        <button class="btn-apply" onclick="loadSummary('weekly')">Apply</button>
-    </div>
-    <div id="weeklyLoading" style="display:none;"><div class="loader"></div></div>
-    <div id="weeklyTable"></div>
-</div>
-
-<!-- MONTHLY SECTION -->
-<div class="summary-section">
-    <div class="section-title">📆 Monthly Summary</div>
-    <div class="filter-row">
-        <div class="f-group">
-            <div class="f-label">From Date</div>
-            <input type="date" id="monthlyFrom" class="f-input" value="2025-01-01">
-        </div>
-        <div class="f-group">
-            <div class="f-label">To Date</div>
-            <input type="date" id="monthlyTo" class="f-input" value="2025-12-31">
-        </div>
-        <button class="btn-apply" onclick="loadSummary('monthly')">Apply</button>
-    </div>
-    <div id="monthlyLoading" style="display:none;"><div class="loader"></div></div>
-    <div id="monthlyTable"></div>
-</div>
+<div id="loading" style="display:none;"><div class="loader"></div></div>
+<div id="tableContainer"></div>
 
 <script>
-async function loadSummary(period) {
-    const fromId = period + 'From';
-    const toId = period + 'To';
-    const from = document.getElementById(fromId).value;
-    const to = document.getElementById(toId).value;
-    if (!from || !to) {
-        alert('Please select both dates');
-        return;
-    }
-    const loadingId = period + 'Loading';
-    const tableId = period + 'Table';
-    document.getElementById(loadingId).style.display = 'block';
-    document.getElementById(tableId).innerHTML = '';
-    try {
-        const url = `/api/nexus/summary_data?period=${period}&start_date=${from}&end_date=${to}`;
-        const r = await fetch(url);
-        const d = await r.json();
-        document.getElementById(loadingId).style.display = 'none';
-        if (!d.success) {
-            document.getElementById(tableId).innerHTML = `<div class="no-data">${d.message || 'Error loading data'}</div>`;
-            return;
-        }
-        if (!d.data || d.data.length === 0) {
-            document.getElementById(tableId).innerHTML = '<div class="no-data">No data for selected range</div>';
-            return;
-        }
-        let html = '<table><thead><tr>';
-        if (period === 'daily') {
-            html += '<th>Date</th><th>Bundles</th><th>Orders</th><th>Total Weight (kg)</th>';
-        } else if (period === 'weekly') {
-            html += '<th>Week Start (Mon)</th><th>Week End (Sun)</th><th>Bundles</th><th>Orders</th><th>Total Weight (kg)</th>';
-        } else if (period === 'monthly') {
-            html += '<th>Month</th><th>Bundles</th><th>Orders</th><th>Total Weight (kg)</th>';
-        }
-        html += '</tr></thead><tbody>';
-        d.data.forEach(row => {
-            html += '<tr>';
-            if (period === 'daily') {
-                html += `<td>${row.period}</td><td>${row.bundles}</td><td>${row.orders}</td><td>${row.weight}</td>`;
-            } else if (period === 'weekly') {
-                html += `<td>${row.week_start}</td><td>${row.week_end}</td><td>${row.bundles}</td><td>${row.orders}</td><td>${row.weight}</td>`;
-            } else if (period === 'monthly') {
-                html += `<td>${row.month}</td><td>${row.bundles}</td><td>${row.orders}</td><td>${row.weight}</td>`;
-            }
-            html += '</tr>';
-        });
-        html += '</tbody></table>';
-        document.getElementById(tableId).innerHTML = html;
-    } catch(e) {
-        document.getElementById(loadingId).style.display = 'none';
-        document.getElementById(tableId).innerHTML = `<div class="no-data">Error: ${e.message}</div>`;
-    }
+function getMonday(d) {
+    d = new Date(d);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
 }
 
-// Set default dates to current year
+window.onload = function() {
+    const today = new Date();
+    const monday = getMonday(today);
+    const yyyy = monday.getFullYear();
+    const mm = String(monday.getMonth() + 1).padStart(2, '0');
+    const dd = String(monday.getDate()).padStart(2, '0');
+    document.getElementById('weekStart').value = `${yyyy}-${mm}-${dd}`;
+    loadWeekly();
+}
+
+async function loadWeekly() {
+    const weekStart = document.getElementById('weekStart').value;
+    if (!weekStart) return;
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('tableContainer').innerHTML = '';
+    try {
+        const r = await fetch(`/api/nexus/region_weekly?week_start=${weekStart}`);
+        const d = await r.json();
+        document.getElementById('loading').style.display = 'none';
+        if (!d.success) {
+            document.getElementById('tableContainer').innerHTML = `<div style="color:#EF4444;">${d.message}</div>`;
+            return;
+        }
+        let html = `<div style="margin-bottom:10px;color:#888;">Week: ${d.week_start} to ${d.week_end}</div>`;
+        html += '<table><thead><tr><th>Region</th>';
+        d.days.forEach(day => html += `<th>${day}</th>`);
+        html += '<th>Total</th></tr></thead><tbody>';
+        const regions = d.regions;
+        const totals = d.totals;
+        for (let region in regions) {
+            let counts = regions[region];
+            let rowSum = counts.reduce((a,b)=>a+b,0);
+            html += `<tr><td class="region-name">${region}</td>`;
+            counts.forEach(c => html += `<td>${c}</td>`);
+            html += `<td><b>${rowSum}</b></td></tr>`;
+        }
+        // Totals row
+        html += `<tr class="totals-row"><td>TOTAL</td>`;
+        totals.forEach(t => html += `<td><b>${t}</b></td>`);
+        let grandTotal = totals.reduce((a,b)=>a+b,0);
+        html += `<td><b>${grandTotal}</b></td></tr>`;
+        html += '</tbody></table>';
+        document.getElementById('tableContainer').innerHTML = html;
+    } catch(e) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('tableContainer').innerHTML = `<div style="color:#EF4444;">Error: ${e.message}</div>`;
+    }
+}
+</script>
+</body>
+</html>'''
+
+REGION_SUMMARY_HTML = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>🌍 Region Summary</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#3b82f6;--muted:#71717A;--input-bg:#050505;}
+        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
+        .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
+        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
+        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
+        .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+        .control-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px;display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;}
+        .f-group{display:flex;flex-direction:column;gap:5px;}
+        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;}
+        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';}
+        .btn{background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
+        .btn:hover{opacity:0.8;}
+        table{width:100%;border-collapse:collapse;background:#111;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
+        th{background:#050505;padding:12px;font-size:11px;color:#888;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:left;}
+        td{padding:12px;border-bottom:1px solid #222;color:#ccc;}
+        .totals-row{background:#1a1a1a;font-weight:700;}
+        .loader{width:30px;height:30px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+    </style>
+</head>
+<body>
+<div class="header">
+    <div>
+        <h1 style="margin:0;font-size:26px;">🌍 Region Summary</h1>
+        <p style="color:#888;">Total orders per region for custom date range</p>
+    </div>
+    <a href="/" class="nav-tab" style="background:#1A1A1A;">🏠 Main Dash</a>
+</div>
+
+<div class="nav-tabs">
+    <a href="/bundling" class="nav-tab">📦 Bundle</a>
+    <a href="/bundling/status" class="nav-tab">📡 Status</a>
+    <a href="/bundling/summary" class="nav-tab">📅 Summary</a>
+    <a href="/bundling/region_weekly" class="nav-tab">📊 Region Weekly</a>
+    <a href="/bundling/region_summary" class="nav-tab active">🌍 Region Summary</a>
+</div>
+
+<div class="control-panel">
+    <div class="f-group">
+        <div class="f-label">From Date</div>
+        <input type="date" id="fromDate" class="f-input" value="2025-01-01">
+    </div>
+    <div class="f-group">
+        <div class="f-label">To Date</div>
+        <input type="date" id="toDate" class="f-input" value="2025-12-31">
+    </div>
+    <button class="btn" onclick="loadSummary()">Load</button>
+</div>
+
+<div id="loading" style="display:none;"><div class="loader"></div></div>
+<div id="tableContainer"></div>
+
+<script>
 window.onload = function() {
     const today = new Date();
     const year = today.getFullYear();
-    document.getElementById('dailyFrom').value = year + '-01-01';
-    document.getElementById('dailyTo').value = year + '-12-31';
-    document.getElementById('weeklyFrom').value = year + '-01-01';
-    document.getElementById('weeklyTo').value = year + '-12-31';
-    document.getElementById('monthlyFrom').value = year + '-01-01';
-    document.getElementById('monthlyTo').value = year + '-12-31';
-    loadSummary('daily');
-    loadSummary('weekly');
-    loadSummary('monthly');
+    document.getElementById('fromDate').value = year + '-01-01';
+    document.getElementById('toDate').value = year + '-12-31';
+    loadSummary();
+}
+
+async function loadSummary() {
+    const from = document.getElementById('fromDate').value;
+    const to = document.getElementById('toDate').value;
+    if (!from || !to) return;
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('tableContainer').innerHTML = '';
+    try {
+        const r = await fetch(`/api/nexus/region_summary?start_date=${from}&end_date=${to}`);
+        const d = await r.json();
+        document.getElementById('loading').style.display = 'none';
+        if (!d.success) {
+            document.getElementById('tableContainer').innerHTML = `<div style="color:#EF4444;">${d.message}</div>`;
+            return;
+        }
+        let html = `<div style="margin-bottom:10px;color:#888;">Period: ${d.start_date} to ${d.end_date}</div>`;
+        html += '<table><thead><tr><th>Region</th><th>Order Count</th></tr></thead><tbody>';
+        let total = 0;
+        d.data.forEach(item => {
+            html += `<tr><td>${item.region}</td><td><b>${item.count}</b></td></tr>`;
+            total += item.count;
+        });
+        html += `<tr class="totals-row"><td>TOTAL</td><td><b>${total}</b></td></tr>`;
+        html += '</tbody></table>';
+        document.getElementById('tableContainer').innerHTML = html;
+    } catch(e) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('tableContainer').innerHTML = `<div style="color:#EF4444;">Error: ${e.message}</div>`;
+    }
 }
 </script>
 </body>
