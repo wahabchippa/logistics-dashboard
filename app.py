@@ -1315,8 +1315,6 @@ def logout():
 
 # ===== DASHBOARD =====
 @app.route('/')
-def home():
-    return '<h1>Bundling Tool is Running</h1><p>Go to <a href="/bundling">/bundling</a></p>'
 @login_required
 def dashboard():
     role = session.get('role', 'guest')
