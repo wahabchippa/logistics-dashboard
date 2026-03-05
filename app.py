@@ -4343,9 +4343,8 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - ULTIMATE FIX (DEADLOCK REMOVED & SAFE)
+# 📦 BUNDLING, STATUS & SUMMARY HUB - (SAFE ADD-ON, NO ROOT ROUTE INTERFERENCE)
 # ==============================================================================
-from flask import Flask, jsonify, request, session, render_template_string
 import urllib.request
 import csv
 import re
@@ -4354,11 +4353,9 @@ import time
 import math
 import concurrent.futures
 from datetime import datetime, timedelta
+from flask import jsonify, request, session, render_template_string
 
-app = Flask(__name__)
-app.secret_key = 'your-secret-key-here-change-this'
-
-# ---------- Configuration ----------
+# ---------- Configuration & Caches ----------
 _bundling_cache = {'data': None, 'time': 0}
 _journey_cache  = {'data': None, 'time': 0}
 _status_cache   = {'data': None, 'time': 0}
@@ -4418,12 +4415,12 @@ def fmt_journey_date(dt):
     if not dt: return None
     return dt.strftime('%d %b %Y, %H:%M')
 
-# ---------- Data Fetchers (Safe Timeouts) ----------
+# ---------- Data Fetchers ----------
 def fetch_rates_sheet(ctx):
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
             rates_map = {}
             for row in data[1:]:
@@ -4447,7 +4444,7 @@ def fetch_status_sheet_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(STATUS_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
         status_map = {}
         for row in data[1:]:
@@ -4473,7 +4470,7 @@ def fetch_journey_sheet_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(JOURNEY_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
         journey_map = {}
         for row in data[1:]:
@@ -4504,7 +4501,7 @@ def fetch_journey_sheet_data():
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
             processed = []
             last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
@@ -4525,14 +4522,11 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
                 if not current_order or not re.search(r'\d', current_order): continue
                 if current_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
 
-                # 🔥 TRACKING ID FILTER (PREVENTS 51221603582666 KG BUG) 🔥
-                if len(raw_weight) > 8 or re.search(r'[A-Za-z]{2,}', raw_weight):
-                    raw_weight = "0"
-                else:
-                    try:
-                        wt_check = float(re.sub(r'[^0-9.]', '', raw_weight))
-                        if wt_check > 200: raw_weight = "0"
-                    except: raw_weight = "0"
+                # 🔥 SAFETY NET: 500KG TRACKING ID FILTER 🔥
+                try:
+                    wt_check = float(re.sub(r'[^0-9.]', '', raw_weight))
+                    if wt_check > 500: raw_weight = "0"
+                except: raw_weight = "0"
 
                 date_val     = str(p[col['d']]).strip()
                 vendor_val   = str(p[col['v']]).strip()
@@ -4571,7 +4565,7 @@ def fetch_bundling_standalone_data():
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
 
-    # 🚨 EXACT ALPHABET MAPPING (GE Zone Weight = 6) & START_IDX = 1 🚨
+    # 🚨 EXACT ALPHABET MAPPING (GE Zone Weight = 6) 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -4607,16 +4601,14 @@ def fetch_bundling_standalone_data():
             except Exception as e:
                 pass
 
-    # CACHE FALLBACK LOGIC
-    has_real_data = sum(1 for k, v in res.items() if k != "RATES" and isinstance(v, list) and len(v) > 0) > 0
-    if has_real_data:
+    # Ensure we don't cache 0 data if sheet fails to load
+    has_data = any(len(v) > 0 for k, v in res.items() if k != "RATES" and isinstance(v, list))
+    if has_data:
         _bundling_cache['data'] = res
         _bundling_cache['time'] = now
         return res
-    elif _bundling_cache['data']:
-        return _bundling_cache['data']
-    else:
-        return res
+    
+    return _bundling_cache['data'] or res
 
 # ---------- API Endpoints ----------
 @app.route('/api/nexus/all_journey')
@@ -4692,7 +4684,6 @@ def api_order_journey(order_id):
 
 @app.route('/api/nexus/status_intelligence')
 def api_status_intelligence():
-    # DEADLOCK REMOVED: Sequential calls instead of Nested ThreadPools
     sheets_data = fetch_bundling_standalone_data()
     status_map = fetch_status_sheet_data()
 
@@ -4715,7 +4706,6 @@ def api_status_intelligence():
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
 def api_nexus_bundling_data():
-    # DEADLOCK REMOVED: Sequential calls instead of Nested ThreadPools
     sheets_data = fetch_bundling_standalone_data()
     status_map = fetch_status_sheet_data()
 
@@ -4757,7 +4747,6 @@ def api_nexus_bundling_data():
             try:
                 wt_str = re.sub(r'[^0-9.]','',str(o['weight']))
                 wt = float(wt_str) if wt_str else 0.0
-                if wt > 500: wt = 0.0  
             except: wt = 0.0
                 
             bundle_weight_sum += wt
@@ -4774,11 +4763,6 @@ def api_nexus_bundling_data():
     return jsonify({"success": True, "kpi": {"total_bundles": tot_bundles, "total_orders_bundled": tot_orders, "saved_shipments": (tot_orders - tot_bundles if tot_bundles > 0 else 0), "total_savings_gbp": round(total_savings_gbp, 2)}, "source_stats": source_stats, "bundles": bundles_list})
 
 # ---------- View Routes ----------
-@app.route('/')
-def home_dashboard():
-    # Returns a safe generic message just in case, but you can override this safely in your main app!
-    return "<h1>Main Dashboard</h1><p>Tool is running properly.</p>"
-
 @app.route('/bundling')
 def bundling_dashboard_view():
     return render_template_string(BUNDLING_HTML)
@@ -5004,7 +4988,7 @@ async function loadBundles(forceRefresh = false) {
         renderData(d);
     } catch(e) {
         console.error(e);
-        document.getElementById('loading').innerHTML = '<div style="color:#F59E0B; font-weight:bold; margin-top:20px; font-size:18px;">⚠️ Google Sheets Timeout</div><div style="font-size:13px; color:#888; margin-top:10px;">The data is too large for a single fetch. Please try again.</div><button onclick="refreshData()" class="btn-apply" style="margin-top:15px;">Retry Fetch</button>';
+        document.getElementById('loading').innerHTML = '<div style="color:#EF4444; font-weight:bold; margin-top:20px; font-size:18px;">🚨 Google Sheets Timeout</div><div style="font-size:13px; color:#888; margin-top:10px;">Please click "Refresh Data" again.</div>';
     }
 }
 function renderData(d) {
@@ -5366,7 +5350,7 @@ async function loadData(forceRefresh = false) {
         applyFilters();
     } catch(e) {
         console.error(e);
-        document.getElementById('loading').innerHTML = `<div style="color:#EF4444; font-weight:bold; margin-top:20px; font-size:18px;">🚨 Timeout Error</div><div style="font-size:13px; color:#888; margin-top:10px;">Please click "Refresh Data" again.</div><button onclick="refreshData()" class="apply-btn" style="margin-top:15px;">Retry Fetch</button>`;
+        document.getElementById('loading').innerHTML = `<div style="color:#EF4444; font-weight:bold; margin-top:20px; font-size:18px;">🚨 Google Sheets Timeout</div><div style="font-size:13px; color:#888; margin-top:10px;">Please click "Refresh" again.</div>`;
     }
 }
 function refreshData() {
@@ -5672,7 +5656,7 @@ async function fetchAllData(forceRefresh = false) {
         setDefaultDates();
         if (currentTab === 'daily') loadDaily(); else loadWeekly();
     } catch(e) {
-        console.error(e); document.getElementById('dailyLoader').innerHTML = `<div style="color:#ef4444; font-weight:bold; margin-bottom:20px; font-size:18px;">🚨 System Timeout</div><button onclick="fetchAllData(true)" style="padding:10px 20px; background:#f97316; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">Retry Fetch</button>`;
+        console.error(e); document.getElementById('dailyLoader').innerHTML = `<div style="color:#ef4444; font-weight:bold; margin-bottom:20px; font-size:18px;">🚨 Google Sheets Timeout</div><button onclick="fetchAllData(true)" style="padding:10px 20px; background:#f97316; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">Retry Fetch</button>`;
     }
 }
 
@@ -5814,6 +5798,7 @@ function showRegionOrders(region, type) {
     document.getElementById('orderModal').classList.add('open');
 }
 function closeModal() { document.getElementById('orderModal').classList.remove('open'); }
+window.onload = () => fetchAllData();
 </script>
 </body>
 </html>'''
