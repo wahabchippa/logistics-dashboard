@@ -4637,7 +4637,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 .tbtn:hover{filter:brightness(1.15);}
 /* TABS */
 .tabs-wrap{padding:18px 28px 0;background:var(--s1);border-bottom:1px solid var(--bd);}
-.tabs{display:flex;gap:4px;}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;}
 .tab{padding:10px 20px;border-radius:8px 8px 0 0;font-weight:700;font-size:13px;cursor:pointer;
   border:1px solid transparent;border-bottom:none;color:var(--t3);transition:.15s;background:transparent;}
 .tab:hover{color:var(--t2);background:rgba(92,107,192,.1);}
@@ -4650,7 +4650,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 .frow{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;}
 .frow:last-child{margin-bottom:0;}
 .fg{display:flex;flex-direction:column;gap:4px;}
-.fl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
+.fl{font-size:10px;color:var(--t3);font-weight:700;text-uppercase:uppercase;letter-spacing:.8px;}
 .fi{background:var(--bg);border:1px solid var(--bd);color:var(--t1);padding:8px 11px;border-radius:7px;
   font-family:inherit;outline:none;font-size:13px;transition:.2s;}
 .fi:focus{border-color:var(--acc);}
@@ -4669,14 +4669,14 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 .kc{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:20px 18px;
   border-left:3px solid var(--green);}
 .kv{font-size:34px;font-weight:900;letter-spacing:-1.5px;margin-bottom:4px;color:var(--t1);}
-.kl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+.kl{font-size:10px;color:var(--t3);font-weight:700;text-uppercase:uppercase;letter-spacing:.5px;}
 .sg{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
 .sc{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px;
   border-left:3px solid var(--green);}
 .sct{font-size:12px;font-weight:800;color:var(--green);margin-bottom:12px;}
 .scst{display:flex;justify-content:space-around;text-align:center;}
 .scv{font-size:22px;font-weight:900;color:var(--t1);}
-.scl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;}
+.scl{font-size:10px;color:var(--t3);font-weight:700;text-uppercase:uppercase;}
 /* MAIN TABLE */
 .tw{overflow-x:auto;}
 table.mt{width:100%;border-collapse:collapse;background:var(--s1);border-radius:12px;
@@ -4764,19 +4764,6 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 .bar-track{flex:1;height:14px;background:var(--s2);border-radius:7px;overflow:hidden;}
 .bar-fill{height:100%;border-radius:7px;transition:.5s;}
 .bar-val{font-size:11px;font-weight:700;width:50px;text-align:right;}
-/* ANALYTICS SPECIFIC */
-.ana-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-bottom:20px;}
-.ana-card{background:var(--s1);border:1px solid var(--bd);border-radius:16px;overflow:hidden;}
-.ana-hdr{padding:16px 20px;background:linear-gradient(135deg,rgba(92,107,192,.15),rgba(57,73,171,.15));border-bottom:1px solid var(--bd);font-size:14px;font-weight:800;color:var(--t1);display:flex;align-items:center;gap:10px;}
-.ana-body{padding:20px;}
-.ana-kv{font-size:28px;font-weight:900;color:var(--green);margin-bottom:4px;}
-.ana-kl{font-size:11px;color:var(--t3);text-transform:uppercase;font-weight:700;}
-.ana-bar{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
-.ana-bar-label{font-size:12px;color:var(--t2);font-weight:600;min-width:120px;}
-.ana-bar-fill{width:100%;height:12px;background:var(--s2);border-radius:6px;overflow:hidden;border:1px solid var(--bd);}
-.ana-bar-progress{height:100%;background:linear-gradient(90deg,var(--blue),var(--purple));border-radius:6px;transition:.3s;}
-.ana-pie-container{width:200px;height:200px;margin:20px auto;border-radius:50%;background:conic-gradient(var(--green) 0% 40%, var(--blue) 40% 70%, var(--yellow) 70% 100%);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:var(--t1);position:relative;}
-.ana-pie-container::before{content:'';position:absolute;width:140px;height:140px;border-radius:50%;background:var(--s1);}
 /* LOADER */
 .lw{text-align:center;padding:60px;}
 .ld{width:42px;height:42px;border:3px solid var(--bd);border-top-color:var(--acc);
@@ -4821,8 +4808,107 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 /* WEEK LABEL */
 .wklabel{font-size:11px;color:var(--t3);background:var(--bg);border:1px solid var(--bd);
   border-radius:6px;padding:4px 12px;display:inline-block;margin-bottom:18px;}
+/* ============ ANALYTICS STYLES ============ */
+.analytics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+.acard{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;
+  position:relative;overflow:hidden;}
+.acard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--blue),var(--purple));}
+.acard.blue::before{background:linear-gradient(90deg,#448aff,#2979ff);}
+.acard.green::before{background:linear-gradient(90deg,#00e676,#00c853);}
+.acard.yellow::before{background:linear-gradient(90deg,#ffd740,#ffab00);}
+.acard.purple::before{background:linear-gradient(90deg,#e040fb,#aa00ff);}
+.acard.orange::before{background:linear-gradient(90deg,#ff6d00,#f57c00);}
+.acard.cyan::before{background:linear-gradient(90deg,#00e5ff,#00b8d4);}
+.acard-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--t3);margin-bottom:8px;}
+.acard-value{font-size:32px;font-weight:900;color:var(--t1);line-height:1.1;}
+.acard-value span{font-size:14px;color:var(--t3);font-weight:600;}
+.acard-sub{font-size:11px;color:var(--t3);margin-top:6px;display:flex;align-items:center;gap:6px;}
+.acard-sub .trend{font-weight:700;}
+.trend.up{color:var(--green);}
+.trend.down{color:var(--red);}
+
+.an-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+.an-card{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;}
+.an-card-title{font-size:14px;font-weight:800;color:var(--t1);margin-bottom:16px;
+  display:flex;align-items:center;gap:8px;}
+.an-card-title .icon{width:28px;height:28px;background:linear-gradient(135deg,var(--blue),var(--purple));
+  border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;}
+
+/* DONUT CHART */
+.donut-wrap{display:flex;align-items:center;gap:30px;flex-wrap:wrap;justify-content:center;}
+.donut{width:160px;height:160px;position:relative;}
+.donut svg{transform:rotate(-90deg);width:100%;height:100%;}
+.donut circle{fill:none;stroke-width:18;stroke-linecap:round;}
+.donut-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  text-align:center;}
+.donut-total{font-size:28px;font-weight:900;color:var(--t1);}
+.donut-label{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;}
+.donut-legend{display:flex;flex-direction:column;gap:10px;}
+.donut-legend-item{display:flex;align-items:center;gap:10px;font-size:12px;}
+.donut-legend-dot{width:12px;height:12px;border-radius:3px;}
+
+/* BAR CHART */
+.bar-chart{display:flex;flex-direction:column;gap:10px;}
+.bar-item{display:flex;align-items:center;gap:12px;}
+.bar-item-label{flex:0 0 100px;font-size:11px;font-weight:600;color:var(--t2);}
+.bar-item-track{flex:1;height:24px;background:var(--s2);border-radius:6px;overflow:hidden;position:relative;}
+.bar-item-fill{height:100%;border-radius:6px;transition:width .6s ease;}
+.bar-item-value{width:50px;text-align:right;font-size:12px;font-weight:700;color:var(--t1);}
+
+/* PIE CHART SMALL */
+.pie-wrap{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;}
+.pie{width:120px;height:120px;position:relative;}
+.pie svg{width:100%;height:100%;transform:rotate(-90deg);}
+.pie circle{fill:none;stroke-width:20;}
+.pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:18px;font-weight:900;color:var(--t1);}
+
+/* TOP LISTS */
+.top-list{display:flex;flex-direction:column;gap:8px;}
+.top-item{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg);
+  border-radius:8px;border:1px solid var(--bd);transition:.15s;}
+.top-item:hover{border-color:var(--acc);background:rgba(92,107,192,.08);}
+.top-rank{width:24px;height:24px;background:var(--s2);border-radius:6px;display:flex;
+  align-items:center;justify-content:center;font-size:11px;font-weight:900;color:var(--t3);}
+.top-rank.gold{background:linear-gradient(135deg,#ffd740,#ffab00);color:#000;}
+.top-rank.silver{background:linear-gradient(135deg,#90a4ae,#607d8b);color:#000;}
+.top-rank.bronze{background:linear-gradient(135deg,#ff7043,#f57c00);color:#000;}
+.top-info{flex:1;}
+.top-name{font-size:13px;font-weight:700;color:var(--t1);}
+.top-detail{font-size:10px;color:var(--t3);}
+.top-count{font-size:16px;font-weight:900;color:var(--green);}
+
+/* TREND CHART */
+.trend-chart{height:180px;display:flex;align-items:flex-end;gap:4px;padding:10px 0;}
+.trend-bar{flex:1;background:linear-gradient(180deg,var(--blue),rgba(68,138,255,.3));
+  border-radius:4px 4px 0 0;min-height:4px;position:relative;cursor:pointer;transition:.2s;}
+.trend-bar:hover{filter:brightness(1.2);}
+.trend-bar::after{content:attr(data-val);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);
+  background:var(--s2);padding:4px 8px;border-radius:4px;font-size:10px;font-weight:700;
+  color:var(--t1);white-space:nowrap;opacity:0;pointer-events:none;transition:.2s;margin-bottom:4px;}
+.trend-bar:hover::after{opacity:1;}
+.trend-labels{display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--bd);margin-top:8px;}
+.trend-label{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;}
+
+/* SAVINGS GRID */
+.savings-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.saving-card{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:14px;text-align:center;}
+.saving-card-header{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-bottom:6px;}
+.saving-card-value{font-size:22px;font-weight:900;color:var(--green);}
+.saving-card-sub{font-size:10px;color:var(--t3);margin-top:4px;}
+
+/* STATS ROW */
+.stats-row{display:flex;gap:20px;flex-wrap:wrap;}
+.stat-box{flex:1;min-width:120px;background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:16px;text-align:center;}
+.stat-box-icon{font-size:24px;margin-bottom:8px;}
+.stat-box-value{font-size:24px;font-weight:900;color:var(--t1);}
+.stat-box-label{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:4px;}
+
 /* Responsive */
-@media(max-width:768px){.kg{grid-template-columns:1fr 1fr;}.sg{grid-template-columns:1fr;}.reg-grid{grid-template-columns:1fr;}.main{padding:14px;}}
+@media(max-width:768px){.kg{grid-template-columns:1fr 1fr;}.sg{grid-template-columns:1fr;}.reg-grid{grid-template-columns:1fr;}.main{padding:14px;}
+.analytics-grid{grid-template-columns:1fr 1fr;}.an-row{grid-template-columns:1fr;}.savings-grid{grid-template-columns:1fr 1fr;}}
+@media(max-width:480px){.analytics-grid{grid-template-columns:1fr;}.an-card{padding:14px;}}
 </style>
 </head>
 <body>
@@ -4990,9 +5076,26 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 
   <!-- ANALYTICS TAB -->
   <div class="pane" id="pane-analytics">
-    <div class="ana-grid" id="anaContent">
-      <!-- Analytics content will be rendered here -->
+    <div class="fbar">
+      <div class="frow">
+        <div class="fg"><div class="fl">📅 From</div><input type="date" id="af" class="fi" onchange="rAnalytics()"></div>
+        <div class="fg"><div class="fl">📅 To</div><input type="date" id="at" class="fi" onchange="rAnalytics()"></div>
+        <div class="fg"><div class="fl">Source</div>
+          <select id="as" class="fi" onchange="rAnalytics()">
+            <option value="all">All Sources</option>
+            <option value="ECL QC Center">ECL QC Center</option>
+            <option value="ECL Zone">ECL Zone</option>
+            <option value="GE Zone">GE Zone</option>
+          </select>
+        </div>
+        <div class="fg"><div class="fl">Region</div>
+          <select id="ar" class="fi" onchange="rAnalytics()">
+            <option value="all">All Regions</option>
+          </select>
+        </div>
+      </div>
     </div>
+    <div id="analyticsContent"></div>
   </div>
 </div>
 
@@ -5030,16 +5133,35 @@ async function init(){
     D=await r.json();
     const mon=gMon(new Date());
     g("ws").value=fi(mon); g("w4e").value=fi(mon); g("rws").value=fi(mon);
+    
+    // Set default analytics date range (last 30 days)
+    const today=new Date();
+    const thirtyDaysAgo=new Date(today);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-30);
+    g("af").value=fi(thirtyDaysAgo);
+    g("at").value=fi(today);
+    
+    // Populate region dropdown
+    populateRegionDropdown();
+    
     g("gLoad").style.display="none";
     g("pane-bundle").classList.add("active");
     rBundle();
     // pre-render others in bg
-    setTimeout(()=>{rSummary();rW4();rRegional();rAnalytics();},200);
+    setTimeout(()=>{rSummary();rW4();rRegional();},200);
   }catch(e){
     g("gLoad").innerHTML=`<div style="color:var(--red);font-size:14px">❌ ${e.message}<br><br><button class="abtn" onclick="init()">Retry</button></div>`;
   }
 }
 function hardRefresh(){D=null;g("gLoad").style.display="block";document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));init();}
+
+function populateRegionDropdown(){
+  const regions=new Set();
+  (D.bundles||[]).forEach(b=>{if(b.region)regions.add(b.region);});
+  const sel=g("ar");
+  sel.innerHTML='<option value="all">All Regions</option>';
+  Array.from(regions).sort().forEach(r=>{sel.innerHTML+=`<option value="${r}">${r}</option>`;});
+}
 
 // ============================================================
 // TAB SWITCH - use RAF to avoid UI blocking
@@ -5509,6 +5631,344 @@ function buildRegCard(gname,bundles,wl){
 }
 
 // ============================================================
+// ANALYTICS TAB
+// ============================================================
+function rAnalytics(){
+  if(!D) return;
+  
+  const fr=g("af").value;
+  const to=g("at").value;
+  const src=g("as").value;
+  const reg=g("ar").value;
+  
+  // Filter bundles based on criteria
+  const bundles=(D.bundles||[]).filter(b=>{
+    if(src!=="all"&&b.source!==src) return false;
+    if(reg!=="all"&&b.region!==reg) return false;
+    if(fr&&b.date_std<fr) return false;
+    if(to&&b.date_std>to) return false;
+    return true;
+  });
+  
+  // Calculate metrics
+  const totalBundles=bundles.length;
+  const totalOrders=bundles.reduce((a,b)=>a+b.orders.length,0);
+  const totalWeight=bundles.reduce((a,b)=>a+(b.weight_kg||0),0);
+  const totalSavings=bundles.reduce((a,b)=>a+(b.savings_gbp||0),0);
+  const totalItems=bundles.reduce((a,b)=>a+(b.total_items||0),0);
+  const avgWeight=totalBundles>0?(totalWeight/totalBundles).toFixed(1):0;
+  const avgOrdersPerBundle=totalBundles>0?(totalOrders/totalBundles).toFixed(1):0;
+  
+  // By source breakdown
+  const sourceStats={};
+  const regionStats={};
+  const customerStats={};
+  const vendorStats={};
+  const dailyStats={};
+  const weightStats={lt20:0,ge20:0};
+  const savingsByRegion={};
+  
+  bundles.forEach(b=>{
+    // Source
+    if(!sourceStats[b.source])sourceStats[b.source]={bundles:0,orders:0,weight:0,savings:0};
+    sourceStats[b.source].bundles++;
+    sourceStats[b.source].orders+=b.orders.length;
+    sourceStats[b.source].weight+=b.weight_kg||0;
+    sourceStats[b.source].savings+=b.savings_gbp||0;
+    
+    // Region
+    const rg=b.region||"EU";
+    if(!regionStats[rg])regionStats[rg]={bundles:0,orders:0,weight:0};
+    regionStats[rg].bundles++;
+    regionStats[rg].orders+=b.orders.length;
+    regionStats[rg].weight+=b.weight_kg||0;
+    
+    // Savings by region
+    if(!savingsByRegion[rg])savingsByRegion[rg]=0;
+    savingsByRegion[rg]+=b.savings_gbp||0;
+    
+    // Weight distribution
+    if((b.weight_kg||0)<20) weightStats.lt20++;
+    else weightStats.ge20++;
+    
+    // Customer
+    const cust=b.customer||"Unknown";
+    if(!customerStats[cust])customerStats[cust]={count:0,orders:0,weight:0};
+    customerStats[cust].count++;
+    customerStats[cust].orders+=b.orders.length;
+    customerStats[cust].weight+=b.weight_kg||0;
+    
+    // Vendor
+    const vend=b.vendor||"Unknown";
+    if(!vendorStats[vend])vendorStats[vend]={count:0,orders:0,weight:0};
+    vendorStats[vend].count++;
+    vendorStats[vend].orders+=b.orders.length;
+    vendorStats[vend].weight+=b.weight_kg||0;
+    
+    // Daily
+    const day=b.date_std;
+    if(!dailyStats[day])dailyStats[day]={bundles:0,orders:0,weight:0};
+    dailyStats[day].bundles++;
+    dailyStats[day].orders+=b.orders.length;
+    dailyStats[day].weight+=b.weight_kg||0;
+  });
+  
+  // Sort for top lists
+  const topCustomers=Object.entries(customerStats).sort((a,b)=>b[1].orders-a[1].orders).slice(0,8);
+  const topVendors=Object.entries(vendorStats).sort((a,b)=>b[1].orders-a[1].orders).slice(0,8);
+  const topRegions=Object.entries(regionStats).sort((a,b)=>b[1].orders-a[1].orders).slice(0,6);
+  
+  // Source colors
+  const srcColors={"ECL QC Center":"#00e676","ECL Zone":"#448aff","GE Zone":"#ff6d00"};
+  
+  // Build HTML
+  let html=``;
+  
+  // ========== KPI CARDS ==========
+  html+=`<div class="analytics-grid">
+    <div class="acard blue">
+      <div class="acard-title">📦 Total Bundles</div>
+      <div class="acard-value">${totalBundles.toLocaleString()}</div>
+      <div class="acard-sub"><span class="trend up">⬆ ${avgOrdersPerBundle}</span> avg orders/bundle</div>
+    </div>
+    <div class="acard green">
+      <div class="acard-title">📋 Total Orders</div>
+      <div class="acard-value">${totalOrders.toLocaleString()}</div>
+      <div class="acard-sub"><span class="trend up">⬆ ${totalItems.toLocaleString()}</span> total items</div>
+    </div>
+    <div class="acard yellow">
+      <div class="acard-title">⚖️ Total Weight</div>
+      <div class="acard-value">${totalWeight<1000?totalWeight.toFixed(1)+' kg':(totalWeight/1000).toFixed(2)+' T'}</div>
+      <div class="acard-sub"><span class="trend">📊 ${avgWeight} kg</span> avg per bundle</div>
+    </div>
+    <div class="acard purple">
+      <div class="acard-title">💰 Total Savings</div>
+      <div class="acard-value">£${totalSavings.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
+      <div class="acard-sub"><span class="trend up">⬆ £${totalBundles>0?(totalSavings/totalBundles).toFixed(2):"0.00"}</span> avg per bundle</div>
+    </div>
+  </div>`;
+  
+  // ========== SOURCE & REGION BREAKDOWN ==========
+  html+=`<div class="an-row">`;
+  
+  // Source Distribution (Donut)
+  const srcEntries=Object.entries(sourceStats);
+  const srcTotal=srcEntries.reduce((a,[,v])=>a+v.orders,0);
+  let srcDonut='';
+  let srcLegend='';
+  let offset=0;
+  srcEntries.forEach(([s,v],i)=>{
+    const pct=srcTotal>0?(v.orders/srcTotal*100):0;
+    const dashArray=pct*1.25;
+    const color=srcColors[s]||'#888';
+    srcDonut+=`<circle cx="50" cy="50" r="35" stroke="${color}" stroke-dasharray="${dashArray} 125" stroke-dashoffset="-${offset}" />`;
+    offset+=dashArray;
+    srcLegend+=`<div class="donut-legend-item"><div class="donut-legend-dot" style="background:${color}"></div><span>${s}</span><b>${v.orders}</b></div>`;
+  });
+  
+  html+=`<div class="an-card">
+    <div class="an-card-title"><div class="icon">📊</div> Orders by Source</div>
+    <div class="donut-wrap">
+      <div class="donut">
+        <svg viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="35" fill="none" stroke="var(--bd)" stroke-width="18"/>
+          ${srcDonut}
+        </svg>
+        <div class="donut-center">
+          <div class="donut-total">${srcTotal}</div>
+          <div class="donut-label">Orders</div>
+        </div>
+      </div>
+      <div class="donut-legend">${srcLegend}</div>
+    </div>
+  </div>`;
+  
+  // Regional Distribution (Bars)
+  let regionBars='';
+  const maxRegOrders=Math.max(...topRegions.map(r=>r[1].orders),1);
+  const regColors=["#448aff","#00e676","#ff6d00","#e040fb","#ffd740","#00e5ff"];
+  topRegions.forEach(([rg,v],i)=>{
+    const pct=(v.orders/maxRegOrders*100).toFixed(1);
+    regionBars+=`<div class="bar-item">
+      <div class="bar-item-label">${rg}</div>
+      <div class="bar-item-track"><div class="bar-item-fill" style="width:${pct}%;background:${regColors[i%regColors.length]}"></div></div>
+      <div class="bar-item-value">${v.orders}</div>
+    </div>`;
+  });
+  
+  html+=`<div class="an-card">
+    <div class="an-card-title"><div class="icon">🌍</div> Orders by Region</div>
+    <div class="bar-chart">${regionBars||'<div style="color:var(--t3)">No data</div>'}</div>
+  </div>`;
+  
+  html+=`</div>`;
+  
+  // ========== WEIGHT & SAVINGS ==========
+  html+=`<div class="an-row">`;
+  
+  // Weight Distribution
+  const totalWeightDist=weightStats.lt20+weightStats.ge20;
+  const ltPct=totalWeightDist>0?(weightStats.lt20/totalWeightDist*100).toFixed(1):0;
+  const gePct=totalWeightDist>0?(weightStats.ge20/totalWeightDist*100).toFixed(1):0;
+  
+  html+=`<div class="an-card">
+    <div class="an-card-title"><div class="icon">⚖️</div> Weight Distribution</div>
+    <div class="pie-wrap" style="margin-bottom:16px">
+      <div class="pie">
+        <svg viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="35" fill="none" stroke="var(--bd)" stroke-width="20"/>
+          <circle cx="50" cy="50" r="35" fill="none" stroke="#00e676" stroke-width="20" stroke-dasharray="${ltPct*2.2} 220" />
+          <circle cx="50" cy="50" r="35" fill="none" stroke="#ff6d00" stroke-width="20" stroke-dasharray="${gePct*2.2} 220" stroke-dashoffset="-${ltPct*2.2}" />
+        </svg>
+        <div class="pie-center">${totalWeightDist}</div>
+      </div>
+      <div class="donut-legend">
+        <div class="donut-legend-item"><div class="donut-legend-dot" style="background:#00e676"></div><span>&lt;20 kg (Light)</span><b>${weightStats.lt20}</b></div>
+        <div class="donut-legend-item"><div class="donut-legend-dot" style="background:#ff6d00"></div><span>20+ kg (Heavy)</span><b>${weightStats.ge20}</b></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:20px;justify-content:center">
+      <div class="stat-box">
+        <div class="stat-box-icon">📦</div>
+        <div class="stat-box-value" style="color:#00e676">${weightStats.lt20}</div>
+        <div class="stat-box-label">Light Bundles</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-icon">🚛</div>
+        <div class="stat-box-value" style="color:#ff6d00">${weightStats.ge20}</div>
+        <div class="stat-box-label">Heavy Bundles</div>
+      </div>
+    </div>
+  </div>`;
+  
+  // Savings by Region
+  const savingsEntries=Object.entries(savingsByRegion).sort((a,b)=>b[1]-a[1]);
+  let savingsCards='';
+  const totalSavingsAll=savingsEntries.reduce((a,b)=>a+b[1],0);
+  savingsEntries.slice(0,6).forEach(([rg,sav])=>{
+    const pct=totalSavingsAll>0?(sav/totalSavingsAll*100).toFixed(1):0;
+    savingsCards+=`<div class="saving-card">
+      <div class="saving-card-header">${rg}</div>
+      <div class="saving-card-value">£${sav.toFixed(2)}</div>
+      <div class="saving-card-sub">${pct}% of total</div>
+    </div>`;
+  });
+  
+  html+=`<div class="an-card">
+    <div class="an-card-title"><div class="icon">💰</div> Savings by Region</div>
+    <div class="savings-grid">${savingsCards||'<div style="color:var(--t3)">No savings data</div>'}</div>
+  </div>`;
+  
+  html+=`</div>`;
+  
+  // ========== TOP LISTS ==========
+  html+=`<div class="an-row">`;
+  
+  // Top Customers
+  let customerList='';
+  topCustomers.forEach(([c,v],i)=>{
+    let rankClass='';
+    if(i===0)rankClass='gold';
+    else if(i===1)rankClass='silver';
+    else if(i===2)rankClass='bronze';
+    customerList+=`<div class="top-item">
+      <div class="top-rank ${rankClass}">${i+1}</div>
+      <div class="top-info">
+        <div class="top-name">${c}</div>
+        <div class="top-detail">${v.count} bundles · ${v.weight.toFixed(1)} kg</div>
+      </div>
+      <div class="top-count">${v.orders}</div>
+    </div>`;
+  });
+  
+  html+=`<div class="an-card">
+    <div class="an-card-title"><div class="icon">👥</div> Top Customers</div>
+    <div class="top-list">${customerList||'<div style="color:var(--t3)">No customer data</div>'}</div>
+  </div>`;
+  
+  // Top Vendors
+  let vendorList='';
+  topVendors.forEach(([v,d],i)=>{
+    let rankClass='';
+    if(i===0)rankClass='gold';
+    else if(i===1)rankClass='silver';
+    else if(i===2)rankClass='bronze';
+    vendorList+=`<div class="top-item">
+      <div class="top-rank ${rankClass}">${i+1}</div>
+      <div class="top-info">
+        <div class="top-name">${v}</div>
+        <div class="top-detail">${d.count} bundles · ${d.weight.toFixed(1)} kg</div>
+      </div>
+      <div class="top-count">${d.orders}</div>
+    </div>`;
+  });
+  
+  html+=`<div class="an-card">
+    <div class="an-card-title"><div class="icon">🏭</div> Top Vendors</div>
+    <div class="top-list">${vendorList||'<div style="color:var(--t3)">No vendor data</div>'}</div>
+  </div>`;
+  
+  html+=`</div>`;
+  
+  // ========== DAILY TREND ==========
+  // Get last 30 days of data
+  const dailyEntries=Object.entries(dailyStats).sort((a,b)=>a[0].localeCompare(b[0]));
+  let trendBars='';
+  const maxDailyOrders=Math.max(...dailyEntries.map(d=>d[1].orders),1);
+  dailyEntries.forEach(([day,data])=>{
+    const h=data.orders/maxDailyOrders*100;
+    trendBars+=`<div class="trend-bar" style="height:${h}%" data-val="${data.orders} orders"></div>`;
+  });
+  
+  // Get labels (show every 5th day)
+  const labelIndices=[0,Math.floor(dailyEntries.length/4),Math.floor(dailyEntries.length/2),Math.floor(dailyEntries.length*3/4),dailyEntries.length-1];
+  let trendLabels='';
+  labelIndices.forEach(i=>{
+    if(dailyEntries[i]){
+      const d=new Date(dailyEntries[i][0]);
+      trendLabels+=`<div class="trend-label">${d.getDate()}/${d.getMonth()+1}</div>`;
+    }
+  });
+  
+  html+=`<div class="an-card" style="margin-top:20px">
+    <div class="an-card-title"><div class="icon">📈</div> Daily Order Trend (Last ${dailyEntries.length} Days)</div>
+    <div class="trend-chart">${trendBars}</div>
+    <div class="trend-labels">${trendLabels}</div>
+  </div>`;
+  
+  // ========== STATS ROW ==========
+  html+=`<div class="stats-row" style="margin-top:20px">
+    <div class="stat-box">
+      <div class="stat-box-icon">🏢</div>
+      <div class="stat-box-value">${Object.keys(sourceStats).length}</div>
+      <div class="stat-box-label">Active Sources</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-box-icon">🌐</div>
+      <div class="stat-box-value">${Object.keys(regionStats).length}</div>
+      <div class="stat-box-label">Regions</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-box-icon">👤</div>
+      <div class="stat-box-value">${Object.keys(customerStats).length}</div>
+      <div class="stat-box-label">Customers</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-box-icon">🏭</div>
+      <div class="stat-box-value">${Object.keys(vendorStats).length}</div>
+      <div class="stat-box-label">Vendors</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-box-icon">📅</div>
+      <div class="stat-box-value">${dailyEntries.length}</div>
+      <div class="stat-box-label">Active Days</div>
+    </div>
+  </div>`;
+  
+  g("analyticsContent").innerHTML=html;
+}
+
+// ============================================================
 // SHOW ORDERS MODAL
 // ============================================================
 function showOrd(uid,region,di){
@@ -5613,170 +6073,6 @@ async function openJ(oid){
 
 function cMod(id){document.getElementById(id).classList.remove("open");}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){cMod("jMov");cMod("oMov");}});
-
-// ============================================================
-// ANALYTICS TAB
-// ============================================================
-function rAnalytics(){
-  if(!D || !D.bundles || D.bundles.length === 0) {
-    g("anaContent").innerHTML = '<div style="text-align:center;padding:60px;color:var(--t3);">No data available for analytics.</div>';
-    return;
-  }
-
-  // Compute analytics data
-  const bundles = D.bundles;
-  const kpi = D.kpi || {};
-  const sourceStats = D.source_stats || {};
-
-  // Overall stats
-  const totalOrders = kpi.total_orders_bundled || 0;
-  const totalBundles = kpi.total_bundles || 0;
-  const totalSavings = kpi.total_savings_gbp || 0;
-  const avgOrdersPerBundle = totalOrders > 0 ? (totalOrders / totalBundles).toFixed(1) : 0;
-  const totalWeight = bundles.reduce((sum, b) => sum + (b.weight_kg || 0), 0).toFixed(2);
-  const avgWeightPerBundle = totalBundles > 0 ? (totalWeight / totalBundles).toFixed(2) : 0;
-
-  // By source
-  const srcBreakdown = {};
-  bundles.forEach(b => {
-    const src = b.source;
-    if (!srcBreakdown[src]) srcBreakdown[src] = { orders: 0, bundles: 1, savings: b.savings_gbp || 0, weight: b.weight_kg || 0 };
-    else {
-      srcBreakdown[src].orders += b.orders.length;
-      srcBreakdown[src].bundles += 1;
-      srcBreakdown[src].savings += b.savings_gbp || 0;
-      srcBreakdown[src].weight += b.weight_kg || 0;
-    }
-  });
-
-  // By region
-  const regBreakdown = {};
-  bundles.forEach(b => {
-    const reg = b.region || 'EU';
-    if (!regBreakdown[reg]) regBreakdown[reg] = { orders: 0, bundles: 1, savings: b.savings_gbp || 0 };
-    else {
-      regBreakdown[reg].orders += b.orders.length;
-      regBreakdown[reg].bundles += 1;
-      regBreakdown[reg].savings += b.savings_gbp || 0;
-    }
-  });
-
-  // Top 5 vendors/customers by orders
-  const vendorMap = {};
-  const customerMap = {};
-  bundles.forEach(b => {
-    const vendor = b.vendor || 'Unknown';
-    const customer = b.customer || 'Unknown';
-    if (!vendorMap[vendor]) vendorMap[vendor] = 0;
-    vendorMap[vendor] += b.orders.length;
-    if (!customerMap[customer]) customerMap[customer] = 0;
-    customerMap[customer] += b.orders.length;
-  });
-  const topVendors = Object.entries(vendorMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const topCustomers = Object.entries(customerMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
-
-  // Savings distribution (e.g., percentage of bundles with savings > £10)
-  const highSavingsBundles = bundles.filter(b => (b.savings_gbp || 0) > 10).length;
-  const savingsPct = totalBundles > 0 ? ((highSavingsBundles / totalBundles) * 100).toFixed(1) : 0;
-
-  // Render HTML
-  let html = `
-    <div class="ana-card">
-      <div class="ana-hdr">📊 Overall Performance</div>
-      <div class="ana-body">
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">
-          <div><div class="ana-kv">${totalBundles.toLocaleString()}</div><div class="ana-kl">Total Bundles</div></div>
-          <div><div class="ana-kv">${totalOrders.toLocaleString()}</div><div class="ana-kl">Total Orders</div></div>
-          <div><div class="ana-kv">${avgOrdersPerBundle}x</div><div class="ana-kl">Avg Orders/Bundle</div></div>
-          <div><div class="ana-kv">£${totalSavings.toLocaleString(undefined, {minimumFractionDigits: 2})}</div><div class="ana-kl">Total Savings</div></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="ana-card">
-      <div class="ana-hdr">📦 Weight Analytics</div>
-      <div class="ana-body">
-        <div><div class="ana-kv">${totalWeight} kg</div><div class="ana-kl">Total Weight</div></div>
-        <div style="margin-top:12px;"><div class="ana-kv">${avgWeightPerBundle} kg</div><div class="ana-kl">Avg Weight/Bundle</div></div>
-      </div>
-    </div>
-
-    <div class="ana-card">
-      <div class="ana-hdr">🌍 Breakdown by Region</div>
-      <div class="ana-body">
-        ${Object.entries(regBreakdown).map(([reg, data]) => {
-          const pct = totalOrders > 0 ? ((data.orders / totalOrders) * 100).toFixed(1) : 0;
-          return `
-            <div class="ana-bar">
-              <div class="ana-bar-label">${reg}</div>
-              <div class="ana-bar-fill"><div class="ana-bar-progress" style="width:${pct}%"></div></div>
-              <div style="font-size:11px;font-weight:700;color:var(--t1);min-width:40px;">${data.orders} (${pct}%)</div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>
-
-    <div class="ana-card">
-      <div class="ana-hdr">🏭 Breakdown by Source</div>
-      <div class="ana-body">
-        ${Object.entries(srcBreakdown).map(([src, data]) => {
-          const pct = totalOrders > 0 ? ((data.orders / totalOrders) * 100).toFixed(1) : 0;
-          return `
-            <div class="ana-bar">
-              <div class="ana-bar-label">${src}</div>
-              <div class="ana-bar-fill"><div class="ana-bar-progress" style="width:${pct}%"></div></div>
-              <div style="font-size:11px;font-weight:700;color:var(--t1);min-width:60px;">${data.orders} orders</div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>
-
-    <div class="ana-card">
-      <div class="ana-hdr">💼 Top 5 Vendors</div>
-      <div class="ana-body">
-        ${topVendors.map(([vendor, orders]) => `
-          <div class="ana-bar">
-            <div class="ana-bar-label">${vendor}</div>
-            <div class="ana-bar-fill"><div class="ana-bar-progress" style="width:100%"></div></div>
-            <div style="font-size:11px;font-weight:700;color:var(--green);">${orders} orders</div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-
-    <div class="ana-card">
-      <div class="ana-hdr">👥 Top 5 Customers</div>
-      <div class="ana-body">
-        ${topCustomers.map(([customer, orders]) => `
-          <div class="ana-bar">
-            <div class="ana-bar-label">${customer}</div>
-            <div class="ana-bar-fill"><div class="ana-bar-progress" style="width:100%"></div></div>
-            <div style="font-size:11px;font-weight:700;color:var(--blue);">${orders} orders</div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-
-    <div class="ana-card">
-      <div class="ana-hdr">💰 Savings Insights</div>
-      <div class="ana-body">
-        <div style="text-align:center;margin-bottom:20px;">
-          <div class="ana-pie-container">📈</div>
-          <div style="font-size:12px;color:var(--t3);">Savings Distribution<br><span style="color:var(--green);font-weight:700;">${savingsPct}%</span> bundles saved > £10</div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div><div class="ana-kv">£${Math.max(...bundles.map(b => b.savings_gbp || 0)).toFixed(2)}</div><div class="ana-kl">Max Savings/Bundle</div></div>
-          <div><div class="ana-kv">£${(totalSavings / totalBundles || 0).toFixed(2)}</div><div class="ana-kl">Avg Savings/Bundle</div></div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  g("anaContent").innerHTML = html;
-}
-
 window.onload=init;
 </script></body></html>"""
 
