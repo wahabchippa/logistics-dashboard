@@ -4578,32 +4578,23 @@ def fetch_bundling_standalone_data():
         return _bundling_cache['data']
 
     # ============================================================
-    # 🚨 EXACT MAPPING FROM DOCUMENT 3 — DO NOT CHANGE 🚨
-    # ECL QC Center: A=Order B=Date D=Boxes G=Weight K=Vendor
-    #                L=Title M=ItemCount N=Customer R=Country Z=Tracking
-    #                start_row=1
-    # ECL Zone:      A=Order B=Date E=Boxes I=Weight N=Vendor
-    #                O=Title P=ItemCount Q=Customer U=Country AC=Tracking
-    #                start_row=2
-    # GE Zone:       A=Order B=Date D=Boxes H=Weight M=Vendor
-    #                N=Title O=ItemCount P=Customer T=Country AC=Tracking
-    #                start_row=2
+    # 🚨 CORRECTED COLUMN MAPPINGS (based on user's 1‑indexed list) 🚨
+    # ECL QC Center: A=0, B=1, D=3, G=6, K=10, N=13, L=11, M=12, R=17, Z=25
+    # ECL Zone:      A=0, B=1, E=4, I=8, N=13, O=14, P=15, Q=16, U=20, AC=28
+    # GE Zone:       A=0, B=1, D=3, H=7, M=12, P=15, N=13, O=14, T=19, AC=28
     # ============================================================
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
             {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1
-            # A    B    D    G    K      L       M      N      R      Z
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
             {"o":0, "d":1, "b":4, "w":8, "v":13, "title":14, "ic":15, "c":16, "cn":20, "t":28}, 2
-            # A    B    E    I    N      O       P      Q      U      AC
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
             {"o":0, "d":1, "b":3, "w":7, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2
-            # A    B    D    H    M      N       O      P      T      AC
         )
     }
 
