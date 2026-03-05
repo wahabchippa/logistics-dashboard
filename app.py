@@ -4591,7 +4591,7 @@ def fetch_bundling_standalone_data():
     # 🚨 CORRECTED COLUMN MAPPINGS (based on user's 1‑indexed list) 🚨
     # ECL QC Center: A=0, B=1, D=3, G=6, K=10, N=13, L=11, M=12, R=17, Z=25
     # ECL Zone:      A=0, B=1, E=4, I=8, N=13, O=14, P=15, Q=16, U=20, AC=28
-    # GE Zone:       A=0, B=1, D=3, G=7, M=12, P=15, N=13, O=14, T=19, AC=28
+    # GE Zone:       A=0, B=1, D=3, H=7, M=12, P=15, N=13, O=14, T=19, AC=28
     # ============================================================
     BUNDLING_SOURCES = {
         "ECL QC Center": (
@@ -4604,7 +4604,7 @@ def fetch_bundling_standalone_data():
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o":0, "d":1, "b":3, "w":7, "v":12, "title":13, "ic":14, "c":15, "cn":19, "H":28}, 2
+            {"o":0, "d":1, "b":3, "w":7, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2
         )
     }
 
@@ -4622,13 +4622,28 @@ def fetch_bundling_standalone_data():
         # Also fetch rates in parallel
         futures[executor.submit(fetch_rates_sheet, ctx)] = "RATES"
 
-        for future in concurrent.futures.as_completed(futures, timeout=25):  # overall timeout 25s
-            name = futures[future]
-            try:
-                n, data = future.result(timeout=5)  # per‑future timeout
-                res[n] = data
-            except Exception as e:
-                print(f"[ERROR] {name} failed: {e}")
+        try:
+            # Wait for all futures to complete within 40 seconds
+            for future in concurrent.futures.as_completed(futures, timeout=40):
+                name = futures[future]
+                try:
+                    n, data = future.result()  # no inner timeout, rely on overall timeout
+                    res[n] = data
+                except Exception as e:
+                    print(f"[ERROR] Failed to get result for {name}: {e}")
+                    res[name] = [] if name != "RATES" else {}
+        except concurrent.futures.TimeoutError:
+            print("[ERROR] Overall timeout reached while fetching sheets")
+            # Cancel remaining futures and set defaults for any not yet received
+            for future in futures:
+                if not future.done():
+                    future.cancel()
+                    name = futures[future]
+                    res[name] = [] if name != "RATES" else {}
+        except Exception as e:
+            print(f"[ERROR] Unexpected error in parallel fetch: {e}")
+            # Set defaults for all
+            for name in list(BUNDLING_SOURCES.keys()) + ["RATES"]:
                 res[name] = [] if name != "RATES" else {}
 
     _bundling_cache['data'] = res
@@ -5074,7 +5089,8 @@ async function loadBundles() {
         document.getElementById('pk-boxes').innerText  = s['PK Zone']?.boxes  || 0;
         applyFilters();
     } catch(e) {
-        document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data.</div>';
+        console.error(e);
+        document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data. Check console for details.</div>';
     }
 }
 
