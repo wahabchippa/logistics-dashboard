@@ -4343,17 +4343,24 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# BUNDLING INTELLIGENCE HUB — COMPLETE FINAL VERSION
+# Bundling Intelligence Hub — Complete App (Bug Fixed + Polished Design + Analytics)
 # ==============================================================================
 import urllib.request, csv, re, ssl, time, math, concurrent.futures
 from datetime import datetime, timedelta
-from flask import jsonify, request, session, render_template_string
+from flask import Flask, jsonify, request, session, render_template_string
 
+app = Flask(__name__)
+app.secret_key = "replace-with-your-secret-key"
+
+# --- Caches ---
 _bc={"data":None,"time":0}; _jc={"data":None,"time":0}; _sc={"data":None,"time":0}
-CD=600
+CD=600  # cache duration seconds
+
+# --- Data sources (unchanged) ---
 JS=("https://docs.google.com/spreadsheets/d/e/2PACX-1vQRsiVaciOMON0xaXXEi1guBYrqfVNpD-j4My_9YokGd5kftqjAXvri5c_gLB_VRXeoDLzEtz9h5y8x/pub?gid=1409345116&single=true&output=csv")
 SS=("https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1570463436&single=true&output=csv")
 
+# --- Helpers ---
 def sd(d):
     for fmt in ("%Y-%m-%d","%d/%m/%Y","%m/%d/%Y","%d-%b-%y","%d-%b-%Y","%Y/%m/%d"):
         try: return datetime.strptime(str(d).split()[0],fmt).strftime("%Y-%m-%d")
@@ -4406,6 +4413,7 @@ def grg(country):
 def ctx():
     c=ssl.create_default_context(); c.check_hostname=False; c.verify_mode=ssl.CERT_NONE; return c
 
+# --- Rates ---
 def fetch_rates(cx):
     try:
         url="https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
@@ -4421,6 +4429,7 @@ def fetch_rates(cx):
         return "RATES",rm
     except: return "RATES",{}
 
+# --- Status map ---
 def fetch_status():
     global _sc
     now=time.time()
@@ -4437,6 +4446,7 @@ def fetch_status():
         _sc["data"]=sm; _sc["time"]=now; return sm
     except: return {}
 
+# --- Journey map ---
 def fetch_journey():
     global _jc
     now=time.time()
@@ -4457,25 +4467,23 @@ def fetch_journey():
         _jc["data"]=jm; _jc["time"]=now; return jm
     except: return {}
 
-def fetch_sheet(name, url, col, start, cx):
+# --- Sheet fetcher (FIXED: no carry-forward, strict row validation) ---
+def fetch_sheet(name,url,col,start,cx):
     for attempt in range(2):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=25, context=cx) as r:
-                data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
-
-            rows = []
+            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(req,timeout=25,context=cx) as r:
+                data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
+            rows=[]
             for row in data[start:]:
-                if not row:
+                if not row:  # fully empty row
                     continue
-                p = row + [""] * 60
+                p=row+[""]*60
 
-                # Require an explicit Order ID in THIS row (no carry-forward)
-                ro = str(p[col["o"]]).strip()
-                if not ro or ro.lower() in ["n/a", "nan", "order", "orderid", "order id"]:
+                ro=str(p[col["o"]]).strip()
+                if not ro or ro.lower() in ["n/a","nan","order","orderid","order id"]:
                     continue
-                # Must contain at least one digit (real ID)
-                if not re.search(r"\d", ro):
+                if not re.search(r"\d",ro):  # must have digits
                     continue
 
                 dv  = str(p[col["d"]]).strip()
@@ -4488,7 +4496,6 @@ def fetch_sheet(name, url, col, start, cx):
                 cnv = str(p[col["cn"]]).strip()
                 tv  = str(p[col["t"]]).strip()
 
-                # Build row using ONLY values present on this row
                 rows.append({
                     "order": ro,
                     "date": dv,
@@ -4502,14 +4509,14 @@ def fetch_sheet(name, url, col, start, cx):
                     "country": cnv,
                     "tid": tv
                 })
-
             print(f"[OK] {name}: {len(rows)} rows")
-            return name, rows
+            return name,rows
         except Exception as e:
             print(f"[WARN] {name} attempt {attempt+1}: {e}")
             time.sleep(1)
-    return name, []
+    return name,[]
 
+# --- Fetch all sources (unchanged mappings) ---
 def fetch_all():
     global _bc
     now=time.time()
@@ -4536,118 +4543,73 @@ def fetch_all():
                 if not f.done(): f.cancel(); res[futs[f]]=[] if futs[f]!="RATES" else {}
     _bc["data"]=res; _bc["time"]=now; return res
 
+# --- API: Bundling + Analytics data ---
 @app.route("/api/nexus/app_data")
 def api_app_data():
-    sheets = fetch_all()
-    sm = fetch_status()
-    rm = sheets.get("RATES", {})
-    DR = 4.50
+    sheets=fetch_all(); sm=fetch_status(); rm=sheets.get("RATES",{}); DR=4.50
 
-    bundles = []
-    tb = to2 = 0
-    tsav = 0.0
-    ss = {"ECL QC Center": {"orders": 0, "boxes": 0}, "PK Zone": {"orders": 0, "boxes": 0}}
+    bundles=[]; tb=to2=0; tsav=0.0
+    ss={"ECL QC Center":{"orders":0,"boxes":0},"PK Zone":{"orders":0,"boxes":0}}
 
-    for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
-        rows = sheets.get(src, [])
-        cb = None
-        pk = "PK Zone" if src in ["ECL Zone", "GE Zone"] else src
+    for src in ["ECL QC Center","ECL Zone","GE Zone"]:
+        rows=sheets.get(src,[]); cb=None
+        pk="PK Zone" if src in ["ECL Zone","GE Zone"] else src
 
         for r in rows:
-            oid = str(r["order"]).strip().upper()
-            if not oid:
-                # Hard guard: never process rows without a real order id
+            oid=str(r["order"]).strip().upper()
+            if not oid:  # extra guard
                 continue
 
-            bx = str(r["boxes"]).strip()
-            od = {
-                "order_id": oid,
-                "weight": r["weight"],
-                "title": r["title"],
-                "item_count": r["item_count"],
-                "country": r["country"],
-                "status": sm.get(oid, "—")
-            }
+            bx=str(r["boxes"]).strip()
+            od={"order_id":oid,"weight":r["weight"],"title":r["title"],
+                "item_count":r["item_count"],"country":r["country"],"status":sm.get(oid,"—")}
 
-            # New box line starts a new bundle
-            if bx != "":
-                # Flush previous bundle if valid (>=2 orders)
-                if cb and len(cb["orders"]) > 1:
-                    bundles.append(cb)
-                    tb += 1
-                    to2 += len(cb["orders"])
-                    ss[pk]["orders"] += len(cb["orders"])
-                    ss[pk]["boxes"] += 1
+            if bx!="":
+                # flush previous bundle if valid
+                if cb and len(cb["orders"])>1:
+                    bundles.append(cb); tb+=1; to2+=len(cb["orders"])
+                    ss[pk]["orders"]+=len(cb["orders"]); ss[pk]["boxes"]+=1
 
-                tids = ctids(r["tid"])
-                cb = {
-                    "orders": [od],
-                    "date": r["date"],
-                    "date_std": r["date_std"],
-                    "customer": r["customer"],
-                    "vendor": r["vendor"],
-                    "country": r["country"],
-                    "source": src,
-                    "region": grg(r["country"]),
-                    "boxes_val": bx,
-                    "tid": ", ".join(tids) if tids else "Pending Tracking"
-                }
+                tids=ctids(r["tid"])
+                cb={"orders":[od],"date":r["date"],"date_std":r["date_std"],
+                    "customer":r["customer"],"vendor":r["vendor"],"country":r["country"],
+                    "source":src,"region":grg(r["country"]),"boxes_val":bx,
+                    "tid":", ".join(tids) if tids else "Pending Tracking"}
             else:
-                # Continuation rows within the same bundle (no boxes value)
                 if cb:
-                    # De-duplicate order IDs within the same bundle
-                    if not any(o["order_id"] == oid for o in cb["orders"]):
+                    # de-duplicate inside bundle
+                    if not any(o["order_id"]==oid for o in cb["orders"]):
                         cb["orders"].append(od)
-                        # If tracking appears later, update pending tracking
-                        if r["tid"] not in ["N/A", "", None] and cb["tid"] == "Pending Tracking":
-                            t2 = ctids(r["tid"])
-                            if t2:
-                                cb["tid"] = ", ".join(t2)
+                    # late tracking update
+                    if r["tid"] not in ["N/A","","None",None] and cb["tid"]=="Pending Tracking":
+                        t2=ctids(r["tid"]); 
+                        if t2: cb["tid"]=", ".join(t2)
 
-        # Final flush for the source
-        if cb and len(cb["orders"]) > 1:
-            bundles.append(cb)
-            tb += 1
-            to2 += len(cb["orders"])
-            ss[pk]["orders"] += len(cb["orders"])
-            ss[pk]["boxes"] += 1
+        if cb and len(cb["orders"])>1:
+            bundles.append(cb); tb+=1; to2+=len(cb["orders"])
+            ss[pk]["orders"]+=len(cb["orders"]); ss[pk]["boxes"]+=1
 
-    # Costing and savings calculation remain unchanged
+    # costing
     for b in bundles:
-        tq = 0
-        bw = 0.0
-        isc = 0.0
-        pr = rm.get(str(b.get("country", "")).strip().lower(), DR)
+        tq=0; bw=0.0; isc=0.0
+        pr=rm.get(str(b.get("country","")).strip().lower(),DR)
         for o in b["orders"]:
-            try:
-                tq += int(float(re.sub(r"[^0-9.]", "", str(o["item_count"])) or 0))
-            except:
-                pass
-            try:
-                wt = float(re.sub(r"[^0-9.]", "", str(o["weight"])) or 0)
-            except:
-                wt = 0.0
-            bw += wt
-            isc += (max(math.ceil(wt), 1) * pr)
-        b["total_items"] = tq
-        b["weight_kg"] = round(bw, 2)
-        sv = isc - (max(math.ceil(bw), 1) * pr)
-        b["savings_gbp"] = round(sv if sv > 0 else 0, 2)
-        tsav += b["savings_gbp"]
+            try: tq+=int(float(re.sub(r"[^0-9.]","",str(o["item_count"])) or 0))
+            except: pass
+            try: wt=float(re.sub(r"[^0-9.]","",str(o["weight"])) or 0)
+            except: wt=0.0
+            bw+=wt; isc+=(max(math.ceil(wt),1)*pr)
+        b["total_items"]=tq; b["weight_kg"]=round(bw,2)
+        sv=isc-(max(math.ceil(bw),1)*pr); b["savings_gbp"]=round(sv if sv>0 else 0,2)
+        tsav+=b["savings_gbp"]
 
-    bundles.sort(key=lambda x: x["date_std"], reverse=True)
-    return jsonify({
-        "success": True,
-        "kpi": {
-            "total_bundles": tb,
-            "total_orders_bundled": to2,
-            "saved_shipments": to2 - tb if tb > 0 else 0,
-            "total_savings_gbp": round(tsav, 2)
-        },
-        "source_stats": ss,
-        "bundles": bundles
-    })
+    bundles.sort(key=lambda x:x["date_std"],reverse=True)
+    return jsonify({"success":True,
+        "kpi":{"total_bundles":tb,"total_orders_bundled":to2,
+               "saved_shipments":to2-tb if tb>0 else 0,"total_savings_gbp":round(tsav,2)},
+        "source_stats":ss,"bundles":bundles})
 
+# --- API: order journey ---
 @app.route("/api/nexus/order_journey/<oid>")
 def api_order_journey(oid):
     jm=fetch_journey(); row=jm.get(str(oid).strip().upper())
@@ -4667,6 +4629,7 @@ def api_order_journey(oid):
         "key_metrics":{"qc_to_handover":dayb(dqa,dh),"handover_to_freight":dayb(dh,dfr),
             "total_journey":dayb(dc,dd or last)}})
 
+# --- SPA routes (admin gate unchanged) ---
 @app.route("/bundling")
 @app.route("/bundling/status")
 @app.route("/bundling/summary")
@@ -4689,6 +4652,7 @@ def add_float_btns(response):
             if "</body>" in html: response.set_data(html.replace("</body>",btn+"</body>"))
     return response
 
+# --- UI (polished design + analytics) ---
 BUNDLING_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -4699,103 +4663,102 @@ BUNDLING_HTML = r"""<!DOCTYPE html>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#05050f;--s1:#0c0c1e;--s2:#11112a;--s3:#161632;
-  --bd:#1e1e3f;--bd2:#252550;
-  --t1:#e8eaf6;--t2:#9fa8da;--t3:#5c6bc0;--t4:#3949ab;
-  --green:#00e676;--green2:#00c853;--blue:#448aff;--blue2:#2979ff;
-  --purple:#e040fb;--orange:#ff6d00;--yellow:#ffd740;--red:#ff1744;
-  --cyan:#00e5ff;--acc:#5c6bc0;
+  --bd:#1e1e3f;--t1:#e8eaf6;--t2:#9fa8da;--t3:#5c6bc0;--t4:#3949ab;
+  --green:#00e676;--blue:#448aff;--purple:#e040fb;--orange:#ff6d00;--yellow:#ffd740;--red:#ff1744;--acc:#5c6bc0;
 }
 body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;}
-.topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 28px;
-  background:var(--s1);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:200;backdrop-filter:blur(12px);}
+/* Topbar */
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 28px;background:var(--s1);
+  border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:200;backdrop-filter:blur(10px);}
 .tbl-left{display:flex;align-items:center;gap:12px;}
-.tbl-ico{width:38px;height:38px;background:linear-gradient(135deg,#1e88e5,#5c6bc0);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;}
-.tbl-title{font-size:16px;font-weight:800;color:var(--t1);}
-.tbl-sub{font-size:11px;color:var(--t3);margin-top:1px;}
-.tbtn{padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;transition:.15s;}
-.tbtn:hover{filter:brightness(1.15);}
+.tbl-ico{width:38px;height:38px;background:linear-gradient(135deg,#1e88e5,#5c6bc0);
+  border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+.tbl-title{font-size:16px;font-weight:800;}
+.tbl-sub{font-size:11px;color:var(--t3);}
+.tbtn{padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;transition:.15s;}
+.tbtn:hover{filter:brightness(1.1);}
+/* Tabs */
 .tabs-wrap{padding:18px 28px 0;background:var(--s1);border-bottom:1px solid var(--bd);}
 .tabs{display:flex;gap:4px;flex-wrap:wrap;}
-.tab{padding:10px 20px;border-radius:8px 8px 0 0;font-weight:700;font-size:13px;cursor:pointer;border:1px solid transparent;border-bottom:none;color:var(--t3);transition:.15s;background:transparent;}
-.tab:hover{color:var(--t2);background:rgba(92,107,192,.1);}
-.tab.active{background:var(--s2);color:var(--t1);border-color:var(--bd);border-bottom-color:var(--s2);}
+.tab{padding:10px 20px;border-radius:8px 8px 0 0;font-weight:700;font-size:13px;cursor:pointer;
+  border:1px solid transparent;border-bottom:none;color:var(--t2);transition:.15s;background:transparent;}
+.tab:hover{color:#cbd5ff;background:rgba(92,107,192,.12);}
+.tab.active{background:var(--s2);color:#fff;border-color:var(--bd);border-bottom-color:var(--s2);}
 .main{padding:24px 28px;}
 .pane{display:none;}.pane.active{display:block;}
+/* Filter bar */
 .fbar{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:16px 20px;margin-bottom:22px;}
 .frow{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;}
-.frow:last-child{margin-bottom:0;}
 .fg{display:flex;flex-direction:column;gap:4px;}
-.fl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
-.fi{background:var(--bg);border:1px solid var(--bd);color:var(--t1);padding:8px 11px;border-radius:7px;font-family:inherit;outline:none;font-size:13px;transition:.2s;}
-.fi:focus{border-color:var(--acc);}
+.fl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.7px;}
+.fi{background:var(--bg);border:1px solid var(--bd);color:var(--t1);padding:9px 11px;border-radius:8px;font-size:13px;outline:none;transition:.2s;}
+.fi:focus{border-color:var(--acc);box-shadow:0 0 0 2px rgba(92,107,192,.2);}
 .fg-grow{flex:1;min-width:180px;}
 .qbtns{display:flex;gap:6px;flex-wrap:wrap;}
-.qb{padding:6px 12px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:6px;color:var(--t3);font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;transition:.15s;}
-.qb:hover,.qb.on{background:rgba(92,107,192,.18);border-color:var(--acc);color:var(--t2);}
-.abtn{padding:8px 20px;background:linear-gradient(135deg,#3949ab,#5c6bc0);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
-.cbtn{padding:8px 14px;background:rgba(255,255,255,.04);border:1px solid var(--bd);border-radius:8px;color:var(--t3);font-size:13px;cursor:pointer;font-family:inherit;}
+.qb{padding:6px 12px;background:rgba(255,255,255,.04);border:1px solid var(--bd);border-radius:8px;color:var(--t2);font-size:12px;font-weight:600;cursor:pointer;transition:.15s;}
+.qb:hover,.qb.on{background:rgba(92,107,192,.18);border-color:var(--acc);color:#cbd5ff;}
+.abtn{padding:8px 20px;background:linear-gradient(135deg,#3949ab,#5c6bc0);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:800;cursor:pointer;}
+.cbtn{padding:8px 14px;background:rgba(255,255,255,.04);border:1px solid var(--bd);border-radius:10px;color:var(--t2);font-size:13px;cursor:pointer;}
 .cbtn:hover{border-color:var(--red);color:var(--red);}
+/* KPI cards */
 .kg{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
-.kc{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:20px 18px;border-left:3px solid var(--green);}
-.kv{font-size:34px;font-weight:900;letter-spacing:-1.5px;margin-bottom:4px;color:var(--t1);}
-.kl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+.kc{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;border-left:4px solid var(--green);transition:.2s;}
+.kc:hover{transform:translateY(-2px);}
+.kv{font-size:34px;font-weight:900;letter-spacing:-1.2px;margin-bottom:4px;}
+.kl{font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
 .sg{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
-.sc{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px;border-left:3px solid var(--green);}
+.sc{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:18px;border-left:4px solid var(--green);}
 .sct{font-size:12px;font-weight:800;color:var(--green);margin-bottom:12px;}
 .scst{display:flex;justify-content:space-around;text-align:center;}
-.scv{font-size:22px;font-weight:900;color:var(--t1);}
-.scl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;}
+.scv{font-size:22px;font-weight:900;}
+.scl{font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;}
+/* Table */
 .tw{overflow-x:auto;}
-table.mt{width:100%;border-collapse:collapse;background:var(--s1);border-radius:12px;border:1px solid var(--bd);overflow:hidden;}
-table.mt th{background:var(--bg);padding:12px 14px;font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--bd);text-align:left;}
+table.mt{width:100%;border-collapse:collapse;background:var(--s1);border-radius:14px;border:1px solid var(--bd);overflow:hidden;}
+table.mt th{background:var(--bg);padding:12px 14px;font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--bd);text-align:left;}
 table.mt td{padding:12px 14px;border-bottom:1px solid var(--s2);vertical-align:top;font-size:13px;}
 table.mt tr:hover td{background:rgba(255,255,255,.015);}
-.bbox{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;}
+.bbox{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:8px 10px;}
 .bi{display:grid;grid-template-columns:165px 1fr 50px;gap:8px;padding:7px 0;border-bottom:1px dashed var(--bd);align-items:start;}
 .bi:last-child{border-bottom:none;padding-bottom:0;}
-.olink{color:var(--green);font-weight:800;cursor:pointer;font-family:monospace;font-size:12px;background:rgba(0,230,118,.07);padding:3px 7px;border-radius:4px;border:1px solid rgba(0,230,118,.2);display:inline-flex;align-items:center;gap:3px;transition:.15s;}
+.olink{color:var(--green);font-weight:800;cursor:pointer;font-family:monospace;font-size:12px;background:rgba(0,230,118,.07);padding:3px 7px;border-radius:6px;border:1px solid rgba(0,230,118,.2);display:inline-flex;align-items:center;gap:4px;transition:.15s;}
 .olink:hover{background:rgba(0,230,118,.18);}
 .spill{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;margin-top:2px;white-space:nowrap;}
-.pbx{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:14px 18px;margin-bottom:18px;}
+/* Status pills */
+.pbx{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:14px 18px;margin-bottom:18px;}
 .sp{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:.15s;display:inline-block;}
 .sp:hover{transform:translateY(-1px);}
 .sp.on{box-shadow:0 0 0 2px var(--t1);}
+/* Provider card */
 .pcard{background:var(--s1);border:1px solid var(--bd);border-radius:16px;overflow:hidden;margin-bottom:28px;}
 .phdr{display:flex;justify-content:space-between;align-items:center;padding:18px 22px 14px;border-bottom:1px solid var(--bd);flex-wrap:wrap;gap:12px;background:linear-gradient(135deg,rgba(30,30,63,.8),rgba(17,17,42,.8));}
-.phdr-left{display:flex;flex-direction:column;gap:6px;}
-.pname{font-size:18px;font-weight:900;color:var(--t1);letter-spacing:-.3px;}
-.pname-sub{font-size:11px;color:var(--t3);}
+.pname{font-size:18px;font-weight:900;}
+.pname-sub{font-size:11px;color:var(--t2);}
 .pname-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .stars{color:var(--yellow);font-size:15px;letter-spacing:1px;}
-.pkbadge{background:linear-gradient(135deg,#ff6d00,#ff8f00);color:#fff;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:800;}
+.pkbadge{background:linear-gradient(135deg,#ff6d00,#ff8f00);color:#000;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:800;}
 .pstats{display:flex;gap:24px;align-items:center;flex-wrap:wrap;}
-.pstat{text-align:center;cursor:pointer;transition:.15s;padding:6px 10px;border-radius:8px;border:1px solid transparent;}
+.pstat{text-align:center;transition:.15s;padding:6px 10px;border-radius:10px;border:1px solid transparent;}
 .pstat:hover{background:rgba(255,255,255,.06);border-color:var(--bd);}
 .pstat-v{font-size:24px;font-weight:900;}
-.pstat-l{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:2px;}
-.csvbtn{padding:5px 12px;background:var(--s2);border:1px solid var(--bd);color:var(--t3);border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;transition:.15s;}
+.pstat-l{font-size:9px;color:var(--t2);text-transform:uppercase;font-weight:700;margin-top:2px;}
+.csvbtn{padding:6px 12px;background:var(--s2);border:1px solid var(--bd);color:var(--t2);border-radius:8px;font-size:11px;cursor:pointer;transition:.15s;}
 .csvbtn:hover{border-color:var(--yellow);color:var(--yellow);}
+/* Matrix */
 .tw2{overflow-x:auto;padding:0 2px 4px;}
 table.mx{width:100%;border-collapse:collapse;min-width:860px;}
 table.mx th.dh{background:var(--bg);text-align:center;padding:10px 4px;font-size:11px;font-weight:700;color:var(--t2);border-bottom:2px solid var(--acc);border-left:1px solid var(--bd);}
 table.mx th.sh{background:rgba(0,0,0,.4);text-align:center;padding:5px 3px;font-size:9px;font-weight:700;color:var(--t4);text-transform:uppercase;border-bottom:1px solid var(--bd);border-left:1px solid rgba(255,255,255,.04);}
-table.mx th.rh{background:var(--bg);text-align:left;padding:10px 14px;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;border-bottom:1px solid var(--bd);}
-table.mx td{padding:9px 5px;text-align:center;border-bottom:1px solid rgba(255,255,255,.04);border-left:1px solid rgba(255,255,255,.03);font-size:12px;font-weight:600;color:var(--t2);}
+table.mx th.rh{background:var(--bg);text-align:left;padding:10px 14px;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;border-bottom:1px solid var(--bd);}
+table.mx td{padding:9px 5px;text-align:center;border-bottom:1px solid rgba(255,255,255,.04);border-left:1px solid rgba(255,255,255,.03);font-size:12px;}
 table.mx td.rc{text-align:left;padding:9px 14px;font-weight:700;color:var(--t1);font-size:13px;border-left:none;}
-table.mx td.vo{color:var(--blue);}
-table.mx td.vb{color:var(--green);}
-table.mx td.vw{color:var(--yellow);}
-table.mx td.vl{color:var(--purple);}
-table.mx td.vg{color:var(--red);}
+table.mx td.vo{color:var(--blue);} table.mx td.vb{color:var(--green);} table.mx td.vw{color:var(--yellow);} table.mx td.vl{color:var(--purple);} table.mx td.vg{color:var(--red);}
 table.mx td.dash{color:var(--t4);font-size:10px;}
-table.mx tr:hover td{background:rgba(255,255,255,.02);}
 table.mx tr.ttr td{background:rgba(92,107,192,.08);font-weight:900;font-size:13px;}
-table.mx tr.ttr td.rc{color:var(--yellow);}
-table.mx td.clk{cursor:pointer;}
-table.mx td.clk:hover{opacity:.7;text-decoration:underline;}
-table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
+table.mx td.clk{cursor:pointer;} table.mx td.clk:hover{opacity:.8;text-decoration:underline;}
+/* Mini */
 .reg-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
-.mini-card{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px;}
+.mini-card{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:18px;}
 .mini-title{font-size:13px;font-weight:800;color:var(--t2);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
 .mini-title .dot{width:8px;height:8px;border-radius:50%;}
 .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
@@ -4803,118 +4766,97 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 .bar-track{flex:1;height:14px;background:var(--s2);border-radius:7px;overflow:hidden;}
 .bar-fill{height:100%;border-radius:7px;transition:.5s;}
 .bar-val{font-size:11px;font-weight:700;width:50px;text-align:right;}
+/* Loader */
 .lw{text-align:center;padding:60px;}
 .ld{width:42px;height:42px;border:3px solid var(--bd);border-top-color:var(--acc);border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 14px;}
 @keyframes sp{to{transform:rotate(360deg)}}
+/* Modals */
 .mov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;backdrop-filter:blur(8px);justify-content:center;align-items:center;}
 .mov.open{display:flex;}
-.mdl{background:var(--s1);border:1px solid var(--bd);border-radius:16px;padding:26px;width:100%;max-width:660px;max-height:88vh;overflow-y:auto;position:relative;}
+.mdl{background:var(--s1);border:1px solid var(--bd);border-radius:16px;padding:26px;width:100%;max-width:680px;max-height:88vh;overflow-y:auto;position:relative;}
 .mdl.wide{max-width:900px;}
-.mcl{position:absolute;top:13px;right:13px;background:var(--s2);border:1px solid var(--bd);color:var(--t1);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+.mcl{position:absolute;top:13px;right:13px;background:var(--s2);border:1px solid var(--bd);color:var(--t1);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
 .mcl:hover{background:var(--red);}
+/* Journey timeline */
 .tl{position:relative;padding-left:24px;margin-top:14px;}
 .tl::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--green),var(--bd));}
 .tli{position:relative;margin-bottom:13px;}
 .tld{position:absolute;left:-20px;top:2px;width:10px;height:10px;border-radius:50%;border:2px solid var(--green);background:var(--s1);}
-.tld.done{background:var(--green);}.tld.can{background:var(--red);border-color:var(--red);}.tld.pend{border-color:var(--bd);}
+.tld.done{background:var(--green);} .tld.can{background:var(--red);border-color:var(--red);} .tld.pend{border-color:var(--bd);}
 .tll{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;}
 .tlv{font-size:13px;color:var(--t1);font-weight:600;margin-top:1px;}
-.tlv.pv{color:var(--bd);font-style:italic;}.tlv.cv{color:var(--red);}
+.tlv.pv{color:var(--bd);font-style:italic;} .tlv.cv{color:var(--red);}
 .mg{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
-.mc{background:var(--bg);border:1px solid var(--bd);border-radius:9px;padding:12px;text-align:center;}
-.mv{font-size:20px;font-weight:900;color:var(--green);}
-.mv.w{color:var(--yellow);}.mv.d{color:var(--red);}.mv.n{color:var(--t3);font-size:14px;}
-.ml{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:3px;}
+.mc{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center;}
+.mv{font-size:20px;font-weight:900;color:var(--green);} .mv.w{color:var(--yellow);} .mv.d{color:var(--red);} .mv.n{color:var(--t2);font-size:14px;}
+.ml{font-size:9px;color:var(--t2);text-transform:uppercase;font-weight:700;margin-top:3px;}
 .stp-g{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:16px;}
-.stp{background:var(--bg);border:1px solid var(--bd);border-radius:7px;padding:8px;text-align:center;}
-.stpv{font-size:13px;font-weight:700;}.stpl{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-bottom:2px;}
-.cbanner{background:rgba(255,23,68,.1);border:1px solid rgba(255,23,68,.3);border-radius:7px;padding:9px 13px;margin-bottom:14px;color:var(--red);font-weight:700;font-size:12px;}
+.stp{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px;text-align:center;}
+.stpv{font-size:13px;font-weight:700;} .stpl{font-size:9px;color:var(--t2);text-transform:uppercase;font-weight:700;margin-bottom:2px;}
+.cbanner{background:rgba(255,23,68,.1);border:1px solid rgba(255,23,68,.3);border-radius:8px;padding:9px 13px;margin-bottom:14px;color:var(--red);font-weight:700;font-size:12px;}
 .shd{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin:14px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--bd);}
 .mld{width:24px;height:24px;border:3px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:sp .7s linear infinite;margin:24px auto;}
-.rc{font-size:12px;color:var(--t3);margin-bottom:10px;}.rc b{color:var(--t1);}
-.wklabel{font-size:11px;color:var(--t3);background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:4px 12px;display:inline-block;margin-bottom:18px;}
-
-/* ============ ANALYTICS STYLES ============ */
-.analytics-hero{background:linear-gradient(135deg,rgba(92,107,192,0.15),rgba(30,30,63,0.8));border:1px solid var(--bd);border-radius:16px;padding:24px;margin-bottom:24px;position:relative;overflow:hidden;}
-.analytics-hero::before{content:'';position:absolute;top:-50%;right:-20%;width:300px;height:300px;background:radial-gradient(circle,rgba(92,107,192,0.3),transparent 70%);pointer-events:none;}
-.analytics-hero::after{content:'';position:absolute;bottom:-30%;left:-10%;width:200px;height:200px;background:radial-gradient(circle,rgba(0,230,118,0.2),transparent 70%);pointer-events:none;}
-.analytics-hero-title{font-size:22px;font-weight:900;color:var(--t1);margin-bottom:6px;position:relative;z-index:1;}
-.analytics-hero-sub{font-size:12px;color:var(--t3);position:relative;z-index:1;}
+.rc{font-size:12px;color:var(--t2);margin-bottom:10px;} .rc b{color:var(--t1);}
+.wklabel{font-size:11px;color:var(--t2);background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;display:inline-block;margin-bottom:18px;}
+/* Analytics extras */
+.analytics-hero{background:linear-gradient(135deg,rgba(92,107,192,0.18),rgba(30,30,63,0.6));border:1px solid var(--bd);border-radius:18px;padding:24px;margin-bottom:24px;position:relative;overflow:hidden;}
+.analytics-hero::before{content:'';position:absolute;top:-40%;right:-15%;width:280px;height:280px;background:radial-gradient(circle,rgba(92,107,192,0.25),transparent 70%);}
+.analytics-hero-title{font-size:22px;font-weight:900;}
+.analytics-hero-sub{font-size:12px;color:var(--t2);}
 .analytics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
-.acard{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s;}
+.acard{background:var(--s1);border:1px solid var(--bd);border-radius:16px;padding:20px;position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s;}
 .acard:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(0,0,0,0.3);}
-.acard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--blue),var(--purple));}
+.acard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#448aff,#e040fb);}
 .acard.blue::before{background:linear-gradient(90deg,#448aff,#2979ff);}
 .acard.green::before{background:linear-gradient(90deg,#00e676,#00c853);}
 .acard.yellow::before{background:linear-gradient(90deg,#ffd740,#ffab00);}
 .acard.purple::before{background:linear-gradient(90deg,#e040fb,#aa00ff);}
-.acard.orange::before{background:linear-gradient(90deg,#ff6d00,#f57c00);}
-.acard.cyan::before{background:linear-gradient(90deg,#00e5ff,#00b8d4);}
-.acard-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--t3);margin-bottom:8px;}
-.acard-value{font-size:32px;font-weight:900;color:var(--t1);line-height:1.1;}
-.acard-value span{font-size:14px;color:var(--t3);font-weight:600;}
-.acard-sub{font-size:11px;color:var(--t3);margin-top:6px;display:flex;align-items:center;gap:6px;}
-.acard-sub .trend{font-weight:700;}
-.trend.up{color:var(--green);}
-.trend.down{color:var(--red);}
+.acard-title{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--t2);margin-bottom:8px;}
+.acard-value{font-size:32px;font-weight:900;line-height:1.1;}
+.acard-sub{font-size:11px;color:var(--t2);margin-top:6px;display:flex;gap:6px;}
+.trend.up{color:var(--green);} .trend.down{color:var(--red);}
 .an-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
-.an-card{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;position:relative;}
-.an-card::after{content:'';position:absolute;top:0;right:0;width:80px;height:80px;background:radial-gradient(circle,rgba(92,107,192,0.1),transparent 70%);pointer-events:none;}
-.an-card-title{font-size:14px;font-weight:800;color:var(--t1);margin-bottom:16px;display:flex;align-items:center;gap:8px;position:relative;z-index:1;}
-.an-card-title .icon{width:28px;height:28px;background:linear-gradient(135deg,var(--blue),var(--purple));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;}
+.an-card{background:var(--s1);border:1px solid var(--bd);border-radius:16px;padding:20px;}
+.an-card-title{font-size:14px;font-weight:800;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.an-card-title .icon{width:28px;height:28px;background:linear-gradient(135deg,#448aff,#e040fb);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;}
 .donut-wrap{display:flex;align-items:center;gap:30px;flex-wrap:wrap;justify-content:center;}
-.donut{width:160px;height:160px;position:relative;}
-.donut svg{transform:rotate(-90deg);width:100%;height:100%;}
+.donut{width:160px;height:160px;position:relative;} .donut svg{transform:rotate(-90deg);width:100%;height:100%;}
 .donut circle{fill:none;stroke-width:18;stroke-linecap:round;}
 .donut-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;}
-.donut-total{font-size:28px;font-weight:900;color:var(--t1);}
-.donut-label{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;}
+.donut-total{font-size:28px;font-weight:900;} .donut-label{font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:700;}
 .donut-legend{display:flex;flex-direction:column;gap:10px;}
 .donut-legend-item{display:flex;align-items:center;gap:10px;font-size:12px;}
 .donut-legend-dot{width:12px;height:12px;border-radius:3px;}
 .bar-chart{display:flex;flex-direction:column;gap:10px;}
 .bar-item{display:flex;align-items:center;gap:12px;}
-.bar-item-label{flex:0 0 100px;font-size:11px;font-weight:600;color:var(--t2);}
-.bar-item-track{flex:1;height:24px;background:var(--s2);border-radius:6px;overflow:hidden;}
-.bar-item-fill{height:100%;border-radius:6px;transition:width .6s ease;}
-.bar-item-value{width:50px;text-align:right;font-size:12px;font-weight:700;color:var(--t1);}
+.bar-item-label{flex:0 0 110px;font-size:11px;font-weight:600;color:var(--t2);}
+.bar-item-track{flex:1;height:24px;background:var(--s2);border-radius:8px;overflow:hidden;}
+.bar-item-fill{height:100%;border-radius:8px;transition:width .6s ease;}
+.bar-item-value{width:50px;text-align:right;font-size:12px;font-weight:800;}
 .pie-wrap{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;}
 .pie{width:120px;height:120px;position:relative;}
-.pie svg{width:100%;height:100%;transform:rotate(-90deg);}
-.pie circle{fill:none;stroke-width:20;}
-.pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;font-weight:900;color:var(--t1);}
+.pie svg{width:100%;height:100%;transform:rotate(-90deg);} .pie circle{fill:none;stroke-width:20;}
+.pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;font-weight:900;}
 .top-list{display:flex;flex-direction:column;gap:8px;}
-.top-item{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--bd);transition:.15s;}
-.top-item:hover{border-color:var(--acc);background:rgba(92,107,192,.08);transform:translateX(4px);}
-.top-rank{width:24px;height:24px;background:var(--s2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:var(--t3);}
+.top-item{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg);border-radius:10px;border:1px solid var(--bd);transition:.15s;}
+.top-item:hover{border-color:var(--acc);background:rgba(92,107,192,.08);}
+.top-rank{width:24px;height:24px;background:var(--s2);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:var(--t2);}
 .top-rank.gold{background:linear-gradient(135deg,#ffd740,#ffab00);color:#000;}
 .top-rank.silver{background:linear-gradient(135deg,#90a4ae,#607d8b);color:#000;}
 .top-rank.bronze{background:linear-gradient(135deg,#ff7043,#f57c00);color:#000;}
-.top-info{flex:1;}
-.top-name{font-size:13px;font-weight:700;color:var(--t1);}
-.top-detail{font-size:10px;color:var(--t3);}
-.top-count{font-size:16px;font-weight:900;color:var(--green);}
+.top-info{flex:1;} .top-name{font-size:13px;font-weight:700;} .top-detail{font-size:10px;color:var(--t2);} .top-count{font-size:16px;font-weight:900;color:var(--green);}
 .trend-chart{height:180px;display:flex;align-items:flex-end;gap:4px;padding:10px 0;}
-.trend-bar{flex:1;background:linear-gradient(180deg,var(--blue),rgba(68,138,255,.3));border-radius:4px 4px 0 0;min-height:4px;position:relative;cursor:pointer;transition:.2s;}
-.trend-bar:hover{filter:brightness(1.2);}
-.trend-bar::after{content:attr(data-val);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--s2);padding:4px 8px;border-radius:4px;font-size:10px;font-weight:700;color:var(--t1);white-space:nowrap;opacity:0;pointer-events:none;transition:.2s;margin-bottom:4px;}
+.trend-bar{flex:1;background:linear-gradient(180deg,#448aff,rgba(68,138,255,.3));border-radius:4px 4px 0 0;min-height:4px;position:relative;cursor:pointer;transition:.2s;}
+.trend-bar:hover{filter:brightness(1.15);} .trend-bar::after{content:attr(data-val);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--s2);padding:4px 8px;border-radius:6px;font-size:10px;font-weight:700;color:#fff;opacity:0;transition:.2s;margin-bottom:4px;}
 .trend-bar:hover::after{opacity:1;}
 .trend-labels{display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--bd);margin-top:8px;}
-.trend-label{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;}
-.savings-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.saving-card{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:14px;text-align:center;transition:.2s;}
-.saving-card:hover{transform:scale(1.02);border-color:var(--green);}
-.saving-card-header{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-bottom:6px;}
-.saving-card-value{font-size:22px;font-weight:900;color:var(--green);}
-.saving-card-sub{font-size:10px;color:var(--t3);margin-top:4px;}
-.stats-row{display:flex;gap:20px;flex-wrap:wrap;}
+.trend-label{font-size:9px;color:var(--t2);text-transform:uppercase;font-weight:700;}
+.stats-row{display:flex;gap:20px;flex-wrap:wrap;margin-top:20px;}
 .stat-box{flex:1;min-width:120px;background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:16px;text-align:center;transition:.2s;}
-.stat-box:hover{background:rgba(92,107,192,0.1);border-color:var(--acc);}
+.stat-box:hover{background:rgba(92,107,192,.1);border-color:var(--acc);}
 .stat-box-icon{font-size:24px;margin-bottom:8px;}
-.stat-box-value{font-size:24px;font-weight:900;color:var(--t1);}
-.stat-box-label{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:4px;}
-
-@media(max-width:768px){.kg{grid-template-columns:1fr 1fr;}.sg{grid-template-columns:1fr;}.reg-grid{grid-template-columns:1fr;}.main{padding:14px;}.analytics-grid{grid-template-columns:1fr 1fr;}.an-row{grid-template-columns:1fr;}.savings-grid{grid-template-columns:1fr 2fr;}}
+.stat-box-value{font-size:24px;font-weight:900;} .stat-box-label{font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:700;margin-top:4px;}
+@media(max-width:768px){.kg{grid-template-columns:1fr 1fr;}.sg{grid-template-columns:1fr;}.reg-grid{grid-template-columns:1fr;}.main{padding:14px;}.analytics-grid{grid-template-columns:1fr 1fr;}.an-row{grid-template-columns:1fr;}}
 @media(max-width:480px){.analytics-grid{grid-template-columns:1fr;}.an-card{padding:14px;}}
 </style>
 </head>
@@ -4925,7 +4867,7 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
     <div><div class="tbl-title">Bundling Intelligence Hub</div><div class="tbl-sub">Live Cost Analytics · Order Consolidation</div></div>
   </div>
   <div style="display:flex;gap:10px;align-items:center;">
-    <a href="/" class="tbtn" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)">🏠 Main Dash</a>
+    <a href="/" class="tbtn" style="background:var(--s2);color:#fff;border:1px solid var(--bd)">🏠 Main Dash</a>
     <button class="tbtn" style="background:linear-gradient(135deg,#00c853,#00e676);color:#000" onclick="hardRefresh()">🔄 Refresh Data</button>
   </div>
 </div>
@@ -4940,7 +4882,7 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
   </div>
 </div>
 <div class="main">
-  <div id="gLoad" class="lw"><div class="ld"></div><p style="color:var(--t3);font-size:13px">Loading data from all sources...</p><p style="color:var(--t3);font-size:11px;margin-top:6px" id="lStat">Connecting...</p></div>
+  <div id="gLoad" class="lw"><div class="ld"></div><p style="color:var(--t2);font-size:13px">Loading data from all sources...</p><p style="color:var(--t2);font-size:11px;margin-top:6px" id="lStat">Connecting...</p></div>
 
   <!-- BUNDLE TAB -->
   <div class="pane active" id="pane-bundle">
@@ -5106,12 +5048,10 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
   </div>
 </div>
 
-<!-- JOURNEY MODAL -->
+<!-- Modals -->
 <div class="mov" id="jMov" onclick="if(event.target===this)cMod('jMov')">
   <div class="mdl"><button class="mcl" onclick="cMod('jMov')">✕</button><div id="jBody"><div class="mld"></div></div></div>
 </div>
-
-<!-- ORDERS MODAL -->
 <div class="mov" id="oMov" onclick="if(event.target===this)cMod('oMov')">
   <div class="mdl wide"><button class="mcl" onclick="cMod('oMov')">✕</button>
     <div style="font-size:15px;font-weight:800;color:var(--yellow);margin-bottom:16px" id="oTit">Orders</div>
@@ -5120,9 +5060,10 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 </div>
 
 <script>
+// =============== Global ===============
 let D=null, SEL=null;
 const DAYS=["MON","TUE","WED","THU","FRI","SAT","SUN"];
-const FLT=[1,3,5];
+const FLT=[1,3,5]; // Tue Thu Sat
 const SRCS=["ECL QC Center","ECL Zone","GE Zone"];
 
 async function init(){
@@ -5132,21 +5073,18 @@ async function init(){
     const r=await fetch("/api/nexus/app_data");
     if(!r.ok) throw new Error("HTTP "+r.status);
     D=await r.json();
+
     const mon=gMon(new Date());
     g("ws").value=fi(mon); g("w4e").value=fi(mon); g("rws").value=fi(mon);
-    
-    const today=new Date();
-    const thirtyDaysAgo=new Date(today);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-30);
-    g("af").value=fi(thirtyDaysAgo);
-    g("at").value=fi(today);
-    
-    const regions=new Set();
-    (D.bundles||[]).forEach(b=>{if(b.region)regions.add(b.region);});
-    const sel=g("ar");
-    sel.innerHTML='<option value="all">All Regions</option>';
-    Array.from(regions).sort().forEach(r=>{sel.innerHTML+=`<option value="${r}">${r}</option>`;});
-    
+
+    const today=new Date(); const thirty=new Date(today); thirty.setDate(thirty.getDate()-30);
+    g("af").value=fi(thirty); g("at").value=fi(today);
+
+    // Regions into dropdown
+    const regions=new Set(); (D.bundles||[]).forEach(b=>{if(b.region)regions.add(b.region);});
+    const sel=g("ar"); sel.innerHTML='<option value="all">All Regions</option>';
+    Array.from(regions).sort().forEach(rg=>{sel.innerHTML+=`<option value="${rg}">${rg}</option>`;});
+
     g("gLoad").style.display="none";
     g("pane-bundle").classList.add("active");
     rBundle();
@@ -5156,7 +5094,6 @@ async function init(){
   }
 }
 function hardRefresh(){D=null;g("gLoad").style.display="block";document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));init();}
-
 function sw(name,tab){
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   tab.classList.add("active");
@@ -5167,14 +5104,12 @@ function sw(name,tab){
     if(name==="analytics"&&D) rAnalytics();
   });
 }
-
 function g(id){return document.getElementById(id);}
 function fi(d){return d instanceof Date?d.toISOString().split("T")[0]:d;}
 function gMon(d){d=new Date(d);const dy=d.getDay(),diff=d.getDate()-dy+(dy===0?-6:1);return new Date(d.setDate(diff));}
 function addD(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
-
 function sStyle(st){
-  if(!st||st==="—") return {bg:"rgba(255,255,255,.04)",c:"var(--t3)"};
+  if(!st||st==="—") return {bg:"rgba(255,255,255,.04)",c:"#90a4ae"};
   const s=st.toLowerCase();
   if(s.includes("deliver")) return {bg:"rgba(0,230,118,.12)",c:"#69f0ae"};
   if(s.includes("freight")) return {bg:"rgba(68,138,255,.12)",c:"#82b1ff"};
@@ -5185,13 +5120,10 @@ function sStyle(st){
   if(s.includes("pending")) return {bg:"rgba(255,215,64,.1)",c:"#ffd740"};
   return {bg:"rgba(255,255,255,.05)",c:"#90a4ae"};
 }
-function spill(st){
-  if(!st||st==="—") return "";
-  const s=sStyle(st);
-  return `<span class="spill" style="background:${s.bg};color:${s.c}">📡 ${st}</span>`;
-}
+function spill(st){if(!st||st==="—")return "";const s=sStyle(st);return `<span class="spill" style="background:${s.bg};color:${s.c}">📡 ${st}</span>`;}
 function starsFor(n){return "★".repeat(n)+"☆".repeat(5-n);}
 
+// =============== Bundle Tab ===============
 function rBundle(){
   if(!D) return;
   const q=g("bq").value.toLowerCase().trim(),fr=g("bf").value,to=g("bt").value,src=g("bs").value;
@@ -5212,15 +5144,37 @@ function rBundle(){
     return true;
   });
   let h="";
-  if(!fl.length){h=`<tr><td colspan="4" style="text-align:center;padding:50px;color:var(--t3)">No bundles found.</td></tr>`;}
+  if(!fl.length){h=`<tr><td colspan="4" style="text-align:center;padding:50px;color:var(--t2)">No bundles found.</td></tr>`;}
   else fl.forEach(b=>{
-    const items=b.orders.map(o=>`<div class="bi"><div><span class="olink" onclick="openJ('${o.order_id}')">${o.order_id} ▾</span>${spill(o.status)}<div style="font-size:10px;color:var(--t3);margin-top:2px">Wt: ${o.weight} kg</div></div><div style="font-size:11px;color:var(--t3)">${(o.title||"").substring(0,42)}</div><div style="font-weight:800;text-align:right">${o.item_count}</div></div>`).join("");
+    const items=b.orders.map(o=>`
+      <div class="bi">
+        <div><span class="olink" onclick="openJ('${o.order_id}')">${o.order_id} ▾</span>
+        ${spill(o.status)}<div style="font-size:10px;color:var(--t2);margin-top:2px">Wt: ${o.weight} kg</div></div>
+        <div style="font-size:11px;color:var(--t2)">${(o.title||"").substring(0,42)}</div>
+        <div style="font-weight:800;text-align:right">${o.item_count}</div>
+      </div>`).join("");
     const aw=b.weight_kg||0,bw=Math.max(Math.ceil(aw),1);
-    h+=`<tr><td><b style="font-size:14px">${b.date||""}</b><br><span style="color:var(--t3);font-size:11px">${b.source}</span></td><td><b>${b.customer||""}</b><br><span style="color:var(--t3);font-size:11px">${b.vendor||""}</span><br><span style="color:var(--t3);font-size:11px">${b.country||""}</span></td><td><div style="background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--bd)"><span style="color:var(--t3);font-size:11px">TID:</span> <b style="font-family:monospace;font-size:11px">${b.tid}</b><br><span style="color:var(--t3);font-size:11px">BOX:</span> <b style="color:var(--green)">${b.boxes_val}</b></div><div style="margin-top:6px;background:rgba(0,230,118,.07);border:1px solid rgba(0,230,118,.2);padding:8px;border-radius:6px"><div style="font-size:11px;display:flex;justify-content:space-between;color:var(--t3);margin-bottom:2px"><span>Total Wt:</span><b>${aw} kg</b></div><div style="font-size:11px;display:flex;justify-content:space-between;color:var(--t3);margin-bottom:2px"><span>Billed Wt:</span><b>${bw} kg</b></div><div style="font-size:13px;color:var(--green);display:flex;justify-content:space-between;font-weight:800"><span>💰 Saved:</span><span>£${(b.savings_gbp||0).toFixed(2)}</span></div></div></td><td><div class="bbox">${items}</div></td></tr>`;
+    h+=`<tr>
+      <td><b style="font-size:14px">${b.date||""}</b><br><span style="color:var(--t2);font-size:11px">${b.source}</span></td>
+      <td><b>${b.customer||""}</b><br><span style="color:var(--t2);font-size:11px">${b.vendor||""}</span><br><span style="color:var(--t2);font-size:11px">${b.country||""}</span></td>
+      <td>
+        <div style="background:var(--bg);padding:8px;border-radius:8px;border:1px solid var(--bd)">
+          <span style="color:var(--t2);font-size:11px">TID:</span> <b style="font-family:monospace;font-size:11px">${b.tid}</b><br>
+          <span style="color:var(--t2);font-size:11px">BOX:</span> <b style="color:var(--green)">${b.boxes_val}</b>
+        </div>
+        <div style="margin-top:6px;background:rgba(0,230,118,.07);border:1px solid rgba(0,230,118,.2);padding:8px;border-radius:8px">
+          <div style="font-size:11px;display:flex;justify-content:space-between;color:var(--t2);margin-bottom:2px"><span>Total Wt:</span><b>${aw} kg</b></div>
+          <div style="font-size:11px;display:flex;justify-content:space-between;color:var(--t2);margin-bottom:2px"><span>Billed Wt:</span><b>${bw} kg</b></div>
+          <div style="font-size:13px;color:var(--green);display:flex;justify-content:space-between;font-weight:800"><span>💰 Saved:</span><span>£${(b.savings_gbp||0).toFixed(2)}</span></div>
+        </div>
+      </td>
+      <td><div class="bbox">${items}</div></td>
+    </tr>`;
   });
   g("btb").innerHTML=h;
 }
 
+// =============== Status Tab ===============
 function qs(btn,p){
   document.querySelectorAll("#pane-status .qb").forEach(b=>b.classList.remove("on"));
   btn.classList.add("on");
@@ -5235,12 +5189,14 @@ function qs(btn,p){
   g("sf").value=fi(fr);g("st").value=fi(to);
 }
 function clrSt(){g("sf").value="";g("st").value="";g("sq").value="";g("ss").value="all";SEL=null;rStatus();}
-
 function rStatus(){
   if(!D) return;
   const q=g("sq").value.toLowerCase().trim(),fr=g("sf").value,to=g("st").value,src=g("ss").value;
   const orders=[];
-  (D.bundles||[]).forEach(b=>b.orders.forEach(o=>orders.push({order_id:o.order_id,date:b.date,date_std:b.date_std,source:b.source,customer:b.customer,country:b.country,weight:o.weight,status:o.status})));
+  (D.bundles||[]).forEach(b=>b.orders.forEach(o=>orders.push({
+    order_id:o.order_id,date:b.date,date_std:b.date_std,source:b.source,
+    customer:b.customer,country:b.country,weight:o.weight,status:o.status
+  })));
   const fl=orders.filter(o=>{
     if(src!=="all"&&o.source!==src) return false;
     if(fr&&o.date_std<fr) return false;
@@ -5251,179 +5207,491 @@ function rStatus(){
   });
   const cnt={};fl.forEach(o=>{cnt[o.status]=(cnt[o.status]||0)+1;});
   const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
-  let ph="";sorted.forEach(([st,n])=>{const s=sStyle(st);const esc=st.replace(/'/g,"\\'");ph+=`<span class="sp ${SEL===st?"on":""}" onclick="selSt(this,'${esc}')" style="background:${s.bg};color:${s.c};border-color:${s.c}44">${st} <b>${n}</b></span>`;});
+  let ph="";sorted.forEach(([st,n])=>{
+    const s=sStyle(st);const esc=st.replace(/'/g,"\\'");
+    ph+=`<span class="sp ${SEL===st?"on":""}" onclick="selSt(this,'${esc}')" style="background:${s.bg};color:${s.c};border-color:${s.c}44">${st} <b>${n}</b></span>`;
+  });
   g("spills").innerHTML=ph;g("spw").style.display=sorted.length?"block":"none";
   const del=fl.filter(o=>o.status.toLowerCase().includes("deliver")).length;
   const tr=fl.filter(o=>o.status.toLowerCase().includes("freight")||o.status.toLowerCase().includes("courier")).length;
   const can=fl.filter(o=>o.status.toLowerCase().includes("cancel")).length;
-  g("stot").textContent=fl.length.toLocaleString();g("sdel").textContent=del.toLocaleString();g("str2").textContent=tr.toLocaleString();g("scan").textContent=can.toLocaleString();
+  g("stot").textContent=fl.length.toLocaleString();g("sdel").textContent=del.toLocaleString();
+  g("str2").textContent=tr.toLocaleString();g("scan").textContent=can.toLocaleString();
   g("src2").innerHTML=`Showing <b>${fl.length.toLocaleString()}</b> of <b>${orders.length.toLocaleString()}</b> orders`;
   let h="";
-  if(!fl.length){h=`<tr><td colspan="8" style="text-align:center;padding:50px;color:var(--t3)">No orders found</td></tr>`;}
-  else fl.forEach((o,i)=>{const s=sStyle(o.status);h+=`<tr><td style="color:var(--t3)">${i+1}</td><td style="font-family:monospace;font-weight:800;color:var(--blue)">${o.order_id}</td><td style="color:var(--t3)">${o.date||"—"}</td><td><span class="spill" style="background:${s.bg};color:${s.c}">${o.status}</span></td><td><span class="spill" style="background:rgba(255,255,255,.05);color:var(--t3)">${o.source}</span></td><td>${o.customer||"—"}</td><td style="color:var(--t3)">${o.country||"—"}</td><td style="color:var(--t3)">${o.weight||"—"} kg</td></tr>`;});
+  if(!fl.length){h=`<tr><td colspan="8" style="text-align:center;padding:50px;color:var(--t2)">No orders found</td></tr>`;}
+  else fl.forEach((o,i)=>{
+    const s=sStyle(o.status);
+    h+=`<tr><td style="color:var(--t2)">${i+1}</td>
+      <td style="font-family:monospace;font-weight:800;color:var(--blue)">${o.order_id}</td>
+      <td style="color:var(--t2)">${o.date||"—"}</td>
+      <td><span class="spill" style="background:${s.bg};color:${s.c}">${o.status}</span></td>
+      <td><span class="spill" style="background:rgba(255,255,255,.05);color:var(--t2)">${o.source}</span></td>
+      <td>${o.customer||"—"}</td>
+      <td style="color:var(--t2)">${o.country||"—"}</td>
+      <td style="color:var(--t2)">${o.weight||"—"} kg</td></tr>`;
+  });
   g("stb").innerHTML=h;
 }
 function selSt(pill,st){SEL=SEL===st?null:st;rStatus();}
 
+// =============== Summary & Regional helpers ===============
 function wkBundles(mon){
   const s=new Date(mon);s.setHours(0,0,0,0);
   const e=addD(s,6);e.setHours(23,59,59,999);
   return (D.bundles||[]).filter(b=>{const d=new Date(b.date_std);return d>=s&&d<=e;});
 }
-
-function buildCard(src,bundles,wkLabel){
+function buildCard(src,bundles,wl){
   const sb=bundles.filter(b=>b.source===src);
   const totO=sb.reduce((a,b)=>a+b.orders.length,0);
   const totB=sb.length;
   const totW=sb.reduce((a,b)=>a+(b.weight_kg||0),0);
   const rm={};
-  sb.forEach(b=>{const rg=b.region||"EU";const d=new Date(b.date_std);const di=d.getDay()===0?6:d.getDay()-1;if(!rm[rg])rm[rg]={};if(!rm[rg][di])rm[rg][di]={o:0,bx:0,w:0,lt:0,ge:0,list:[]};rm[rg][di].o+=b.orders.length;rm[rg][di].bx+=1;rm[rg][di].w+=b.weight_kg||0;rm[rg][di].lt+=(b.weight_kg||0)<20?1:0;rm[rg][di].ge+=(b.weight_kg||0)>=20?1:0;b.orders.forEach(o=>rm[rg][di].list.push({...o,date:b.date_std}));});
+  sb.forEach(b=>{
+    const rg=b.region||"EU"; const d=new Date(b.date_std);
+    const di=d.getDay()===0?6:d.getDay()-1;
+    if(!rm[rg])rm[rg]={};
+    if(!rm[rg][di])rm[rg][di]={o:0,bx:0,w:0,lt:0,ge:0,list:[]};
+    rm[rg][di].o+=b.orders.length;rm[rg][di].bx+=1;rm[rg][di].w+=b.weight_kg||0;
+    rm[rg][di].lt+=(b.weight_kg||0)<20?1:0;rm[rg][di].ge+=(b.weight_kg||0)>=20?1:0;
+    b.orders.forEach(o=>rm[rg][di].list.push({...o,date:b.date_std}));
+  });
   const regs=Object.keys(rm).sort();
   const dt=Array.from({length:7},()=>({o:0,bx:0,w:0,lt:0,ge:0}));
-  regs.forEach(rg=>[0,1,2,3,4,5,6].forEach(di=>{if(rm[rg][di]){dt[di].o+=rm[rg][di].o;dt[di].bx+=rm[rg][di].bx;dt[di].w+=rm[rg][di].w;dt[di].lt+=rm[rg][di].lt;dt[di].ge+=rm[rg][di].ge;}}));
-  const uid=(src+"_"+wkLabel).replace(/[\s\/\-]/g,"_");
-  window["RM_"+uid]=rm;window["RM_"+uid+"_dt"]=dt;window["RM_"+uid+"_all"]=sb;
+  regs.forEach(rg=>[0,1,2,3,4,5,6].forEach(di=>{
+    if(rm[rg][di]){dt[di].o+=rm[rg][di].o;dt[di].bx+=rm[rg][di].bx;dt[di].w+=rm[rg][di].w;dt[di].lt+=rm[rg][di].lt;dt[di].ge+=rm[rg][di].ge;}
+  }));
+  const uid=(src+"_"+wl).replace(/[\s\/\-]/g,"_");
+  window["RM_"+uid]=rm; window["RM_"+uid+"_dt"]=dt; window["RM_"+uid+"_all"]=sb;
+
   let rows="";
-  regs.forEach(rg=>{rows+=`<tr><td class="rc">${rg}</td>`;[0,1,2,3,4,5,6].forEach(di=>{const v=rm[rg][di];const sep=di>0?"ds":"";if(!v){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}else{rows+=`<td class="vo ${sep} clk" onclick="showOrd('${uid}','${rg}',${di})">${v.o}</td><td class="vb">${v.bx}</td><td class="vw">${v.w.toFixed(1)}</td><td class="vl">${v.lt}</td><td class="vg">${v.ge}</td>`;}});rows+="</tr>";});
+  regs.forEach(rg=>{
+    rows+=`<tr><td class="rc">${rg}</td>`;
+    [0,1,2,3,4,5,6].forEach(di=>{
+      const v=rm[rg][di];const sep=di>0?"ds":"";
+      if(!v){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}
+      else{rows+=`<td class="vo ${sep} clk" onclick="showOrd('${uid}','${rg}',${di})">${v.o}</td><td class="vb">${v.bx}</td><td class="vw">${v.w.toFixed(1)}</td><td class="vl">${v.lt}</td><td class="vg">${v.ge}</td>`;}
+    });
+    rows+="</tr>";
+  });
   rows+=`<tr class="ttr"><td class="rc">TOTAL</td>`;
-  dt.forEach((t,di)=>{const sep=di>0?"ds":"";if(!t.o){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}else{rows+=`<td class="vo ${sep} clk" onclick="showOrdDay('${uid}',${di})">${t.o}</td><td class="vb clk" onclick="showOrdDay('${uid}',${di})">${t.bx}</td><td class="vw clk" onclick="showOrdDay('${uid}',${di})">${t.w.toFixed(1)}</td><td class="vl">${t.lt}</td><td class="vg">${t.ge}</td>`;}});
+  dt.forEach((t,di)=>{
+    const sep=di>0?"ds":"";
+    if(!t.o){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}
+    else{rows+=`<td class="vo ${sep} clk" onclick="showOrdDay('${uid}',${di})">${t.o}</td><td class="vb clk" onclick="showOrdDay('${uid}',${di})">${t.bx}</td><td class="vw clk" onclick="showOrdDay('${uid}',${di})">${t.w.toFixed(1)}</td><td class="vl">${t.lt}</td><td class="vg">${t.ge}</td>`;}
+  });
   rows+="</tr>";
   const totWDisp=totW<1000?totW.toFixed(1)+" kg":(totW/1000).toFixed(2)+" T";
-  return `<div class="pcard"><div class="phdr"><div class="phdr-left"><div class="pname-row"><div class="pname">${src}</div><div class="stars">${starsFor(4)}</div></div><div class="pname-sub">${wkLabel}</div></div><div class="pstats"><div class="pstat" onclick="showAllOrd('${uid}','O')"><div class="pstat-v" style="color:var(--blue)">${totO.toLocaleString()}</div><div class="pstat-l">ORDERS</div></div><div class="pstat" onclick="showAllOrd('${uid}','B')"><div class="pstat-v" style="color:var(--green)">${totB.toLocaleString()}</div><div class="pstat-l">BOXES</div></div><div class="pstat" onclick="showAllOrd('${uid}','W')"><div class="pstat-v" style="color:var(--yellow)">${totWDisp}</div><div class="pstat-l">WEIGHT</div></div><button class="csvbtn" onclick="doCSV('${uid}','${src}','${wkLabel}')">📋 CSV</button></div></div><div class="tw2"><table class="mx"><thead><tr><th class="rh" rowspan="2">REGION</th>${DAYS.map((d,i)=>`<th class="dh ${i>0?"ds":""}" colspan="5">${d}${FLT.includes(i)?" ✈️":""}</th>`).join("")}</tr><tr>${DAYS.map((_,i)=>`<td class="sh ${i>0?"ds":""}">O</td><td class="sh">B</td><td class="sh">W</td><td class="sh">&lt;20</td><td class="sh">20+</td>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  return `<div class="pcard">
+    <div class="phdr">
+      <div>
+        <div class="pname-row"><div class="pname">${src}</div><div class="stars">${starsFor(4)}</div></div>
+        <div class="pname-sub">${wl}</div>
+      </div>
+      <div class="pstats">
+        <div class="pstat" onclick="showAllOrd('${uid}','O')">
+          <div class="pstat-v" style="color:var(--blue)">${totO.toLocaleString()}</div>
+          <div class="pstat-l">ORDERS</div>
+        </div>
+        <div class="pstat" onclick="showAllOrd('${uid}','B')">
+          <div class="pstat-v" style="color:var(--green)">${totB.toLocaleString()}</div>
+          <div class="pstat-l">BOXES</div>
+        </div>
+        <div class="pstat" onclick="showAllOrd('${uid}','W')">
+          <div class="pstat-v" style="color:var(--yellow)">${totWDisp}</div>
+          <div class="pstat-l">WEIGHT</div>
+        </div>
+        <button class="csvbtn" onclick="doCSV('${uid}','${src}','${wl}')">📋 CSV</button>
+      </div>
+    </div>
+    <div class="tw2"><table class="mx">
+      <thead>
+        <tr>
+          <th class="rh" rowspan="2">REGION</th>
+          ${DAYS.map((d,i)=>`<th class="dh ${i>0?"ds":""}" colspan="5">${d}${FLT.includes(i)?" ✈️":""}</th>`).join("")}
+        </tr>
+        <tr>${DAYS.map((_,i)=>`<td class="sh ${i>0?"ds":""}">O</td><td class="sh">B</td><td class="sh">W</td><td class="sh">&lt;20</td><td class="sh">20+</td>`).join("")}</tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+function setWk(offset,btn){document.querySelectorAll("#pane-summary .qb").forEach(b=>b.classList.remove("on"));if(btn)btn.classList.add("on");const mon=gMon(new Date());mon.setDate(mon.getDate()+offset*7);g("ws").value=fi(mon);}
+function rSummary(){if(!D) return;const ws=g("ws").value;if(!ws) return;const mon=new Date(ws);mon.setHours(0,0,0,0);const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;const bundles=wkBundles(mon);let html="";if(!bundles.length) html=`<div style="text-align:center;padding:60px;color:var(--t2)">No data for selected week.</div>`;else SRCS.forEach(src=>{html+=buildCard(src,bundles,wl);});g("sumCards").innerHTML=html;}
+function setW4Now(btn){document.querySelectorAll("#pane-week4 .qb").forEach(b=>b.classList.remove("on"));if(btn)btn.classList.add("on");g("w4e").value=fi(gMon(new Date()));}
+function rW4(){if(!D) return;const ws=g("w4e").value;if(!ws) return;const lat=new Date(ws);lat.setHours(0,0,0,0);let html="";for(let i=0;i<4;i++){const mon=new Date(lat);mon.setDate(mon.getDate()-i*7);const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;const bundles=wkBundles(mon);html+=`<div style="margin-bottom:8px"><div class="wklabel">📅 Week ${4-i}: ${wl}</div>`;if(!bundles.length){html+=`<div style="text-align:center;padding:30px;color:var(--t2);background:var(--s1);border-radius:14px;margin-bottom:20px">No data</div>`;}else SRCS.forEach(src=>{html+=buildCard(src,bundles,wl);});html+="</div>";}g("w4cards").innerHTML=html;}
+function setRWk(offset,btn){document.querySelectorAll("#pane-regional .qb").forEach(b=>b.classList.remove("on"));if(btn)btn.classList.add("on");const mon=gMon(new Date());mon.setDate(mon.getDate()+offset*7);g("rws").value=fi(mon);}
+function rRegional(){if(!D) return;const ws=g("rws").value;if(!ws) return;const mon=new Date(ws);mon.setHours(0,0,0,0);const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;const bundles=wkBundles(mon);
+  const groups={"QC Center":["ECL QC Center"],"PK Zone":["ECL Zone","GE Zone"]};
+  let html=`<div class="wklabel">📅 ${wl}</div>`;
+  const regTotals={};bundles.forEach(b=>{const rg=b.region||"EU";if(!regTotals[rg])regTotals[rg]={o:0,bx:0,w:0};regTotals[rg].o+=b.orders.length;regTotals[rg].bx+=1;regTotals[rg].w+=(b.weight_kg||0);});
+  const regs=Object.entries(regTotals).sort((a,b)=>b[1].o-a[1].o);
+  const maxO=Math.max(...regs.map(r=>r[1].o),1);
+  const barCols=["var(--blue)","var(--green)","var(--yellow)","var(--purple)","var(--orange)","var(--red)","#80cbc4","#ce93d8"];
+  let barHtml="";
+  regs.slice(0,12).forEach(([rg,v],i)=>{
+    const pct=(v.o/maxO*100).toFixed(1);
+    barHtml+=`<div class="bar-row"><div class="bar-label">${rg}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${barCols[i%barCols.length]}"></div></div><div class="bar-val" style="color:${barCols[i%barCols.length]}">${v.o}</div></div>`;
+  });
+  html+=`<div class="reg-grid">
+    <div class="mini-card">
+      <div class="mini-title"><div class="dot" style="background:var(--blue)"></div>Orders by Region (This Week)</div>
+      ${barHtml||'<div style="color:var(--t2)">No data</div>'}
+    </div>
+    <div class="mini-card">
+      <div class="mini-title"><div class="dot" style="background:var(--yellow)"></div>Week Stats</div>
+      ${buildWeekStats(bundles)}
+    </div>
+  </div>`;
+  Object.entries(groups).forEach(([gname,srcs])=>{
+    const gb=bundles.filter(b=>srcs.includes(b.source));
+    html+=buildRegCard(gname,gb,wl);
+  });
+  g("regCards").innerHTML=html;
+}
+function buildWeekStats(bundles){
+  const totO=bundles.reduce((a,b)=>a+b.orders.length,0);
+  const totB=bundles.length;
+  const totW=bundles.reduce((a,b)=>a+(b.weight_kg||0),0);
+  const lt=bundles.filter(b=>(b.weight_kg||0)<20).length;
+  const ge=bundles.filter(b=>(b.weight_kg||0)>=20).length;
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div style="background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:28px;font-weight:900;color:var(--blue)">${totO.toLocaleString()}</div>
+      <div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:700">Total Orders</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:28px;font-weight:900;color:var(--green)">${totB.toLocaleString()}</div>
+      <div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:700">Total Boxes</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:24px;font-weight:900;color:var(--yellow)">${totW.toFixed(1)} kg</div>
+      <div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:700">Total Weight</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:20px;font-weight:900"><span style="color:var(--purple)">${lt}</span> / <span style="color:var(--red)">${ge}</span></div>
+      <div style="font-size:10px;color:var(--t2);text-transform:uppercase;font-weight:700">&lt;20 kg / 20+ kg</div>
+    </div>
+  </div>`;
+}
+function buildRegCard(gname,bundles,wl){
+  const uid=(gname+"_"+wl).replace(/[\s\/\-]/g,"_");
+  const totO=bundles.reduce((a,b)=>a+b.orders.length,0);
+  const totB=bundles.length;
+  const totW=bundles.reduce((a,b)=>a+(b.weight_kg||0),0);
+  const rm={};
+  bundles.forEach(b=>{
+    const rg=b.region||"EU";const d=new Date(b.date_std);
+    const di=d.getDay()===0?6:d.getDay()-1;
+    if(!rm[rg])rm[rg]={};
+    if(!rm[rg][di])rm[rg][di]={o:0,bx:0,w:0,lt:0,ge:0,list:[]};
+    rm[rg][di].o+=b.orders.length;rm[rg][di].bx+=1;rm[rg][di].w+=b.weight_kg||0;
+    rm[rg][di].lt+=(b.weight_kg||0)<20?1:0;rm[rg][di].ge+=(b.weight_kg||0)>=20?1:0;
+    b.orders.forEach(o=>rm[rg][di].list.push({...o,date:b.date_std}));
+  });
+  window["RM_"+uid]=rm; window["RM_"+uid+"_all"]=bundles;
+  const regs=Object.keys(rm).sort();
+  const dt=Array.from({length:7},()=>({o:0,bx:0,w:0,lt:0,ge:0}));
+  regs.forEach(rg=>[0,1,2,3,4,5,6].forEach(di=>{
+    if(rm[rg][di]){dt[di].o+=rm[rg][di].o;dt[di].bx+=rm[rg][di].bx;dt[di].w+=rm[rg][di].w;dt[di].lt+=rm[rg][di].lt;dt[di].ge+=rm[rg][di].ge;}
+  }));
+  let rows="";
+  regs.forEach(rg=>{
+    rows+=`<tr><td class="rc">${rg}</td>`;
+    [0,1,2,3,4,5,6].forEach(di=>{
+      const v=rm[rg][di];const sep=di>0?"ds":"";
+      if(!v){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}
+      else{rows+=`<td class="vo ${sep} clk" onclick="showOrd('${uid}','${rg}',${di})">${v.o}</td><td class="vb">${v.bx}</td><td class="vw">${v.w.toFixed(1)}</td><td class="vl">${v.lt}</td><td class="vg">${v.ge}</td>`;}
+    });
+    rows+="</tr>";
+  });
+  rows+=`<tr class="ttr"><td class="rc">TOTAL</td>`;
+  dt.forEach((t,di)=>{
+    const sep=di>0?"ds":"";
+    if(!t.o){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}
+    else{rows+=`<td class="vo ${sep} clk" onclick="showOrdDay('${uid}',${di})">${t.o}</td><td class="vb clk" onclick="showOrdDay('${uid}',${di})">${t.bx}</td><td class="vw clk" onclick="showOrdDay('${uid}',${di})">${t.w.toFixed(1)}</td><td class="vl">${t.lt}</td><td class="vg">${t.ge}</td>`;}
+  });
+  rows+="</tr>";
+  const totWDisp=totW<1000?totW.toFixed(1)+" kg":(totW/1000).toFixed(2)+" T";
+  const nameCol=gname==="QC Center"?"var(--green)":"#7986cb";
+  return `<div class="pcard">
+    <div class="phdr">
+      <div class="pname-row">
+        <div class="pname" style="color:${nameCol}">${gname}</div>
+        <div class="stars">${starsFor(4)}</div>
+        ${gname==="PK Zone"?'<div class="pkbadge">👑 Region King</div>':""}
+      </div>
+      <div class="pstats">
+        <div class="pstat" onclick="showAllOrd('${uid}','O')"><div class="pstat-v" style="color:var(--blue)">${totO.toLocaleString()}</div><div class="pstat-l">ORDERS</div></div>
+        <div class="pstat" onclick="showAllOrd('${uid}','B')"><div class="pstat-v" style="color:var(--green)">${totB.toLocaleString()}</div><div class="pstat-l">BOXES</div></div>
+        <div class="pstat" onclick="showAllOrd('${uid}','W')"><div class="pstat-v" style="color:var(--yellow)">${totWDisp}</div><div class="pstat-l">WEIGHT</div></div>
+        <button class="csvbtn" onclick="doCSV('${uid}','${gname}','${wl}')">📋 CSV</button>
+      </div>
+    </div>
+    <div class="tw2"><table class="mx">
+      <thead>
+        <tr>
+          <th class="rh" rowspan="2">REGION</th>
+          ${DAYS.map((d,i)=>`<th class="dh ${i>0?"ds":""}" colspan="5">${d}${FLT.includes(i)?" ✈️":""}</th>`).join("")}
+        </tr>
+        <tr>${DAYS.map((_,i)=>`<td class="sh ${i>0?"ds":""}">O</td><td class="sh">B</td><td class="sh">W</td><td class="sh">&lt;20</td><td class="sh">20+</td>`).join("")}</tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
 }
 
-function setWk(offset,btn){document.querySelectorAll("#pane-summary .qb").forEach(b=>b.classList.remove("on"));if(btn)btn.classList.add("on");const mon=gMon(new Date());mon.setDate(mon.getDate()+offset*7);g("ws").value=fi(mon);}
-function rSummary(){if(!D) return;const ws=g("ws").value;if(!ws) return;const mon=new Date(ws);mon.setHours(0,0,0,0);const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;const bundles=wkBundles(mon);let html="";if(!bundles.length) html=`<div style="text-align:center;padding:60px;color:var(--t3)">No data for selected week.</div>`;else SRCS.forEach(src=>{html+=buildCard(src,bundles,wl);});g("sumCards").innerHTML=html;}
-function setW4Now(btn){document.querySelectorAll("#pane-week4 .qb").forEach(b=>b.classList.remove("on"));if(btn)btn.classList.add("on");g("w4e").value=fi(gMon(new Date()));}
-function rW4(){if(!D) return;const ws=g("w4e").value;if(!ws) return;const lat=new Date(ws);lat.setHours(0,0,0,0);let html="";for(let i=0;i<4;i++){const mon=new Date(lat);mon.setDate(mon.getDate()-i*7);const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;const bundles=wkBundles(mon);html+=`<div style="margin-bottom:8px"><div class="wklabel">📅 Week ${4-i}: ${wl}</div>`;if(!bundles.length){html+=`<div style="text-align:center;padding:30px;color:var(--t3);background:var(--s1);border-radius:12px;margin-bottom:20px">No data</div>`;}else SRCS.forEach(src=>{html+=buildCard(src,bundles,wl);});html+="</div>";}g("w4cards").innerHTML=html;}
-function setRWk(offset,btn){document.querySelectorAll("#pane-regional .qb").forEach(b=>b.classList.remove("on"));if(btn)btn.classList.add("on");const mon=gMon(new Date());mon.setDate(mon.getDate()+offset*7);g("rws").value=fi(mon);}
-function rRegional(){if(!D) return;const ws=g("rws").value;if(!ws) return;const mon=new Date(ws);mon.setHours(0,0,0,0);const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;const bundles=wkBundles(mon);const groups={"QC Center":["ECL QC Center"],"PK Zone":["ECL Zone","GE Zone"]};let html=`<div class="wklabel">📅 ${wl}</div>`;const regTotals={};bundles.forEach(b=>{const rg=b.region||"EU";if(!regTotals[rg])regTotals[rg]={o:0,bx:0,w:0};regTotals[rg].o+=b.orders.length;regTotals[rg].bx+=1;regTotals[rg].w+=(b.weight_kg||0);});const regs=Object.entries(regTotals).sort((a,b)=>b[1].o-a[1].o);const maxO=Math.max(...regs.map(r=>r[1].o),1);const barCols=["var(--blue)","var(--green)","var(--yellow)","var(--purple)","var(--cyan)","var(--orange)","var(--red)","#80cbc4","#ce93d8","#f48fb1","#ffe082","#a5d6a7"];let barHtml="";regs.slice(0,12).forEach(([rg,v],i)=>{const pct=(v.o/maxO*100).toFixed(1);barHtml+=`<div class="bar-row"><div class="bar-label">${rg}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${barCols[i%barCols.length]}"></div></div><div class="bar-val" style="color:${barCols[i%barCols.length]}">${v.o}</div></div>`;});html+=`<div class="reg-grid"><div class="mini-card"><div class="mini-title"><div class="dot" style="background:var(--blue)"></div>Orders by Region (This Week)</div>${barHtml||'<div style="color:var(--t3)">No data</div>'}</div><div class="mini-card"><div class="mini-title"><div class="dot" style="background:var(--yellow)"></div>Week Stats</div>${buildWeekStats(bundles)}</div></div>`;Object.entries(groups).forEach(([gname,srcs])=>{const gb=bundles.filter(b=>srcs.includes(b.source));html+=buildRegCard(gname,gb,wl);});g("regCards").innerHTML=html;}
-function buildWeekStats(bundles){const totO=bundles.reduce((a,b)=>a+b.orders.length,0);const totB=bundles.length;const totW=bundles.reduce((a,b)=>a+(b.weight_kg||0),0);const lt=bundles.filter(b=>(b.weight_kg||0)<20).length;const ge=bundles.filter(b=>(b.weight_kg||0)>=20).length;return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center"><div style="font-size:28px;font-weight:900;color:var(--blue)">${totO.toLocaleString()}</div><div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700">Total Orders</div></div><div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center"><div style="font-size:28px;font-weight:900;color:var(--green)">${totB.toLocaleString()}</div><div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700">Total Boxes</div></div><div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:900;color:var(--yellow)">${totW.toFixed(1)} kg</div><div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700">Total Weight</div></div><div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:900"><span style="color:var(--purple)">${lt}</span> / <span style="color:var(--red)">${ge}</span></div><div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700">&lt;20 kg / 20+ kg</div></div></div>`;}
-function buildRegCard(gname,bundles,wl){const uid=(gname+"_"+wl).replace(/[\s\/\-]/g,"_");const totO=bundles.reduce((a,b)=>a+b.orders.length,0);const totB=bundles.length;const totW=bundles.reduce((a,b)=>a+(b.weight_kg||0),0);const rm={};bundles.forEach(b=>{const rg=b.region||"EU";const d=new Date(b.date_std);const di=d.getDay()===0?6:d.getDay()-1;if(!rm[rg])rm[rg]={};if(!rm[rg][di])rm[rg][di]={o:0,bx:0,w:0,lt:0,ge:0,list:[]};rm[rg][di].o+=b.orders.length;rm[rg][di].bx+=1;rm[rg][di].w+=b.weight_kg||0;rm[rg][di].lt+=(b.weight_kg||0)<20?1:0;rm[rg][di].ge+=(b.weight_kg||0)>=20?1:0;b.orders.forEach(o=>rm[rg][di].list.push({...o,date:b.date_std}));});window["RM_"+uid]=rm;window["RM_"+uid+"_all"]=bundles;const regs=Object.keys(rm).sort();const dt=Array.from({length:7},()=>({o:0,bx:0,w:0,lt:0,ge:0}));regs.forEach(rg=>[0,1,2,3,4,5,6].forEach(di=>{if(rm[rg][di]){dt[di].o+=rm[rg][di].o;dt[di].bx+=rm[rg][di].bx;dt[di].w+=rm[rg][di].w;dt[di].lt+=rm[rg][di].lt;dt[di].ge+=rm[rg][di].ge;}}));let rows="";regs.forEach(rg=>{rows+=`<tr><td class="rc">${rg}</td>`;[0,1,2,3,4,5,6].forEach(di=>{const v=rm[rg][di];const sep=di>0?"ds":"";if(!v){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}else{rows+=`<td class="vo ${sep} clk" onclick="showOrd('${uid}','${rg}',${di})">${v.o}</td><td class="vb">${v.bx}</td><td class="vw">${v.w.toFixed(1)}</td><td class="vl">${v.lt}</td><td class="vg">${v.ge}</td>`;}});rows+="</tr>";});rows+=`<tr class="ttr"><td class="rc">TOTAL</td>`;dt.forEach((t,di)=>{const sep=di>0?"ds":"";if(!t.o){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}else{rows+=`<td class="vo ${sep} clk" onclick="showOrdDay('${uid}',${di})">${t.o}</td><td class="vb clk" onclick="showOrdDay('${uid}',${di})">${t.bx}</td><td class="vw clk" onclick="showOrdDay('${uid}',${di})">${t.w.toFixed(1)}</td><td class="vl">${t.lt}</td><td class="vg">${t.ge}</td>`;}});rows+="</tr>";const totWDisp=totW<1000?totW.toFixed(1)+" kg":(totW/1000).toFixed(2)+" T";const nameCol=gname==="QC Center"?"var(--green)":"#7986cb";return `<div class="pcard"><div class="phdr"><div class="phdr-left"><div class="pname-row"><div class="pname" style="color:${nameCol}">${gname}</div><div class="stars">${starsFor(4)}</div>${gname==="PK Zone"?'<div class="pkbadge">👑 Region King</div>':""}</div><div class="pname-sub">${wl}</div></div><div class="pstats"><div class="pstat" onclick="showAllOrd('${uid}','O')"><div class="pstat-v" style="color:var(--blue)">${totO.toLocaleString()}</div><div class="pstat-l">ORDERS</div></div><div class="pstat" onclick="showAllOrd('${uid}','B')"><div class="pstat-v" style="color:var(--green)">${totB.toLocaleString()}</div><div class="pstat-l">BOXES</div></div><div class="pstat" onclick="showAllOrd('${uid}','W')"><div class="pstat-v" style="color:var(--yellow)">${totWDisp}</div><div class="pstat-l">WEIGHT</div></div><button class="csvbtn" onclick="doCSV('${uid}','${gname}','${wl}')">📋 CSV</button></div></div><div class="tw2"><table class="mx"><thead><tr><th class="rh" rowspan="2">REGION</th>${DAYS.map((d,i)=>`<th class="dh ${i>0?"ds":""}" colspan="5">${d}${FLT.includes(i)?" ✈️":""}</th>`).join("")}</tr><tr>${DAYS.map((_,i)=>`<td class="sh ${i>0?"ds":""}">O</td><td class="sh">B</td><td class="sh">W</td><td class="sh">&lt;20</td><td class="sh">20+</td>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div></div>`;}
-
-// ============================================================
-// ANALYTICS TAB
-// ============================================================
+// =============== Analytics ===============
 function rAnalytics(){
   if(!D) return;
   const fr=g("af").value,to=g("at").value,src=g("as").value,reg=g("ar").value;
-  const bundles=(D.bundles||[]).filter(b=>{if(src!=="all"&&b.source!==src)return false;if(reg!=="all"&&b.region!==reg)return false;if(fr&&b.date_std<fr)return false;if(to&&b.date_std>to)return false;return true;});
-  const totalBundles=bundles.length,totalOrders=bundles.reduce((a,b)=>a+b.orders.length,0),totalWeight=bundles.reduce((a,b)=>a+(b.weight_kg||0),0),totalSavings=bundles.reduce((a,b)=>a+(b.savings_gbp||0),0),totalItems=bundles.reduce((a,b)=>a+(b.total_items||0),0),avgWeight=totalBundles>0?(totalWeight/totalBundles).toFixed(1):0,avgOrdersPerBundle=totalBundles>0?(totalOrders/totalBundles).toFixed(1):0;
+  const bundles=(D.bundles||[]).filter(b=>{
+    if(src!=="all"&&b.source!==src) return false;
+    if(reg!=="all"&&b.region!==reg) return false;
+    if(fr&&b.date_std<fr) return false;
+    if(to&&b.date_std>to) return false;
+    return true;
+  });
+
+  const totalBundles=bundles.length;
+  const totalOrders=bundles.reduce((a,b)=>a+b.orders.length,0);
+  const totalWeight=bundles.reduce((a,b)=>a+(b.weight_kg||0),0);
+  const totalSavings=bundles.reduce((a,b)=>a+(b.savings_gbp||0),0);
+  const totalItems=bundles.reduce((a,b)=>a+(b.total_items||0),0);
+  const avgWeight=totalBundles? (totalWeight/totalBundles).toFixed(1) : 0;
+  const avgOrdersPerBundle=totalBundles? (totalOrders/totalBundles).toFixed(1) : 0;
+
   const sourceStats={},regionStats={},customerStats={},vendorStats={},dailyStats={},weightStats={lt20:0,ge20:0},savingsByRegion={};
-  bundles.forEach(b=>{if(!sourceStats[b.source])sourceStats[b.source]={bundles:0,orders:0,weight:0,savings:0};sourceStats[b.source].bundles++;sourceStats[b.source].orders+=b.orders.length;sourceStats[b.source].weight+=b.weight_kg||0;sourceStats[b.source].savings+=b.savings_gbp||0;const rg=b.region||"EU";if(!regionStats[rg])regionStats[rg]={bundles:0,orders:0,weight:0};regionStats[rg].bundles++;regionStats[rg].orders+=b.orders.length;regionStats[rg].weight+=b.weight_kg||0;if(!savingsByRegion[rg])savingsByRegion[rg]=0;savingsByRegion[rg]+=b.savings_gbp||0;if((b.weight_kg||0)<20)weightStats.lt20++;else weightStats.ge20++;const cust=b.customer||"Unknown";if(!customerStats[cust])customerStats[cust]={count:0,orders:0,weight:0};customerStats[cust].count++;customerStats[cust].orders+=b.orders.length;customerStats[cust].weight+=b.weight_kg||0;const vend=b.vendor||"Unknown";if(!vendorStats[vend])vendorStats[vend]={count:0,orders:0,weight:0};vendorStats[vend].count++;vendorStats[vend].orders+=b.orders.length;vendorStats[vend].weight+=b.weight_kg||0;const day=b.date_std;if(!dailyStats[day])dailyStats[day]={bundles:0,orders:0,weight:0};dailyStats[day].bundles++;dailyStats[day].orders+=b.orders.length;dailyStats[day].weight+=b.weight_kg||0;});
-  const topCustomers=Object.entries(customerStats).sort((a,b)=>b[1].orders-a[1].orders).slice(0,8),topVendors=Object.entries(vendorStats).sort((a,b)=>b[1].orders-a[1].orders).slice(0,8),topRegions=Object.entries(regionStats).sort((a,b)=>b[1].orders-a[1].orders).slice(0,6),srcColors={"ECL QC Center":"#00e676","ECL Zone":"#448aff","GE Zone":"#ff6d00"};
+  bundles.forEach(b=>{
+    if(!sourceStats[b.source])sourceStats[b.source]={bundles:0,orders:0,weight:0,savings:0};
+    sourceStats[b.source].bundles++;sourceStats[b.source].orders+=b.orders.length;
+    sourceStats[b.source].weight+=b.weight_kg||0;sourceStats[b.source].savings+=b.savings_gbp||0;
+    const rg=b.region||"EU";
+    if(!regionStats[rg])regionStats[rg]={bundles:0,orders:0,weight:0};
+    regionStats[rg].bundles++;regionStats[rg].orders+=b.orders.length;regionStats[rg].weight+=b.weight_kg||0;
+    if(!savingsByRegion[rg])savingsByRegion[rg]=0; savingsByRegion[rg]+=b.savings_gbp||0;
+    if((b.weight_kg||0)<20) weightStats.lt20++; else weightStats.ge20++;
+    const cust=b.customer||"Unknown";
+    if(!customerStats[cust])customerStats[cust]={count:0,orders:0,weight:0};
+    customerStats[cust].count++;customerStats[cust].orders+=b.orders.length;customerStats[cust].weight+=b.weight_kg||0;
+    const vend=b.vendor||"Unknown";
+    if(!vendorStats[vend])vendorStats[vend]={count:0,orders:0,weight:0};
+    vendorStats[vend].count++;vendorStats[vend].orders+=b.orders.length;vendorStats[vend].weight+=b.weight_kg||0;
+    const day=b.date_std;
+    if(!dailyStats[day])dailyStats[day]={bundles:0,orders:0,weight:0};
+    dailyStats[day].bundles++;dailyStats[day].orders+=b.orders.length;dailyStats[day].weight+=b.weight_kg||0;
+  });
+
+  const topCustomers=Object.entries(customerStats).sort((a,b)=>b[1].orders-a[1].orders).slice(0,8);
+  const topVendors=Object.entries(vendorStats).sort((a,b)=>b[1].orders-a[1].orders).slice(0,8);
+  const topRegions=Object.entries(regionStats).sort((a,b)=>b[1].orders-a[1].orders).slice(0,6);
+  const srcColors={"ECL QC Center":"#00e676","ECL Zone":"#448aff","GE Zone":"#ff6d00"};
+
   let html=``;
-  
-  // Hero Section
-  html+=`<div class="analytics-hero"><div class="analytics-hero-title">📈 Analytics Dashboard</div><div class="analytics-hero-sub">Comprehensive insights into your bundling operations · ${totalBundles} bundles · ${totalOrders} orders</div></div>`;
-  
-  // KPI Cards
+  html+=`<div class="analytics-hero"><div class="analytics-hero-title">📈 Analytics Dashboard</div><div class="analytics-hero-sub">Insights across ${totalBundles} bundles · ${totalOrders} orders</div></div>`;
   html+=`<div class="analytics-grid">
     <div class="acard blue"><div class="acard-title">📦 Total Bundles</div><div class="acard-value">${totalBundles.toLocaleString()}</div><div class="acard-sub"><span class="trend up">⬆ ${avgOrdersPerBundle}</span> avg orders/bundle</div></div>
     <div class="acard green"><div class="acard-title">📋 Total Orders</div><div class="acard-value">${totalOrders.toLocaleString()}</div><div class="acard-sub"><span class="trend up">⬆ ${totalItems.toLocaleString()}</span> total items</div></div>
     <div class="acard yellow"><div class="acard-title">⚖️ Total Weight</div><div class="acard-value">${totalWeight<1000?totalWeight.toFixed(1)+' kg':(totalWeight/1000).toFixed(2)+' T'}</div><div class="acard-sub"><span class="trend">📊 ${avgWeight} kg</span> avg per bundle</div></div>
-    <div class="acard purple"><div class="acard-title">💰 Total Savings</div><div class="acard-value">£${totalSavings.toLocaleString(undefined,{minimumFractionDigits:2})}</div><div class="acard-sub"><span class="trend up">⬆ £${totalBundles>0?(totalSavings/totalBundles).toFixed(2):"0.00"}</span> avg per bundle</div></div>
+    <div class="acard purple"><div class="acard-title">💰 Total Savings</div><div class="acard-value">£${totalSavings.toLocaleString(undefined,{minimumFractionDigits:2})}</div><div class="acard-sub"><span class="trend up">⬆ £${totalBundles? (totalSavings/totalBundles).toFixed(2):"0.00"}</span> avg per bundle</div></div>
   </div>`;
-  
-  // Source & Region
-  html+=`<div class="an-row">`;
-  const srcEntries=Object.entries(sourceStats),srcTotal=srcEntries.reduce((a,[,v])=>a+v.orders,0);
+
+  // Source donut
+  const srcEntries=Object.entries(sourceStats);
+  const srcTotal=srcEntries.reduce((a,[,v])=>a+v.orders,0);
   let srcDonut='',srcLegend='',offset=0;
-  srcEntries.forEach(([s,v],i)=>{const pct=srcTotal>0?(v.orders/srcTotal*100):0,dashArray=pct*1.25,color=srcColors[s]||'#888';srcDonut+=`<circle cx="50" cy="50" r="35" stroke="${color}" stroke-dasharray="${dashArray} 125" stroke-dashoffset="-${offset}" />`;offset+=dashArray;srcLegend+=`<div class="donut-legend-item"><div class="donut-legend-dot" style="background:${color}"></div><span>${s}</span><b>${v.orders}</b></div>`;});
-  html+=`<div class="an-card"><div class="an-card-title"><div class="icon">📊</div> Orders by Source</div><div class="donut-wrap"><div class="donut"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="35" fill="none" stroke="var(--bd)" stroke-width="18"/>${srcDonut}</svg><div class="donut-center"><div class="donut-total">${srcTotal}</div><div class="donut-label">Orders</div></div></div><div class="donut-legend">${srcLegend}</div></div></div>`;
-  let regionBars='';const maxRegOrders=Math.max(...topRegions.map(r=>r[1].orders),1);const regColors=["#448aff","#00e676","#ff6d00","#e040fb","#ffd740","#00e5ff"];topRegions.forEach(([rg,v],i)=>{const pct=(v.orders/maxRegOrders*100).toFixed(1);regionBars+=`<div class="bar-item"><div class="bar-item-label">${rg}</div><div class="bar-item-track"><div class="bar-item-fill" style="width:${pct}%;background:${regColors[i%regColors.length]}"></div></div><div class="bar-item-value">${v.orders}</div></div>`;});
-  html+=`<div class="an-card"><div class="an-card-title"><div class="icon">🌍</div> Orders by Region</div><div class="bar-chart">${regionBars||'<div style="color:var(--t3)">No data</div>'}</div></div></div>`;
-  
-  // Weight & Savings
-  html+=`<div class="an-row">`;
-  const totalWeightDist=weightStats.lt20+weightStats.ge20,ltPct=totalWeightDist>0?(weightStats.lt20/totalWeightDist*100).toFixed(1):0,gePct=totalWeightDist>0?(weightStats.ge20/totalWeightDist*100).toFixed(1):0;
-  html+=`<div class="an-card"><div class="an-card-title"><div class="icon">⚖️</div> Weight Distribution</div><div class="pie-wrap" style="margin-bottom:16px"><div class="pie"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="35" fill="none" stroke="var(--bd)" stroke-width="20"/><circle cx="50" cy="50" r="35" fill="none" stroke="#00e676" stroke-width="20" stroke-dasharray="${ltPct*2.2} 220" /><circle cx="50" cy="50" r="35" fill="none" stroke="#ff6d00" stroke-width="20" stroke-dasharray="${gePct*2.2} 220" stroke-dashoffset="-${ltPct*2.2}" /></svg><div class="pie-center">${totalWeightDist}</div></div><div class="donut-legend"><div class="donut-legend-item"><div class="donut-legend-dot" style="background:#00e676"></div><span>&lt;20 kg (Light)</span><b>${weightStats.lt20}</b></div><div class="donut-legend-item"><div class="donut-legend-dot" style="background:#ff6d00"></div><span>20+ kg (Heavy)</span><b>${weightStats.ge20}</b></div></div></div></div>`;
-  const savingsEntries=Object.entries(savingsByRegion).sort((a,b)=>b[1]-a[1]);let savingsCards='';const totalSavingsAll=savingsEntries.reduce((a,b)=>a+b[1],0);savingsEntries.slice(0,6).forEach(([rg,sav])=>{const pct=totalSavingsAll>0?(sav/totalSavingsAll*100).toFixed(1):0;savingsCards+=`<div class="saving-card"><div class="saving-card-header">${rg}</div><div class="saving-card-value">£${sav.toFixed(2)}</div><div class="saving-card-sub">${pct}% of total</div></div>`;});
-  html+=`<div class="an-card"><div class="an-card-title"><div class="icon">💰</div> Savings by Region</div><div class="savings-grid">${savingsCards||'<div style="color:var(--t3)">No savings</div>'}</div></div></div>`;
-  
-  // Top Lists
-  html+=`<div class="an-row">`;
-  let customerList='';topCustomers.forEach(([c,v],i)=>{let rankClass='';if(i===0)rankClass='gold';else if(i===1)rankClass='silver';else if(i===2)rankClass='bronze';customerList+=`<div class="top-item"><div class="top-rank ${rankClass}">${i+1}</div><div class="top-info"><div class="top-name">${c}</div><div class="top-detail">${v.count} bundles · ${v.weight.toFixed(1)} kg</div></div><div class="top-count">${v.orders}</div></div>`;});
-  html+=`<div class="an-card"><div class="an-card-title"><div class="icon">👥</div> Top Customers</div><div class="top-list">${customerList||'<div style="color:var(--t3)">No data</div>'}</div></div>`;
-  let vendorList='';topVendors.forEach(([v,d],i)=>{let rankClass='';if(i===0)rankClass='gold';else if(i===1)rankClass='silver';else if(i===2)rankClass='bronze';vendorList+=`<div class="top-item"><div class="top-rank ${rankClass}">${i+1}</div><div class="top-info"><div class="top-name">${v}</div><div class="top-detail">${d.count} bundles · ${d.weight.toFixed(1)} kg</div></div><div class="top-count">${d.orders}</div></div>`;});
-  html+=`<div class="an-card"><div class="an-card-title"><div class="icon">🏭</div> Top Vendors</div><div class="top-list">${vendorList||'<div style="color:var(--t3)">No data</div>'}</div></div></div>`;
-  
-  // Daily Trend
-  const dailyEntries=Object.entries(dailyStats).sort((a,b)=>a[0].localeCompare(b[0]));let trendBars='';const maxDailyOrders=Math.max(...dailyEntries.map(d=>d[1].orders),1);dailyEntries.forEach(([day,data])=>{const h=data.orders/maxDailyOrders*100;trendBars+=`<div class="trend-bar" style="height:${h}%" data-val="${data.orders} orders"></div>`;});
-  const labelIndices=[0,Math.floor(dailyEntries.length/4),Math.floor(dailyEntries.length/2),Math.floor(dailyEntries.length*3/4),dailyEntries.length-1];let trendLabels='';labelIndices.forEach(i=>{if(dailyEntries[i]){const d=new Date(dailyEntries[i][0]);trendLabels+=`<div class="trend-label">${d.getDate()}/${d.getMonth()+1}</div>`;}});
-  html+=`<div class="an-card" style="margin-top:20px"><div class="an-card-title"><div class="icon">📈</div> Daily Order Trend (${dailyEntries.length} days)</div><div class="trend-chart">${trendBars}</div><div class="trend-labels">${trendLabels}</div></div>`;
-  
-  // Stats Row
-  html+=`<div class="stats-row" style="margin-top:20px">
+  srcEntries.forEach(([s,v])=>{
+    const pct=srcTotal? (v.orders/srcTotal*100):0;
+    const dashArray=pct*1.25;
+    const color=srcColors[s]||'#888';
+    srcDonut+=`<circle cx="50" cy="50" r="35" stroke="${color}" stroke-dasharray="${dashArray} 125" stroke-dashoffset="-${offset}" />`;
+    offset+=dashArray;
+    srcLegend+=`<div class="donut-legend-item"><div class="donut-legend-dot" style="background:${color}"></div><span>${s}</span><b>${v.orders}</b></div>`;
+  });
+  let regionBars='';
+  const maxRegOrders=Math.max(...topRegions.map(r=>r[1].orders),1);
+  const regColors=["#448aff","#00e676","#ff6d00","#e040fb","#ffd740","#00e5ff"];
+  topRegions.forEach(([rg,v],i)=>{
+    const pct=(v.orders/maxRegOrders*100).toFixed(1);
+    regionBars+=`<div class="bar-item"><div class="bar-item-label">${rg}</div><div class="bar-item-track"><div class="bar-item-fill" style="width:${pct}%;background:${regColors[i%regColors.length]}"></div></div><div class="bar-item-value">${v.orders}</div></div>`;
+  });
+  html+=`<div class="an-row">
+    <div class="an-card">
+      <div class="an-card-title"><div class="icon">📊</div> Orders by Source</div>
+      <div class="donut-wrap">
+        <div class="donut">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="35" fill="none" stroke="var(--bd)" stroke-width="18"/>
+            ${srcDonut}
+          </svg>
+          <div class="donut-center"><div class="donut-total">${srcTotal}</div><div class="donut-label">Orders</div></div>
+        </div>
+        <div class="donut-legend">${srcLegend||'<div style="color:var(--t2)">No data</div>'}</div>
+      </div>
+    </div>
+    <div class="an-card">
+      <div class="an-card-title"><div class="icon">🌍</div> Orders by Region</div>
+      <div class="bar-chart">${regionBars||'<div style="color:var(--t2)">No data</div>'}</div>
+    </div>
+  </div>`;
+
+  // Weight & savings
+  const totalWeightDist=weightStats.lt20+weightStats.ge20;
+  const ltPct=totalWeightDist? (weightStats.lt20/totalWeightDist*100).toFixed(1) : 0;
+  const gePct=totalWeightDist? (weightStats.ge20/totalWeightDist*100).toFixed(1) : 0;
+  const savingsEntries=Object.entries(savingsByRegion).sort((a,b)=>b[1]-a[1]);
+  let savingsCards=''; const totalSavingsAll=savingsEntries.reduce((a,b)=>a+b[1],0);
+  savingsEntries.slice(0,6).forEach(([rg,sav])=>{
+    const pct=totalSavingsAll? (sav/totalSavingsAll*100).toFixed(1) : 0;
+    savingsCards+=`<div class="top-item" style="justify-content:space-between">
+      <div class="top-info"><div class="top-name">${rg}</div><div class="top-detail">${pct}% of total</div></div>
+      <div class="top-count">£${sav.toFixed(2)}</div>
+    </div>`;
+  });
+  html+=`<div class="an-row">
+    <div class="an-card">
+      <div class="an-card-title"><div class="icon">⚖️</div> Weight Distribution</div>
+      <div class="pie-wrap" style="margin-bottom:16px">
+        <div class="pie">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="35" fill="none" stroke="var(--bd)" stroke-width="20"/>
+            <circle cx="50" cy="50" r="35" fill="none" stroke="#00e676" stroke-width="20" stroke-dasharray="${ltPct*2.2} 220" />
+            <circle cx="50" cy="50" r="35" fill="none" stroke="#ff6d00" stroke-width="20" stroke-dasharray="${gePct*2.2} 220" stroke-dashoffset="-${ltPct*2.2}" />
+          </svg>
+          <div class="pie-center">${totalWeightDist}</div>
+        </div>
+        <div class="donut-legend">
+          <div class="donut-legend-item"><div class="donut-legend-dot" style="background:#00e676"></div><span>&lt;20 kg (Light)</span><b>${weightStats.lt20}</b></div>
+          <div class="donut-legend-item"><div class="donut-legend-dot" style="background:#ff6d00"></div><span>20+ kg (Heavy)</span><b>${weightStats.ge20}</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="an-card">
+      <div class="an-card-title"><div class="icon">💰</div> Savings by Region</div>
+      ${savingsCards or '<div style="color:var(--t2)">No savings</div>'}
+    </div>
+  </div>`;
+
+  // Top lists
+  let customerList=''; topCustomers.forEach(([c,v],i)=>{const classes=["gold","silver","bronze"][i]||"";customerList+=`<div class="top-item"><div class="top-rank ${classes}">${i+1}</div><div class="top-info"><div class="top-name">${c}</div><div class="top-detail">${v.count} bundles · ${v.weight.toFixed(1)} kg</div></div><div class="top-count">${v.orders}</div></div>`;});
+  let vendorList=''; topVendors.forEach(([v,d],i)=>{const classes=["gold","silver","bronze"][i]||"";vendorList+=`<div class="top-item"><div class="top-rank ${classes}">${i+1}</div><div class="top-info"><div class="top-name">${v}</div><div class="top-detail">${d.count} bundles · ${d.weight.toFixed(1)} kg</div></div><div class="top-count">${d.orders}</div></div>`;});
+  html+=`<div class="an-row">
+    <div class="an-card"><div class="an-card-title"><div class="icon">👥</div> Top Customers</div><div class="top-list">${customerList||'<div style="color:var(--t2)">No data</div>'}</div></div>
+    <div class="an-card"><div class="an-card-title"><div class="icon">🏭</div> Top Vendors</div><div class="top-list">${vendorList||'<div style="color:var(--t2)">No data</div>'}</div></div>
+  </div>`;
+
+  // Daily trend
+  const dailyEntries=Object.entries(dailyStats).sort((a,b)=>a[0].localeCompare(b[0]));
+  let trendBars=''; const maxDailyOrders=Math.max(...dailyEntries.map(d=>d[1].orders),1);
+  dailyEntries.forEach(([day,data])=>{const h=data.orders/maxDailyOrders*100;trendBars+=`<div class="trend-bar" style="height:${h}%" data-val="${data.orders} orders"></div>`;});
+  const labelIndices=[0,Math.floor(dailyEntries.length/4),Math.floor(dailyEntries.length/2),Math.floor(dailyEntries.length*3/4),dailyEntries.length-1];
+  let trendLabels=''; labelIndices.forEach(i=>{if(dailyEntries[i]){const d=new Date(dailyEntries[i][0]);trendLabels+=`<div class="trend-label">${d.getDate()}/${d.getMonth()+1}</div>`;}});
+  html+=`<div class="an-card" style="margin-top:12px"><div class="an-card-title"><div class="icon">📈</div> Daily Order Trend (${dailyEntries.length} days)</div><div class="trend-chart">${trendBars}</div><div class="trend-labels">${trendLabels}</div></div>`;
+
+  // Stats row
+  html+=`<div class="stats-row">
     <div class="stat-box"><div class="stat-box-icon">🏢</div><div class="stat-box-value">${Object.keys(sourceStats).length}</div><div class="stat-box-label">Active Sources</div></div>
     <div class="stat-box"><div class="stat-box-icon">🌐</div><div class="stat-box-value">${Object.keys(regionStats).length}</div><div class="stat-box-label">Regions</div></div>
     <div class="stat-box"><div class="stat-box-icon">👤</div><div class="stat-box-value">${Object.keys(customerStats).length}</div><div class="stat-box-label">Customers</div></div>
     <div class="stat-box"><div class="stat-box-icon">🏭</div><div class="stat-box-value">${Object.keys(vendorStats).length}</div><div class="stat-box-label">Vendors</div></div>
     <div class="stat-box"><div class="stat-box-icon">📅</div><div class="stat-box-value">${dailyEntries.length}</div><div class="stat-box-label">Active Days</div></div>
   </div>`;
-  
   g("analyticsContent").innerHTML=html;
 }
 
+// =============== Modals & CSV ===============
 function showOrd(uid,region,di){
-  const rm=window["RM_"+uid];
-  if(!rm||!rm[region]||!rm[region][di]) return;
+  const rm=window["RM_"+uid]; if(!rm||!rm[region]||!rm[region][di]) return;
   const list=rm[region][di].list||[];
   g("oTit").textContent=`${region} — ${DAYS[di]} (${list.length} orders)`;
   showOrdModal(list);
 }
 function showOrdDay(uid,di){
-  const rm=window["RM_"+uid];
-  if(!rm) return;
-  const list=[];
-  Object.values(rm).forEach(rg=>{if(rg[di])list.push(...rg[di].list);});
+  const rm=window["RM_"+uid]; if(!rm) return;
+  const list=[]; Object.values(rm).forEach(rg=>{if(rg[di])list.push(...rg[di].list);});
   g("oTit").textContent=`${DAYS[di]} — All Regions (${list.length} orders)`;
   showOrdModal(list);
 }
 function showAllOrd(uid,type){
   const all=window["RM_"+uid+"_all"]||[];
-  const list=[];
-  all.forEach(b=>b.orders.forEach(o=>list.push({...o,date:b.date_std})));
+  const list=[]; all.forEach(b=>b.orders.forEach(o=>list.push({...o,date:b.date_std})));
   g("oTit").textContent=`All Orders — ${type} (${list.length})`;
   showOrdModal(list);
 }
 function showOrdModal(list){
   if(!list.length){alert("No orders.");return;}
   let h=`<div class="tw"><table class="mt"><thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Weight</th><th>Status</th></tr></thead><tbody>`;
-  list.forEach((o,i)=>{const s=sStyle(o.status||"—");h+=`<tr><td style="color:var(--t3)">${i+1}</td><td style="font-family:monospace;font-weight:800;color:var(--blue)">${o.order_id}</td><td style="color:var(--t3)">${o.date||"—"}</td><td style="color:var(--yellow)">${o.weight||"—"} kg</td><td><span class="spill" style="background:${s.bg};color:${s.c}">${o.status||"—"}</span></td></tr>`;});
+  list.forEach((o,i)=>{const s=sStyle(o.status||"—");h+=`<tr><td style="color:var(--t2)">${i+1}</td>
+    <td style="font-family:monospace;font-weight:800;color:var(--blue)">${o.order_id}</td>
+    <td style="color:var(--t2)">${o.date||"—"}</td>
+    <td style="color:var(--yellow)">${o.weight||"—"} kg</td>
+    <td><span class="spill" style="background:${s.bg};color:${s.c}">${o.status||"—"}</span></td></tr>`;});
   h+="</tbody></table></div>";
   g("oBody").innerHTML=h;
   g("oMov").classList.add("open");
 }
-
 function doCSV(uid,src,week){
-  const rm=window["RM_"+uid];if(!rm)return;
+  const rm=window["RM_"+uid]; if(!rm) return;
   let rows=[["Source","Week","Region","Day","Orders","Boxes","Weight_kg","LT20","GE20"]];
-  Object.keys(rm).forEach(rg=>{[0,1,2,3,4,5,6].forEach(di=>{const v=rm[rg][di];if(v)rows.push([src,week,rg,DAYS[di],v.o,v.bx,v.w.toFixed(1),v.lt,v.ge]);});});
+  Object.keys(rm).forEach(rg=>{
+    [0,1,2,3,4,5,6].forEach(di=>{
+      const v=rm[rg][di]; if(v) rows.push([src,week,rg,DAYS[di],v.o,v.bx,v.w.toFixed(1),v.lt,v.ge]);
+    });
+  });
   const csv=rows.map(r=>r.join(",")).join("\n");
-  const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download=`${src.replace(/\s/g,"_")}_${week.replace(/[\s\/\-]/g,"_")}.csv`;a.click();
+  const a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);
+  a.download=`${src.replace(/\s/g,"_")}_${week.replace(/[\s\/\-]/g,"_")}.csv`; a.click();
 }
-
 async function openJ(oid){
   g("jMov").classList.add("open");
-  g("jBody").innerHTML="<div class='mld'></div><p style='text-align:center;color:var(--t3);font-size:12px;margin-top:8px'>Fetching journey...</p>";
+  g("jBody").innerHTML="<div class='mld'></div><p style='text-align:center;color:var(--t2);font-size:12px;margin-top:8px'>Fetching journey...</p>";
   try{
     const r=await fetch("/api/nexus/order_journey/"+encodeURIComponent(oid));
     const d=await r.json();
-    if(!d.success){g("jBody").innerHTML=`<div style="text-align:center;padding:30px;color:var(--t3)">${d.message}</div>`;return;}
+    if(!d.success){g("jBody").innerHTML=`<div style="text-align:center;padding:30px;color:var(--t2)">${d.message}</div>`;return;}
     const tl=d.timeline,km=d.key_metrics,steps=d.step_metrics||[];
     function mc(v){if(!v||v==="N/A")return"n";const n=parseFloat(v);if(isNaN(n))return"";if(n<=1)return"";if(n<=3)return"w";return"d";}
     const cb=d.is_cancelled?`<div class="cbanner">⚠️ CANCELLED — ${tl.cancelled_at||"N/A"}</div>`:"";
     function ti(lb,v,tp){let dc=v?"done":"pend",vc=v?"":"pv";if(tp==="c"){dc=v?"can":"pend";vc=v?"cv":"pv";}return`<div class="tli"><div class="tld ${dc}"></div><div class="tll">${lb}</div><div class="tlv ${vc}">${v||"— Not yet"}</div></div>`;}
-    let sh="";if(steps.length){sh="<div class='shd'>⏱️ Step Durations</div><div class='stp-g'>";steps.forEach(s=>{sh+=`<div class="stp"><div class="stpl">${s.label}</div><div class="stpv ${s.duration?"":"" }" style="color:${s.duration?"var(--t1)":"var(--t3)"}">${s.duration||"—"}</div></div>`;});sh+="</div>";}
-    g("jBody").innerHTML=`<div style="font-size:16px;font-weight:800;margin-bottom:3px">📦 Order Journey</div><div style="font-family:monospace;color:var(--green);margin-bottom:14px">${d.order_id}</div>${cb}<div class="shd">⭐ Key Metrics</div><div class="mg"><div class="mc"><div class="mv ${mc(km.qc_to_handover)}">${km.qc_to_handover||"N/A"}</div><div class="ml">QC → Handover</div></div><div class="mc"><div class="mv ${mc(km.handover_to_freight)}">${km.handover_to_freight||"N/A"}</div><div class="ml">Handover → Freight</div></div><div class="mc"><div class="mv ${mc(km.total_journey)}">${km.total_journey||"N/A"}</div><div class="ml">Total Journey</div></div></div>${sh}<div class="shd">🗺️ Full Timeline</div><div class="tl">${ti("📋 Created",tl.created_at,"n")}${ti("✅ Accepted",tl.accepted_at,"n")}${ti("🚚 Pickup Ready",tl.pickup_ready_at,"n")}${ti("🔍 QC Pending",tl.qc_pending_at,"n")}${ti("✅ QC Approved",tl.qc_approved_at,"n")}${ti("🤝 Handed Over",tl.handedover_at,"n")}${ti("✈️ Freight",tl.freight_at,"n")}${ti("🚁 Courier",tl.courier_at,"n")}${ti("📬 Delivered",tl.delivered_at,"n")}${tl.cancelled_at?ti("❌ Cancelled",tl.cancelled_at,"c"):""}</div>`;
+    let sh="";
+    if(steps.length){sh="<div class='shd'>⏱️ Step Durations</div><div class='stp-g'>";
+      steps.forEach(s=>{sh+=`<div class="stp"><div class="stpl">${s.label}</div><div class="stpv ${s.duration?"":"" }" style="color:${s.duration?"#fff":"var(--t2)"}">${s.duration||"—"}</div></div>`;});
+      sh+="</div>";}
+    g("jBody").innerHTML=`
+      <div style="font-size:16px;font-weight:800;margin-bottom:3px">📦 Order Journey</div>
+      <div style="font-family:monospace;color:var(--green);margin-bottom:14px">${d.order_id}</div>
+      ${cb}
+      <div class="shd">⭐ Key Metrics</div>
+      <div class="mg">
+        <div class="mc"><div class="mv ${mc(km.qc_to_handover)}">${km.qc_to_handover||"N/A"}</div><div class="ml">QC → Handover</div></div>
+        <div class="mc"><div class="mv ${mc(km.handover_to_freight)}">${km.handover_to_freight||"N/A"}</div><div class="ml">Handover → Freight</div></div>
+        <div class="mc"><div class="mv ${mc(km.total_journey)}">${km.total_journey||"N/A"}</div><div class="ml">Total Journey</div></div>
+      </div>
+      ${sh}
+      <div class="shd">🗺️ Full Timeline</div>
+      <div class="tl">
+        ${ti("📋 Created",tl.created_at,"n")}${ti("✅ Accepted",tl.accepted_at,"n")}
+        ${ti("🚚 Pickup Ready",tl.pickup_ready_at,"n")}${ti("🔍 QC Pending",tl.qc_pending_at,"n")}
+        ${ti("✅ QC Approved",tl.qc_approved_at,"n")}${ti("🤝 Handed Over",tl.handedover_at,"n")}
+        ${ti("✈️ Freight",tl.freight_at,"n")}${ti("🚁 Courier",tl.courier_at,"n")}
+        ${ti("📬 Delivered",tl.delivered_at,"n")}
+        ${tl.cancelled_at?ti("❌ Cancelled",tl.cancelled_at,"c"):""}
+      </div>`;
   }catch(e){g("jBody").innerHTML=`<div style="color:var(--red)">Error: ${e.message}</div>`;}
 }
-
 function cMod(id){document.getElementById(id).classList.remove("open");}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){cMod("jMov");cMod("oMov");}});
 window.onload=init;
 </script></body></html>"""
+
+# Optional: define a simple home route for testing the floating buttons
+@app.route("/")
+def home():
+    # simulate admin for quick testing:
+    session["username"]="admin"
+    return "<html><body><h1 style='font-family:sans-serif'>Home</h1><p>Go to /bundling</p></body></html>"
+
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
