@@ -4873,96 +4873,582 @@ def bundling_summary_view():
     return render_template_string(SUMMARY_HTML)
 
 # ---------- HTML Templates ----------
-STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
+SUMMARY_HTML = '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>📡 Status Intelligence</title>
+    <title>📊 Region Summary</title>
     <style>
-        /* (apna existing style) */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0f0f0f;
+            color: #f0f0f0;
+            padding: 30px;
+        }
+        .app-container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .logo-area img {
+            height: 45px;
+            display: none; /* Hidden by default, enable if you have logo */
+        }
+        .logo-area h1 {
+            font-size: 26px;
+            font-weight: 700;
+            color: #f97316;
+        }
+        .main-dash-btn {
+            background: #1f1f1f;
+            border: 1px solid #2a2a2a;
+            color: #f0f0f0;
+            padding: 10px 22px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .main-dash-btn:hover {
+            border-color: #f97316;
+            color: #f97316;
+        }
+        .nav-tabs {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+        .nav-tab {
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            color: #aaa;
+        }
+        .nav-tab.active {
+            background: #f97316;
+            color: #000;
+            border-color: #f97316;
+        }
+        .sub-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+            border-bottom: 1px solid #2a2a2a;
+            padding-bottom: 10px;
+        }
+        .sub-tab {
+            padding: 8px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            color: #aaa;
+        }
+        .sub-tab.active {
+            background: #f97316;
+            color: #000;
+        }
+        .control-panel {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 25px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .f-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .f-label {
+            font-size: 11px;
+            color: #aaa;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .f-input {
+            background: #0f0f0f;
+            border: 1px solid #2a2a2a;
+            color: #f0f0f0;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        .f-input:focus {
+            outline: none;
+            border-color: #f97316;
+        }
+        .btn {
+            background: #f97316;
+            color: #000;
+            border: none;
+            padding: 10px 28px;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .table-wrapper {
+            background: #1a1a1a;
+            border-radius: 12px;
+            border: 1px solid #2a2a2a;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 800px;
+        }
+        th {
+            background: #0f0f0f;
+            padding: 16px 12px;
+            font-size: 12px;
+            color: #aaa;
+            text-transform: uppercase;
+            border-bottom: 1px solid #2a2a2a;
+            text-align: center;
+        }
+        td {
+            padding: 14px 12px;
+            border-bottom: 1px solid #2a2a2a;
+            color: #f0f0f0;
+            text-align: center;
+        }
+        tr:hover td {
+            background: #2a2a2a;
+        }
+        .region-name {
+            font-weight: 700;
+            color: #f97316;
+            text-align: left;
+        }
+        .totals-row {
+            background: #0f0f0f;
+            font-weight: 700;
+        }
+        .totals-row td {
+            color: #f97316;
+        }
+        .clickable {
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-color: #f97316;
+            font-weight: 600;
+        }
+        .clickable:hover {
+            color: #f97316;
+        }
+        .loader {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #2a2a2a;
+            border-top-color: #f97316;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 30px auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .no-data {
+            text-align: center;
+            padding: 50px;
+            color: #aaa;
+        }
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 10000;
+            backdrop-filter: blur(5px);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.open {
+            display: flex;
+        }
+        .modal {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 16px;
+            padding: 28px;
+            width: 100%;
+            max-width: 900px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .modal-close {
+            position: absolute;
+            top: 16px; right: 16px;
+            background: #2a2a2a;
+            border: 1px solid #2a2a2a;
+            color: #fff;
+            width: 34px; height: 34px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-close:hover {
+            background: #ef4444;
+        }
+        .modal-title {
+            font-size: 22px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            color: #f97316;
+        }
     </style>
 </head>
 <body>
-<div class="header">
-    <div>
-        <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-1px;">📡 Status Intelligence</h1>
-        <p style="color:#888;margin-top:4px;">Filter orders by date range & latest status</p>
+<div class="app-container">
+    <div class="header">
+        <div class="logo-area">
+            <img src="/static/3pl-logo.png" alt="3PL Logo" style="display:none;">
+            <h1>Region Summary</h1>
+        </div>
+        <a href="/" class="main-dash-btn">🏠 Main Dash</a>
     </div>
-    <div style="display:flex;gap:12px;">
-        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
-        <button onclick="refreshData()" class="btn-top" style="background:#6366f1;color:#fff;">🔄 Refresh</button>
+
+    <div class="nav-tabs">
+        <a href="/bundling" class="nav-tab">📦 Bundle</a>
+        <a href="/bundling/status" class="nav-tab">📡 Status</a>
+        <a href="/bundling/summary" class="nav-tab active">📊 Summary</a>
+    </div>
+
+    <div class="sub-tabs">
+        <div class="sub-tab active" onclick="switchTab('daily')">Daily Region</div>
+        <div class="sub-tab" onclick="switchTab('weekly')">Weekly Matrix</div>
+    </div>
+
+    <div id="dailyPanel">
+        <div class="control-panel">
+            <div class="f-group">
+                <div class="f-label">From Date</div>
+                <input type="date" id="dailyFrom" class="f-input">
+            </div>
+            <div class="f-group">
+                <div class="f-label">To Date</div>
+                <input type="date" id="dailyTo" class="f-input">
+            </div>
+            <button class="btn" onclick="loadDaily()">Apply</button>
+        </div>
+        <div id="dailyLoader" style="display:none;"><div class="loader"></div></div>
+        <div id="dailyTable"></div>
+    </div>
+
+    <div id="weeklyPanel" style="display:none;">
+        <div class="control-panel">
+            <div class="f-group">
+                <div class="f-label">Week Starting (Monday)</div>
+                <input type="date" id="weekStart" class="f-input">
+            </div>
+            <button class="btn" onclick="loadWeekly()">Load Week</button>
+        </div>
+        <div id="weeklyLoader" style="display:none;"><div class="loader"></div></div>
+        <div id="weeklyTable"></div>
     </div>
 </div>
 
-<div class="nav-tabs">
-    <a href="/bundling" class="nav-tab">📦 Bundle Intelligence</a>
-    <a href="/bundling/status" class="nav-tab active">📡 Status Intelligence</a>
-    <a href="/bundling/summary" class="nav-tab">📊 Summary</a>
+<div class="modal-overlay" id="orderModal" onclick="if(event.target===this) closeModal()">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-title" id="modalTitle">Region Orders</div>
+        <div id="modalContent"></div>
+    </div>
 </div>
-
-<!-- filter bar same as before ... -->
-
-<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#666;">Loading orders & statuses...</p></div>
-<div id="content" style="display:none;">...</div>
 
 <script>
-const CACHE_KEY = 'status_data';
-const CACHE_DURATION = 30 * 60 * 1000;
-
-let allOrders = [];
-let selectedStatus = null;
+// ==================== CLIENT-SIDE CACHE ====================
+const CACHE_KEY = 'bundling_summary_cache';
+const CACHE_DURATION = 10 * 60 * 1000;
 
 function getCachedData() {
     const cached = localStorage.getItem(CACHE_KEY);
     if (!cached) return null;
     try {
-        const { timestamp, data } = JSON.parse(cached);
+        const { timestamp, bundles, journey } = JSON.parse(cached);
         if (Date.now() - timestamp < CACHE_DURATION) {
-            return data;
+            return { bundles, journey };
         }
     } catch (e) {}
     return null;
 }
 
-function setCachedData(data) {
-    const cache = { timestamp: Date.now(), data };
+function setCachedData(bundles, journey) {
+    const cache = {
+        timestamp: Date.now(),
+        bundles: bundles,
+        journey: journey
+    };
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
 }
 
-async function loadData(forceRefresh = false) {
-    document.getElementById('content').style.display = 'none';
-    document.getElementById('loading').style.display = 'block';
-    document.getElementById('statusBreakdown').style.display = 'none';
+let bundlesData = null;
+let journeyData = null;
+let currentTab = 'daily';
 
-    if (!forceRefresh) {
-        const cached = getCachedData();
-        if (cached) {
-            allOrders = cached.orders || [];
-            applyFilters();
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('content').style.display = 'block';
-            return;
-        }
+function getRegionFromCountry(country) {
+    if (!country) return 'EU';
+    const c = country.trim().toLowerCase();
+    const specific = [
+        'united kingdom', 'united states', 'australia', 'switzerland', 'new zealand',
+        'canada', 'china', 'ghana', 'japan', 'india', 'philippines', 'saudia arabia',
+        'singapore', 'south africa', 'south korea', 'thailand'
+    ];
+    if (specific.includes(c)) {
+        const match = {
+            'united kingdom': 'United Kingdom',
+            'united states': 'United States',
+            'australia': 'Australia',
+            'switzerland': 'Switzerland',
+            'new zealand': 'New Zealand',
+            'canada': 'Canada',
+            'china': 'China',
+            'ghana': 'Ghana',
+            'japan': 'Japan',
+            'india': 'India',
+            'philippines': 'Philippines',
+            'saudia arabia': 'Saudia Arabia',
+            'singapore': 'Singapore',
+            'south africa': 'South Africa',
+            'south korea': 'South Korea',
+            'thailand': 'Thailand'
+        };
+        return match[c];
     }
+    return 'EU';
+}
 
+async function fetchAllData() {
+    const cached = getCachedData();
+    if (cached) {
+        bundlesData = cached.bundles;
+        journeyData = cached.journey;
+        setDefaultDates();
+        if (currentTab === 'daily') loadDaily();
+        else loadWeekly();
+        return;
+    }
     try {
-        const r = await fetch('/api/nexus/status_intelligence');
-        const d = await r.json();
-        setCachedData(d);
-        allOrders = d.orders || [];
-        applyFilters();
+        const [bRes, jRes] = await Promise.all([
+            fetch('/api/nexus/bundling_data'),
+            fetch('/api/nexus/all_journey')
+        ]);
+        const bJson = await bRes.json();
+        const jJson = await jRes.json();
+        bundlesData = bJson.bundles || [];
+        journeyData = jJson.data || [];
+        setCachedData(bundlesData, journeyData);
+        setDefaultDates();
+        if (currentTab === 'daily') loadDaily();
+        else loadWeekly();
     } catch(e) {
-        document.getElementById('loading').innerHTML = `<div style="color:#EF4444;">Error: ${e.message}</div>`;
+        console.error(e);
+        alert('Error loading data. Please refresh.');
     }
 }
 
-function refreshData() {
-    localStorage.removeItem(CACHE_KEY);
-    loadData(true);
+function setDefaultDates() {
+    const today = new Date();
+    const year = today.getFullYear();
+    document.getElementById('dailyFrom').value = year + '-01-01';
+    document.getElementById('dailyTo').value = year + '-12-31';
+    const monday = getMonday(today);
+    const yyyy = monday.getFullYear();
+    const mm = String(monday.getMonth() + 1).padStart(2, '0');
+    const dd = String(monday.getDate()).padStart(2, '0');
+    document.getElementById('weekStart').value = `${yyyy}-${mm}-${dd}`;
 }
 
-// ... baaki functions (getStatusStyle, quickDate, clearFilters, selectStatus, buildStatusPills, applyFilters, renderTable) bilkul waise hi ...
-window.onload = () => loadData();
+function getMonday(d) {
+    d = new Date(d);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+}
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.sub-tab').forEach(el => el.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('dailyPanel').style.display = tab === 'daily' ? 'block' : 'none';
+    document.getElementById('weeklyPanel').style.display = tab === 'weekly' ? 'block' : 'none';
+    if (tab === 'daily') loadDaily();
+    else loadWeekly();
+}
+
+function loadDaily() {
+    const from = document.getElementById('dailyFrom').value;
+    const to = document.getElementById('dailyTo').value;
+    if (!from || !to) return;
+    document.getElementById('dailyLoader').style.display = 'block';
+    document.getElementById('dailyTable').innerHTML = '';
+
+    const start = new Date(from);
+    const end = new Date(to);
+    end.setHours(23,59,59,999);
+
+    const filtered = bundlesData.filter(b => {
+        const d = new Date(b.date_std);
+        return d >= start && d <= end;
+    });
+
+    const regionMap = {};
+    filtered.forEach(b => {
+        const region = getRegionFromCountry(b.country);
+        if (!regionMap[region]) {
+            regionMap[region] = { orders:0, boxes:0, weight:0, lt20:0, ge20:0, ordersList: [] };
+        }
+        regionMap[region].boxes += 1;
+        regionMap[region].orders += b.orders.length;
+        regionMap[region].weight += b.bundle_weight_kg || 0;
+        if (b.bundle_weight_kg < 20) regionMap[region].lt20 += 1;
+        else regionMap[region].ge20 += 1;
+        b.orders.forEach(o => {
+            regionMap[region].ordersList.push({
+                order_id: o.order_id,
+                weight: o.weight,
+                status: o.status,
+                date: b.date_std
+            });
+        });
+    });
+
+    const sorted = Object.keys(regionMap).sort();
+    let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20kg</th><th>20+kg</th></tr></thead><tbody>';
+    let totalOrders = 0, totalBoxes = 0, totalWeight = 0, totalLt20 = 0, totalGe20 = 0;
+    sorted.forEach(region => {
+        let r = regionMap[region];
+        html += `<tr><td class="region-name">${region}</td>`;
+        html += `<td class="clickable" onclick="showRegionOrders('${region}', 'orders')">${r.orders.toLocaleString()}</td>`;
+        html += `<td class="clickable" onclick="showRegionOrders('${region}', 'boxes')">${r.boxes.toLocaleString()}</td>`;
+        html += `<td class="clickable" onclick="showRegionOrders('${region}', 'weight')">${r.weight.toFixed(1)}</td>`;
+        html += `<td>${r.lt20.toLocaleString()}</td>`;
+        html += `<td>${r.ge20.toLocaleString()}</td></tr>`;
+        totalOrders += r.orders;
+        totalBoxes += r.boxes;
+        totalWeight += r.weight;
+        totalLt20 += r.lt20;
+        totalGe20 += r.ge20;
+        window['regionData_' + region] = r.ordersList;
+    });
+    html += `<tr class="totals-row"><td>TOTAL</td><td>${totalOrders.toLocaleString()}</td><td>${totalBoxes.toLocaleString()}</td><td>${totalWeight.toFixed(1)}</td><td>${totalLt20.toLocaleString()}</td><td>${totalGe20.toLocaleString()}</td></tr>`;
+    html += '</tbody></table></div>';
+    document.getElementById('dailyTable').innerHTML = html;
+    document.getElementById('dailyLoader').style.display = 'none';
+}
+
+function loadWeekly() {
+    const weekStart = document.getElementById('weekStart').value;
+    if (!weekStart) return;
+    document.getElementById('weeklyLoader').style.display = 'block';
+    document.getElementById('weeklyTable').innerHTML = '';
+
+    const start = new Date(weekStart);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    end.setHours(23,59,59,999);
+    const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+    const filtered = journeyData.filter(j => {
+        const d = new Date(j.date);
+        return d >= start && d <= end;
+    });
+
+    const regionDayMap = {};
+    filtered.forEach(j => {
+        const region = j.region || 'Unknown';
+        const d = new Date(j.date);
+        const dayIndex = d.getDay();
+        let idx = dayIndex === 0 ? 6 : dayIndex - 1;
+        if (!regionDayMap[region]) {
+            regionDayMap[region] = [0,0,0,0,0,0,0];
+        }
+        regionDayMap[region][idx] += 1;
+    });
+
+    const regions = Object.keys(regionDayMap);
+    let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th>';
+    days.forEach(d => html += `<th>${d}</th>`);
+    html += '<th>Total</th></tr></thead><tbody>';
+    let totals = [0,0,0,0,0,0,0];
+    let grandTotal = 0;
+    regions.forEach(region => {
+        let counts = regionDayMap[region];
+        let rowSum = counts.reduce((a,b)=>a+b,0);
+        html += `<tr><td class="region-name">${region}</td>`;
+        counts.forEach((c,i) => {
+            html += `<td>${c.toLocaleString()}</td>`;
+            totals[i] += c;
+        });
+        html += `<td><b>${rowSum.toLocaleString()}</b></td></tr>`;
+        grandTotal += rowSum;
+    });
+    html += `<tr class="totals-row"><td>TOTAL</td>`;
+    totals.forEach(t => html += `<td><b>${t.toLocaleString()}</b></td>`);
+    html += `<td><b>${grandTotal.toLocaleString()}</b></td></tr>`;
+    html += '</tbody></table></div>';
+    document.getElementById('weeklyTable').innerHTML = html;
+    document.getElementById('weeklyLoader').style.display = 'none';
+}
+
+function showRegionOrders(region, type) {
+    const ordersList = window['regionData_' + region];
+    if (!ordersList || ordersList.length === 0) {
+        alert('No orders found for this region.');
+        return;
+    }
+    let title = `Orders in ${region}`;
+    if (type === 'boxes') title = `Boxes in ${region}`;
+    else if (type === 'weight') title = `Weight details in ${region}`;
+    document.getElementById('modalTitle').innerText = title;
+
+    let tableHtml = '<div class="table-wrapper"><table><thead><tr><th>Order ID</th><th>Date</th><th>Weight (kg)</th><th>Status</th></tr></thead><tbody>';
+    ordersList.forEach(o => {
+        tableHtml += `<tr><td>${o.order_id}</td><td>${o.date}</td><td>${o.weight}</td><td>${o.status || '—'}</td></tr>`;
+    });
+    tableHtml += '</tbody></table></div>';
+    document.getElementById('modalContent').innerHTML = tableHtml;
+    document.getElementById('orderModal').classList.add('open');
+}
+
+function closeModal() {
+    document.getElementById('orderModal').classList.remove('open');
+}
+
+window.onload = fetchAllData;
 </script>
 </body>
 </html>'''
