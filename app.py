@@ -4343,9 +4343,8 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - COMPLETE WORKING APP (BUGS FIXED)
+# 📦 BUNDLING INTELLIGENCE HUB - SAFE MODULAR BLOCK (NO ROOT ROUTE INTERFERENCE)
 # ==============================================================================
-from flask import Flask, jsonify, request, session, render_template_string
 import urllib.request
 import csv
 import re
@@ -4353,10 +4352,7 @@ import ssl
 import time
 import math
 import concurrent.futures
-from datetime import datetime, timedelta
-
-app = Flask(__name__)
-app.secret_key = 'your-secret-key-here-change-this'  # sessions ke liye zaroori
+from datetime import datetime
 
 # ---------- Configuration ----------
 _bundling_cache = {'data': None, 'time': 0}
@@ -4448,7 +4444,6 @@ def fetch_rates_sheet(ctx):
                     except: pass
             return "RATES", rates_map
     except Exception as e:
-        print(f"[WARN] Rates sheet failed: {e}")
         return "RATES", {}
 
 def fetch_status_sheet_data():
@@ -4474,7 +4469,6 @@ def fetch_status_sheet_data():
         _status_cache['time'] = now
         return status_map
     except Exception as e:
-        print(f"[WARN] Status sheet failed: {e}")
         return {}
 
 def fetch_journey_sheet_data():
@@ -4513,7 +4507,6 @@ def fetch_journey_sheet_data():
         _journey_cache['time'] = now
         return journey_map
     except Exception as e:
-        print(f"[WARN] Journey sheet failed: {e}")
         return {}
 
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
@@ -4568,12 +4561,9 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
                         'country':    country_val  if country_val  else last_country,
                         'tid':        tid_val      if tid_val      else last_tid
                     })
-                print(f"[OK] {name} loaded ({len(processed)} rows)")
                 return name, processed
         except Exception as e:
-            print(f"[WARN] {name} attempt {attempt+1} failed: {e}")
             time.sleep(1)
-    print(f"[ERROR] {name} failed after 2 attempts, returning empty")
     return name, []
 
 def fetch_bundling_standalone_data():
@@ -4582,19 +4572,19 @@ def fetch_bundling_standalone_data():
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
 
-    # 🚨 PERFECT ALPHABET MAPPING (START_IDX FIXED) 🚨
+    # 🚨 PERFECT ALPHABET MAPPING (GE ZONE WEIGHT IS 6 AS YOU SAID) 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1 # start_idx 1
+            {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o":0, "d":1, "b":4, "w":8, "v":13, "title":14, "ic":15, "c":16, "cn":20, "t":28}, 2 # start_idx 2
+            {"o":0, "d":1, "b":4, "w":8, "v":13, "title":14, "ic":15, "c":16, "cn":20, "t":28}, 2
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o":0, "d":1, "b":3, "w":6, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2 # start_idx 2 (WEIGHT IS H=7)
+            {"o":0, "d":1, "b":3, "w":6, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2
         )
     }
 
@@ -4617,17 +4607,8 @@ def fetch_bundling_standalone_data():
                     n, data = future.result()
                     res[n] = data
                 except Exception as e:
-                    print(f"[ERROR] Failed to get result for {name}: {e}")
-                    res[name] = [] if name != "RATES" else {}
-        except concurrent.futures.TimeoutError:
-            print("[ERROR] Overall timeout reached")
-            for future in futures:
-                if not future.done():
-                    future.cancel()
-                    name = futures[future]
                     res[name] = [] if name != "RATES" else {}
         except Exception as e:
-            print(f"[ERROR] Unexpected error: {e}")
             for name in list(BUNDLING_SOURCES.keys()) + ["RATES"]:
                 res[name] = [] if name != "RATES" else {}
 
@@ -4832,7 +4813,7 @@ def api_nexus_bundling_data():
             try:
                 wt_str = re.sub(r'[^0-9.]','',str(o['weight']))
                 wt = float(wt_str) if wt_str else 0.0
-                if wt > 500: wt = 0.0  # SAFETY NET: If a tracking ID gets picked up as weight
+                if wt > 500: wt = 0.0  # SAFETY NET for Tracking IDs
             except: wt = 0.0
                 
             bundle_weight_sum += wt
@@ -4859,10 +4840,6 @@ def api_nexus_bundling_data():
     })
 
 # ---------- View Routes ----------
-@app.route('/')
-def home():
-    return '<h1>Bundling Tool is Running</h1><p>Go to <a href="/bundling">/bundling</a></p>'
-
 @app.route('/bundling')
 def bundling_dashboard_view():
     return render_template_string(BUNDLING_HTML)
@@ -5877,7 +5854,6 @@ function showRegionOrders(region, type) {
     document.getElementById('orderModal').classList.add('open');
 }
 function closeModal() { document.getElementById('orderModal').classList.remove('open'); }
-window.onload = () => fetchAllData();
 </script>
 </body>
 </html>'''
@@ -5887,8 +5863,6 @@ window.onload = () => fetchAllData();
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
         user_val = session.get('username') or session.get('user') or session.get('role')
-        # temporarily bypassing admin check if needed, uncomment below lines to enforce
-        # if user_val and str(user_val).lower() == 'admin':
         html = response.get_data(as_text=True)
         btn = '''
         <div style="position:fixed;bottom:30px;right:30px;display:flex;flex-direction:column;gap:12px;z-index:99999;">
@@ -5899,9 +5873,9 @@ def add_bundling_floating_btn(response):
             response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
-# ---------- Run ----------
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+# ==============================================================================
+# END OF BUNDLING HUB
+# ==============================================================================
 
 
 
