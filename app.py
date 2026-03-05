@@ -5558,37 +5558,208 @@ SUMMARY_HTML = '''<!DOCTYPE html>
     <title>📊 Region Summary</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#f97316;--muted:#71717A;--input-bg:#050505;}
-        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
-        .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
-        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
-        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
-        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
-        .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-        .sub-tabs{display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:10px;}
-        .sub-tab{padding:8px 16px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;background:var(--card);border:1px solid var(--border);color:#888;}
-        .sub-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-        .control-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px;display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;}
-        .f-group{display:flex;flex-direction:column;gap:5px;}
-        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;}
-        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';}
-        .btn{background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
-        .btn:hover{opacity:0.8;}
-        table{width:100%;border-collapse:collapse;background:#111;border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-top:10px;}
-        th{background:#050505;padding:12px;font-size:11px;color:#888;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:center;}
-        td{padding:12px;border-bottom:1px solid #222;color:#ccc;text-align:center;}
-        .region-name{font-weight:700;color:var(--accent);text-align:left;}
-        .totals-row{background:#1a1a1a;font-weight:700;}
-        .loader{width:30px;height:30px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto;}
-        @keyframes spin{to{transform:rotate(360deg);}}
-        .no-data{text-align:center;padding:40px;color:#666;}
+        :root {
+            --bg: #000;
+            --card: #0A0A0A;
+            --border: #1A1A1A;
+            --text: #FAFAFA;
+            --accent: #f97316;
+            --accent-soft: rgba(249, 115, 22, 0.1);
+            --muted: #71717A;
+            --input-bg: #050505;
+            --table-header-bg: #050505;
+            --row-hover: #111;
+            --totals-bg: #1a1a1a;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 40px;
+            margin: 0;
+            padding-bottom: 60px;
+        }
+        .header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+        }
+        .nav-tab {
+            padding: 10px 22px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 13px;
+            text-decoration: none;
+            border: 1px solid var(--border);
+            color: #888;
+            transition: all 0.2s;
+        }
+        .nav-tab:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .nav-tab.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+        .sub-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+        .sub-tab {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            background: var(--card);
+            border: 1px solid var(--border);
+            color: #888;
+        }
+        .sub-tab.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+        .control-panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            display: flex;
+            gap: 20px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .f-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .f-label {
+            font-size: 10px;
+            color: #666;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        .f-input {
+            background: var(--input-bg);
+            border: 1px solid #333;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: 'Inter';
+        }
+        .btn {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn:hover {
+            opacity: 0.8;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #111;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            margin-top: 10px;
+        }
+        th {
+            background: #050505;
+            padding: 12px;
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+        }
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #222;
+            color: #ccc;
+            text-align: center;
+        }
+        .region-name {
+            font-weight: 700;
+            color: var(--accent);
+            text-align: left;
+        }
+        .totals-row {
+            background: #1a1a1a;
+            font-weight: 700;
+        }
+        .loader {
+            width: 30px;
+            height: 30px;
+            border: 3px solid #333;
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .kpi-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .kpi-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+            border-left: 3px solid var(--accent);
+        }
+        .kpi-value {
+            font-size: 28px;
+            font-weight: 800;
+            color: #fff;
+        }
+        .kpi-label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
 <div class="header">
     <div>
-        <h1 style="margin:0;font-size:26px;">📊 Region Summary</h1>
-        <p style="color:#888;">Daily region totals & weekly matrix</p>
+        <h1 style="margin:0; font-size:26px;">📊 Region Summary</h1>
+        <p style="color:#888; margin-top:4px;">Daily region totals & weekly matrix (3PL style)</p>
     </div>
     <a href="/" class="nav-tab" style="background:#1A1A1A;">🏠 Main Dash</a>
 </div>
@@ -5638,6 +5809,40 @@ let bundlesData = null;
 let journeyData = null;
 let currentTab = 'daily';
 
+// Region mapping function (as per formula)
+function getRegionFromCountry(country) {
+    if (!country) return 'EU';
+    const c = country.trim().toLowerCase();
+    const specific = [
+        'united kingdom', 'united states', 'australia', 'switzerland', 'new zealand',
+        'canada', 'china', 'ghana', 'japan', 'india', 'philippines', 'saudia arabia',
+        'singapore', 'south africa', 'south korea', 'thailand'
+    ];
+    if (specific.includes(c)) {
+        // Return original country name with proper capitalization
+        const match = {
+            'united kingdom': 'United Kingdom',
+            'united states': 'United States',
+            'australia': 'Australia',
+            'switzerland': 'Switzerland',
+            'new zealand': 'New Zealand',
+            'canada': 'Canada',
+            'china': 'China',
+            'ghana': 'Ghana',
+            'japan': 'Japan',
+            'india': 'India',
+            'philippines': 'Philippines',
+            'saudia arabia': 'Saudia Arabia',
+            'singapore': 'Singapore',
+            'south africa': 'South Africa',
+            'south korea': 'South Korea',
+            'thailand': 'Thailand'
+        };
+        return match[c];
+    }
+    return 'EU';
+}
+
 // Fetch all data once
 async function fetchAllData() {
     if (bundlesData && journeyData) return;
@@ -5657,7 +5862,7 @@ async function fetchAllData() {
         else loadWeekly();
     } catch(e) {
         console.error(e);
-        alert('Error loading data');
+        alert('Error loading data. Please refresh.');
     }
 }
 
@@ -5692,7 +5897,7 @@ function switchTab(tab) {
     else loadWeekly();
 }
 
-// Daily region summary
+// Daily region summary (using bundles)
 function loadDaily() {
     const from = document.getElementById('dailyFrom').value;
     const to = document.getElementById('dailyTo').value;
@@ -5700,18 +5905,18 @@ function loadDaily() {
     document.getElementById('dailyLoader').style.display = 'block';
     document.getElementById('dailyTable').innerHTML = '';
 
-    // Filter bundles by date range (using bundle's date_std)
     const start = new Date(from);
     const end = new Date(to);
+    // Filter bundles by date_std
     const filteredBundles = bundlesData.filter(b => {
         const d = new Date(b.date_std);
         return d >= start && d <= end;
     });
 
-    // Aggregate per region
+    // Aggregate per region (using country mapping)
     const regionMap = {};
     filteredBundles.forEach(b => {
-        const region = b.country || 'Unknown';
+        const region = getRegionFromCountry(b.country);
         if (!regionMap[region]) {
             regionMap[region] = { orders:0, boxes:0, weight:0, lt20:0, ge20:0 };
         }
@@ -5722,25 +5927,28 @@ function loadDaily() {
         else regionMap[region].ge20 += 1;
     });
 
+    // Sort regions alphabetically
+    const sortedRegions = Object.keys(regionMap).sort();
+
     // Build table
     let html = '<table><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20kg</th><th>20+kg</th></tr></thead><tbody>';
     let totalOrders = 0, totalBoxes = 0, totalWeight = 0, totalLt20 = 0, totalGe20 = 0;
-    for (let region in regionMap) {
+    sortedRegions.forEach(region => {
         let r = regionMap[region];
-        html += `<tr><td class="region-name">${region}</td><td>${r.orders}</td><td>${r.boxes}</td><td>${r.weight.toFixed(1)}</td><td>${r.lt20}</td><td>${r.ge20}</td></tr>`;
+        html += `<tr><td class="region-name">${region}</td><td>${r.orders.toLocaleString()}</td><td>${r.boxes.toLocaleString()}</td><td>${r.weight.toFixed(1)}</td><td>${r.lt20.toLocaleString()}</td><td>${r.ge20.toLocaleString()}</td></tr>`;
         totalOrders += r.orders;
         totalBoxes += r.boxes;
         totalWeight += r.weight;
         totalLt20 += r.lt20;
         totalGe20 += r.ge20;
-    }
-    html += `<tr class="totals-row"><td>TOTAL</td><td>${totalOrders}</td><td>${totalBoxes}</td><td>${totalWeight.toFixed(1)}</td><td>${totalLt20}</td><td>${totalGe20}</td></tr>`;
+    });
+    html += `<tr class="totals-row"><td>TOTAL</td><td>${totalOrders.toLocaleString()}</td><td>${totalBoxes.toLocaleString()}</td><td>${totalWeight.toFixed(1)}</td><td>${totalLt20.toLocaleString()}</td><td>${totalGe20.toLocaleString()}</td></tr>`;
     html += '</tbody></table>';
     document.getElementById('dailyTable').innerHTML = html;
     document.getElementById('dailyLoader').style.display = 'none';
 }
 
-// Weekly matrix
+// Weekly matrix (using journey data with region from CS)
 function loadWeekly() {
     const weekStart = document.getElementById('weekStart').value;
     if (!weekStart) return;
@@ -5758,19 +5966,22 @@ function loadWeekly() {
         return d >= start && d <= end;
     });
 
-    // Aggregate per region and day
+    // Aggregate per region and day (region already from CS)
     const regionDayMap = {};
     filteredJourney.forEach(j => {
         const region = j.region || 'Unknown';
         const d = new Date(j.date);
         const dayIndex = d.getDay(); // 0=Sun, 1=Mon, ... 6=Sat
         // Convert to Mon=0 .. Sun=6
-        let idx = dayIndex === 0 ? 6 : dayIndex - 1; // Mon=0, Tue=1, ..., Sun=6
+        let idx = dayIndex === 0 ? 6 : dayIndex - 1;
         if (!regionDayMap[region]) {
             regionDayMap[region] = [0,0,0,0,0,0,0];
         }
         regionDayMap[region][idx] += 1;
     });
+
+    // Sort regions alphabetically
+    const sortedRegions = Object.keys(regionDayMap).sort();
 
     // Build table
     let html = '<table><thead><tr><th>Region</th>';
@@ -5778,21 +5989,21 @@ function loadWeekly() {
     html += '<th>Total</th></tr></thead><tbody>';
     let totals = [0,0,0,0,0,0,0];
     let grandTotal = 0;
-    for (let region in regionDayMap) {
+    sortedRegions.forEach(region => {
         let counts = regionDayMap[region];
         let rowSum = counts.reduce((a,b)=>a+b,0);
         html += `<tr><td class="region-name">${region}</td>`;
         counts.forEach((c,i) => {
-            html += `<td>${c}</td>`;
+            html += `<td>${c.toLocaleString()}</td>`;
             totals[i] += c;
         });
-        html += `<td><b>${rowSum}</b></td></tr>`;
+        html += `<td><b>${rowSum.toLocaleString()}</b></td></tr>`;
         grandTotal += rowSum;
-    }
+    });
     // Totals row
     html += `<tr class="totals-row"><td>TOTAL</td>`;
-    totals.forEach(t => html += `<td><b>${t}</b></td>`);
-    html += `<td><b>${grandTotal}</b></td></tr>`;
+    totals.forEach(t => html += `<td><b>${t.toLocaleString()}</b></td>`);
+    html += `<td><b>${grandTotal.toLocaleString()}</b></td></tr>`;
     html += '</tbody></table>';
     document.getElementById('weeklyTable').innerHTML = html;
     document.getElementById('weeklyLoader').style.display = 'none';
