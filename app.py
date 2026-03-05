@@ -5557,21 +5557,17 @@ SUMMARY_HTML = '''<!DOCTYPE html>
     <meta charset="UTF-8">
     <title>📊 Region Summary</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: #0f0f0f;
             color: #f0f0f0;
             padding: 30px;
-            margin: 0;
-            min-height: 100vh;
         }
-        /* Premium dark theme – exactly like 3PL dashboard */
         .app-container {
             max-width: 1600px;
             margin: 0 auto;
@@ -5591,16 +5587,12 @@ SUMMARY_HTML = '''<!DOCTYPE html>
         }
         .logo-area img {
             height: 45px;
-            width: auto;
-            filter: brightness(1.2);
+            display: none; /* Hidden by default, enable if you have logo */
         }
         .logo-area h1 {
             font-size: 26px;
             font-weight: 700;
-            background: linear-gradient(135deg, #f97316, #fb923c);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: #f97316;
         }
         .main-dash-btn {
             background: #1f1f1f;
@@ -5608,10 +5600,8 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             color: #f0f0f0;
             padding: 10px 22px;
             border-radius: 8px;
-            font-weight: 600;
-            font-size: 13px;
             text-decoration: none;
-            transition: all 0.2s;
+            font-weight: 600;
         }
         .main-dash-btn:hover {
             border-color: #f97316;
@@ -5621,28 +5611,20 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             display: flex;
             gap: 12px;
             margin-bottom: 30px;
-            flex-wrap: wrap;
         }
         .nav-tab {
             padding: 10px 24px;
             border-radius: 8px;
             font-weight: 600;
-            font-size: 14px;
             text-decoration: none;
             background: #1a1a1a;
             border: 1px solid #2a2a2a;
             color: #aaa;
-            transition: all 0.2s;
-        }
-        .nav-tab:hover {
-            border-color: #f97316;
-            color: #f97316;
         }
         .nav-tab.active {
             background: #f97316;
             color: #000;
             border-color: #f97316;
-            font-weight: 700;
         }
         .sub-tabs {
             display: flex;
@@ -5655,7 +5637,6 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             padding: 8px 20px;
             border-radius: 6px;
             font-weight: 600;
-            font-size: 13px;
             cursor: pointer;
             background: #1a1a1a;
             border: 1px solid #2a2a2a;
@@ -5664,7 +5645,6 @@ SUMMARY_HTML = '''<!DOCTYPE html>
         .sub-tab.active {
             background: #f97316;
             color: #000;
-            border-color: #f97316;
         }
         .control-panel {
             background: #1a1a1a;
@@ -5676,7 +5656,6 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             gap: 25px;
             align-items: flex-end;
             flex-wrap: wrap;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         }
         .f-group {
             display: flex;
@@ -5688,7 +5667,6 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             color: #aaa;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
         .f-input {
             background: #0f0f0f;
@@ -5696,9 +5674,8 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             color: #f0f0f0;
             padding: 10px 14px;
             border-radius: 8px;
-            font-family: 'Inter';
+            font-family: inherit;
             font-size: 14px;
-            transition: border 0.2s;
         }
         .f-input:focus {
             outline: none;
@@ -5711,21 +5688,16 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             padding: 10px 28px;
             border-radius: 8px;
             font-weight: 700;
-            font-size: 14px;
             cursor: pointer;
-            transition: opacity 0.2s;
         }
         .btn:hover {
             opacity: 0.9;
         }
-        /* Table styling */
         .table-wrapper {
             background: #1a1a1a;
             border-radius: 12px;
             border: 1px solid #2a2a2a;
             overflow-x: auto;
-            margin-top: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
         table {
             width: 100%;
@@ -5736,10 +5708,8 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             background: #0f0f0f;
             padding: 16px 12px;
             font-size: 12px;
-            font-weight: 600;
             color: #aaa;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
             border-bottom: 1px solid #2a2a2a;
             text-align: center;
         }
@@ -5748,10 +5718,6 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             border-bottom: 1px solid #2a2a2a;
             color: #f0f0f0;
             text-align: center;
-            font-size: 14px;
-        }
-        tr:last-child td {
-            border-bottom: none;
         }
         tr:hover td {
             background: #2a2a2a;
@@ -5772,7 +5738,6 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             cursor: pointer;
             text-decoration: underline;
             text-decoration-color: #f97316;
-            text-underline-offset: 3px;
             font-weight: 600;
         }
         .clickable:hover {
@@ -5794,16 +5759,11 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             text-align: center;
             padding: 50px;
             color: #aaa;
-            font-size: 16px;
         }
-        /* Modal styling */
         .modal-overlay {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.9);
             z-index: 10000;
             backdrop-filter: blur(5px);
@@ -5823,28 +5783,23 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             max-height: 80vh;
             overflow-y: auto;
             position: relative;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.8);
         }
         .modal-close {
             position: absolute;
-            top: 16px;
-            right: 16px;
+            top: 16px; right: 16px;
             background: #2a2a2a;
             border: 1px solid #2a2a2a;
             color: #fff;
-            width: 34px;
-            height: 34px;
+            width: 34px; height: 34px;
             border-radius: 50%;
             cursor: pointer;
             font-size: 18px;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.2s;
         }
         .modal-close:hover {
             background: #ef4444;
-            border-color: #ef4444;
         }
         .modal-title {
             font-size: 22px;
@@ -5852,20 +5807,13 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             margin-bottom: 20px;
             color: #f97316;
         }
-        .modal table {
-            background: #0f0f0f;
-        }
-        .modal th {
-            background: #1a1a1a;
-        }
     </style>
 </head>
 <body>
 <div class="app-container">
     <div class="header">
         <div class="logo-area">
-            <!-- Replace with your 3PL logo path -->
-            <img src="/static/3pl-logo.png" alt="3PL Logo" onerror="this.style.display='none'">
+            <img src="/static/3pl-logo.png" alt="3PL Logo" style="display:none;">
             <h1>Region Summary</h1>
         </div>
         <a href="/" class="main-dash-btn">🏠 Main Dash</a>
@@ -5911,7 +5859,6 @@ SUMMARY_HTML = '''<!DOCTYPE html>
     </div>
 </div>
 
-<!-- Modal for order details -->
 <div class="modal-overlay" id="orderModal" onclick="if(event.target===this) closeModal()">
     <div class="modal">
         <button class="modal-close" onclick="closeModal()">✕</button>
@@ -5921,9 +5868,9 @@ SUMMARY_HTML = '''<!DOCTYPE html>
 </div>
 
 <script>
-// ==================== CLIENT-SIDE CACHE (localStorage) ====================
+// ==================== CLIENT-SIDE CACHE ====================
 const CACHE_KEY = 'bundling_summary_cache';
-const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const CACHE_DURATION = 10 * 60 * 1000;
 
 function getCachedData() {
     const cached = localStorage.getItem(CACHE_KEY);
@@ -5946,12 +5893,10 @@ function setCachedData(bundles, journey) {
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
 }
 
-// Global data stores
 let bundlesData = null;
 let journeyData = null;
 let currentTab = 'daily';
 
-// Region mapping function (as per formula)
 function getRegionFromCountry(country) {
     if (!country) return 'EU';
     const c = country.trim().toLowerCase();
@@ -5984,18 +5929,15 @@ function getRegionFromCountry(country) {
     return 'EU';
 }
 
-// Fetch all data once, using cache if available
-async function fetchAllData(forceRefresh = false) {
-    if (!forceRefresh) {
-        const cached = getCachedData();
-        if (cached) {
-            bundlesData = cached.bundles;
-            journeyData = cached.journey;
-            setDefaultDates();
-            if (currentTab === 'daily') loadDaily();
-            else loadWeekly();
-            return;
-        }
+async function fetchAllData() {
+    const cached = getCachedData();
+    if (cached) {
+        bundlesData = cached.bundles;
+        journeyData = cached.journey;
+        setDefaultDates();
+        if (currentTab === 'daily') loadDaily();
+        else loadWeekly();
+        return;
     }
     try {
         const [bRes, jRes] = await Promise.all([
@@ -6045,7 +5987,6 @@ function switchTab(tab) {
     else loadWeekly();
 }
 
-// ==================== DAILY REGION TABLE ====================
 function loadDaily() {
     const from = document.getElementById('dailyFrom').value;
     const to = document.getElementById('dailyTo').value;
@@ -6057,13 +5998,13 @@ function loadDaily() {
     const end = new Date(to);
     end.setHours(23,59,59,999);
 
-    const filteredBundles = bundlesData.filter(b => {
+    const filtered = bundlesData.filter(b => {
         const d = new Date(b.date_std);
         return d >= start && d <= end;
     });
 
     const regionMap = {};
-    filteredBundles.forEach(b => {
+    filtered.forEach(b => {
         const region = getRegionFromCountry(b.country);
         if (!regionMap[region]) {
             regionMap[region] = { orders:0, boxes:0, weight:0, lt20:0, ge20:0, ordersList: [] };
@@ -6083,11 +6024,10 @@ function loadDaily() {
         });
     });
 
-    const sortedRegions = Object.keys(regionMap).sort();
-
+    const sorted = Object.keys(regionMap).sort();
     let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20kg</th><th>20+kg</th></tr></thead><tbody>';
     let totalOrders = 0, totalBoxes = 0, totalWeight = 0, totalLt20 = 0, totalGe20 = 0;
-    sortedRegions.forEach(region => {
+    sorted.forEach(region => {
         let r = regionMap[region];
         html += `<tr><td class="region-name">${region}</td>`;
         html += `<td class="clickable" onclick="showRegionOrders('${region}', 'orders')">${r.orders.toLocaleString()}</td>`;
@@ -6108,7 +6048,6 @@ function loadDaily() {
     document.getElementById('dailyLoader').style.display = 'none';
 }
 
-// ==================== WEEKLY MATRIX ====================
 function loadWeekly() {
     const weekStart = document.getElementById('weekStart').value;
     if (!weekStart) return;
@@ -6121,25 +6060,24 @@ function loadWeekly() {
     end.setHours(23,59,59,999);
     const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-    const filteredJourney = journeyData.filter(j => {
+    const filtered = journeyData.filter(j => {
         const d = new Date(j.date);
         return d >= start && d <= end;
     });
 
     const regionDayMap = {};
-    filteredJourney.forEach(j => {
+    filtered.forEach(j => {
         const region = j.region || 'Unknown';
         const d = new Date(j.date);
-        const dayIndex = d.getDay(); // 0=Sun, 1=Mon, ... 6=Sat
-        let idx = dayIndex === 0 ? 6 : dayIndex - 1; // Mon=0..Sun=6
+        const dayIndex = d.getDay();
+        let idx = dayIndex === 0 ? 6 : dayIndex - 1;
         if (!regionDayMap[region]) {
             regionDayMap[region] = [0,0,0,0,0,0,0];
         }
         regionDayMap[region][idx] += 1;
     });
 
-    const regions = Object.keys(regionDayMap); // preserve order as they appear
-
+    const regions = Object.keys(regionDayMap);
     let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th>';
     days.forEach(d => html += `<th>${d}</th>`);
     html += '<th>Total</th></tr></thead><tbody>';
@@ -6164,7 +6102,6 @@ function loadWeekly() {
     document.getElementById('weeklyLoader').style.display = 'none';
 }
 
-// ==================== MODAL FOR REGION ORDERS ====================
 function showRegionOrders(region, type) {
     const ordersList = window['regionData_' + region];
     if (!ordersList || ordersList.length === 0) {
@@ -6189,8 +6126,7 @@ function closeModal() {
     document.getElementById('orderModal').classList.remove('open');
 }
 
-// Initialize
-window.onload = () => fetchAllData();
+window.onload = fetchAllData;
 </script>
 </body>
 </html>'''
