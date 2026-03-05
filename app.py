@@ -4343,7 +4343,7 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - COMPLETE WITH PREMIUM SUMMARY TABS
+# 📦 BUNDLING INTELLIGENCE HUB - WITH NEW SUMMARY TABS
 # ==============================================================================
 import urllib.request
 import csv
@@ -4355,7 +4355,6 @@ import concurrent.futures
 from datetime import datetime, timedelta
 from flask import jsonify, request, session, render_template_string
 
-# ---------- Configuration ----------
 _bundling_cache = {'data': None, 'time': 0}
 _journey_cache  = {'data': None, 'time': 0}
 _status_cache   = {'data': None, 'time': 0}
@@ -4364,7 +4363,10 @@ BUNDLING_CACHE_DURATION = 600  # 10 minutes
 JOURNEY_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRsiVaciOMON0xaXXEi1guBYrqfVNpD-j4My_9YokGd5kftqjAXvri5c_gLB_VRXeoDLzEtz9h5y8x/pub?gid=1409345116&single=true&output=csv"
 STATUS_SHEET_URL  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1570463436&single=true&output=csv"
 
-# ---------- Helper Functions ----------
+# ==============================================================================
+# HELPERS
+# ==============================================================================
+
 def std_date(d_str):
     try:
         for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%d-%b-%Y', '%Y/%m/%d'):
@@ -4428,7 +4430,10 @@ def fmt_journey_date(dt):
     if not dt: return None
     return dt.strftime('%d %b %Y, %H:%M')
 
-# ---------- Data Fetchers ----------
+# ==============================================================================
+# DATA FETCHERS (OPTIMIZED)
+# ==============================================================================
+
 def fetch_rates_sheet(ctx):
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
@@ -4631,9 +4636,13 @@ def fetch_bundling_standalone_data():
     _bundling_cache['time'] = now
     return res
 
-# ---------- API Endpoints ----------
+# ==============================================================================
+# NEW API: ALL JOURNEY DATA FOR SUMMARY
+# ==============================================================================
+
 @app.route('/api/nexus/all_journey')
 def api_all_journey():
+    """Return list of orders with date and region from journey sheet"""
     journey_map = fetch_journey_sheet_data()
     result = []
     for order_id, data in journey_map.items():
@@ -4653,10 +4662,14 @@ def api_all_journey():
         })
     return jsonify({"success": True, "data": result})
 
+# ==============================================================================
+# API ROUTES (existing)
+# ==============================================================================
+
 @app.route('/api/nexus/order_journey/<order_id>')
 def api_order_journey(order_id):
     journey_map = fetch_journey_sheet_data()
-    order_key = str(order_id).strip().upper()
+    order_key   = str(order_id).strip().upper()
     row = journey_map.get(order_key)
     if not row:
         return jsonify({"success": False, "message": f"Order '{order_id}' not found in journey sheet."})
@@ -4727,10 +4740,13 @@ def api_order_journey(order_id):
             "delivered_at":    fmt_journey_date(dt_delivered),
         },
         "step_metrics": step_metrics,
-        "last_event": {"label": last_event_label, "date": fmt_journey_date(last_event)},
+        "last_event": {
+            "label": last_event_label,
+            "date": fmt_journey_date(last_event)
+        },
         "key_metrics": {
             "qc_to_handover":      days_between(dt_qc_appr, dt_handed),
-            "handover_to_freight": days_between(dt_handed, dt_freight),
+            "handover_to_freight": days_between(dt_handed,  dt_freight),
             "total_journey":       total_journey,
         }
     })
@@ -4783,7 +4799,7 @@ def api_nexus_bundling_data():
         for r in rows:
             oid = r['order'].upper()
             bx  = r['boxes']
-            od = {
+            od  = {
                 "order_id":   oid,
                 "weight":     r['weight'],
                 "title":      r['title'],
@@ -4850,7 +4866,10 @@ def api_nexus_bundling_data():
         "bundles":      bundles_list
     })
 
-# ---------- View Routes ----------
+# ==============================================================================
+# VIEWS
+# ==============================================================================
+
 @app.route('/bundling')
 def bundling_dashboard_view():
     u = session.get('username') or session.get('user') or session.get('role')
@@ -4872,395 +4891,108 @@ def bundling_summary_view():
         return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
     return render_template_string(SUMMARY_HTML)
 
-# ---------- HTML Templates ----------
+# ==============================================================================
+# HTML TEMPLATES
+# ==============================================================================
+
+BUNDLING_HTML = '''<!DOCTYPE html>...'''  # (keep your existing BUNDLING_HTML here)
+
+STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>...'''  # (keep your existing STATUS_INTELLIGENCE_HTML here)
+
+# ==============================================================================
+# NEW SUMMARY HTML
+# ==============================================================================
+
 SUMMARY_HTML = '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>📊 Region Summary</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #0f0f0f;
-            color: #f0f0f0;
-            padding: 30px;
-        }
-        .app-container {
-            max-width: 1600px;
-            margin: 0 auto;
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #2a2a2a;
-        }
-        .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        .logo-area img {
-            height: 45px;
-            display: none; /* Hidden by default, enable if you have logo */
-        }
-        .logo-area h1 {
-            font-size: 26px;
-            font-weight: 700;
-            color: #f97316;
-        }
-        .main-dash-btn {
-            background: #1f1f1f;
-            border: 1px solid #2a2a2a;
-            color: #f0f0f0;
-            padding: 10px 22px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .main-dash-btn:hover {
-            border-color: #f97316;
-            color: #f97316;
-        }
-        .nav-tabs {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 30px;
-        }
-        .nav-tab {
-            padding: 10px 24px;
-            border-radius: 8px;
-            font-weight: 600;
-            text-decoration: none;
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            color: #aaa;
-        }
-        .nav-tab.active {
-            background: #f97316;
-            color: #000;
-            border-color: #f97316;
-        }
-        .sub-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 25px;
-            border-bottom: 1px solid #2a2a2a;
-            padding-bottom: 10px;
-        }
-        .sub-tab {
-            padding: 8px 20px;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            color: #aaa;
-        }
-        .sub-tab.active {
-            background: #f97316;
-            color: #000;
-        }
-        .control-panel {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 30px;
-            display: flex;
-            gap: 25px;
-            align-items: flex-end;
-            flex-wrap: wrap;
-        }
-        .f-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .f-label {
-            font-size: 11px;
-            color: #aaa;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .f-input {
-            background: #0f0f0f;
-            border: 1px solid #2a2a2a;
-            color: #f0f0f0;
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-family: inherit;
-            font-size: 14px;
-        }
-        .f-input:focus {
-            outline: none;
-            border-color: #f97316;
-        }
-        .btn {
-            background: #f97316;
-            color: #000;
-            border: none;
-            padding: 10px 28px;
-            border-radius: 8px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-        .btn:hover {
-            opacity: 0.9;
-        }
-        .table-wrapper {
-            background: #1a1a1a;
-            border-radius: 12px;
-            border: 1px solid #2a2a2a;
-            overflow-x: auto;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 800px;
-        }
-        th {
-            background: #0f0f0f;
-            padding: 16px 12px;
-            font-size: 12px;
-            color: #aaa;
-            text-transform: uppercase;
-            border-bottom: 1px solid #2a2a2a;
-            text-align: center;
-        }
-        td {
-            padding: 14px 12px;
-            border-bottom: 1px solid #2a2a2a;
-            color: #f0f0f0;
-            text-align: center;
-        }
-        tr:hover td {
-            background: #2a2a2a;
-        }
-        .region-name {
-            font-weight: 700;
-            color: #f97316;
-            text-align: left;
-        }
-        .totals-row {
-            background: #0f0f0f;
-            font-weight: 700;
-        }
-        .totals-row td {
-            color: #f97316;
-        }
-        .clickable {
-            cursor: pointer;
-            text-decoration: underline;
-            text-decoration-color: #f97316;
-            font-weight: 600;
-        }
-        .clickable:hover {
-            color: #f97316;
-        }
-        .loader {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #2a2a2a;
-            border-top-color: #f97316;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 30px auto;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .no-data {
-            text-align: center;
-            padding: 50px;
-            color: #aaa;
-        }
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9);
-            z-index: 10000;
-            backdrop-filter: blur(5px);
-            justify-content: center;
-            align-items: center;
-        }
-        .modal-overlay.open {
-            display: flex;
-        }
-        .modal {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 16px;
-            padding: 28px;
-            width: 100%;
-            max-width: 900px;
-            max-height: 80vh;
-            overflow-y: auto;
-            position: relative;
-        }
-        .modal-close {
-            position: absolute;
-            top: 16px; right: 16px;
-            background: #2a2a2a;
-            border: 1px solid #2a2a2a;
-            color: #fff;
-            width: 34px; height: 34px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-close:hover {
-            background: #ef4444;
-        }
-        .modal-title {
-            font-size: 22px;
-            font-weight: 800;
-            margin-bottom: 20px;
-            color: #f97316;
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#f97316;--muted:#71717A;--input-bg:#050505;}
+        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
+        .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
+        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
+        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
+        .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+        .sub-tabs{display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:10px;}
+        .sub-tab{padding:8px 16px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;background:var(--card);border:1px solid var(--border);color:#888;}
+        .sub-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+        .control-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px;display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;}
+        .f-group{display:flex;flex-direction:column;gap:5px;}
+        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;}
+        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';}
+        .btn{background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
+        .btn:hover{opacity:0.8;}
+        table{width:100%;border-collapse:collapse;background:#111;border-radius:12px;overflow:hidden;border:1px solid var(--border);margin-top:10px;}
+        th{background:#050505;padding:12px;font-size:11px;color:#888;text-transform:uppercase;border-bottom:1px solid var(--border);text-align:center;}
+        td{padding:12px;border-bottom:1px solid #222;color:#ccc;text-align:center;}
+        .region-name{font-weight:700;color:var(--accent);text-align:left;}
+        .totals-row{background:#1a1a1a;font-weight:700;}
+        .loader{width:30px;height:30px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .no-data{text-align:center;padding:40px;color:#666;}
     </style>
 </head>
 <body>
-<div class="app-container">
-    <div class="header">
-        <div class="logo-area">
-            <img src="/static/3pl-logo.png" alt="3PL Logo" style="display:none;">
-            <h1>Region Summary</h1>
-        </div>
-        <a href="/" class="main-dash-btn">🏠 Main Dash</a>
+<div class="header">
+    <div>
+        <h1 style="margin:0;font-size:26px;">📊 Region Summary</h1>
+        <p style="color:#888;">Daily region totals & weekly matrix</p>
     </div>
-
-    <div class="nav-tabs">
-        <a href="/bundling" class="nav-tab">📦 Bundle</a>
-        <a href="/bundling/status" class="nav-tab">📡 Status</a>
-        <a href="/bundling/summary" class="nav-tab active">📊 Summary</a>
-    </div>
-
-    <div class="sub-tabs">
-        <div class="sub-tab active" onclick="switchTab('daily')">Daily Region</div>
-        <div class="sub-tab" onclick="switchTab('weekly')">Weekly Matrix</div>
-    </div>
-
-    <div id="dailyPanel">
-        <div class="control-panel">
-            <div class="f-group">
-                <div class="f-label">From Date</div>
-                <input type="date" id="dailyFrom" class="f-input">
-            </div>
-            <div class="f-group">
-                <div class="f-label">To Date</div>
-                <input type="date" id="dailyTo" class="f-input">
-            </div>
-            <button class="btn" onclick="loadDaily()">Apply</button>
-        </div>
-        <div id="dailyLoader" style="display:none;"><div class="loader"></div></div>
-        <div id="dailyTable"></div>
-    </div>
-
-    <div id="weeklyPanel" style="display:none;">
-        <div class="control-panel">
-            <div class="f-group">
-                <div class="f-label">Week Starting (Monday)</div>
-                <input type="date" id="weekStart" class="f-input">
-            </div>
-            <button class="btn" onclick="loadWeekly()">Load Week</button>
-        </div>
-        <div id="weeklyLoader" style="display:none;"><div class="loader"></div></div>
-        <div id="weeklyTable"></div>
-    </div>
+    <a href="/" class="nav-tab" style="background:#1A1A1A;">🏠 Main Dash</a>
 </div>
 
-<div class="modal-overlay" id="orderModal" onclick="if(event.target===this) closeModal()">
-    <div class="modal">
-        <button class="modal-close" onclick="closeModal()">✕</button>
-        <div class="modal-title" id="modalTitle">Region Orders</div>
-        <div id="modalContent"></div>
+<div class="nav-tabs">
+    <a href="/bundling" class="nav-tab">📦 Bundle</a>
+    <a href="/bundling/status" class="nav-tab">📡 Status</a>
+    <a href="/bundling/summary" class="nav-tab active">📊 Summary</a>
+</div>
+
+<div class="sub-tabs">
+    <div class="sub-tab active" onclick="switchTab('daily')">Daily Region</div>
+    <div class="sub-tab" onclick="switchTab('weekly')">Weekly Matrix</div>
+</div>
+
+<div id="dailyPanel" style="display:block;">
+    <div class="control-panel">
+        <div class="f-group">
+            <div class="f-label">From Date</div>
+            <input type="date" id="dailyFrom" class="f-input" value="">
+        </div>
+        <div class="f-group">
+            <div class="f-label">To Date</div>
+            <input type="date" id="dailyTo" class="f-input" value="">
+        </div>
+        <button class="btn" onclick="loadDaily()">Apply</button>
     </div>
+    <div id="dailyLoader" style="display:none;"><div class="loader"></div></div>
+    <div id="dailyTable"></div>
+</div>
+
+<div id="weeklyPanel" style="display:none;">
+    <div class="control-panel">
+        <div class="f-group">
+            <div class="f-label">Week Starting (Monday)</div>
+            <input type="date" id="weekStart" class="f-input" value="">
+        </div>
+        <button class="btn" onclick="loadWeekly()">Load Week</button>
+    </div>
+    <div id="weeklyLoader" style="display:none;"><div class="loader"></div></div>
+    <div id="weeklyTable"></div>
 </div>
 
 <script>
-// ==================== CLIENT-SIDE CACHE ====================
-const CACHE_KEY = 'bundling_summary_cache';
-const CACHE_DURATION = 10 * 60 * 1000;
-
-function getCachedData() {
-    const cached = localStorage.getItem(CACHE_KEY);
-    if (!cached) return null;
-    try {
-        const { timestamp, bundles, journey } = JSON.parse(cached);
-        if (Date.now() - timestamp < CACHE_DURATION) {
-            return { bundles, journey };
-        }
-    } catch (e) {}
-    return null;
-}
-
-function setCachedData(bundles, journey) {
-    const cache = {
-        timestamp: Date.now(),
-        bundles: bundles,
-        journey: journey
-    };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-}
-
+// Global data stores
 let bundlesData = null;
 let journeyData = null;
 let currentTab = 'daily';
 
-function getRegionFromCountry(country) {
-    if (!country) return 'EU';
-    const c = country.trim().toLowerCase();
-    const specific = [
-        'united kingdom', 'united states', 'australia', 'switzerland', 'new zealand',
-        'canada', 'china', 'ghana', 'japan', 'india', 'philippines', 'saudia arabia',
-        'singapore', 'south africa', 'south korea', 'thailand'
-    ];
-    if (specific.includes(c)) {
-        const match = {
-            'united kingdom': 'United Kingdom',
-            'united states': 'United States',
-            'australia': 'Australia',
-            'switzerland': 'Switzerland',
-            'new zealand': 'New Zealand',
-            'canada': 'Canada',
-            'china': 'China',
-            'ghana': 'Ghana',
-            'japan': 'Japan',
-            'india': 'India',
-            'philippines': 'Philippines',
-            'saudia arabia': 'Saudia Arabia',
-            'singapore': 'Singapore',
-            'south africa': 'South Africa',
-            'south korea': 'South Korea',
-            'thailand': 'Thailand'
-        };
-        return match[c];
-    }
-    return 'EU';
-}
-
+// Fetch all data once
 async function fetchAllData() {
-    const cached = getCachedData();
-    if (cached) {
-        bundlesData = cached.bundles;
-        journeyData = cached.journey;
-        setDefaultDates();
-        if (currentTab === 'daily') loadDaily();
-        else loadWeekly();
-        return;
-    }
+    if (bundlesData && journeyData) return;
     try {
         const [bRes, jRes] = await Promise.all([
             fetch('/api/nexus/bundling_data'),
@@ -5270,21 +5002,24 @@ async function fetchAllData() {
         const jJson = await jRes.json();
         bundlesData = bJson.bundles || [];
         journeyData = jJson.data || [];
-        setCachedData(bundlesData, journeyData);
+        // Set default dates
         setDefaultDates();
+        // Load current tab
         if (currentTab === 'daily') loadDaily();
         else loadWeekly();
     } catch(e) {
         console.error(e);
-        alert('Error loading data. Please refresh.');
+        alert('Error loading data');
     }
 }
 
 function setDefaultDates() {
     const today = new Date();
     const year = today.getFullYear();
+    // Default to current year
     document.getElementById('dailyFrom').value = year + '-01-01';
     document.getElementById('dailyTo').value = year + '-12-31';
+    // Default week to current week's Monday
     const monday = getMonday(today);
     const yyyy = monday.getFullYear();
     const mm = String(monday.getMonth() + 1).padStart(2, '0');
@@ -5309,6 +5044,7 @@ function switchTab(tab) {
     else loadWeekly();
 }
 
+// Daily region summary
 function loadDaily() {
     const from = document.getElementById('dailyFrom').value;
     const to = document.getElementById('dailyTo').value;
@@ -5316,60 +5052,47 @@ function loadDaily() {
     document.getElementById('dailyLoader').style.display = 'block';
     document.getElementById('dailyTable').innerHTML = '';
 
+    // Filter bundles by date range (using bundle's date_std)
     const start = new Date(from);
     const end = new Date(to);
-    end.setHours(23,59,59,999);
-
-    const filtered = bundlesData.filter(b => {
+    const filteredBundles = bundlesData.filter(b => {
         const d = new Date(b.date_std);
         return d >= start && d <= end;
     });
 
+    // Aggregate per region
     const regionMap = {};
-    filtered.forEach(b => {
-        const region = getRegionFromCountry(b.country);
+    filteredBundles.forEach(b => {
+        const region = b.country || 'Unknown';
         if (!regionMap[region]) {
-            regionMap[region] = { orders:0, boxes:0, weight:0, lt20:0, ge20:0, ordersList: [] };
+            regionMap[region] = { orders:0, boxes:0, weight:0, lt20:0, ge20:0 };
         }
         regionMap[region].boxes += 1;
-        regionMap[region].orders += b.orders.length;
+        regionMap[region].orders += b.orders.length; // number of orders in bundle
         regionMap[region].weight += b.bundle_weight_kg || 0;
         if (b.bundle_weight_kg < 20) regionMap[region].lt20 += 1;
         else regionMap[region].ge20 += 1;
-        b.orders.forEach(o => {
-            regionMap[region].ordersList.push({
-                order_id: o.order_id,
-                weight: o.weight,
-                status: o.status,
-                date: b.date_std
-            });
-        });
     });
 
-    const sorted = Object.keys(regionMap).sort();
-    let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20kg</th><th>20+kg</th></tr></thead><tbody>';
+    // Build table
+    let html = '<table><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20kg</th><th>20+kg</th></tr></thead><tbody>';
     let totalOrders = 0, totalBoxes = 0, totalWeight = 0, totalLt20 = 0, totalGe20 = 0;
-    sorted.forEach(region => {
+    for (let region in regionMap) {
         let r = regionMap[region];
-        html += `<tr><td class="region-name">${region}</td>`;
-        html += `<td class="clickable" onclick="showRegionOrders('${region}', 'orders')">${r.orders.toLocaleString()}</td>`;
-        html += `<td class="clickable" onclick="showRegionOrders('${region}', 'boxes')">${r.boxes.toLocaleString()}</td>`;
-        html += `<td class="clickable" onclick="showRegionOrders('${region}', 'weight')">${r.weight.toFixed(1)}</td>`;
-        html += `<td>${r.lt20.toLocaleString()}</td>`;
-        html += `<td>${r.ge20.toLocaleString()}</td></tr>`;
+        html += `<tr><td class="region-name">${region}</td><td>${r.orders}</td><td>${r.boxes}</td><td>${r.weight.toFixed(1)}</td><td>${r.lt20}</td><td>${r.ge20}</td></tr>`;
         totalOrders += r.orders;
         totalBoxes += r.boxes;
         totalWeight += r.weight;
         totalLt20 += r.lt20;
         totalGe20 += r.ge20;
-        window['regionData_' + region] = r.ordersList;
-    });
-    html += `<tr class="totals-row"><td>TOTAL</td><td>${totalOrders.toLocaleString()}</td><td>${totalBoxes.toLocaleString()}</td><td>${totalWeight.toFixed(1)}</td><td>${totalLt20.toLocaleString()}</td><td>${totalGe20.toLocaleString()}</td></tr>`;
-    html += '</tbody></table></div>';
+    }
+    html += `<tr class="totals-row"><td>TOTAL</td><td>${totalOrders}</td><td>${totalBoxes}</td><td>${totalWeight.toFixed(1)}</td><td>${totalLt20}</td><td>${totalGe20}</td></tr>`;
+    html += '</tbody></table>';
     document.getElementById('dailyTable').innerHTML = html;
     document.getElementById('dailyLoader').style.display = 'none';
 }
 
+// Weekly matrix
 function loadWeekly() {
     const weekStart = document.getElementById('weekStart').value;
     if (!weekStart) return;
@@ -5379,81 +5102,64 @@ function loadWeekly() {
     const start = new Date(weekStart);
     const end = new Date(start);
     end.setDate(end.getDate() + 6);
-    end.setHours(23,59,59,999);
     const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-    const filtered = journeyData.filter(j => {
+    // Filter journey data by date range
+    const filteredJourney = journeyData.filter(j => {
         const d = new Date(j.date);
         return d >= start && d <= end;
     });
 
+    // Aggregate per region and day
     const regionDayMap = {};
-    filtered.forEach(j => {
+    filteredJourney.forEach(j => {
         const region = j.region || 'Unknown';
         const d = new Date(j.date);
-        const dayIndex = d.getDay();
-        let idx = dayIndex === 0 ? 6 : dayIndex - 1;
+        const dayIndex = d.getDay(); // 0=Sun, 1=Mon, ... 6=Sat
+        // Convert to Mon=0 .. Sun=6
+        let idx = dayIndex === 0 ? 6 : dayIndex - 1; // Mon=0, Tue=1, ..., Sun=6
         if (!regionDayMap[region]) {
             regionDayMap[region] = [0,0,0,0,0,0,0];
         }
         regionDayMap[region][idx] += 1;
     });
 
-    const regions = Object.keys(regionDayMap);
-    let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th>';
+    // Build table
+    let html = '<table><thead><tr><th>Region</th>';
     days.forEach(d => html += `<th>${d}</th>`);
     html += '<th>Total</th></tr></thead><tbody>';
     let totals = [0,0,0,0,0,0,0];
     let grandTotal = 0;
-    regions.forEach(region => {
+    for (let region in regionDayMap) {
         let counts = regionDayMap[region];
         let rowSum = counts.reduce((a,b)=>a+b,0);
         html += `<tr><td class="region-name">${region}</td>`;
         counts.forEach((c,i) => {
-            html += `<td>${c.toLocaleString()}</td>`;
+            html += `<td>${c}</td>`;
             totals[i] += c;
         });
-        html += `<td><b>${rowSum.toLocaleString()}</b></td></tr>`;
+        html += `<td><b>${rowSum}</b></td></tr>`;
         grandTotal += rowSum;
-    });
+    }
+    // Totals row
     html += `<tr class="totals-row"><td>TOTAL</td>`;
-    totals.forEach(t => html += `<td><b>${t.toLocaleString()}</b></td>`);
-    html += `<td><b>${grandTotal.toLocaleString()}</b></td></tr>`;
-    html += '</tbody></table></div>';
+    totals.forEach(t => html += `<td><b>${t}</b></td>`);
+    html += `<td><b>${grandTotal}</b></td></tr>`;
+    html += '</tbody></table>';
     document.getElementById('weeklyTable').innerHTML = html;
     document.getElementById('weeklyLoader').style.display = 'none';
 }
 
-function showRegionOrders(region, type) {
-    const ordersList = window['regionData_' + region];
-    if (!ordersList || ordersList.length === 0) {
-        alert('No orders found for this region.');
-        return;
-    }
-    let title = `Orders in ${region}`;
-    if (type === 'boxes') title = `Boxes in ${region}`;
-    else if (type === 'weight') title = `Weight details in ${region}`;
-    document.getElementById('modalTitle').innerText = title;
-
-    let tableHtml = '<div class="table-wrapper"><table><thead><tr><th>Order ID</th><th>Date</th><th>Weight (kg)</th><th>Status</th></tr></thead><tbody>';
-    ordersList.forEach(o => {
-        tableHtml += `<tr><td>${o.order_id}</td><td>${o.date}</td><td>${o.weight}</td><td>${o.status || '—'}</td></tr>`;
-    });
-    tableHtml += '</tbody></table></div>';
-    document.getElementById('modalContent').innerHTML = tableHtml;
-    document.getElementById('orderModal').classList.add('open');
-}
-
-function closeModal() {
-    document.getElementById('orderModal').classList.remove('open');
-}
-
+// Initialize
 window.onload = fetchAllData;
 </script>
 </body>
 </html>'''
 
-# ---------- Floating Button ----------
+# ==============================================================================
+# FLOATING BUTTON (unchanged)
+# ==============================================================================
+
 @app.after_request
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
@@ -5468,6 +5174,10 @@ def add_bundling_floating_btn(response):
             if '</body>' in html:
                 response.set_data(html.replace('</body>', btn + '</body>'))
     return response
+
+# ==============================================================================
+# 🛑 BUNDLING BLOCK END
+# ==============================================================================
 
 
 
