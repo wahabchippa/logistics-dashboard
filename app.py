@@ -5558,229 +5558,245 @@ SUMMARY_HTML = '''<!DOCTYPE html>
     <title>📊 Region Summary</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        :root {
-            --bg: #0a0a0a;
-            --card: #1a1a1a;
-            --border: #2a2a2a;
-            --text: #f0f0f0;
-            --accent: #f97316;
-            --accent-soft: rgba(249, 115, 22, 0.15);
-            --muted: #9ca3af;
-            --input-bg: #2a2a2a;
-            --table-header-bg: #2a2a2a;
-            --row-hover: #2a2a2a;
-            --totals-bg: #2a2a2a;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
         body {
             font-family: 'Inter', sans-serif;
-            background: var(--bg);
-            color: var(--text);
+            background: #0f0f0f;
+            color: #f0f0f0;
             padding: 30px;
             margin: 0;
-            padding-bottom: 60px;
+            min-height: 100vh;
+        }
+        /* Premium dark theme – exactly like 3PL dashboard */
+        .app-container {
+            max-width: 1600px;
+            margin: 0 auto;
         }
         .header {
-            margin-bottom: 24px;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
-            gap: 16px;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #2a2a2a;
         }
         .logo-area {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 15px;
         }
         .logo-area img {
-            height: 40px;
+            height: 45px;
             width: auto;
+            filter: brightness(1.2);
         }
         .logo-area h1 {
-            font-size: 24px;
-            margin: 0;
-            color: var(--accent);
+            font-size: 26px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #f97316, #fb923c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .main-dash-btn {
+            background: #1f1f1f;
+            border: 1px solid #2a2a2a;
+            color: #f0f0f0;
+            padding: 10px 22px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .main-dash-btn:hover {
+            border-color: #f97316;
+            color: #f97316;
         }
         .nav-tabs {
             display: flex;
-            gap: 10px;
-            margin-bottom: 28px;
+            gap: 12px;
+            margin-bottom: 30px;
             flex-wrap: wrap;
         }
         .nav-tab {
-            padding: 10px 22px;
+            padding: 10px 24px;
             border-radius: 8px;
-            font-weight: 700;
-            font-size: 13px;
+            font-weight: 600;
+            font-size: 14px;
             text-decoration: none;
-            border: 1px solid var(--border);
-            color: var(--muted);
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            color: #aaa;
             transition: all 0.2s;
-            background: var(--card);
         }
         .nav-tab:hover {
-            border-color: var(--accent);
-            color: var(--accent);
+            border-color: #f97316;
+            color: #f97316;
         }
         .nav-tab.active {
-            background: var(--accent);
+            background: #f97316;
             color: #000;
-            border-color: var(--accent);
+            border-color: #f97316;
+            font-weight: 700;
         }
         .sub-tabs {
             display: flex;
             gap: 10px;
-            margin-bottom: 20px;
-            border-bottom: 1px solid var(--border);
+            margin-bottom: 25px;
+            border-bottom: 1px solid #2a2a2a;
             padding-bottom: 10px;
         }
         .sub-tab {
-            padding: 8px 16px;
+            padding: 8px 20px;
             border-radius: 6px;
             font-weight: 600;
             font-size: 13px;
             cursor: pointer;
-            background: var(--card);
-            border: 1px solid var(--border);
-            color: var(--muted);
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            color: #aaa;
         }
         .sub-tab.active {
-            background: var(--accent);
+            background: #f97316;
             color: #000;
-            border-color: var(--accent);
+            border-color: #f97316;
         }
         .control-panel {
-            background: var(--card);
-            border: 1px solid var(--border);
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
             border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 24px;
+            padding: 24px;
+            margin-bottom: 30px;
             display: flex;
-            gap: 20px;
+            gap: 25px;
             align-items: flex-end;
             flex-wrap: wrap;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         }
         .f-group {
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 6px;
         }
         .f-label {
-            font-size: 10px;
-            color: var(--muted);
-            font-weight: 700;
+            font-size: 11px;
+            color: #aaa;
+            font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .f-input {
-            background: var(--input-bg);
-            border: 1px solid var(--border);
-            color: var(--text);
-            padding: 8px 12px;
-            border-radius: 6px;
+            background: #0f0f0f;
+            border: 1px solid #2a2a2a;
+            color: #f0f0f0;
+            padding: 10px 14px;
+            border-radius: 8px;
             font-family: 'Inter';
+            font-size: 14px;
+            transition: border 0.2s;
+        }
+        .f-input:focus {
+            outline: none;
+            border-color: #f97316;
         }
         .btn {
-            background: var(--accent);
+            background: #f97316;
             color: #000;
             border: none;
-            padding: 8px 20px;
-            border-radius: 6px;
-            font-weight: bold;
+            padding: 10px 28px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 14px;
             cursor: pointer;
+            transition: opacity 0.2s;
         }
         .btn:hover {
-            opacity: 0.8;
+            opacity: 0.9;
+        }
+        /* Table styling */
+        .table-wrapper {
+            background: #1a1a1a;
+            border-radius: 12px;
+            border: 1px solid #2a2a2a;
+            overflow-x: auto;
+            margin-top: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            background: var(--card);
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid var(--border);
-            margin-top: 10px;
+            min-width: 800px;
         }
         th {
-            background: var(--table-header-bg);
-            padding: 12px;
-            font-size: 11px;
-            color: var(--muted);
+            background: #0f0f0f;
+            padding: 16px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #aaa;
             text-transform: uppercase;
-            border-bottom: 1px solid var(--border);
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #2a2a2a;
             text-align: center;
         }
         td {
-            padding: 12px;
-            border-bottom: 1px solid var(--border);
-            color: var(--text);
+            padding: 14px 12px;
+            border-bottom: 1px solid #2a2a2a;
+            color: #f0f0f0;
             text-align: center;
+            font-size: 14px;
+        }
+        tr:last-child td {
+            border-bottom: none;
         }
         tr:hover td {
-            background: var(--row-hover);
+            background: #2a2a2a;
         }
         .region-name {
             font-weight: 700;
-            color: var(--accent);
+            color: #f97316;
             text-align: left;
         }
         .totals-row {
-            background: var(--totals-bg);
+            background: #0f0f0f;
             font-weight: 700;
+        }
+        .totals-row td {
+            color: #f97316;
         }
         .clickable {
             cursor: pointer;
             text-decoration: underline;
-            text-decoration-color: var(--accent);
-            text-underline-offset: 2px;
+            text-decoration-color: #f97316;
+            text-underline-offset: 3px;
+            font-weight: 600;
         }
         .clickable:hover {
-            color: var(--accent);
+            color: #f97316;
         }
         .loader {
-            width: 30px;
-            height: 30px;
-            border: 3px solid var(--border);
-            border-top-color: var(--accent);
+            width: 40px;
+            height: 40px;
+            border: 4px solid #2a2a2a;
+            border-top-color: #f97316;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
-            margin: 20px auto;
+            margin: 30px auto;
         }
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
         .no-data {
             text-align: center;
-            padding: 40px;
-            color: var(--muted);
+            padding: 50px;
+            color: #aaa;
+            font-size: 16px;
         }
-        .kpi-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-        .kpi-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 16px;
-            text-align: center;
-            border-left: 3px solid var(--accent);
-        }
-        .kpi-value {
-            font-size: 28px;
-            font-weight: 800;
-            color: var(--text);
-        }
-        .kpi-label {
-            font-size: 11px;
-            color: var(--muted);
-            text-transform: uppercase;
-            margin-top: 4px;
-        }
-        /* Modal styles */
+        /* Modal styling */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -5788,9 +5804,9 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.85);
+            background: rgba(0,0,0,0.9);
             z-index: 10000;
-            backdrop-filter: blur(4px);
+            backdrop-filter: blur(5px);
             justify-content: center;
             align-items: center;
         }
@@ -5798,91 +5814,101 @@ SUMMARY_HTML = '''<!DOCTYPE html>
             display: flex;
         }
         .modal {
-            background: var(--card);
-            border: 1px solid var(--border);
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
             border-radius: 16px;
-            padding: 24px;
+            padding: 28px;
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             max-height: 80vh;
             overflow-y: auto;
             position: relative;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.8);
         }
         .modal-close {
             position: absolute;
             top: 16px;
             right: 16px;
-            background: var(--border);
-            border: 1px solid var(--border);
-            color: var(--text);
-            width: 32px;
-            height: 32px;
+            background: #2a2a2a;
+            border: 1px solid #2a2a2a;
+            color: #fff;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 18px;
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: all 0.2s;
         }
         .modal-close:hover {
             background: #ef4444;
             border-color: #ef4444;
         }
         .modal-title {
-            font-size: 20px;
+            font-size: 22px;
             font-weight: 800;
-            margin-bottom: 16px;
-            color: var(--accent);
+            margin-bottom: 20px;
+            color: #f97316;
+        }
+        .modal table {
+            background: #0f0f0f;
+        }
+        .modal th {
+            background: #1a1a1a;
         }
     </style>
 </head>
 <body>
-<div class="header">
-    <div class="logo-area">
-        <!-- Replace with your 3PL logo path -->
-        <img src="/static/3pl-logo.png" alt="3PL Logo" onerror="this.style.display='none'">
-        <h1>Region Summary</h1>
-    </div>
-    <a href="/" class="nav-tab" style="background:var(--card);">🏠 Main Dash</a>
-</div>
-
-<div class="nav-tabs">
-    <a href="/bundling" class="nav-tab">📦 Bundle</a>
-    <a href="/bundling/status" class="nav-tab">📡 Status</a>
-    <a href="/bundling/summary" class="nav-tab active">📊 Summary</a>
-</div>
-
-<div class="sub-tabs">
-    <div class="sub-tab active" onclick="switchTab('daily')">Daily Region</div>
-    <div class="sub-tab" onclick="switchTab('weekly')">Weekly Matrix</div>
-</div>
-
-<div id="dailyPanel" style="display:block;">
-    <div class="control-panel">
-        <div class="f-group">
-            <div class="f-label">From Date</div>
-            <input type="date" id="dailyFrom" class="f-input" value="">
+<div class="app-container">
+    <div class="header">
+        <div class="logo-area">
+            <!-- Replace with your 3PL logo path -->
+            <img src="/static/3pl-logo.png" alt="3PL Logo" onerror="this.style.display='none'">
+            <h1>Region Summary</h1>
         </div>
-        <div class="f-group">
-            <div class="f-label">To Date</div>
-            <input type="date" id="dailyTo" class="f-input" value="">
-        </div>
-        <button class="btn" onclick="loadDaily()">Apply</button>
+        <a href="/" class="main-dash-btn">🏠 Main Dash</a>
     </div>
-    <div id="dailyLoader" style="display:none;"><div class="loader"></div></div>
-    <div id="dailyTable"></div>
-</div>
 
-<div id="weeklyPanel" style="display:none;">
-    <div class="control-panel">
-        <div class="f-group">
-            <div class="f-label">Week Starting (Monday)</div>
-            <input type="date" id="weekStart" class="f-input" value="">
-        </div>
-        <button class="btn" onclick="loadWeekly()">Load Week</button>
+    <div class="nav-tabs">
+        <a href="/bundling" class="nav-tab">📦 Bundle</a>
+        <a href="/bundling/status" class="nav-tab">📡 Status</a>
+        <a href="/bundling/summary" class="nav-tab active">📊 Summary</a>
     </div>
-    <div id="weeklyLoader" style="display:none;"><div class="loader"></div></div>
-    <div id="weeklyTable"></div>
+
+    <div class="sub-tabs">
+        <div class="sub-tab active" onclick="switchTab('daily')">Daily Region</div>
+        <div class="sub-tab" onclick="switchTab('weekly')">Weekly Matrix</div>
+    </div>
+
+    <div id="dailyPanel">
+        <div class="control-panel">
+            <div class="f-group">
+                <div class="f-label">From Date</div>
+                <input type="date" id="dailyFrom" class="f-input">
+            </div>
+            <div class="f-group">
+                <div class="f-label">To Date</div>
+                <input type="date" id="dailyTo" class="f-input">
+            </div>
+            <button class="btn" onclick="loadDaily()">Apply</button>
+        </div>
+        <div id="dailyLoader" style="display:none;"><div class="loader"></div></div>
+        <div id="dailyTable"></div>
+    </div>
+
+    <div id="weeklyPanel" style="display:none;">
+        <div class="control-panel">
+            <div class="f-group">
+                <div class="f-label">Week Starting (Monday)</div>
+                <input type="date" id="weekStart" class="f-input">
+            </div>
+            <button class="btn" onclick="loadWeekly()">Load Week</button>
+        </div>
+        <div id="weeklyLoader" style="display:none;"><div class="loader"></div></div>
+        <div id="weeklyTable"></div>
+    </div>
 </div>
 
 <!-- Modal for order details -->
@@ -5980,7 +6006,6 @@ async function fetchAllData(forceRefresh = false) {
         const jJson = await jRes.json();
         bundlesData = bJson.bundles || [];
         journeyData = jJson.data || [];
-        // Save to cache
         setCachedData(bundlesData, journeyData);
         setDefaultDates();
         if (currentTab === 'daily') loadDaily();
@@ -6030,7 +6055,7 @@ function loadDaily() {
 
     const start = new Date(from);
     const end = new Date(to);
-    end.setHours(23,59,59,999); // include entire end day
+    end.setHours(23,59,59,999);
 
     const filteredBundles = bundlesData.filter(b => {
         const d = new Date(b.date_std);
@@ -6048,7 +6073,6 @@ function loadDaily() {
         regionMap[region].weight += b.bundle_weight_kg || 0;
         if (b.bundle_weight_kg < 20) regionMap[region].lt20 += 1;
         else regionMap[region].ge20 += 1;
-        // Store order IDs and details for modal
         b.orders.forEach(o => {
             regionMap[region].ordersList.push({
                 order_id: o.order_id,
@@ -6059,14 +6083,12 @@ function loadDaily() {
         });
     });
 
-    // Sort regions alphabetically
     const sortedRegions = Object.keys(regionMap).sort();
 
-    let html = '<table><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20kg</th><th>20+kg</th></tr></thead><tbody>';
+    let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight (kg)</th><th>&lt;20kg</th><th>20+kg</th></tr></thead><tbody>';
     let totalOrders = 0, totalBoxes = 0, totalWeight = 0, totalLt20 = 0, totalGe20 = 0;
     sortedRegions.forEach(region => {
         let r = regionMap[region];
-        // Make numbers clickable
         html += `<tr><td class="region-name">${region}</td>`;
         html += `<td class="clickable" onclick="showRegionOrders('${region}', 'orders')">${r.orders.toLocaleString()}</td>`;
         html += `<td class="clickable" onclick="showRegionOrders('${region}', 'boxes')">${r.boxes.toLocaleString()}</td>`;
@@ -6078,11 +6100,10 @@ function loadDaily() {
         totalWeight += r.weight;
         totalLt20 += r.lt20;
         totalGe20 += r.ge20;
-        // Store region data globally for modal access
         window['regionData_' + region] = r.ordersList;
     });
     html += `<tr class="totals-row"><td>TOTAL</td><td>${totalOrders.toLocaleString()}</td><td>${totalBoxes.toLocaleString()}</td><td>${totalWeight.toFixed(1)}</td><td>${totalLt20.toLocaleString()}</td><td>${totalGe20.toLocaleString()}</td></tr>`;
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     document.getElementById('dailyTable').innerHTML = html;
     document.getElementById('dailyLoader').style.display = 'none';
 }
@@ -6117,10 +6138,9 @@ function loadWeekly() {
         regionDayMap[region][idx] += 1;
     });
 
-    // Preserve order as they appear (no sorting)
-    const regions = Object.keys(regionDayMap);
+    const regions = Object.keys(regionDayMap); // preserve order as they appear
 
-    let html = '<table><thead><tr><th>Region</th>';
+    let html = '<div class="table-wrapper"><table><thead><tr><th>Region</th>';
     days.forEach(d => html += `<th>${d}</th>`);
     html += '<th>Total</th></tr></thead><tbody>';
     let totals = [0,0,0,0,0,0,0];
@@ -6139,7 +6159,7 @@ function loadWeekly() {
     html += `<tr class="totals-row"><td>TOTAL</td>`;
     totals.forEach(t => html += `<td><b>${t.toLocaleString()}</b></td>`);
     html += `<td><b>${grandTotal.toLocaleString()}</b></td></tr>`;
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     document.getElementById('weeklyTable').innerHTML = html;
     document.getElementById('weeklyLoader').style.display = 'none';
 }
@@ -6156,11 +6176,11 @@ function showRegionOrders(region, type) {
     else if (type === 'weight') title = `Weight details in ${region}`;
     document.getElementById('modalTitle').innerText = title;
 
-    let tableHtml = '<table><thead><tr><th>Order ID</th><th>Date</th><th>Weight (kg)</th><th>Status</th></tr></thead><tbody>';
+    let tableHtml = '<div class="table-wrapper"><table><thead><tr><th>Order ID</th><th>Date</th><th>Weight (kg)</th><th>Status</th></tr></thead><tbody>';
     ordersList.forEach(o => {
         tableHtml += `<tr><td>${o.order_id}</td><td>${o.date}</td><td>${o.weight}</td><td>${o.status || '—'}</td></tr>`;
     });
-    tableHtml += '</tbody></table>';
+    tableHtml += '</tbody></table></div>';
     document.getElementById('modalContent').innerHTML = tableHtml;
     document.getElementById('orderModal').classList.add('open');
 }
@@ -6169,15 +6189,11 @@ function closeModal() {
     document.getElementById('orderModal').classList.remove('open');
 }
 
-// Initialize: check cache, else fetch
+// Initialize
 window.onload = () => fetchAllData();
 </script>
 </body>
 </html>'''
-
-# ==============================================================================
-# FLOATING BUTTON (unchanged)
-# ==============================================================================
 
 @app.after_request
 def add_bundling_floating_btn(response):
