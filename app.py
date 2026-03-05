@@ -4343,160 +4343,134 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - SINGLE PAGE APP (FAST - NO RE-FETCH)
+# BUNDLING INTELLIGENCE HUB — COMPLETE FINAL VERSION
 # ==============================================================================
-import urllib.request
-import csv
-import re
-import ssl
-import time
-import math
-import concurrent.futures
+import urllib.request, csv, re, ssl, time, math, concurrent.futures
 from datetime import datetime, timedelta
 from flask import jsonify, request, session, render_template_string
 
-_bundling_cache = {"data": None, "time": 0}
-_journey_cache  = {"data": None, "time": 0}
-_status_cache   = {"data": None, "time": 0}
-BUNDLING_CACHE_DURATION = 600
+_bc={"data":None,"time":0}; _jc={"data":None,"time":0}; _sc={"data":None,"time":0}
+CD=600
+JS=("https://docs.google.com/spreadsheets/d/e/2PACX-1vQRsiVaciOMON0xaXXEi1guBYrqfVNpD-j4My_9YokGd5kftqjAXvri5c_gLB_VRXeoDLzEtz9h5y8x/pub?gid=1409345116&single=true&output=csv")
+SS=("https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1570463436&single=true&output=csv")
 
-JOURNEY_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRsiVaciOMON0xaXXEi1guBYrqfVNpD-j4My_9YokGd5kftqjAXvri5c_gLB_VRXeoDLzEtz9h5y8x/pub?gid=1409345116&single=true&output=csv"
-STATUS_SHEET_URL  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1570463436&single=true&output=csv"
-
-def std_date(d):
-    try:
-        for fmt in ("%Y-%m-%d","%d/%m/%Y","%m/%d/%Y","%d-%b-%y","%d-%b-%Y","%Y/%m/%d"):
-            try: return datetime.strptime(d.split(" ")[0], fmt).strftime("%Y-%m-%d")
-            except: continue
-    except: pass
+def sd(d):
+    for fmt in ("%Y-%m-%d","%d/%m/%Y","%m/%d/%Y","%d-%b-%y","%d-%b-%Y","%Y/%m/%d"):
+        try: return datetime.strptime(str(d).split()[0],fmt).strftime("%Y-%m-%d")
+        except: pass
     return "1970-01-01"
 
-def clean_tids(raw):
-    raw = str(raw).strip()
+def ctids(raw):
+    raw=str(raw).strip()
     if not raw or raw.lower() in ["pending","none","n/a","-","tbd","update soon"]: return []
-    raw = re.sub(r"(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})", r" \1 ", raw)
-    parts = [t.strip() for t in re.split(r"[,/\s;]+", raw) if t.strip()]
-    out = []
-    for t in parts:
-        t = re.sub(r"^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$", "", t)
-        if len(t) > 6 and re.search(r"\d", t) and t.lower() not in ["tracking","number"]:
+    raw=re.sub(r"(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})",r" \1 ",raw)
+    out=[]
+    for t in [x.strip() for x in re.split(r"[,/\s;]+",raw) if x.strip()]:
+        t=re.sub(r"^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$","",t)
+        if len(t)>6 and re.search(r"\d",t) and t.lower() not in ["tracking","number"]:
             out.append(("0"+t) if t.startswith("150") and len(t)>=12 and not t.startswith("0") else t)
     return list(dict.fromkeys(out))
 
-def parse_dt(val):
+def pdt(val):
     if not val or str(val).strip() in ["","nan","N/A","-","None","null"]: return None
-    val = str(val).strip()
+    v=str(val).strip()
     for fmt in ["%B %d, %Y, %H:%M","%B %d, %Y %H:%M:%S","%B %d, %Y %H:%M","%B %d, %Y",
                 "%Y-%m-%d %H:%M:%S","%Y-%m-%dT%H:%M:%S","%Y-%m-%d %H:%M:%S.%f",
                 "%d/%m/%Y %H:%M:%S","%d/%m/%Y %H:%M","%d/%m/%Y","%Y-%m-%d","%d-%m-%Y","%d-%b-%Y","%d %b %Y"]:
-        try: return datetime.strptime(val.split("+")[0].strip(), fmt)
-        except: continue
+        try: return datetime.strptime(v.split("+")[0].strip(),fmt)
+        except: pass
     return None
 
-def days_b(dt1, dt2):
-    if dt1 and dt2:
-        diff = (dt2-dt1).total_seconds()
-        if diff < 0: return None
-        return f"{int(diff/3600)}h" if diff < 86400 else f"{diff/86400:.1f}d"
+def dayb(a,b):
+    if a and b:
+        d=(b-a).total_seconds()
+        if d<0: return None
+        return f"{int(d/3600)}h" if d<86400 else f"{d/86400:.1f}d"
     return None
 
-def fmt_dt(dt):
-    return dt.strftime("%d %b %Y, %H:%M") if dt else None
+def fdt(dt): return dt.strftime("%d %b %Y, %H:%M") if dt else None
 
-def get_region(country):
+def grg(country):
     if not country: return "EU"
-    c = country.strip().lower()
-    m = {"united kingdom":"United Kingdom","uk":"United Kingdom","gb":"United Kingdom",
-         "united states":"United States","usa":"United States","us":"United States",
-         "australia":"Australia","switzerland":"Switzerland","new zealand":"New Zealand",
-         "canada":"Canada","china":"China","ghana":"Ghana","japan":"Japan","india":"India",
-         "philippines":"Philippines","saudi arabia":"Saudi Arabia","saudia arabia":"Saudi Arabia",
-         "singapore":"Singapore","south africa":"South Africa","south korea":"South Korea",
-         "thailand":"Thailand","malaysia":"Malaysia","indonesia":"Indonesia",
-         "hong kong":"Hong Kong","uae":"UAE","united arab emirates":"UAE",
-         "nigeria":"Nigeria","kenya":"Kenya"}
-    return m.get(c, "EU")
+    c=country.strip().lower()
+    m={"united kingdom":"United Kingdom","uk":"United Kingdom","gb":"United Kingdom",
+       "united states":"United States","usa":"United States","us":"United States",
+       "australia":"Australia","switzerland":"Switzerland","new zealand":"New Zealand",
+       "canada":"Canada","china":"China","ghana":"Ghana","japan":"Japan","india":"India",
+       "philippines":"Philippines","saudi arabia":"Saudi Arabia","saudia arabia":"Saudi Arabia",
+       "singapore":"Singapore","south africa":"South Africa","south korea":"South Korea",
+       "thailand":"Thailand","malaysia":"Malaysia","indonesia":"Indonesia","hong kong":"Hong Kong",
+       "uae":"UAE","united arab emirates":"UAE","nigeria":"Nigeria","kenya":"Kenya"}
+    return m.get(c,"EU")
 
-def ssl_ctx():
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
+def ctx():
+    c=ssl.create_default_context(); c.check_hostname=False; c.verify_mode=ssl.CERT_NONE; return c
 
-def fetch_rates(ctx):
+def fetch_rates(cx):
     try:
-        url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
-        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
-            data = list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
-        rm = {}
+        url="https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
+        req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+        with urllib.request.urlopen(req,timeout=20,context=cx) as r:
+            data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
+        rm={}
         for row in data[1:]:
-            p = row+[""]*20
-            c = str(p[7]).strip().lower(); rs = str(p[12]).strip()
-            if c and rs:
-                try: rm[c] = float(re.sub(r"[^0-9.]","",rs))
+            p=row+[""]*20; c2=str(p[7]).strip().lower(); rs=str(p[12]).strip()
+            if c2 and rs:
+                try: rm[c2]=float(re.sub(r"[^0-9.]","",rs))
                 except: pass
-        return "RATES", rm
-    except: return "RATES", {}
+        return "RATES",rm
+    except: return "RATES",{}
 
 def fetch_status():
-    global _status_cache
-    now = time.time()
-    if _status_cache["data"] and (now-_status_cache["time"]) < BUNDLING_CACHE_DURATION:
-        return _status_cache["data"]
+    global _sc
+    now=time.time()
+    if _sc["data"] and (now-_sc["time"])<CD: return _sc["data"]
     try:
-        req = urllib.request.Request(STATUS_SHEET_URL, headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=20, context=ssl_ctx()) as r:
-            data = list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
-        sm = {}
+        req=urllib.request.Request(SS,headers={"User-Agent":"Mozilla/5.0"})
+        with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
+            data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
+        sm={}
         for row in data[1:]:
-            p = row+[""]*10
-            fid = str(p[0]).strip()
+            p=row+[""]*10; fid=str(p[0]).strip()
             if fid and fid.lower() not in ["","nan","fleek_id","fleek id","order"]:
-                sm[fid.upper()] = str(p[1]).strip() or "—"
-        _status_cache["data"] = sm; _status_cache["time"] = now
-        return sm
+                sm[fid.upper()]=str(p[1]).strip() or "—"
+        _sc["data"]=sm; _sc["time"]=now; return sm
     except: return {}
 
 def fetch_journey():
-    global _journey_cache
-    now = time.time()
-    if _journey_cache["data"] and (now-_journey_cache["time"]) < BUNDLING_CACHE_DURATION:
-        return _journey_cache["data"]
+    global _jc
+    now=time.time()
+    if _jc["data"] and (now-_jc["time"])<CD: return _jc["data"]
     try:
-        req = urllib.request.Request(JOURNEY_SHEET_URL, headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=20, context=ssl_ctx()) as r:
-            data = list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
-        jm = {}
+        req=urllib.request.Request(JS,headers={"User-Agent":"Mozilla/5.0"})
+        with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
+            data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
+        jm={}
         for row in data[1:]:
-            p = row+[""]*100
-            fid = str(p[4]).strip()
+            p=row+[""]*100; fid=str(p[4]).strip()
             if not fid or fid.lower() in ["","nan","fleek_id","fleek id"]: continue
-            jm[fid.upper()] = {
-                "created_at":str(p[0]).strip(),"accepted_at":str(p[8]).strip(),
+            jm[fid.upper()]={"created_at":str(p[0]).strip(),"accepted_at":str(p[8]).strip(),
                 "pickup_ready_at":str(p[9]).strip(),"cancelled_at":str(p[12]).strip(),
                 "qc_pending_at":str(p[13]).strip(),"qc_approved_at":str(p[14]).strip(),
                 "handedover_at":str(p[30]).strip(),"freight_at":str(p[31]).strip(),
-                "courier_at":str(p[34]).strip(),"delivered_at":str(p[36]).strip(),
-            }
-        _journey_cache["data"] = jm; _journey_cache["time"] = now
-        return jm
+                "courier_at":str(p[34]).strip(),"delivered_at":str(p[36]).strip()}
+        _jc["data"]=jm; _jc["time"]=now; return jm
     except: return {}
 
-def fetch_sheet(name, url, col, start, ctx):
+def fetch_sheet(name,url,col,start,cx):
     for attempt in range(2):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
-                data = list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
-            rows = []; lo=ld=lv=lc=lcn=lt=""
+            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(req,timeout=25,context=cx) as r:
+                data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
+            rows=[]; lo=ld=lv=lc=lcn=lt=""
             for row in data[start:]:
                 if not row: continue
-                p = row+[""]*60
+                p=row+[""]*60
                 ro=str(p[col["o"]]).strip(); rw=str(p[col["w"]]).strip(); rti=str(p[col["title"]]).strip()
                 if not ro and not rw and not rti: continue
                 if ro: lo=ro
-                co = ro if ro else lo
+                co=ro if ro else lo
                 if not co or not re.search(r"\d",co): continue
                 if co.lower() in ["n/a","nan","order","orderid","order id"]: continue
                 dv=str(p[col["d"]]).strip(); vv=str(p[col["v"]]).strip()
@@ -4506,329 +4480,370 @@ def fetch_sheet(name, url, col, start, ctx):
                 if cv: lc=cv
                 if cnv: lcn=cnv
                 if tv: lt=tv
-                rows.append({"order":co,"date":dv or ld,"date_std":std_date(dv or ld),
+                rows.append({"order":co,"date":dv or ld,"date_std":sd(dv or ld),
                     "boxes":str(p[col["b"]]).strip(),"weight":rw,
                     "vendor":vv or lv,"title":rti or "N/A","item_count":str(p[col["ic"]]).strip() or "0",
                     "customer":cv or lc,"country":cnv or lcn,"tid":tv or lt})
-            print(f"[OK] {name}: {len(rows)} rows")
-            return name, rows
+            print(f"[OK] {name}: {len(rows)} rows"); return name,rows
         except Exception as e:
             print(f"[WARN] {name} attempt {attempt+1}: {e}"); time.sleep(1)
-    return name, []
+    return name,[]
 
 def fetch_all():
-    global _bundling_cache
-    now = time.time()
-    if _bundling_cache["data"] and (now-_bundling_cache["time"]) < BUNDLING_CACHE_DURATION:
-        return _bundling_cache["data"]
-    # CORRECT MAPPING - DO NOT CHANGE
-    SOURCES = {
-        "ECL QC Center": (
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o":0,"d":1,"b":3,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25}, 1),
-        "ECL Zone": (
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28}, 2),
-        "GE Zone": (
-            "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28}, 2),
+    global _bc
+    now=time.time()
+    if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
+    # ⚠️ CORRECT MAPPINGS — GE Zone weight=col 6 (H is index 7 but user confirmed col 6)
+    SOURCES={
+        "ECL QC Center":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+            {"o":0,"d":1,"b":3,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
+        "ECL Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+            {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28},2),
+        "GE Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+            {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28},2),
     }
-    ctx = ssl_ctx(); res = {}
+    cx=ctx(); res={}
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-        futs = {ex.submit(fetch_sheet,n,u,c,s,ctx):n for n,(u,c,s) in SOURCES.items()}
-        futs[ex.submit(fetch_rates,ctx)] = "RATES"
+        futs={ex.submit(fetch_sheet,n,u,c,s,cx):n for n,(u,c,s) in SOURCES.items()}
+        futs[ex.submit(fetch_rates,cx)]="RATES"
         try:
-            for f in concurrent.futures.as_completed(futs, timeout=40):
+            for f in concurrent.futures.as_completed(futs,timeout=45):
                 n=futs[f]
                 try: k,d=f.result(); res[k]=d
                 except: res[n]=[] if n!="RATES" else {}
         except concurrent.futures.TimeoutError:
             for f in futs:
                 if not f.done(): f.cancel(); res[futs[f]]=[] if futs[f]!="RATES" else {}
-    _bundling_cache["data"]=res; _bundling_cache["time"]=now
-    return res
+    _bc["data"]=res; _bc["time"]=now; return res
 
-
-# ---------- API: Single combined endpoint (fetch everything ONCE) ----------
+# --- API ---
 @app.route("/api/nexus/app_data")
 def api_app_data():
-    """All data in one call - bundles + status merged"""
-    sheets = fetch_all()
-    sm     = fetch_status()
-    rm     = sheets.get("RATES", {})
-    DEFAULT_RATE = 4.50
-    bundles = []; tot_b = tot_o = 0; total_sav = 0.0
-    src_stats = {"ECL QC Center":{"orders":0,"boxes":0},"PK Zone":{"orders":0,"boxes":0}}
-
+    sheets=fetch_all(); sm=fetch_status(); rm=sheets.get("RATES",{}); DR=4.50
+    bundles=[]; tb=to2=0; tsav=0.0
+    ss={"ECL QC Center":{"orders":0,"boxes":0},"PK Zone":{"orders":0,"boxes":0}}
     for src in ["ECL QC Center","ECL Zone","GE Zone"]:
-        rows = sheets.get(src, []); cb = None
-        ss = "PK Zone" if src in ["ECL Zone","GE Zone"] else src
+        rows=sheets.get(src,[]); cb=None
+        pk="PK Zone" if src in ["ECL Zone","GE Zone"] else src
         for r in rows:
-            oid = r["order"].upper(); bx = r["boxes"]
-            od = {"order_id":oid,"weight":r["weight"],"title":r["title"],
-                  "item_count":r["item_count"],"country":r["country"],
-                  "status":sm.get(oid,"—")}
-            if bx != "":
+            oid=r["order"].upper(); bx=r["boxes"]
+            od={"order_id":oid,"weight":r["weight"],"title":r["title"],
+                "item_count":r["item_count"],"country":r["country"],"status":sm.get(oid,"—")}
+            if bx!="":
                 if cb and len(cb["orders"])>1:
-                    bundles.append(cb); tot_b+=1; tot_o+=len(cb["orders"])
-                    src_stats[ss]["orders"]+=len(cb["orders"]); src_stats[ss]["boxes"]+=1
-                tids = clean_tids(r["tid"])
-                cb = {"orders":[od],"date":r["date"],"date_std":r["date_std"],
-                      "customer":r["customer"],"vendor":r["vendor"],"country":r["country"],
-                      "source":src,"region":get_region(r["country"]),"boxes_val":bx,
-                      "tid":", ".join(tids) if tids else "Pending Tracking","total_items":0}
+                    bundles.append(cb); tb+=1; to2+=len(cb["orders"])
+                    ss[pk]["orders"]+=len(cb["orders"]); ss[pk]["boxes"]+=1
+                tids=ctids(r["tid"])
+                cb={"orders":[od],"date":r["date"],"date_std":r["date_std"],
+                    "customer":r["customer"],"vendor":r["vendor"],"country":r["country"],
+                    "source":src,"region":grg(r["country"]),"boxes_val":bx,
+                    "tid":", ".join(tids) if tids else "Pending Tracking"}
             else:
                 if cb:
                     cb["orders"].append(od)
                     if r["tid"] not in ["N/A",""] and cb["tid"]=="Pending Tracking":
-                        tids = clean_tids(r["tid"])
-                        if tids: cb["tid"]=", ".join(tids)
+                        t2=ctids(r["tid"])
+                        if t2: cb["tid"]=", ".join(t2)
         if cb and len(cb["orders"])>1:
-            bundles.append(cb); tot_b+=1; tot_o+=len(cb["orders"])
-            src_stats[ss]["orders"]+=len(cb["orders"]); src_stats[ss]["boxes"]+=1
-
+            bundles.append(cb); tb+=1; to2+=len(cb["orders"])
+            ss[pk]["orders"]+=len(cb["orders"]); ss[pk]["boxes"]+=1
     for b in bundles:
         tq=0; bw=0.0; isc=0.0
-        per_kg = rm.get(str(b.get("country","")).strip().lower(), DEFAULT_RATE)
+        pr=rm.get(str(b.get("country","")).strip().lower(),DR)
         for o in b["orders"]:
             try: tq+=int(float(re.sub(r"[^0-9.]","",str(o["item_count"]))))
             except: pass
             try: wt=float(re.sub(r"[^0-9.]","",str(o["weight"])) or 0)
             except: wt=0.0
-            bw+=wt; isc+=(max(math.ceil(wt),1)*per_kg)
+            bw+=wt; isc+=(max(math.ceil(wt),1)*pr)
         b["total_items"]=tq; b["weight_kg"]=round(bw,2)
-        sav=isc-(max(math.ceil(bw),1)*per_kg)
-        b["savings_gbp"]=round(sav if sav>0 else 0,2)
-        total_sav+=b["savings_gbp"]
+        sv=isc-(max(math.ceil(bw),1)*pr); b["savings_gbp"]=round(sv if sv>0 else 0,2)
+        tsav+=b["savings_gbp"]
+    bundles.sort(key=lambda x:x["date_std"],reverse=True)
+    return jsonify({"success":True,
+        "kpi":{"total_bundles":tb,"total_orders_bundled":to2,
+               "saved_shipments":to2-tb if tb>0 else 0,"total_savings_gbp":round(tsav,2)},
+        "source_stats":ss,"bundles":bundles})
 
-    bundles.sort(key=lambda x: x["date_std"], reverse=True)
-
-    # Status list
-    all_statuses = list(set(sm.values()))
-    return jsonify({
-        "success":True,
-        "kpi":{"total_bundles":tot_b,"total_orders_bundled":tot_o,
-               "saved_shipments":tot_o-tot_b if tot_b>0 else 0,
-               "total_savings_gbp":round(total_sav,2)},
-        "source_stats":src_stats,
-        "bundles":bundles,
-        "statuses":sorted([s for s in all_statuses if s and s!="—"]),
-    })
-
-@app.route("/api/nexus/order_journey/<order_id>")
-def api_order_journey(order_id):
-    jm = fetch_journey()
-    row = jm.get(str(order_id).strip().upper())
-    if not row: return jsonify({"success":False,"message":f"Order not found."})
-    dc=parse_dt(row["created_at"]); da=parse_dt(row["accepted_at"]); dp=parse_dt(row["pickup_ready_at"])
-    dca=parse_dt(row["cancelled_at"]); dqp=parse_dt(row["qc_pending_at"]); dqa=parse_dt(row["qc_approved_at"])
-    dh=parse_dt(row["handedover_at"]); dfr=parse_dt(row["freight_at"])
-    dco=parse_dt(row["courier_at"]); dd=parse_dt(row["delivered_at"])
-    steps=[("Created → Accepted",dc,da),("Accepted → Pickup Ready",da,dp),
-           ("Pickup Ready → QC Pending",dp,dqp),("QC Pending → QC Approved",dqp,dqa),
-           ("QC Approved → Handover",dqa,dh),("Handover → Freight",dh,dfr),
+@app.route("/api/nexus/order_journey/<oid>")
+def api_order_journey(oid):
+    jm=fetch_journey(); row=jm.get(str(oid).strip().upper())
+    if not row: return jsonify({"success":False,"message":"Order not found."})
+    dc=pdt(row["created_at"]); da=pdt(row["accepted_at"]); dp=pdt(row["pickup_ready_at"])
+    dca=pdt(row["cancelled_at"]); dqp=pdt(row["qc_pending_at"]); dqa=pdt(row["qc_approved_at"])
+    dh=pdt(row["handedover_at"]); dfr=pdt(row["freight_at"]); dco=pdt(row["courier_at"]); dd=pdt(row["delivered_at"])
+    steps=[("Created → Accepted",dc,da),("Accepted → Pickup",da,dp),("Pickup → QC Pending",dp,dqp),
+           ("QC Pending → QC Approved",dqp,dqa),("QC → Handover",dqa,dh),("Handover → Freight",dh,dfr),
            ("Freight → Courier",dfr,dco),("Courier → Delivered",dco,dd)]
-    last = next((dt for dt in [dd,dco,dfr,dh,dqa,dqp,dp,da,dc] if dt), None)
-    return jsonify({"success":True,"order_id":order_id,"is_cancelled":bool(dca),
-        "timeline":{"created_at":fmt_dt(dc),"accepted_at":fmt_dt(da),"pickup_ready_at":fmt_dt(dp),
-            "cancelled_at":fmt_dt(dca),"qc_pending_at":fmt_dt(dqp),"qc_approved_at":fmt_dt(dqa),
-            "handedover_at":fmt_dt(dh),"freight_at":fmt_dt(dfr),"courier_at":fmt_dt(dco),"delivered_at":fmt_dt(dd)},
-        "step_metrics":[{"label":l,"duration":days_b(s,e)} for l,s,e in steps],
-        "key_metrics":{"qc_to_handover":days_b(dqa,dh),"handover_to_freight":days_b(dh,dfr),
-            "total_journey":days_b(dc,dd or last)}})
+    last=next((dt for dt in [dd,dco,dfr,dh,dqa,dqp,dp,da,dc] if dt),None)
+    return jsonify({"success":True,"order_id":oid,"is_cancelled":bool(dca),
+        "timeline":{"created_at":fdt(dc),"accepted_at":fdt(da),"pickup_ready_at":fdt(dp),
+            "cancelled_at":fdt(dca),"qc_pending_at":fdt(dqp),"qc_approved_at":fdt(dqa),
+            "handedover_at":fdt(dh),"freight_at":fdt(dfr),"courier_at":fdt(dco),"delivered_at":fdt(dd)},
+        "step_metrics":[{"label":l,"duration":dayb(s,e)} for l,s,e in steps],
+        "key_metrics":{"qc_to_handover":dayb(dqa,dh),"handover_to_freight":dayb(dh,dfr),
+            "total_journey":dayb(dc,dd or last)}})
 
 @app.route("/bundling")
 @app.route("/bundling/status")
 @app.route("/bundling/summary")
 def bundling_spa():
-    u = session.get("username") or session.get("user") or session.get("role")
-    if not u or str(u).lower() != "admin":
-        return "<div style='text-align:center;padding:100px;background:#060610;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>", 403
-    return render_template_string(BUNDLING_SPA_HTML)
+    u=session.get("username") or session.get("user") or session.get("role")
+    if not u or str(u).lower()!="admin":
+        return "<div style='text-align:center;padding:100px;background:#05050f;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>",403
+    return render_template_string(BUNDLING_HTML)
 
+@app.after_request
+def add_float_btns(response):
+    if request.path=="/" and response.content_type and "text/html" in response.content_type:
+        u=session.get("username") or session.get("user") or session.get("role")
+        if u and str(u).lower()=="admin":
+            html=response.get_data(as_text=True)
+            btn='''<div style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:99999">
+<a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
+<a href="/nexus" style="background:#fff;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.4)">🛰️ TID Hub</a>
+</div>'''
+            if "</body>" in html: response.set_data(html.replace("</body>",btn+"</body>"))
+    return response
 
-BUNDLING_SPA_HTML = r"""<!DOCTYPE html>
+BUNDLING_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>📦 Bundling Intelligence Hub</title>
+<title>Bundling Intelligence Hub</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#060610;--surface:#0d0d1a;--surface2:#12122a;--border:#1e1e3a;
-  --text:#e2e8f0;--text2:#94a3b8;--text3:#475569;
-  --green:#10b981;--blue:#3b82f6;--purple:#8b5cf6;--orange:#f97316;--red:#ef4444;--yellow:#f59e0b;
-  --accent:#6366f1;
+  --bg:#05050f;--s1:#0c0c1e;--s2:#11112a;--s3:#161632;
+  --bd:#1e1e3f;--bd2:#252550;
+  --t1:#e8eaf6;--t2:#9fa8da;--t3:#5c6bc0;--t4:#3949ab;
+  --green:#00e676;--green2:#00c853;--blue:#448aff;--blue2:#2979ff;
+  --purple:#e040fb;--orange:#ff6d00;--yellow:#ffd740;--red:#ff1744;
+  --cyan:#00e5ff;--acc:#5c6bc0;
 }
-body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
-/* ---- LAYOUT ---- */
-.topbar{display:flex;justify-content:space-between;align-items:center;padding:16px 28px;border-bottom:1px solid var(--border);background:rgba(6,6,16,.95);position:sticky;top:0;z-index:100;backdrop-filter:blur(10px);}
-.topbar-left{display:flex;align-items:center;gap:12px;}
-.topbar-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--green),var(--accent));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;}
-.topbar-title{font-size:17px;font-weight:800;color:var(--text);}
-.topbar-sub{font-size:11px;color:var(--text3);margin-top:1px;}
-.topbar-right{display:flex;gap:10px;align-items:center;}
-.tbtn{padding:7px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:none;display:flex;align-items:center;gap:6px;text-decoration:none;transition:opacity .2s;}
-.tbtn:hover{opacity:.8;}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;}
+/* TOPBAR */
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 28px;
+  background:var(--s1);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:200;
+  backdrop-filter:blur(12px);}
+.tbl-left{display:flex;align-items:center;gap:12px;}
+.tbl-ico{width:38px;height:38px;background:linear-gradient(135deg,#1e88e5,#5c6bc0);
+  border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+.tbl-title{font-size:16px;font-weight:800;color:var(--t1);}
+.tbl-sub{font-size:11px;color:var(--t3);margin-top:1px;}
+.tbtn{padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
+  font-family:inherit;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;transition:.15s;}
+.tbtn:hover{filter:brightness(1.15);}
+/* TABS */
+.tabs-wrap{padding:18px 28px 0;background:var(--s1);border-bottom:1px solid var(--bd);}
+.tabs{display:flex;gap:4px;}
+.tab{padding:10px 20px;border-radius:8px 8px 0 0;font-weight:700;font-size:13px;cursor:pointer;
+  border:1px solid transparent;border-bottom:none;color:var(--t3);transition:.15s;background:transparent;}
+.tab:hover{color:var(--t2);background:rgba(92,107,192,.1);}
+.tab.active{background:var(--s2);color:var(--t1);border-color:var(--bd);border-bottom-color:var(--s2);}
+/* PANES */
 .main{padding:24px 28px;}
-/* ---- TABS ---- */
-.tabs{display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;}
-.tab{padding:9px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;border:1px solid var(--border);color:var(--text2);transition:all .2s;background:transparent;}
-.tab:hover{border-color:var(--accent);color:var(--accent);}
-.tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-.tab-pane{display:none;}
-.tab-pane.active{display:block;}
-/* ---- FILTER BAR ---- */
-.fbar{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:22px;}
+.pane{display:none;}.pane.active{display:block;}
+/* FILTER BAR */
+.fbar{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:16px 20px;margin-bottom:22px;}
 .frow{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;}
 .frow:last-child{margin-bottom:0;}
 .fg{display:flex;flex-direction:column;gap:4px;}
-.fl{font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
-.fi{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:7px;font-family:inherit;outline:none;font-size:13px;transition:border-color .2s;}
-.fi:focus{border-color:var(--accent);}
+.fl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
+.fi{background:var(--bg);border:1px solid var(--bd);color:var(--t1);padding:8px 11px;border-radius:7px;
+  font-family:inherit;outline:none;font-size:13px;transition:.2s;}
+.fi:focus{border-color:var(--acc);}
 .fg-grow{flex:1;min-width:180px;}
 .qbtns{display:flex;gap:6px;flex-wrap:wrap;}
-.qb{padding:6px 12px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:6px;color:var(--text3);font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;transition:all .2s;}
-.qb:hover,.qb.active{background:rgba(99,102,241,.15);border-color:rgba(99,102,241,.4);color:var(--accent);}
-.abtn{padding:8px 18px;background:var(--accent);border:none;border-radius:7px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
-.cbtn{padding:8px 14px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;color:var(--text3);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
+.qb{padding:6px 12px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:6px;
+  color:var(--t3);font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;transition:.15s;}
+.qb:hover,.qb.on{background:rgba(92,107,192,.18);border-color:var(--acc);color:var(--t2);}
+.abtn{padding:8px 20px;background:linear-gradient(135deg,#3949ab,#5c6bc0);border:none;border-radius:8px;
+  color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+.cbtn{padding:8px 14px;background:rgba(255,255,255,.04);border:1px solid var(--bd);border-radius:8px;
+  color:var(--t3);font-size:13px;cursor:pointer;font-family:inherit;}
 .cbtn:hover{border-color:var(--red);color:var(--red);}
-/* ---- KPI CARDS ---- */
-.kgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;}
-.kc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;border-left:3px solid var(--green);}
-.kv{font-size:32px;font-weight:900;letter-spacing:-1.5px;margin-bottom:4px;}
-.kl{font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
-.src-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:22px;}
-.srcc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;border-left:3px solid var(--green);}
-.srct{font-size:13px;font-weight:800;color:var(--green);margin-bottom:10px;}
-.srcst{display:flex;justify-content:space-around;text-align:center;}
-.sv{font-size:20px;font-weight:900;} .sl{font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;}
-/* ---- TABLE ---- */
-.tbl-wrap{overflow-x:auto;}
-table.main-tbl{width:100%;border-collapse:collapse;background:var(--surface);border-radius:12px;border:1px solid var(--border);overflow:hidden;}
-table.main-tbl th{background:var(--bg);padding:12px 14px;font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;letter-spacing:.5px;}
-table.main-tbl td{padding:12px 14px;border-bottom:1px solid var(--surface2);vertical-align:top;font-size:13px;}
-table.main-tbl tr:hover td{background:rgba(255,255,255,.02);}
-.bbox{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;}
-.bitem{display:grid;grid-template-columns:165px 1fr 55px;gap:8px;padding:7px 0;border-bottom:1px dashed var(--border);align-items:start;}
-.bitem:last-child{border-bottom:none;padding-bottom:0;}
-.olink{color:var(--green);font-weight:800;cursor:pointer;font-family:monospace;font-size:12px;background:rgba(16,185,129,.08);padding:3px 7px;border-radius:4px;border:1px solid rgba(16,185,129,.2);display:inline-flex;align-items:center;gap:3px;transition:all .2s;}
-.olink:hover{background:rgba(16,185,129,.18);}
-.spill{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;margin-top:2px;white-space:nowrap;}
-/* ---- STATUS PILLS ---- */
-.sbbox{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:20px;}
-.sbpill{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:all .15s;display:inline-block;}
-.sbpill:hover{transform:translateY(-1px);}
-.sbpill.sel{box-shadow:0 0 0 2px var(--text);}
-/* ---- SUMMARY ---- */
-.sum-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:24px;}
-.sum-hdr{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px;}
-.sum-title{font-size:16px;font-weight:800;color:var(--text);}
-.sum-totals{display:flex;gap:18px;align-items:center;}
-.tot{text-align:center;}
-.tot-v{font-size:20px;font-weight:900;}
-.tot-l{font-size:9px;color:var(--text3);text-transform:uppercase;font-weight:700;}
-.csvbtn{padding:4px 10px;background:var(--surface2);border:1px solid var(--border);color:var(--text3);border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;}
-.csvbtn:hover{border-color:var(--orange);color:var(--orange);}
-/* Matrix table */
-table.mx{width:100%;border-collapse:collapse;min-width:800px;}
-table.mx th.dh{background:var(--bg);text-align:center;padding:9px 5px;font-size:11px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--accent);border-left:1px solid var(--border);}
-table.mx th.sh{background:rgba(0,0,0,.3);text-align:center;padding:5px 3px;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border);border-left:1px solid rgba(255,255,255,.05);}
-table.mx th.rh{background:var(--bg);text-align:left;padding:9px 14px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;border-bottom:1px solid var(--border);}
-table.mx td{padding:8px 4px;text-align:center;border-bottom:1px solid rgba(255,255,255,.04);border-left:1px solid rgba(255,255,255,.04);font-size:12px;font-weight:600;color:var(--text2);}
-table.mx td.rc{text-align:left;padding:8px 14px;font-weight:700;color:var(--text);font-size:13px;border-left:none;}
+/* KPI CARDS */
+.kg{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+.kc{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:20px 18px;
+  border-left:3px solid var(--green);}
+.kv{font-size:34px;font-weight:900;letter-spacing:-1.5px;margin-bottom:4px;color:var(--t1);}
+.kl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+.sc{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px;
+  border-left:3px solid var(--green);}
+.sct{font-size:12px;font-weight:800;color:var(--green);margin-bottom:12px;}
+.scst{display:flex;justify-content:space-around;text-align:center;}
+.scv{font-size:22px;font-weight:900;color:var(--t1);}
+.scl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;}
+/* MAIN TABLE */
+.tw{overflow-x:auto;}
+table.mt{width:100%;border-collapse:collapse;background:var(--s1);border-radius:12px;
+  border:1px solid var(--bd);overflow:hidden;}
+table.mt th{background:var(--bg);padding:12px 14px;font-size:10px;color:var(--t3);
+  text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--bd);text-align:left;}
+table.mt td{padding:12px 14px;border-bottom:1px solid var(--s2);vertical-align:top;font-size:13px;}
+table.mt tr:hover td{background:rgba(255,255,255,.015);}
+.bbox{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;}
+.bi{display:grid;grid-template-columns:165px 1fr 50px;gap:8px;padding:7px 0;
+  border-bottom:1px dashed var(--bd);align-items:start;}
+.bi:last-child{border-bottom:none;padding-bottom:0;}
+.olink{color:var(--green);font-weight:800;cursor:pointer;font-family:monospace;font-size:12px;
+  background:rgba(0,230,118,.07);padding:3px 7px;border-radius:4px;border:1px solid rgba(0,230,118,.2);
+  display:inline-flex;align-items:center;gap:3px;transition:.15s;}
+.olink:hover{background:rgba(0,230,118,.18);}
+.spill{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;
+  margin-top:2px;white-space:nowrap;}
+/* STATUS */
+.pbx{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:14px 18px;margin-bottom:18px;}
+.sp{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;
+  border:1px solid transparent;transition:.15s;display:inline-block;}
+.sp:hover{transform:translateY(-1px);}
+.sp.on{box-shadow:0 0 0 2px var(--t1);}
+/* PROVIDER CARD (Summary) */
+.pcard{background:var(--s1);border:1px solid var(--bd);border-radius:16px;overflow:hidden;margin-bottom:28px;}
+.phdr{display:flex;justify-content:space-between;align-items:center;
+  padding:18px 22px 14px;border-bottom:1px solid var(--bd);flex-wrap:wrap;gap:12px;
+  background:linear-gradient(135deg,rgba(30,30,63,.8),rgba(17,17,42,.8));}
+.phdr-left{display:flex;flex-direction:column;gap:6px;}
+.pname{font-size:18px;font-weight:900;color:var(--t1);letter-spacing:-.3px;}
+.pname-sub{font-size:11px;color:var(--t3);}
+.pname-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.stars{color:var(--yellow);font-size:15px;letter-spacing:1px;}
+.pbadge{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:800;}
+.pbadge.up{background:rgba(0,230,118,.15);color:var(--green);border:1px solid rgba(0,230,118,.3);}
+.pbadge.dn{background:rgba(255,23,68,.15);color:#ff5252;border:1px solid rgba(255,23,68,.3);}
+.pkbadge{background:linear-gradient(135deg,#ff6d00,#ff8f00);color:#fff;padding:4px 12px;
+  border-radius:20px;font-size:11px;font-weight:800;}
+.pstats{display:flex;gap:24px;align-items:center;flex-wrap:wrap;}
+.pstat{text-align:center;cursor:pointer;transition:.15s;padding:6px 10px;border-radius:8px;
+  border:1px solid transparent;}
+.pstat:hover{background:rgba(255,255,255,.06);border-color:var(--bd);}
+.pstat-v{font-size:24px;font-weight:900;}
+.pstat-l{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:2px;}
+.csvbtn{padding:5px 12px;background:var(--s2);border:1px solid var(--bd);color:var(--t3);
+  border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;transition:.15s;}
+.csvbtn:hover{border-color:var(--yellow);color:var(--yellow);}
+/* MATRIX TABLE */
+.tw2{overflow-x:auto;padding:0 2px 4px;}
+table.mx{width:100%;border-collapse:collapse;min-width:860px;}
+table.mx th.dh{background:var(--bg);text-align:center;padding:10px 4px;font-size:11px;
+  font-weight:700;color:var(--t2);border-bottom:2px solid var(--acc);border-left:1px solid var(--bd);}
+table.mx th.sh{background:rgba(0,0,0,.4);text-align:center;padding:5px 3px;font-size:9px;
+  font-weight:700;color:var(--t4);text-transform:uppercase;border-bottom:1px solid var(--bd);
+  border-left:1px solid rgba(255,255,255,.04);}
+table.mx th.rh{background:var(--bg);text-align:left;padding:10px 14px;font-size:10px;
+  font-weight:700;color:var(--t3);text-transform:uppercase;border-bottom:1px solid var(--bd);}
+table.mx td{padding:9px 5px;text-align:center;border-bottom:1px solid rgba(255,255,255,.04);
+  border-left:1px solid rgba(255,255,255,.03);font-size:12px;font-weight:600;color:var(--t2);}
+table.mx td.rc{text-align:left;padding:9px 14px;font-weight:700;color:var(--t1);font-size:13px;border-left:none;}
 table.mx td.vo{color:var(--blue);}
 table.mx td.vb{color:var(--green);}
 table.mx td.vw{color:var(--yellow);}
 table.mx td.vl{color:var(--purple);}
 table.mx td.vg{color:var(--red);}
-table.mx td.dash{color:var(--text3);font-size:11px;}
+table.mx td.dash{color:var(--t4);font-size:10px;}
 table.mx tr:hover td{background:rgba(255,255,255,.02);}
-table.mx tr.tr-tot td{background:rgba(0,0,0,.3);font-weight:800;font-size:13px;color:var(--orange);}
-table.mx tr.tr-tot td.rc{color:var(--orange);}
-table.mx td.clk{cursor:pointer;text-decoration:underline;text-decoration-color:currentColor;}
-table.mx td.clk:hover{opacity:.75;}
-table.mx th.dsep,table.mx td.dsep{border-left:1px solid var(--border);}
-/* 4-week grid */
-.wk4-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;}
-/* ---- LOADER ---- */
-.loader-wrap{text-align:center;padding:60px;}
-.loader{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px;}
-@keyframes spin{to{transform:rotate(360deg)}}
-/* ---- MODAL ---- */
-.mover{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:10000;backdrop-filter:blur(6px);justify-content:center;align-items:center;}
-.mover.open{display:flex;}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;width:100%;max-width:640px;max-height:88vh;overflow-y:auto;position:relative;}
-.mclose{position:absolute;top:14px;right:14px;background:var(--surface2);border:1px solid var(--border);color:var(--text);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
-.mclose:hover{background:var(--red);}
+table.mx tr.ttr td{background:rgba(92,107,192,.08);font-weight:900;font-size:13px;}
+table.mx tr.ttr td.rc{color:var(--yellow);}
+table.mx tr.ttr td.vo{color:#7986cb;}
+table.mx tr.ttr td.vb{color:#4db6ac;}
+table.mx tr.ttr td.vw{color:var(--yellow);}
+table.mx td.clk{cursor:pointer;}
+table.mx td.clk:hover{opacity:.7;text-decoration:underline;}
+table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
+/* REGIONAL */
+.reg-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+.mini-card{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px;}
+.mini-title{font-size:13px;font-weight:800;color:var(--t2);margin-bottom:14px;
+  display:flex;align-items:center;gap:8px;}
+.mini-title .dot{width:8px;height:8px;border-radius:50%;}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.bar-label{font-size:11px;color:var(--t2);width:110px;flex-shrink:0;font-weight:600;}
+.bar-track{flex:1;height:14px;background:var(--s2);border-radius:7px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:7px;transition:.5s;}
+.bar-val{font-size:11px;font-weight:700;width:50px;text-align:right;}
+/* LOADER */
+.lw{text-align:center;padding:60px;}
+.ld{width:42px;height:42px;border:3px solid var(--bd);border-top-color:var(--acc);
+  border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 14px;}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* MODALS */
+.mov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;
+  backdrop-filter:blur(8px);justify-content:center;align-items:center;}
+.mov.open{display:flex;}
+.mdl{background:var(--s1);border:1px solid var(--bd);border-radius:16px;padding:26px;
+  width:100%;max-width:660px;max-height:88vh;overflow-y:auto;position:relative;}
+.mdl.wide{max-width:900px;}
+.mcl{position:absolute;top:13px;right:13px;background:var(--s2);border:1px solid var(--bd);
+  color:var(--t1);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px;
+  display:flex;align-items:center;justify-content:center;}
+.mcl:hover{background:var(--red);}
+/* Journey */
 .tl{position:relative;padding-left:24px;margin-top:14px;}
-.tl::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--green),var(--border));}
-.tli{position:relative;margin-bottom:14px;}
-.tld{position:absolute;left:-20px;top:2px;width:10px;height:10px;border-radius:50%;border:2px solid var(--green);background:var(--surface);}
-.tld.done{background:var(--green);} .tld.cancelled{background:var(--red);border-color:var(--red);} .tld.pending{border-color:var(--border);}
-.tll{font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.4px;}
-.tlv{font-size:13px;color:var(--text);font-weight:600;margin-top:1px;}
-.tlv.pv{color:var(--border);font-style:italic;} .tlv.cv{color:var(--red);}
-.mg{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;}
-.mc{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:12px;text-align:center;}
+.tl::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;
+  background:linear-gradient(180deg,var(--green),var(--bd));}
+.tli{position:relative;margin-bottom:13px;}
+.tld{position:absolute;left:-20px;top:2px;width:10px;height:10px;border-radius:50%;
+  border:2px solid var(--green);background:var(--s1);}
+.tld.done{background:var(--green);}.tld.can{background:var(--red);border-color:var(--red);}
+.tld.pend{border-color:var(--bd);}
+.tll{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;}
+.tlv{font-size:13px;color:var(--t1);font-weight:600;margin-top:1px;}
+.tlv.pv{color:var(--bd);font-style:italic;}.tlv.cv{color:var(--red);}
+.mg{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+.mc{background:var(--bg);border:1px solid var(--bd);border-radius:9px;padding:12px;text-align:center;}
 .mv{font-size:20px;font-weight:900;color:var(--green);}
-.mv.warn{color:var(--yellow);} .mv.danger{color:var(--red);} .mv.na{color:var(--text3);font-size:14px;}
-.ml{font-size:9px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-top:3px;}
-.sg{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px;}
-.sc{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:9px;text-align:center;}
-.sclb{font-size:9px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-bottom:3px;}
-.scv{font-size:14px;font-weight:700;} .scv.miss{color:var(--border);}
-.cbanner{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:7px;padding:9px 13px;margin-bottom:14px;color:var(--red);font-weight:700;font-size:12px;}
-.shd{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid var(--border);}
-.mloader{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin:24px auto;}
-/* ---- RESULT COUNT ---- */
-.rc{font-size:12px;color:var(--text3);margin-bottom:10px;}
-.rc b{color:var(--text);}
-/* responsive */
-@media(max-width:768px){
-  .kgrid{grid-template-columns:repeat(2,1fr);}
-  .wk4-grid{grid-template-columns:1fr;}
-  .main{padding:16px;}
-}
+.mv.w{color:var(--yellow);}.mv.d{color:var(--red);}.mv.n{color:var(--t3);font-size:14px;}
+.ml{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:3px;}
+.stp-g{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:16px;}
+.stp{background:var(--bg);border:1px solid var(--bd);border-radius:7px;padding:8px;text-align:center;}
+.stpv{font-size:13px;font-weight:700;}.stpl{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-bottom:2px;}
+.cbanner{background:rgba(255,23,68,.1);border:1px solid rgba(255,23,68,.3);border-radius:7px;padding:9px 13px;margin-bottom:14px;color:var(--red);font-weight:700;font-size:12px;}
+.shd{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin:14px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--bd);}
+.mld{width:24px;height:24px;border:3px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:sp .7s linear infinite;margin:24px auto;}
+/* RC */
+.rc{font-size:12px;color:var(--t3);margin-bottom:10px;}.rc b{color:var(--t1);}
+/* WEEK LABEL */
+.wklabel{font-size:11px;color:var(--t3);background:var(--bg);border:1px solid var(--bd);
+  border-radius:6px;padding:4px 12px;display:inline-block;margin-bottom:18px;}
+/* Responsive */
+@media(max-width:768px){.kg{grid-template-columns:1fr 1fr;}.sg{grid-template-columns:1fr;}.reg-grid{grid-template-columns:1fr;}.main{padding:14px;}}
 </style>
 </head>
 <body>
 <div class="topbar">
-  <div class="topbar-left">
-    <div class="topbar-icon">📦</div>
-    <div><div class="topbar-title">Bundling Intelligence Hub</div><div class="topbar-sub">Live Cost Analytics · Order Consolidation</div></div>
+  <div class="tbl-left">
+    <div class="tbl-ico">📦</div>
+    <div><div class="tbl-title">Bundling Intelligence Hub</div><div class="tbl-sub">Live Cost Analytics · Order Consolidation</div></div>
   </div>
-  <div class="topbar-right">
-    <a href="/" class="tbtn" style="background:var(--surface);color:var(--text);border:1px solid var(--border)">🏠 Main Dash</a>
-    <button class="tbtn" style="background:var(--green);color:#000" onclick="hardRefresh()">🔄 Refresh Data</button>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <a href="/" class="tbtn" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)">🏠 Main Dash</a>
+    <button class="tbtn" style="background:linear-gradient(135deg,#00c853,#00e676);color:#000" onclick="hardRefresh()">🔄 Refresh Data</button>
   </div>
 </div>
-
-<div class="main">
+<div class="tabs-wrap">
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('bundle')">📦 Bundle Intelligence</div>
-    <div class="tab" onclick="switchTab('status')">📡 Status Intelligence</div>
-    <div class="tab" onclick="switchTab('summary')">📊 Weekly Summary</div>
-    <div class="tab" onclick="switchTab('week4')">📅 4-Week Summary</div>
+    <div class="tab active" onclick="sw('bundle',this)">📦 Bundle Intelligence</div>
+    <div class="tab" onclick="sw('status',this)">📡 Status Intelligence</div>
+    <div class="tab" onclick="sw('summary',this)">📊 Weekly Summary</div>
+    <div class="tab" onclick="sw('week4',this)">📅 4-Week Summary</div>
+    <div class="tab" onclick="sw('regional',this)">🌍 Regional View</div>
   </div>
+</div>
+<div class="main">
+  <div id="gLoad" class="lw"><div class="ld"></div><p style="color:var(--t3);font-size:13px">Loading data from all sources...</p><p style="color:var(--t3);font-size:11px;margin-top:6px" id="lStat">Connecting...</p></div>
 
-  <!-- GLOBAL LOADING -->
-  <div id="globalLoading" class="loader-wrap">
-    <div class="loader"></div>
-    <p style="color:var(--text3);font-size:13px">Loading data from all sources...</p>
-    <p style="color:var(--text3);font-size:11px;margin-top:6px" id="loadStatus">Connecting to sheets...</p>
-  </div>
-
-  <!-- =================== BUNDLE TAB =================== -->
-  <div class="tab-pane" id="pane-bundle">
+  <!-- BUNDLE TAB -->
+  <div class="pane active" id="pane-bundle">
     <div class="fbar">
       <div class="frow">
-        <div class="fg fg-grow"><div class="fl">🔍 Search Order ID or Customer</div><input type="text" id="b-search" class="fi" placeholder="e.g. 12345 or John Doe" oninput="renderBundle()"></div>
-        <div class="fg"><div class="fl">📅 From</div><input type="date" id="b-from" class="fi" onchange="renderBundle()"></div>
-        <div class="fg"><div class="fl">📅 To</div><input type="date" id="b-to" class="fi" onchange="renderBundle()"></div>
-        <div class="fg"><div class="fl">🏷️ Source</div>
-          <select id="b-src" class="fi" onchange="renderBundle()">
+        <div class="fg fg-grow"><div class="fl">🔍 Search Order ID or Customer</div><input type="text" id="bq" class="fi" placeholder="e.g. 12345 or John Doe" oninput="rBundle()"></div>
+        <div class="fg"><div class="fl">📅 From</div><input type="date" id="bf" class="fi" onchange="rBundle()"></div>
+        <div class="fg"><div class="fl">📅 To</div><input type="date" id="bt" class="fi" onchange="rBundle()"></div>
+        <div class="fg"><div class="fl">Source</div>
+          <select id="bs" class="fi" onchange="rBundle()">
             <option value="all">All Sources</option>
             <option value="ECL QC Center">ECL QC Center</option>
             <option value="ECL Zone">ECL Zone</option>
@@ -4837,32 +4852,30 @@ table.mx th.dsep,table.mx td.dsep{border-left:1px solid var(--border);}
         </div>
       </div>
     </div>
-    <div class="src-grid">
-      <div class="srcc"><div class="srct">ECL QC Center</div><div class="srcst">
-        <div><div class="sv" id="b-qc-o">0</div><div class="sl">Orders</div></div>
-        <div><div class="sv" id="b-qc-b">0</div><div class="sl">Bundles</div></div>
+    <div class="sg">
+      <div class="sc"><div class="sct">ECL QC Center</div><div class="scst">
+        <div><div class="scv" id="bqo">0</div><div class="scl">Orders</div></div>
+        <div><div class="scv" id="bqb">0</div><div class="scl">Bundles</div></div>
       </div></div>
-      <div class="srcc"><div class="srct">PK Zone (ECL & GE)</div><div class="srcst">
-        <div><div class="sv" id="b-pk-o">0</div><div class="sl">Orders</div></div>
-        <div><div class="sv" id="b-pk-b">0</div><div class="sl">Bundles</div></div>
+      <div class="sc"><div class="sct" style="color:#7986cb">PK Zone (ECL & GE)</div><div class="scst">
+        <div><div class="scv" id="bpo">0</div><div class="scl">Orders</div></div>
+        <div><div class="scv" id="bpb">0</div><div class="scl">Bundles</div></div>
       </div></div>
     </div>
-    <div class="kgrid">
-      <div class="kc"><div class="kv" id="b-kpi1">0</div><div class="kl">Total Bundles Packed</div></div>
-      <div class="kc"><div class="kv" id="b-kpi2">0</div><div class="kl">Total Orders Merged</div></div>
-      <div class="kc" style="border-left-color:var(--yellow)"><div class="kv" id="b-kpi3" style="color:var(--yellow)">0</div><div class="kl" style="color:var(--yellow)">🚚 Shipments Saved</div></div>
-      <div class="kc" style="border-left-color:var(--green)"><div class="kv" id="b-kpi4" style="color:var(--green)">£0</div><div class="kl" style="color:var(--green)">💰 Total Saved (Est)</div></div>
+    <div class="kg">
+      <div class="kc"><div class="kv" id="bk1">0</div><div class="kl">Total Bundles Packed</div></div>
+      <div class="kc"><div class="kv" id="bk2">0</div><div class="kl">Total Orders Merged</div></div>
+      <div class="kc" style="border-left-color:var(--yellow)"><div class="kv" id="bk3" style="color:var(--yellow)">0</div><div class="kl" style="color:var(--yellow)">🚚 Shipments Saved</div></div>
+      <div class="kc" style="border-left-color:var(--green)"><div class="kv" id="bk4" style="color:var(--green)">£0</div><div class="kl" style="color:var(--green)">💰 Total Saved (Est)</div></div>
     </div>
-    <div class="tbl-wrap">
-      <table class="main-tbl">
-        <thead><tr><th>Date & Source</th><th>Client Info</th><th>Box Analytics</th><th>📦 Breakdown <small style="color:var(--text3)">(click order → journey)</small></th></tr></thead>
-        <tbody id="b-tbody"></tbody>
-      </table>
-    </div>
+    <div class="tw"><table class="mt">
+      <thead><tr><th>Date & Source</th><th>Client</th><th>Box Analytics</th><th>📦 Orders (click → Journey)</th></tr></thead>
+      <tbody id="btb"></tbody>
+    </table></div>
   </div>
 
-  <!-- =================== STATUS TAB =================== -->
-  <div class="tab-pane" id="pane-status">
+  <!-- STATUS TAB -->
+  <div class="pane" id="pane-status">
     <div class="fbar">
       <div class="frow">
         <div class="fg" style="flex:1"><div class="fl">⚡ Quick Select</div>
@@ -4877,201 +4890,192 @@ table.mx th.dsep,table.mx td.dsep{border-left:1px solid var(--border);}
         </div>
       </div>
       <div class="frow">
-        <div class="fg"><div class="fl">📅 From</div><input type="date" id="s-from" class="fi"></div>
-        <div class="fg"><div class="fl">📅 To</div><input type="date" id="s-to" class="fi"></div>
-        <div class="fg fg-grow"><div class="fl">🔍 Search</div><input type="text" id="s-search" class="fi" placeholder="Order ID or customer name..."></div>
-        <div class="fg"><div class="fl">🏷️ Source</div>
-          <select id="s-src" class="fi">
+        <div class="fg"><div class="fl">📅 From</div><input type="date" id="sf" class="fi"></div>
+        <div class="fg"><div class="fl">📅 To</div><input type="date" id="st" class="fi"></div>
+        <div class="fg fg-grow"><div class="fl">🔍 Search</div><input type="text" id="sq" class="fi" placeholder="Order ID or customer..."></div>
+        <div class="fg"><div class="fl">Source</div>
+          <select id="ss" class="fi">
             <option value="all">All Sources</option>
             <option value="ECL QC Center">ECL QC Center</option>
             <option value="ECL Zone">ECL Zone</option>
             <option value="GE Zone">GE Zone</option>
           </select>
         </div>
-        <div class="fg" style="flex-direction:row;gap:7px;align-items:flex-end;">
-          <button class="cbtn" onclick="clearStatus()">Clear</button>
-          <button class="abtn" onclick="renderStatus()">Apply Filters</button>
+        <div class="fg" style="flex-direction:row;gap:7px;align-items:flex-end">
+          <button class="cbtn" onclick="clrSt()">Clear</button>
+          <button class="abtn" onclick="rStatus()">Apply Filters</button>
         </div>
       </div>
     </div>
-    <div id="s-pills-wrap" style="display:none" class="sbbox">
-      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:10px;">📊 Filter by Status</div>
-      <div id="s-pills" style="display:flex;flex-wrap:wrap;gap:7px;"></div>
+    <div id="spw" style="display:none" class="pbx">
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--acc);margin-bottom:10px">📊 Filter by Status — click to select</div>
+      <div id="spills" style="display:flex;flex-wrap:wrap;gap:7px"></div>
     </div>
-    <div class="kgrid" style="grid-template-columns:repeat(4,1fr)">
-      <div class="kc"><div class="kv" id="s-tot">0</div><div class="kl">Total Orders</div></div>
-      <div class="kc" style="border-left-color:var(--green)"><div class="kv" id="s-del" style="color:var(--green)">0</div><div class="kl" style="color:var(--green)">Delivered</div></div>
-      <div class="kc" style="border-left-color:var(--yellow)"><div class="kv" id="s-tr" style="color:var(--yellow)">0</div><div class="kl" style="color:var(--yellow)">In Transit / Freight</div></div>
-      <div class="kc" style="border-left-color:var(--red)"><div class="kv" id="s-can" style="color:var(--red)">0</div><div class="kl" style="color:var(--red)">Cancelled</div></div>
+    <div class="kg">
+      <div class="kc"><div class="kv" id="stot">0</div><div class="kl">Total Orders</div></div>
+      <div class="kc" style="border-left-color:var(--green)"><div class="kv" id="sdel" style="color:var(--green)">0</div><div class="kl" style="color:var(--green)">Delivered</div></div>
+      <div class="kc" style="border-left-color:var(--yellow)"><div class="kv" id="str2" style="color:var(--yellow)">0</div><div class="kl" style="color:var(--yellow)">In Transit</div></div>
+      <div class="kc" style="border-left-color:var(--red)"><div class="kv" id="scan" style="color:var(--red)">0</div><div class="kl" style="color:var(--red)">Cancelled</div></div>
     </div>
-    <div class="rc" id="s-rc"></div>
-    <div class="tbl-wrap">
-      <table class="main-tbl">
-        <thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Latest Status</th><th>Source</th><th>Customer</th><th>Country</th><th>Weight</th></tr></thead>
-        <tbody id="s-tbody"></tbody>
-      </table>
-    </div>
+    <div class="rc" id="src2"></div>
+    <div class="tw"><table class="mt">
+      <thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Status</th><th>Source</th><th>Customer</th><th>Country</th><th>Weight</th></tr></thead>
+      <tbody id="stb"></tbody>
+    </table></div>
   </div>
 
-  <!-- =================== SUMMARY TAB =================== -->
-  <div class="tab-pane" id="pane-summary">
+  <!-- WEEKLY SUMMARY TAB -->
+  <div class="pane" id="pane-summary">
     <div class="fbar">
-      <div class="frow" style="align-items:flex-end;gap:12px;">
-        <div class="fg"><div class="fl">Week Starting (Monday)</div><input type="date" id="wk-start" class="fi"></div>
+      <div class="frow" style="align-items:flex-end;gap:14px">
+        <div class="fg"><div class="fl">Week Starting (Monday)</div><input type="date" id="ws" class="fi"></div>
         <div class="fg"><div class="fl">&nbsp;</div>
           <div class="qbtns">
-            <button class="qb active" id="wk-this" onclick="setWeek(0,this)">This Week</button>
-            <button class="qb" onclick="setWeek(-1,this)">Last Week</button>
-            <button class="qb" onclick="setWeek(-2,this)">2 Weeks Ago</button>
+            <button class="qb on" onclick="setWk(0,this)">This Week</button>
+            <button class="qb" onclick="setWk(-1,this)">Last Week</button>
+            <button class="qb" onclick="setWk(-2,this)">2 Weeks Ago</button>
           </div>
         </div>
-        <div class="fg"><div class="fl">&nbsp;</div>
-          <button class="abtn" onclick="renderSummary()">Load Week</button>
-        </div>
+        <div class="fg"><div class="fl">&nbsp;</div><button class="abtn" onclick="rSummary()">Load Week</button></div>
       </div>
     </div>
-    <div id="sum-cards"></div>
+    <div id="sumCards"></div>
   </div>
 
-  <!-- =================== 4-WEEK TAB =================== -->
-  <div class="tab-pane" id="pane-week4">
+  <!-- 4-WEEK TAB -->
+  <div class="pane" id="pane-week4">
     <div class="fbar">
-      <div class="frow" style="align-items:center;gap:12px;">
-        <div class="fg"><div class="fl">Latest Week (Monday)</div><input type="date" id="w4-end" class="fi"></div>
+      <div class="frow" style="align-items:flex-end;gap:14px">
+        <div class="fg"><div class="fl">Latest Monday</div><input type="date" id="w4e" class="fi"></div>
         <div class="fg"><div class="fl">&nbsp;</div>
-          <button class="qb active" id="w4-cur" onclick="setW4Now(this)">Current 4 Weeks</button>
+          <button class="qb on" onclick="setW4Now(this)">Current 4 Weeks</button>
         </div>
-        <div class="fg"><div class="fl">&nbsp;</div>
-          <button class="abtn" onclick="renderW4()">Load</button>
-        </div>
+        <div class="fg"><div class="fl">&nbsp;</div><button class="abtn" onclick="rW4()">Load</button></div>
       </div>
     </div>
-    <div id="w4-cards"></div>
+    <div id="w4cards"></div>
+  </div>
+
+  <!-- REGIONAL VIEW TAB -->
+  <div class="pane" id="pane-regional">
+    <div class="fbar">
+      <div class="frow" style="align-items:flex-end;gap:14px">
+        <div class="fg"><div class="fl">Week Starting (Monday)</div><input type="date" id="rws" class="fi"></div>
+        <div class="fg"><div class="fl">&nbsp;</div>
+          <div class="qbtns">
+            <button class="qb on" onclick="setRWk(0,this)">This Week</button>
+            <button class="qb" onclick="setRWk(-1,this)">Last Week</button>
+            <button class="qb" onclick="setRWk(-2,this)">2 Weeks Ago</button>
+          </div>
+        </div>
+        <div class="fg"><div class="fl">&nbsp;</div><button class="abtn" onclick="rRegional()">Load</button></div>
+      </div>
+    </div>
+    <div id="regCards"></div>
   </div>
 </div>
 
 <!-- JOURNEY MODAL -->
-<div class="mover" id="jModal" onclick="if(event.target===this)closeMod()">
-  <div class="modal">
-    <button class="mclose" onclick="closeMod()">✕</button>
-    <div id="mBody"><div class="mloader"></div></div>
-  </div>
+<div class="mov" id="jMov" onclick="if(event.target===this)cMod('jMov')">
+  <div class="mdl"><button class="mcl" onclick="cMod('jMov')">✕</button><div id="jBody"><div class="mld"></div></div></div>
 </div>
 
 <!-- ORDERS MODAL -->
-<div class="mover" id="oModal" onclick="if(event.target===this)document.getElementById('oModal').classList.remove('open')">
-  <div class="modal" style="max-width:820px;">
-    <button class="mclose" onclick="document.getElementById('oModal').classList.remove('open')">✕</button>
-    <div style="font-size:16px;font-weight:800;color:var(--orange);margin-bottom:16px" id="oTitle">Orders</div>
+<div class="mov" id="oMov" onclick="if(event.target===this)cMod('oMov')">
+  <div class="mdl wide"><button class="mcl" onclick="cMod('oMov')">✕</button>
+    <div style="font-size:15px;font-weight:800;color:var(--yellow);margin-bottom:16px" id="oTit">Orders</div>
     <div id="oBody"></div>
   </div>
 </div>
 
 <script>
 // ============================================================
-// GLOBAL STATE — fetched ONCE, used by all tabs
+// GLOBAL STATE
 // ============================================================
-let D = null; // all data
-let SEL_STATUS = null;
-
-const DAYS = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
-const FLT_DAYS = [1,3,5]; // Tue Thu Sat
-const SRCS = ["ECL QC Center","ECL Zone","GE Zone"];
+let D=null, SEL=null;
+const DAYS=["MON","TUE","WED","THU","FRI","SAT","SUN"];
+const FLT=[1,3,5]; // Tue Thu Sat = flight days
+const SRCS=["ECL QC Center","ECL Zone","GE Zone"];
 
 // ============================================================
-// INIT — fetch once on load
+// INIT
 // ============================================================
 async function init(){
-  const el = id("loadStatus");
-  try {
-    el.textContent = "Fetching orders from 3 sources...";
-    const r = await fetch("/api/nexus/app_data");
+  const ls=g("lStat");
+  try{
+    ls.textContent="Fetching from 3 sources simultaneously...";
+    const r=await fetch("/api/nexus/app_data");
     if(!r.ok) throw new Error("HTTP "+r.status);
-    D = await r.json();
-    el.textContent = "Processing data...";
-    // Set default dates
-    const mon = getMonday(new Date());
-    id("wk-start").value = fi(mon);
-    id("w4-end").value = fi(mon);
-    // Show bundle tab
-    id("globalLoading").style.display = "none";
-    id("pane-bundle").classList.add("active");
-    renderBundle();
-    // Pre-render summary in background
-    setTimeout(()=>{ renderSummary(); renderW4(); }, 100);
-  } catch(e) {
-    id("globalLoading").innerHTML = `<div style="color:var(--red);font-size:14px">❌ Error loading data: ${e.message}<br><br><button class="abtn" onclick="init()">Retry</button></div>`;
+    D=await r.json();
+    const mon=gMon(new Date());
+    g("ws").value=fi(mon); g("w4e").value=fi(mon); g("rws").value=fi(mon);
+    g("gLoad").style.display="none";
+    g("pane-bundle").classList.add("active");
+    rBundle();
+    // pre-render others in bg
+    setTimeout(()=>{rSummary();rW4();rRegional();},200);
+  }catch(e){
+    g("gLoad").innerHTML=`<div style="color:var(--red);font-size:14px">❌ ${e.message}<br><br><button class="abtn" onclick="init()">Retry</button></div>`;
   }
 }
-
-function hardRefresh(){
-  D = null;
-  id("globalLoading").style.display = "block";
-  document.querySelectorAll(".tab-pane").forEach(p=>p.classList.remove("active"));
-  init();
-}
+function hardRefresh(){D=null;g("gLoad").style.display="block";document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));init();}
 
 // ============================================================
-// TAB SWITCHING — ZERO re-fetch
+// TAB SWITCH - use RAF to avoid UI blocking
 // ============================================================
-function switchTab(name){
-  document.querySelectorAll(".tab").forEach((t,i)=>{
-    const names=["bundle","status","summary","week4"];
-    t.classList.toggle("active", names[i]===name);
+function sw(name,tab){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  tab.classList.add("active");
+  document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));
+  // defer heavy render to next frame
+  requestAnimationFrame(()=>{
+    g("pane-"+name).classList.add("active");
+    if(name==="status"&&D) rStatus();
   });
-  document.querySelectorAll(".tab-pane").forEach(p=>p.classList.remove("active"));
-  id("pane-"+name).classList.add("active");
-  if(name==="status" && D) renderStatus();
 }
 
 // ============================================================
 // UTILS
 // ============================================================
-function id(x){ return document.getElementById(x); }
-function fi(d){ return d instanceof Date ? d.toISOString().split("T")[0] : d; }
-function getMonday(d){
-  d=new Date(d); const day=d.getDay(), diff=d.getDate()-day+(day===0?-6:1);
-  return new Date(d.setDate(diff));
-}
-function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function g(id){return document.getElementById(id);}
+function fi(d){return d instanceof Date?d.toISOString().split("T")[0]:d;}
+function gMon(d){d=new Date(d);const dy=d.getDay(),diff=d.getDate()-dy+(dy===0?-6:1);return new Date(d.setDate(diff));}
+function addD(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
 
-function statusStyle(st){
-  if(!st||st==="—") return {bg:"rgba(255,255,255,.05)",c:"var(--text3)"};
+function sStyle(st){
+  if(!st||st==="—") return {bg:"rgba(255,255,255,.04)",c:"var(--t3)"};
   const s=st.toLowerCase();
-  if(s.includes("deliver")) return {bg:"rgba(16,185,129,.15)",c:"#10b981"};
-  if(s.includes("freight")) return {bg:"rgba(99,102,241,.15)",c:"#818cf8"};
-  if(s.includes("courier")) return {bg:"rgba(139,92,246,.15)",c:"#a78bfa"};
-  if(s.includes("cancel"))  return {bg:"rgba(239,68,68,.15)",c:"#f87171"};
-  if(s.includes("qc"))      return {bg:"rgba(245,158,11,.15)",c:"#fbbf24"};
-  if(s.includes("hand"))    return {bg:"rgba(59,130,246,.15)",c:"#60a5fa"};
-  if(s.includes("pending")) return {bg:"rgba(245,158,11,.12)",c:"#f59e0b"};
-  return {bg:"rgba(255,255,255,.06)",c:"#94a3b8"};
+  if(s.includes("deliver")) return {bg:"rgba(0,230,118,.12)",c:"#69f0ae"};
+  if(s.includes("freight")) return {bg:"rgba(68,138,255,.12)",c:"#82b1ff"};
+  if(s.includes("courier")) return {bg:"rgba(224,64,251,.12)",c:"#ea80fc"};
+  if(s.includes("cancel"))  return {bg:"rgba(255,23,68,.12)",c:"#ff5252"};
+  if(s.includes("qc"))      return {bg:"rgba(255,215,64,.12)",c:"#ffe57f"};
+  if(s.includes("hand"))    return {bg:"rgba(68,138,255,.12)",c:"#82b1ff"};
+  if(s.includes("pending")) return {bg:"rgba(255,215,64,.1)",c:"#ffd740"};
+  return {bg:"rgba(255,255,255,.05)",c:"#90a4ae"};
 }
-
 function spill(st){
   if(!st||st==="—") return "";
-  const s=statusStyle(st);
+  const s=sStyle(st);
   return `<span class="spill" style="background:${s.bg};color:${s.c}">📡 ${st}</span>`;
 }
+function starsFor(n){return "★".repeat(n)+"☆".repeat(5-n);}
 
 // ============================================================
 // BUNDLE TAB
 // ============================================================
-function renderBundle(){
+function rBundle(){
   if(!D) return;
-  const q=id("b-search").value.toLowerCase().trim();
-  const fr=id("b-from").value, to=id("b-to").value;
-  const src=id("b-src").value;
-  const ss=D.source_stats||{};
-  id("b-qc-o").textContent=ss["ECL QC Center"]?.orders||0;
-  id("b-qc-b").textContent=ss["ECL QC Center"]?.boxes||0;
-  id("b-pk-o").textContent=ss["PK Zone"]?.orders||0;
-  id("b-pk-b").textContent=ss["PK Zone"]?.boxes||0;
-  const kpi=D.kpi||{};
-  id("b-kpi1").textContent=kpi.total_bundles||0;
-  id("b-kpi2").textContent=kpi.total_orders_bundled||0;
-  id("b-kpi3").textContent=kpi.saved_shipments||0;
-  id("b-kpi4").textContent="£"+(kpi.total_savings_gbp||0).toLocaleString(undefined,{minimumFractionDigits:2});
+  const q=g("bq").value.toLowerCase().trim(),fr=g("bf").value,to=g("bt").value,src=g("bs").value;
+  const ss=D.source_stats||{},kpi=D.kpi||{};
+  g("bqo").textContent=ss["ECL QC Center"]?.orders||0;
+  g("bqb").textContent=ss["ECL QC Center"]?.boxes||0;
+  g("bpo").textContent=ss["PK Zone"]?.orders||0;
+  g("bpb").textContent=ss["PK Zone"]?.boxes||0;
+  g("bk1").textContent=kpi.total_bundles||0;
+  g("bk2").textContent=kpi.total_orders_bundled||0;
+  g("bk3").textContent=kpi.saved_shipments||0;
+  g("bk4").textContent="£"+(kpi.total_savings_gbp||0).toLocaleString(undefined,{minimumFractionDigits:2});
   const fl=(D.bundles||[]).filter(b=>{
     if(src!=="all"&&b.source!==src) return false;
     if(fr&&b.date_std<fr) return false;
@@ -5081,335 +5085,490 @@ function renderBundle(){
     return true;
   });
   let h="";
-  if(!fl.length){
-    h=`<tr><td colspan="4" style="text-align:center;padding:50px;color:var(--text3)">No bundled orders found.</td></tr>`;
-  } else {
-    fl.forEach(b=>{
-      const items=b.orders.map(o=>`
-        <div class="bitem">
-          <div><span class="olink" onclick="openJourney('${o.order_id}')">${o.order_id} ▾</span>
-          ${spill(o.status)}<div style="font-size:10px;color:var(--text3);margin-top:2px">Wt: ${o.weight} kg</div></div>
-          <div style="font-size:11px;color:var(--text3)">${(o.title||"").substring(0,40)}</div>
-          <div style="font-weight:800;text-align:right">${o.item_count}</div>
-        </div>`).join("");
-      const aw=b.weight_kg||0, bw=Math.max(Math.ceil(aw),1);
-      h+=`<tr>
-        <td><b>${b.date||""}</b><br><span style="color:var(--text3);font-size:11px">${b.source}</span></td>
-        <td><b>${b.customer||""}</b><br><span style="color:var(--text3);font-size:11px">${b.vendor||""}</span><br><span style="color:var(--text3);font-size:11px">${b.country||""}</span></td>
-        <td>
-          <div style="background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--border)">
-            <span style="color:var(--text3);font-size:11px">TID:</span> <b style="font-family:monospace;font-size:11px">${b.tid}</b><br>
-            <span style="color:var(--text3);font-size:11px">BOX:</span> <b style="color:var(--green)">${b.boxes_val}</b>
-          </div>
-          <div style="margin-top:7px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);padding:8px;border-radius:6px">
-            <div style="font-size:11px;color:var(--text3);display:flex;justify-content:space-between;margin-bottom:3px"><span>Total Wt:</span><b>${aw} kg</b></div>
-            <div style="font-size:11px;color:var(--text3);display:flex;justify-content:space-between;margin-bottom:3px"><span>Billed Wt:</span><b>${bw} kg</b></div>
-            <div style="font-size:13px;color:var(--green);display:flex;justify-content:space-between;font-weight:800"><span>💰 Saved:</span><span>£${(b.savings_gbp||0).toFixed(2)}</span></div>
-          </div>
-        </td>
-        <td><div class="bbox">${items}</div></td>
-      </tr>`;
-    });
-  }
-  id("b-tbody").innerHTML=h;
+  if(!fl.length){h=`<tr><td colspan="4" style="text-align:center;padding:50px;color:var(--t3)">No bundles found.</td></tr>`;}
+  else fl.forEach(b=>{
+    const items=b.orders.map(o=>`
+      <div class="bi">
+        <div><span class="olink" onclick="openJ('${o.order_id}')">${o.order_id} ▾</span>
+        ${spill(o.status)}<div style="font-size:10px;color:var(--t3);margin-top:2px">Wt: ${o.weight} kg</div></div>
+        <div style="font-size:11px;color:var(--t3)">${(o.title||"").substring(0,42)}</div>
+        <div style="font-weight:800;text-align:right">${o.item_count}</div>
+      </div>`).join("");
+    const aw=b.weight_kg||0,bw=Math.max(Math.ceil(aw),1);
+    h+=`<tr>
+      <td><b style="font-size:14px">${b.date||""}</b><br><span style="color:var(--t3);font-size:11px">${b.source}</span></td>
+      <td><b>${b.customer||""}</b><br><span style="color:var(--t3);font-size:11px">${b.vendor||""}</span><br><span style="color:var(--t3);font-size:11px">${b.country||""}</span></td>
+      <td>
+        <div style="background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--bd)">
+          <span style="color:var(--t3);font-size:11px">TID:</span> <b style="font-family:monospace;font-size:11px">${b.tid}</b><br>
+          <span style="color:var(--t3);font-size:11px">BOX:</span> <b style="color:var(--green)">${b.boxes_val}</b>
+        </div>
+        <div style="margin-top:6px;background:rgba(0,230,118,.07);border:1px solid rgba(0,230,118,.2);padding:8px;border-radius:6px">
+          <div style="font-size:11px;display:flex;justify-content:space-between;color:var(--t3);margin-bottom:2px"><span>Total Wt:</span><b>${aw} kg</b></div>
+          <div style="font-size:11px;display:flex;justify-content:space-between;color:var(--t3);margin-bottom:2px"><span>Billed Wt:</span><b>${bw} kg</b></div>
+          <div style="font-size:13px;color:var(--green);display:flex;justify-content:space-between;font-weight:800"><span>💰 Saved:</span><span>£${(b.savings_gbp||0).toFixed(2)}</span></div>
+        </div>
+      </td>
+      <td><div class="bbox">${items}</div></td>
+    </tr>`;
+  });
+  g("btb").innerHTML=h;
 }
 
 // ============================================================
 // STATUS TAB
 // ============================================================
-function qs(btn, p){
-  document.querySelectorAll("#pane-status .qb").forEach(b=>b.classList.remove("active"));
-  btn.classList.add("active");
-  const today=new Date(); today.setHours(0,0,0,0);
-  let fr, to=new Date(today);
+function qs(btn,p){
+  document.querySelectorAll("#pane-status .qb").forEach(b=>b.classList.remove("on"));
+  btn.classList.add("on");
+  const today=new Date();today.setHours(0,0,0,0);
+  let fr,to=new Date(today);
   if(p==="today") fr=new Date(today);
   else if(p==="7d"){fr=new Date(today);fr.setDate(fr.getDate()-6);}
   else if(p==="15d"){fr=new Date(today);fr.setDate(fr.getDate()-14);}
   else if(p==="30d"){fr=new Date(today);fr.setDate(fr.getDate()-29);}
-  else if(p==="week"){fr=getMonday(new Date(today));to=new Date(fr);to.setDate(to.getDate()+6);}
+  else if(p==="week"){fr=gMon(new Date(today));to=new Date(fr);to.setDate(to.getDate()+6);}
   else if(p==="month"){fr=new Date(today.getFullYear(),today.getMonth(),1);to=new Date(today.getFullYear(),today.getMonth()+1,0);}
-  id("s-from").value=fi(fr); id("s-to").value=fi(to);
+  g("sf").value=fi(fr);g("st").value=fi(to);
 }
+function clrSt(){g("sf").value="";g("st").value="";g("sq").value="";g("ss").value="all";SEL=null;rStatus();}
 
-function clearStatus(){
-  id("s-from").value=""; id("s-to").value=""; id("s-search").value=""; id("s-src").value="all";
-  document.querySelectorAll("#pane-status .qb").forEach(b=>b.classList.remove("active"));
-  SEL_STATUS=null; renderStatus();
-}
-
-function renderStatus(){
+function rStatus(){
   if(!D) return;
-  const q=id("s-search").value.toLowerCase().trim();
-  const fr=id("s-from").value, to=id("s-to").value;
-  const src=id("s-src").value;
-  // Build orders list from bundles
+  const q=g("sq").value.toLowerCase().trim(),fr=g("sf").value,to=g("st").value,src=g("ss").value;
   const orders=[];
-  (D.bundles||[]).forEach(b=>{
-    b.orders.forEach(o=>{
-      orders.push({order_id:o.order_id,date:b.date,date_std:b.date_std,
-        source:b.source,customer:b.customer,country:b.country,
-        weight:o.weight,status:o.status});
-    });
-  });
+  (D.bundles||[]).forEach(b=>b.orders.forEach(o=>orders.push({
+    order_id:o.order_id,date:b.date,date_std:b.date_std,source:b.source,
+    customer:b.customer,country:b.country,weight:o.weight,status:o.status
+  })));
   const fl=orders.filter(o=>{
     if(src!=="all"&&o.source!==src) return false;
     if(fr&&o.date_std<fr) return false;
     if(to&&o.date_std>to) return false;
-    if(SEL_STATUS&&o.status!==SEL_STATUS) return false;
+    if(SEL&&o.status!==SEL) return false;
     if(q) return o.order_id.toLowerCase().includes(q)||(o.customer&&o.customer.toLowerCase().includes(q));
     return true;
   });
-  // pills
-  const cnt={}; fl.forEach(o=>{cnt[o.status]=(cnt[o.status]||0)+1;});
+  const cnt={};fl.forEach(o=>{cnt[o.status]=(cnt[o.status]||0)+1;});
   const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
-  let ph=""; sorted.forEach(([st,n])=>{
-    const s=statusStyle(st);
-    const esc=st.replace(/'/g,"\\'");
-    ph+=`<span class="sbpill ${SEL_STATUS===st?"sel":""}" onclick="selSt(this,'${esc}')" style="background:${s.bg};color:${s.c};border-color:${s.c}44">${st} <b>${n}</b></span>`;
+  let ph="";sorted.forEach(([st,n])=>{
+    const s=sStyle(st);const esc=st.replace(/'/g,"\\'");
+    ph+=`<span class="sp ${SEL===st?"on":""}" onclick="selSt(this,'${esc}')" style="background:${s.bg};color:${s.c};border-color:${s.c}44">${st} <b>${n}</b></span>`;
   });
-  id("s-pills").innerHTML=ph;
-  id("s-pills-wrap").style.display=sorted.length?"block":"none";
+  g("spills").innerHTML=ph;g("spw").style.display=sorted.length?"block":"none";
   const del=fl.filter(o=>o.status.toLowerCase().includes("deliver")).length;
   const tr=fl.filter(o=>o.status.toLowerCase().includes("freight")||o.status.toLowerCase().includes("courier")).length;
   const can=fl.filter(o=>o.status.toLowerCase().includes("cancel")).length;
-  id("s-tot").textContent=fl.length.toLocaleString();
-  id("s-del").textContent=del.toLocaleString();
-  id("s-tr").textContent=tr.toLocaleString();
-  id("s-can").textContent=can.toLocaleString();
-  id("s-rc").innerHTML=`Showing <b>${fl.length.toLocaleString()}</b> of <b>${orders.length.toLocaleString()}</b> orders`;
+  g("stot").textContent=fl.length.toLocaleString();g("sdel").textContent=del.toLocaleString();
+  g("str2").textContent=tr.toLocaleString();g("scan").textContent=can.toLocaleString();
+  g("src2").innerHTML=`Showing <b>${fl.length.toLocaleString()}</b> of <b>${orders.length.toLocaleString()}</b> orders`;
   let h="";
-  if(!fl.length){h=`<tr><td colspan="8" style="text-align:center;padding:50px;color:var(--text3)">No orders found</td></tr>`;}
+  if(!fl.length){h=`<tr><td colspan="8" style="text-align:center;padding:50px;color:var(--t3)">No orders found</td></tr>`;}
   else fl.forEach((o,i)=>{
-    const s=statusStyle(o.status);
-    h+=`<tr>
-      <td style="color:var(--text3)">${i+1}</td>
-      <td style="font-family:monospace;font-weight:800;color:var(--accent)">${o.order_id}</td>
-      <td style="color:var(--text3)">${o.date||"—"}</td>
+    const s=sStyle(o.status);
+    h+=`<tr><td style="color:var(--t3)">${i+1}</td>
+      <td style="font-family:monospace;font-weight:800;color:var(--blue)">${o.order_id}</td>
+      <td style="color:var(--t3)">${o.date||"—"}</td>
       <td><span class="spill" style="background:${s.bg};color:${s.c}">${o.status}</span></td>
-      <td><span class="spill" style="background:rgba(255,255,255,.05);color:var(--text3)">${o.source}</span></td>
+      <td><span class="spill" style="background:rgba(255,255,255,.05);color:var(--t3)">${o.source}</span></td>
       <td>${o.customer||"—"}</td>
-      <td style="color:var(--text3)">${o.country||"—"}</td>
-      <td style="color:var(--text3)">${o.weight||"—"} kg</td>
-    </tr>`;
+      <td style="color:var(--t3)">${o.country||"—"}</td>
+      <td style="color:var(--t3)">${o.weight||"—"} kg</td></tr>`;
   });
-  id("s-tbody").innerHTML=h;
+  g("stb").innerHTML=h;
 }
-
-function selSt(pill, st){
-  SEL_STATUS = SEL_STATUS===st ? null : st;
-  renderStatus();
-}
+function selSt(pill,st){SEL=SEL===st?null:st;rStatus();}
 
 // ============================================================
-// SUMMARY HELPERS
+// SUMMARY — provider card builder
 // ============================================================
-function getBundlesForWeek(weekMon){
-  const start=new Date(weekMon); start.setHours(0,0,0,0);
-  const end=addDays(start,6); end.setHours(23,59,59,999);
-  return (D.bundles||[]).filter(b=>{const d=new Date(b.date_std);return d>=start&&d<=end;});
+function wkBundles(mon){
+  const s=new Date(mon);s.setHours(0,0,0,0);
+  const e=addD(s,6);e.setHours(23,59,59,999);
+  return (D.bundles||[]).filter(b=>{const d=new Date(b.date_std);return d>=s&&d<=e;});
 }
 
-function buildMatrixCard(src, bundles, weekLabel){
+function buildCard(src,bundles,wkLabel){
   const sb=bundles.filter(b=>b.source===src);
   const totO=sb.reduce((a,b)=>a+b.orders.length,0);
   const totB=sb.length;
-  const totW=sb.reduce((a,b)=>a+b.weight_kg,0);
-  // regionMap[region][dayIdx 0-6] = {o,bx,w,lt,ge,list}
+  const totW=sb.reduce((a,b)=>a+(b.weight_kg||0),0);
+  // compute prev week approx for badge
   const rm={};
   sb.forEach(b=>{
-    const rg=b.region||"EU";
-    const d=new Date(b.date_std);
+    const rg=b.region||"EU"; const d=new Date(b.date_std);
     const di=d.getDay()===0?6:d.getDay()-1;
-    if(!rm[rg]) rm[rg]={};
-    if(!rm[rg][di]) rm[rg][di]={o:0,bx:0,w:0,lt:0,ge:0,list:[]};
-    rm[rg][di].o+=b.orders.length; rm[rg][di].bx+=1;
-    rm[rg][di].w+=b.weight_kg; rm[rg][di].lt+=b.lt20||0; rm[rg][di].ge+=b.ge20||0;
+    if(!rm[rg])rm[rg]={};
+    if(!rm[rg][di])rm[rg][di]={o:0,bx:0,w:0,lt:0,ge:0,list:[]};
+    rm[rg][di].o+=b.orders.length;rm[rg][di].bx+=1;
+    rm[rg][di].w+=b.weight_kg||0;
+    rm[rg][di].lt+=(b.weight_kg||0)<20?1:0;
+    rm[rg][di].ge+=(b.weight_kg||0)>=20?1:0;
     b.orders.forEach(o=>rm[rg][di].list.push({...o,date:b.date_std}));
   });
-  const regions=Object.keys(rm).sort();
-  const dt=[0,1,2,3,4,5,6].map(()=>({o:0,bx:0,w:0,lt:0,ge:0}));
-  regions.forEach(rg=>[0,1,2,3,4,5,6].forEach(di=>{
+  const regs=Object.keys(rm).sort();
+  const dt=Array.from({length:7},()=>({o:0,bx:0,w:0,lt:0,ge:0}));
+  regs.forEach(rg=>[0,1,2,3,4,5,6].forEach(di=>{
     if(rm[rg][di]){dt[di].o+=rm[rg][di].o;dt[di].bx+=rm[rg][di].bx;dt[di].w+=rm[rg][di].w;dt[di].lt+=rm[rg][di].lt;dt[di].ge+=rm[rg][di].ge;}
   }));
-  const uid=src.replace(/\s/g,"_")+"_"+weekLabel.replace(/\s/g,"_");
-  window["RM_"+uid]=rm;
+  const uid=(src+"_"+wkLabel).replace(/[\s\/\-]/g,"_");
+  window["RM_"+uid]=rm; window["RM_"+uid+"_dt"]=dt;
+  window["RM_"+uid+"_all"]=sb; // all bundles for this src+week
 
-  function cel(v,cls,clickable,rg,di){
-    if(!v||v===0) return `<td class="dash">-</td>`;
-    const display=Number.isInteger(v)?v:v.toFixed(1);
-    if(clickable&&rg!=null) return `<td class="${cls} clk" onclick="showOrd('${uid}','${rg}',${di})">${display}</td>`;
-    return `<td class="${cls}">${display}</td>`;
+  function dCell(v,cls,rg,di){
+    if(!v) return `<td class="dash">-</td>`;
+    const disp=Number.isInteger(v)?v:v.toFixed(1);
+    if(rg!=null) return `<td class="${cls} clk" onclick="showOrd('${uid}','${rg}',${di})">${disp}</td>`;
+    return `<td class="${cls}">${disp}</td>`;
   }
 
   let rows="";
-  regions.forEach(rg=>{
+  regs.forEach(rg=>{
     rows+=`<tr><td class="rc">${rg}</td>`;
     [0,1,2,3,4,5,6].forEach(di=>{
-      const v=rm[rg][di]; const sep=di>0?"dsep":"";
+      const v=rm[rg][di];const sep=di>0?"ds":"";
       if(!v){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}
       else{rows+=`<td class="vo ${sep} clk" onclick="showOrd('${uid}','${rg}',${di})">${v.o}</td><td class="vb">${v.bx}</td><td class="vw">${v.w.toFixed(1)}</td><td class="vl">${v.lt}</td><td class="vg">${v.ge}</td>`;}
     });
     rows+="</tr>";
   });
-  rows+=`<tr class="tr-tot"><td class="rc">TOTAL</td>`;
+  // TOTAL ROW — all clickable
+  rows+=`<tr class="ttr"><td class="rc">TOTAL</td>`;
   dt.forEach((t,di)=>{
-    const sep=di>0?"dsep":"";
+    const sep=di>0?"ds":"";
     if(!t.o){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}
-    else{rows+=`<td class="vo ${sep}">${t.o}</td><td class="vb">${t.bx}</td><td class="vw">${t.w.toFixed(1)}</td><td class="vl">${t.lt}</td><td class="vg">${t.ge}</td>`;}
+    else{rows+=`<td class="vo ${sep} clk" onclick="showOrdDay('${uid}',${di})">${t.o}</td><td class="vb clk" onclick="showOrdDay('${uid}',${di})">${t.bx}</td><td class="vw clk" onclick="showOrdDay('${uid}',${di})">${t.w.toFixed(1)}</td><td class="vl">${t.lt}</td><td class="vg">${t.ge}</td>`;}
   });
   rows+="</tr>";
 
-  return `
-  <div class="sum-card">
-    <div class="sum-hdr">
-      <div>
-        <div class="sum-title">${src} <span style="color:var(--yellow);font-size:13px">★★★★☆</span></div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">${weekLabel}</div>
+  const stars=starsFor(4);
+  const totWDisp=totW<1000?totW.toFixed(1)+" kg":(totW/1000).toFixed(2)+" T";
+  return `<div class="pcard">
+    <div class="phdr">
+      <div class="phdr-left">
+        <div class="pname-row">
+          <div class="pname">${src}</div>
+          <div class="stars">${stars}</div>
+        </div>
+        <div class="pname-sub">${wkLabel}</div>
       </div>
-      <div class="sum-totals">
-        <div class="tot"><div class="tot-v" style="color:var(--blue)">${totO.toLocaleString()}</div><div class="tot-l">ORDERS</div></div>
-        <div class="tot"><div class="tot-v" style="color:var(--green)">${totB.toLocaleString()}</div><div class="tot-l">BOXES</div></div>
-        <div class="tot"><div class="tot-v" style="color:var(--yellow)">${totW.toFixed(1)} kg</div><div class="tot-l">WEIGHT</div></div>
-        <button class="csvbtn" onclick="doCSV('${uid}','${src}','${weekLabel}')">📋 CSV</button>
+      <div class="pstats">
+        <div class="pstat" onclick="showAllOrd('${uid}','O')">
+          <div class="pstat-v" style="color:var(--blue)">${totO.toLocaleString()}</div>
+          <div class="pstat-l">ORDERS</div>
+        </div>
+        <div class="pstat" onclick="showAllOrd('${uid}','B')">
+          <div class="pstat-v" style="color:var(--green)">${totB.toLocaleString()}</div>
+          <div class="pstat-l">BOXES</div>
+        </div>
+        <div class="pstat" onclick="showAllOrd('${uid}','W')">
+          <div class="pstat-v" style="color:var(--yellow)">${totWDisp}</div>
+          <div class="pstat-l">WEIGHT</div>
+        </div>
+        <button class="csvbtn" onclick="doCSV('${uid}','${src}','${wkLabel}')">📋 CSV</button>
       </div>
     </div>
-    <div class="tbl-wrap">
-      <table class="mx">
-        <thead>
-          <tr>
-            <th class="rh" rowspan="2">REGION</th>
-            ${DAYS.map((d,i)=>`<th class="dh ${i>0?"dsep":""}" colspan="5">${d}${FLT_DAYS.includes(i)?" ✈️":""}</th>`).join("")}
-          </tr>
-          <tr>${DAYS.map((_,i)=>`<td class="sh ${i>0?"dsep":""}">O</td><td class="sh">B</td><td class="sh">W</td><td class="sh">&lt;20</td><td class="sh">20+</td>`).join("")}</tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
+    <div class="tw2"><table class="mx">
+      <thead>
+        <tr>
+          <th class="rh" rowspan="2">REGION</th>
+          ${DAYS.map((d,i)=>`<th class="dh ${i>0?"ds":""}" colspan="5">${d}${FLT.includes(i)?" ✈️":""}</th>`).join("")}
+        </tr>
+        <tr>${DAYS.map((_,i)=>`<td class="sh ${i>0?"ds":""}">O</td><td class="sh">B</td><td class="sh">W</td><td class="sh">&lt;20</td><td class="sh">20+</td>`).join("")}</tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>
   </div>`;
 }
 
 // ============================================================
-// RENDER SUMMARY (1 week)
+// RENDER SUMMARY
 // ============================================================
-function setWeek(offset, btn){
-  document.querySelectorAll("#pane-summary .qb").forEach(b=>b.classList.remove("active"));
-  if(btn) btn.classList.add("active");
-  const mon=getMonday(new Date()); mon.setDate(mon.getDate()+offset*7);
-  id("wk-start").value=fi(mon);
+function setWk(offset,btn){
+  document.querySelectorAll("#pane-summary .qb").forEach(b=>b.classList.remove("on"));
+  if(btn)btn.classList.add("on");
+  const mon=gMon(new Date());mon.setDate(mon.getDate()+offset*7);g("ws").value=fi(mon);
 }
-
-function renderSummary(){
+function rSummary(){
   if(!D) return;
-  const ws=id("wk-start").value;
-  if(!ws) return;
-  const mon=new Date(ws); mon.setHours(0,0,0,0);
-  const weekLabel=`${fi(mon)} – ${fi(addDays(mon,6))}`;
-  const bundles=getBundlesForWeek(mon);
-  // compute lt20/ge20
-  bundles.forEach(b=>{b.lt20=b.weight_kg<20?1:0;b.ge20=b.weight_kg>=20?1:0;});
+  const ws=g("ws").value; if(!ws) return;
+  const mon=new Date(ws);mon.setHours(0,0,0,0);
+  const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
+  const bundles=wkBundles(mon);
   let html="";
-  if(!bundles.length) html=`<div style="text-align:center;padding:50px;color:var(--text3)">No data for this week.</div>`;
-  else SRCS.forEach(src=>{ html+=buildMatrixCard(src,bundles,weekLabel); });
-  id("sum-cards").innerHTML=html;
+  if(!bundles.length) html=`<div style="text-align:center;padding:60px;color:var(--t3)">No data for selected week.</div>`;
+  else SRCS.forEach(src=>{html+=buildCard(src,bundles,wl);});
+  g("sumCards").innerHTML=html;
 }
 
 // ============================================================
-// RENDER 4-WEEK SUMMARY
+// RENDER 4-WEEK
 // ============================================================
 function setW4Now(btn){
-  document.querySelectorAll("#pane-week4 .qb").forEach(b=>b.classList.remove("active"));
-  if(btn) btn.classList.add("active");
-  id("w4-end").value=fi(getMonday(new Date()));
+  document.querySelectorAll("#pane-week4 .qb").forEach(b=>b.classList.remove("on"));
+  if(btn)btn.classList.add("on");
+  g("w4e").value=fi(gMon(new Date()));
 }
-
-function renderW4(){
+function rW4(){
   if(!D) return;
-  const ws=id("w4-end").value;
-  if(!ws) return;
-  const latestMon=new Date(ws); latestMon.setHours(0,0,0,0);
-  // Build 4 weeks: latestMon, latestMon-7, latestMon-14, latestMon-21
-  const weeks=[];
-  for(let i=0;i<4;i++){
-    const mon=new Date(latestMon); mon.setDate(mon.getDate()-i*7);
-    weeks.push(mon);
-  }
+  const ws=g("w4e").value; if(!ws) return;
+  const lat=new Date(ws);lat.setHours(0,0,0,0);
   let html="";
-  weeks.forEach(mon=>{
-    const weekLabel=`${fi(mon)} – ${fi(addDays(mon,6))}`;
-    const bundles=getBundlesForWeek(mon);
-    bundles.forEach(b=>{b.lt20=b.weight_kg<20?1:0;b.ge20=b.weight_kg>=20?1:0;});
-    html+=`<div style="margin-bottom:16px"><div style="font-size:13px;font-weight:800;color:var(--accent);margin-bottom:14px;padding:8px 12px;background:var(--surface);border-radius:8px;border-left:3px solid var(--accent)">📅 Week: ${weekLabel}</div>`;
-    if(!bundles.length){html+=`<div style="text-align:center;padding:30px;color:var(--text3);background:var(--surface);border-radius:12px;margin-bottom:24px">No data</div>`;}
-    else SRCS.forEach(src=>{ html+=buildMatrixCard(src,bundles,weekLabel); });
+  for(let i=0;i<4;i++){
+    const mon=new Date(lat);mon.setDate(mon.getDate()-i*7);
+    const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
+    const bundles=wkBundles(mon);
+    html+=`<div style="margin-bottom:8px"><div class="wklabel">📅 Week ${4-i}: ${wl}</div>`;
+    if(!bundles.length){html+=`<div style="text-align:center;padding:30px;color:var(--t3);background:var(--s1);border-radius:12px;margin-bottom:20px">No data</div>`;}
+    else SRCS.forEach(src=>{html+=buildCard(src,bundles,wl);});
     html+="</div>";
-  });
-  id("w4-cards").innerHTML=html;
+  }
+  g("w4cards").innerHTML=html;
 }
 
 // ============================================================
-// SHOW ORDERS MODAL (clickable cells)
+// REGIONAL VIEW (QC Center + PK Zone combined)
 // ============================================================
-function showOrd(uid, region, di){
+function setRWk(offset,btn){
+  document.querySelectorAll("#pane-regional .qb").forEach(b=>b.classList.remove("on"));
+  if(btn)btn.classList.add("on");
+  const mon=gMon(new Date());mon.setDate(mon.getDate()+offset*7);g("rws").value=fi(mon);
+}
+function rRegional(){
+  if(!D) return;
+  const ws=g("rws").value; if(!ws) return;
+  const mon=new Date(ws);mon.setHours(0,0,0,0);
+  const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
+  const bundles=wkBundles(mon);
+  // Group: QC Center = ECL QC Center, PK Zone = ECL Zone + GE Zone
+  const groups={"QC Center":["ECL QC Center"],"PK Zone":["ECL Zone","GE Zone"]};
+  let html=`<div class="wklabel">📅 ${wl}</div>`;
+  // Summary bar charts
+  const regTotals={};
+  bundles.forEach(b=>{
+    const rg=b.region||"EU";
+    if(!regTotals[rg])regTotals[rg]={o:0,bx:0,w:0};
+    regTotals[rg].o+=b.orders.length;regTotals[rg].bx+=1;regTotals[rg].w+=(b.weight_kg||0);
+  });
+  const regs=Object.entries(regTotals).sort((a,b)=>b[1].o-a[1].o);
+  const maxO=Math.max(...regs.map(r=>r[1].o),1);
+  const barCols=["var(--blue)","var(--green)","var(--yellow)","var(--purple)","var(--cyan)","var(--orange)","var(--red)","#80cbc4","#ce93d8","#f48fb1","#ffe082","#a5d6a7"];
+  let barHtml="";
+  regs.slice(0,12).forEach(([rg,v],i)=>{
+    const pct=(v.o/maxO*100).toFixed(1);
+    barHtml+=`<div class="bar-row">
+      <div class="bar-label">${rg}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${barCols[i%barCols.length]}"></div></div>
+      <div class="bar-val" style="color:${barCols[i%barCols.length]}">${v.o}</div>
+    </div>`;
+  });
+  html+=`<div class="reg-grid">
+    <div class="mini-card">
+      <div class="mini-title"><div class="dot" style="background:var(--blue)"></div>Orders by Region (This Week)</div>
+      ${barHtml||'<div style="color:var(--t3)">No data</div>'}
+    </div>
+    <div class="mini-card">
+      <div class="mini-title"><div class="dot" style="background:var(--yellow)"></div>Week Stats</div>
+      ${buildWeekStats(bundles)}
+    </div>
+  </div>`;
+  // Provider cards
+  Object.entries(groups).forEach(([gname,srcs])=>{
+    const gb=bundles.filter(b=>srcs.includes(b.source));
+    html+=buildRegCard(gname,gb,wl);
+  });
+  g("regCards").innerHTML=html;
+}
+
+function buildWeekStats(bundles){
+  const totO=bundles.reduce((a,b)=>a+b.orders.length,0);
+  const totB=bundles.length;
+  const totW=bundles.reduce((a,b)=>a+(b.weight_kg||0),0);
+  const lt=bundles.filter(b=>(b.weight_kg||0)<20).length;
+  const ge=bundles.filter(b=>(b.weight_kg||0)>=20).length;
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center">
+      <div style="font-size:28px;font-weight:900;color:var(--blue)">${totO.toLocaleString()}</div>
+      <div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700">Total Orders</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center">
+      <div style="font-size:28px;font-weight:900;color:var(--green)">${totB.toLocaleString()}</div>
+      <div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700">Total Boxes</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center">
+      <div style="font-size:24px;font-weight:900;color:var(--yellow)">${totW.toFixed(1)} kg</div>
+      <div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700">Total Weight</div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;text-align:center">
+      <div style="font-size:20px;font-weight:900"><span style="color:var(--purple)">${lt}</span> / <span style="color:var(--red)">${ge}</span></div>
+      <div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700">&lt;20 kg / 20+ kg</div>
+    </div>
+  </div>`;
+}
+
+function buildRegCard(gname,bundles,wl){
+  const uid=(gname+"_"+wl).replace(/[\s\/\-]/g,"_");
+  const totO=bundles.reduce((a,b)=>a+b.orders.length,0);
+  const totB=bundles.length;
+  const totW=bundles.reduce((a,b)=>a+(b.weight_kg||0),0);
+  const rm={};
+  bundles.forEach(b=>{
+    const rg=b.region||"EU";const d=new Date(b.date_std);
+    const di=d.getDay()===0?6:d.getDay()-1;
+    if(!rm[rg])rm[rg]={};
+    if(!rm[rg][di])rm[rg][di]={o:0,bx:0,w:0,lt:0,ge:0,list:[]};
+    rm[rg][di].o+=b.orders.length;rm[rg][di].bx+=1;rm[rg][di].w+=b.weight_kg||0;
+    rm[rg][di].lt+=(b.weight_kg||0)<20?1:0;rm[rg][di].ge+=(b.weight_kg||0)>=20?1:0;
+    b.orders.forEach(o=>rm[rg][di].list.push({...o,date:b.date_std}));
+  });
+  window["RM_"+uid]=rm;
+  window["RM_"+uid+"_all"]=bundles;
+  const regs=Object.keys(rm).sort();
+  const dt=Array.from({length:7},()=>({o:0,bx:0,w:0,lt:0,ge:0}));
+  regs.forEach(rg=>[0,1,2,3,4,5,6].forEach(di=>{
+    if(rm[rg][di]){dt[di].o+=rm[rg][di].o;dt[di].bx+=rm[rg][di].bx;dt[di].w+=rm[rg][di].w;dt[di].lt+=rm[rg][di].lt;dt[di].ge+=rm[rg][di].ge;}
+  }));
+  let rows="";
+  regs.forEach(rg=>{
+    rows+=`<tr><td class="rc">${rg}</td>`;
+    [0,1,2,3,4,5,6].forEach(di=>{
+      const v=rm[rg][di];const sep=di>0?"ds":"";
+      if(!v){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}
+      else{rows+=`<td class="vo ${sep} clk" onclick="showOrd('${uid}','${rg}',${di})">${v.o}</td><td class="vb">${v.bx}</td><td class="vw">${v.w.toFixed(1)}</td><td class="vl">${v.lt}</td><td class="vg">${v.ge}</td>`;}
+    });
+    rows+="</tr>";
+  });
+  rows+=`<tr class="ttr"><td class="rc">TOTAL</td>`;
+  dt.forEach((t,di)=>{
+    const sep=di>0?"ds":"";
+    if(!t.o){rows+=`<td class="dash ${sep}">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td><td class="dash">-</td>`;}
+    else{rows+=`<td class="vo ${sep} clk" onclick="showOrdDay('${uid}',${di})">${t.o}</td><td class="vb clk" onclick="showOrdDay('${uid}',${di})">${t.bx}</td><td class="vw clk" onclick="showOrdDay('${uid}',${di})">${t.w.toFixed(1)}</td><td class="vl">${t.lt}</td><td class="vg">${t.ge}</td>`;}
+  });
+  rows+="</tr>";
+  const totWDisp=totW<1000?totW.toFixed(1)+" kg":(totW/1000).toFixed(2)+" T";
+  const nameCol=gname==="QC Center"?"var(--green)":"#7986cb";
+  return `<div class="pcard">
+    <div class="phdr">
+      <div class="phdr-left">
+        <div class="pname-row">
+          <div class="pname" style="color:${nameCol}">${gname}</div>
+          <div class="stars">${starsFor(4)}</div>
+          ${gname==="PK Zone"?'<div class="pkbadge">👑 Region King</div>':""}
+        </div>
+        <div class="pname-sub">${wl}</div>
+      </div>
+      <div class="pstats">
+        <div class="pstat" onclick="showAllOrd('${uid}','O')">
+          <div class="pstat-v" style="color:var(--blue)">${totO.toLocaleString()}</div>
+          <div class="pstat-l">ORDERS</div>
+        </div>
+        <div class="pstat" onclick="showAllOrd('${uid}','B')">
+          <div class="pstat-v" style="color:var(--green)">${totB.toLocaleString()}</div>
+          <div class="pstat-l">BOXES</div>
+        </div>
+        <div class="pstat" onclick="showAllOrd('${uid}','W')">
+          <div class="pstat-v" style="color:var(--yellow)">${totWDisp}</div>
+          <div class="pstat-l">WEIGHT</div>
+        </div>
+        <button class="csvbtn" onclick="doCSV('${uid}','${gname}','${wl}')">📋 CSV</button>
+      </div>
+    </div>
+    <div class="tw2"><table class="mx">
+      <thead>
+        <tr>
+          <th class="rh" rowspan="2">REGION</th>
+          ${DAYS.map((d,i)=>`<th class="dh ${i>0?"ds":""}" colspan="5">${d}${FLT.includes(i)?" ✈️":""}</th>`).join("")}
+        </tr>
+        <tr>${DAYS.map((_,i)=>`<td class="sh ${i>0?"ds":""}">O</td><td class="sh">B</td><td class="sh">W</td><td class="sh">&lt;20</td><td class="sh">20+</td>`).join("")}</tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
+// ============================================================
+// SHOW ORDERS MODAL
+// ============================================================
+function showOrd(uid,region,di){
   const rm=window["RM_"+uid];
   if(!rm||!rm[region]||!rm[region][di]) return;
   const list=rm[region][di].list||[];
+  g("oTit").textContent=`${region} — ${DAYS[di]} (${list.length} orders)`;
+  showOrdModal(list);
+}
+function showOrdDay(uid,di){
+  const rm=window["RM_"+uid];
+  if(!rm) return;
+  const list=[];
+  Object.values(rm).forEach(rg=>{if(rg[di])list.push(...rg[di].list);});
+  g("oTit").textContent=`${DAYS[di]} — All Regions (${list.length} orders)`;
+  showOrdModal(list);
+}
+function showAllOrd(uid,type){
+  const all=window["RM_"+uid+"_all"]||[];
+  const list=[];
+  all.forEach(b=>b.orders.forEach(o=>list.push({...o,date:b.date_std})));
+  g("oTit").textContent=`All Orders — ${type} (${list.length})`;
+  showOrdModal(list);
+}
+function showOrdModal(list){
   if(!list.length){alert("No orders.");return;}
-  id("oTitle").textContent=`${region} — ${DAYS[di]} (${list.length} orders)`;
-  let h=`<div class="tbl-wrap"><table class="main-tbl"><thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Weight (kg)</th><th>Status</th></tr></thead><tbody>`;
+  let h=`<div class="tw"><table class="mt"><thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Weight</th><th>Status</th></tr></thead><tbody>`;
   list.forEach((o,i)=>{
-    const s=statusStyle(o.status||"—");
-    h+=`<tr><td style="color:var(--text3)">${i+1}</td><td style="font-family:monospace;font-weight:700;color:var(--accent)">${o.order_id}</td><td style="color:var(--text3)">${o.date||"—"}</td><td style="color:var(--yellow)">${o.weight||"—"}</td><td><span class="spill" style="background:${s.bg};color:${s.c}">${o.status||"—"}</span></td></tr>`;
+    const s=sStyle(o.status||"—");
+    h+=`<tr><td style="color:var(--t3)">${i+1}</td>
+      <td style="font-family:monospace;font-weight:800;color:var(--blue)">${o.order_id}</td>
+      <td style="color:var(--t3)">${o.date||"—"}</td>
+      <td style="color:var(--yellow)">${o.weight||"—"} kg</td>
+      <td><span class="spill" style="background:${s.bg};color:${s.c}">${o.status||"—"}</span></td></tr>`;
   });
   h+="</tbody></table></div>";
-  id("oBody").innerHTML=h;
-  id("oModal").classList.add("open");
+  g("oBody").innerHTML=h;
+  g("oMov").classList.add("open");
 }
 
 // ============================================================
 // CSV EXPORT
 // ============================================================
-function doCSV(uid, src, week){
-  const rm=window["RM_"+uid];
-  if(!rm) return;
+function doCSV(uid,src,week){
+  const rm=window["RM_"+uid];if(!rm)return;
   let rows=[["Source","Week","Region","Day","Orders","Boxes","Weight_kg","LT20","GE20"]];
   Object.keys(rm).forEach(rg=>{
     [0,1,2,3,4,5,6].forEach(di=>{
       const v=rm[rg][di];
-      if(v) rows.push([src,week,rg,DAYS[di],v.o,v.bx,v.w.toFixed(1),v.lt,v.ge]);
+      if(v)rows.push([src,week,rg,DAYS[di],v.o,v.bx,v.w.toFixed(1),v.lt,v.ge]);
     });
   });
   const csv=rows.map(r=>r.join(",")).join("\n");
-  const a=document.createElement("a");
-  a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);
-  a.download=`${src.replace(/\s/g,"_")}_${week.replace(/\s/g,"_")}.csv`;
-  a.click();
+  const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);
+  a.download=`${src.replace(/\s/g,"_")}_${week.replace(/[\s\/\-]/g,"_")}.csv`;a.click();
 }
 
 // ============================================================
 // JOURNEY MODAL
 // ============================================================
-async function openJourney(oid){
-  id("jModal").classList.add("open");
-  id("mBody").innerHTML="<div class='mloader'></div><p style='text-align:center;color:var(--text3);font-size:12px;margin-top:8px'>Fetching journey...</p>";
+async function openJ(oid){
+  g("jMov").classList.add("open");
+  g("jBody").innerHTML="<div class='mld'></div><p style='text-align:center;color:var(--t3);font-size:12px;margin-top:8px'>Fetching journey...</p>";
   try{
     const r=await fetch("/api/nexus/order_journey/"+encodeURIComponent(oid));
     const d=await r.json();
-    if(!d.success){id("mBody").innerHTML=`<div style="text-align:center;padding:30px;color:var(--text3)">${d.message}</div>`;return;}
-    const tl=d.timeline, km=d.key_metrics, steps=d.step_metrics||[];
-    function mc(v){if(!v||v==="N/A")return"na";const n=parseFloat(v);if(isNaN(n))return"";if(n<=1)return"";if(n<=3)return"warn";return"danger";}
+    if(!d.success){g("jBody").innerHTML=`<div style="text-align:center;padding:30px;color:var(--t3)">${d.message}</div>`;return;}
+    const tl=d.timeline,km=d.key_metrics,steps=d.step_metrics||[];
+    function mc(v){if(!v||v==="N/A")return"n";const n=parseFloat(v);if(isNaN(n))return"";if(n<=1)return"";if(n<=3)return"w";return"d";}
     const cb=d.is_cancelled?`<div class="cbanner">⚠️ CANCELLED — ${tl.cancelled_at||"N/A"}</div>`:"";
     function ti(lb,v,tp){
-      let dc=v?"done":"pending",vc=v?"":"pv";
-      if(tp==="c"){dc=v?"cancelled":"pending";vc=v?"cv":"pv";}
+      let dc=v?"done":"pend",vc=v?"":"pv";
+      if(tp==="c"){dc=v?"can":"pend";vc=v?"cv":"pv";}
       return`<div class="tli"><div class="tld ${dc}"></div><div class="tll">${lb}</div><div class="tlv ${vc}">${v||"— Not yet"}</div></div>`;
     }
     let sh="";
-    if(steps.length){sh="<div class='shd'>⏱️ Step Durations</div><div class='sg'>";
-      steps.forEach(s=>{sh+=`<div class="sc"><div class="sclb">${s.label}</div><div class="scv ${s.duration?"":"miss"}">${s.duration||"—"}</div></div>`;});
+    if(steps.length){sh="<div class='shd'>⏱️ Step Durations</div><div class='stp-g'>";
+      steps.forEach(s=>{sh+=`<div class="stp"><div class="stpl">${s.label}</div><div class="stpv ${s.duration?"":"" }" style="color:${s.duration?"var(--t1)":"var(--t3)"}">${s.duration||"—"}</div></div>`;});
       sh+="</div>";}
-    id("mBody").innerHTML=`
+    g("jBody").innerHTML=`
       <div style="font-size:16px;font-weight:800;margin-bottom:3px">📦 Order Journey</div>
-      <div style="font-family:monospace;color:var(--green);margin-bottom:14px;font-size:13px">${d.order_id}</div>
+      <div style="font-family:monospace;color:var(--green);margin-bottom:14px">${d.order_id}</div>
       ${cb}
       <div class="shd">⭐ Key Metrics</div>
       <div class="mg">
@@ -5427,33 +5586,13 @@ async function openJourney(oid){
         ${ti("📬 Delivered",tl.delivered_at,"n")}
         ${tl.cancelled_at?ti("❌ Cancelled",tl.cancelled_at,"c"):""}
       </div>`;
-  }catch(e){id("mBody").innerHTML=`<div style="color:var(--red)">Error: ${e.message}</div>`;}
+  }catch(e){g("jBody").innerHTML=`<div style="color:var(--red)">Error: ${e.message}</div>`;}
 }
-function closeMod(){id("jModal").classList.remove("open");}
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){closeMod();id("oModal").classList.remove("open");}});
 
+function cMod(id){document.getElementById(id).classList.remove("open");}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){cMod("jMov");cMod("oMov");}});
 window.onload=init;
 </script></body></html>"""
-
-
-# ---------- Floating Button on main dashboard ----------
-@app.after_request
-def add_bundling_floating_btn(response):
-    if request.path == "/" and response.content_type and "text/html" in response.content_type:
-        user_val = session.get("username") or session.get("user") or session.get("role")
-        if user_val and str(user_val).lower() == "admin":
-            html = response.get_data(as_text=True)
-            btn = '''
-            <div style="position:fixed;bottom:28px;right:28px;display:flex;flex-direction:column;gap:11px;z-index:99999;">
-                <a href="/bundling" style="background:#10B981;color:#000;padding:11px 22px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 8px 18px rgba(16,185,129,.35);">📦 Bundling Intel</a>
-                <a href="/nexus" style="background:#fff;color:#000;padding:11px 22px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 8px 18px rgba(0,0,0,.5);">🛰️ TID Hub</a>
-            </div>'''
-            if "</body>" in html:
-                response.set_data(html.replace("</body>", btn + "</body>"))
-    return response
-# ==============================================================================
-# END BUNDLING MODULE
-# ==============================================================================
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
