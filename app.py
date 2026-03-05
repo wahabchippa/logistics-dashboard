@@ -4431,7 +4431,7 @@ def fmt_journey_date(dt):
     return dt.strftime('%d %b %Y, %H:%M')
 
 # ==============================================================================
-# DATA FETCHERS (UPDATED: SEQUENTIAL + RETRIES)
+# DATA FETCHERS (SEQUENTIAL + RETRIES)
 # ==============================================================================
 
 def fetch_rates_sheet(ctx):
@@ -4806,7 +4806,7 @@ def bundling_status_view():
     return render_template_string(STATUS_INTELLIGENCE_HTML)
 
 # ==============================================================================
-# BUNDLING HTML
+# BUNDLING HTML (UPDATED DISPLAY)
 # ==============================================================================
 
 BUNDLING_HTML = '''<!DOCTYPE html>
@@ -4845,11 +4845,12 @@ BUNDLING_HTML = '''<!DOCTYPE html>
         td{padding:15px;border-bottom:1px solid var(--border);vertical-align:top;}
         tr:hover td{background:#111;}
         .bundle-box{background:#050505;border:1px solid #1A1A1A;border-radius:8px;padding:8px 12px;}
-        .bundle-item{display:grid;grid-template-columns:150px 1fr 60px;gap:10px;padding:8px 0;border-bottom:1px dashed #222;align-items:center;}
+        .bundle-item{display:grid;grid-template-columns:150px 1fr 60px;gap:10px;padding:8px 0;border-bottom:1px dashed #222;align-items:start;}
         .bundle-item:last-child{border-bottom:none;padding-bottom:0;}
         .order-link{color:#10B981;font-weight:800;cursor:pointer;font-family:monospace;font-size:13px;background:rgba(16,185,129,0.08);padding:3px 7px;border-radius:5px;border:1px solid rgba(16,185,129,0.2);display:inline-flex;align-items:center;gap:4px;transition:all 0.2s;}
         .order-link:hover{background:rgba(16,185,129,0.18);border-color:rgba(16,185,129,0.5);transform:translateY(-1px);}
-        .status-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-top:3px;white-space:nowrap;}
+        .status-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-left:5px;white-space:nowrap;}
+        .title-preview{font-size:10px;color:#666;margin-top:2px;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
         .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;backdrop-filter:blur(4px);justify-content:center;align-items:center;}
         .modal-overlay.open{display:flex;}
         .modal{background:#0A0A0A;border:1px solid #2A2A2A;border-radius:16px;padding:32px;width:100%;max-width:580px;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 30px 60px rgba(0,0,0,0.8);}
@@ -4887,7 +4888,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
 <body>
 <div class="header">
     <div>
-        <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-1px;">📦 Bundle Order Consolidation </h1>
+        <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-1px;">📦 Order Consolidation AI</h1>
         <p style="color:#888;margin-top:5px;">Advanced Box & Item level Breakdown (Live Cost Analytics)</p>
     </div>
     <div style="display:flex;gap:15px;">
@@ -4938,7 +4939,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
         </div>
     </div>
     <div class="source-card">
-        <div class="source-title">PK ZONE </div>
+        <div class="source-title">PK Zone (ECL & GE Zone)</div>
         <div class="source-stats">
             <div class="stat-item"><div class="stat-value" id="pk-orders">0</div><div class="stat-label">Orders</div></div>
             <div class="stat-item"><div class="stat-value" id="pk-boxes">0</div><div class="stat-label">Bundles</div></div>
@@ -5044,16 +5045,20 @@ function renderTable(bundles) {
         h = '<tr><td colspan="4" style="text-align:center;padding:60px;color:#666;font-weight:bold;">No Bundled Orders Found.</td></tr>';
     } else {
         bundles.forEach(b => {
-            let items = b.orders.map(o => `
+            let items = b.orders.map(o => {
+                // Truncate title if too long
+                let shortTitle = o.title && o.title.length > 40 ? o.title.substring(0,40)+'...' : (o.title || '');
+                return `
                 <div class="bundle-item">
                     <div>
                         <span class="order-link" onclick="openJourney('${o.order_id}')">${o.order_id} <span style="font-size:10px">▼</span></span>
                         ${statusPill(o.status)}
-                        <br><span style="font-size:10px;color:#666;">Wt: ${o.weight} kg</span>
+                        <div style="font-size:10px;color:#666;margin-top:2px;">Wt: ${o.weight} kg</div>
                     </div>
-                    <div style="font-size:11px;color:#888;">${o.title && o.title.length>40?o.title.substring(0,40)+'...':o.title||''}</div>
-                    <div style="font-weight:800;text-align:right;">${o.item_count}</div>
-                </div>`).join('');
+                    <div class="title-preview">${shortTitle}</div>
+                    <div style="font-weight:800;text-align:right;">${o.item_count} pieces</div>
+                </div>`;
+            }).join('');
             let savStr   = (b.savings_gbp||0).toFixed(2);
             let actualWt = b.bundle_weight_kg||0;
             let billedWt = Math.max(Math.ceil(actualWt),1);
