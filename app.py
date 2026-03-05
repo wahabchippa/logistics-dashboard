@@ -4343,7 +4343,7 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - WITH REGION SUMMARY TABS
+# 📦 BUNDLING INTELLIGENCE HUB - WITH REGION SUMMARY TABS (FULL WORKING CODE)
 # ==============================================================================
 import urllib.request
 import csv
@@ -4498,24 +4498,24 @@ def fetch_journey_sheet_data():
         # Column indices based on your description:
         # E (order_id) = 4, CS (region) = 70 (CS = C=3, S=19 → (3-1)*26 + (19-1) = 52+18=70)
         for row in data[1:]:
-            p = row + [''] * 100  # pad to at least 71 columns
-            fleek_id = str(p[4]).strip()  # Col E
-            region   = str(p[70]).strip() # Col CS
+            # Pad row to at least 71 columns to safely access index 70
+            p = row + [''] * 100
+            fleek_id = str(p[4]).strip()
             if not fleek_id or fleek_id.lower() in ['', 'nan', 'fleek_id', 'fleek id']:
                 continue
-            # Also store other journey timestamps as before
+            region = str(p[70]).strip() if len(p) > 70 else ''
             journey_map[fleek_id.upper()] = {
-                'created_at':      str(p[0]).strip(),   # A
-                'accepted_at':     str(p[8]).strip(),   # I
-                'pickup_ready_at': str(p[9]).strip(),   # J
-                'cancelled_at':    str(p[12]).strip(),  # M
-                'qc_pending_at':   str(p[13]).strip(),  # N
-                'qc_approved_at':  str(p[14]).strip(),  # O
-                'handedover_at':   str(p[30]).strip(),  # AE
-                'freight_at':      str(p[31]).strip(),  # AF
-                'courier_at':      str(p[34]).strip(),  # AI
-                'delivered_at':    str(p[36]).strip(),  # AK
-                'region':          region                # CS
+                'created_at':      str(p[0]).strip() if len(p) > 0 else '',
+                'accepted_at':     str(p[8]).strip() if len(p) > 8 else '',
+                'pickup_ready_at': str(p[9]).strip() if len(p) > 9 else '',
+                'cancelled_at':    str(p[12]).strip() if len(p) > 12 else '',
+                'qc_pending_at':   str(p[13]).strip() if len(p) > 13 else '',
+                'qc_approved_at':  str(p[14]).strip() if len(p) > 14 else '',
+                'handedover_at':   str(p[30]).strip() if len(p) > 30 else '',
+                'freight_at':      str(p[31]).strip() if len(p) > 31 else '',
+                'courier_at':      str(p[34]).strip() if len(p) > 34 else '',
+                'delivered_at':    str(p[36]).strip() if len(p) > 36 else '',
+                'region':          region
             }
         _journey_cache['data'] = journey_map
         _journey_cache['time'] = now
@@ -5088,12 +5088,843 @@ def region_summary_view():
     return render_template_string(REGION_SUMMARY_HTML)
 
 # ==============================================================================
-# HTML TEMPLATES (only the new ones are shown; existing ones are unchanged)
+# HTML TEMPLATES (ALL INCLUDED)
 # ==============================================================================
 
-# ... (existing BUNDLING_HTML, STATUS_INTELLIGENCE_HTML, SUMMARY_HTML remain as before) ...
+BUNDLING_HTML = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>📦 Bundling Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#10B981;--muted:#71717A;--input-bg:#050505;}
+        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:50px;}
+        .header{margin-bottom:30px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px;}
+        .nav-tabs{display:flex;gap:10px;margin-bottom:30px;flex-wrap:wrap;}
+        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
+        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
+        .nav-tab.active{background:var(--accent);color:#000;border-color:var(--accent);}
+        .filter-box{display:flex;gap:15px;background:var(--card);padding:20px;border-radius:12px;border:1px solid var(--border);margin-bottom:30px;align-items:flex-end;flex-wrap:wrap;}
+        .f-group{display:flex;flex-direction:column;gap:5px;}
+        .f-group label{font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';outline:none;min-width:150px;}
+        .f-input:focus{border-color:var(--accent);}
+        .search-box{flex:1;min-width:250px;}
+        .source-kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-bottom:30px;}
+        .source-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;border-left:3px solid var(--accent);}
+        .source-title{font-size:14px;font-weight:800;margin-bottom:10px;color:var(--accent);}
+        .source-stats{display:flex;justify-content:space-around;text-align:center;}
+        .stat-item{flex:1;}
+        .stat-value{font-size:24px;font-weight:900;line-height:1.2;}
+        .stat-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;}
+        .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:40px;}
+        .kpi-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:25px;border-left:4px solid var(--accent);}
+        .kpi-val{font-size:40px;font-weight:900;letter-spacing:-2px;margin-bottom:5px;}
+        .kpi-lbl{font-size:12px;color:#888;font-weight:700;text-transform:uppercase;}
+        table{width:100%;border-collapse:collapse;background:var(--card);border-radius:16px;border:1px solid var(--border);overflow:hidden;}
+        th{background:#050505;padding:15px;font-size:11px;color:#888;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;}
+        td{padding:15px;border-bottom:1px solid var(--border);vertical-align:top;}
+        tr:hover td{background:#111;}
+        .bundle-box{background:#050505;border:1px solid #1A1A1A;border-radius:8px;padding:8px 12px;}
+        .bundle-item{display:grid;grid-template-columns:150px 1fr 60px;gap:10px;padding:8px 0;border-bottom:1px dashed #222;align-items:start;}
+        .bundle-item:last-child{border-bottom:none;padding-bottom:0;}
+        .order-link{color:#10B981;font-weight:800;cursor:pointer;font-family:monospace;font-size:13px;background:rgba(16,185,129,0.08);padding:3px 7px;border-radius:5px;border:1px solid rgba(16,185,129,0.2);display:inline-flex;align-items:center;gap:4px;transition:all 0.2s;}
+        .order-link:hover{background:rgba(16,185,129,0.18);border-color:rgba(16,185,129,0.5);transform:translateY(-1px);}
+        .status-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-left:5px;white-space:nowrap;}
+        .title-preview{font-size:10px;color:#666;margin-top:2px;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+        .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;backdrop-filter:blur(4px);justify-content:center;align-items:center;}
+        .modal-overlay.open{display:flex;}
+        .modal{background:#0A0A0A;border:1px solid #2A2A2A;border-radius:16px;padding:32px;width:100%;max-width:650px;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 30px 60px rgba(0,0,0,0.8);}
+        .modal-close{position:absolute;top:16px;right:16px;background:#1A1A1A;border:1px solid #333;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;}
+        .modal-close:hover{background:#EF4444;border-color:#EF4444;}
+        .modal-title{font-size:20px;font-weight:800;margin-bottom:4px;}
+        .timeline{position:relative;padding-left:28px;margin-bottom:24px;}
+        .timeline::before{content:'';position:absolute;left:9px;top:0;bottom:0;width:2px;background:linear-gradient(180deg,#10B981,#333);}
+        .tl-item{position:relative;margin-bottom:18px;}
+        .tl-dot{position:absolute;left:-24px;top:3px;width:12px;height:12px;border-radius:50%;border:2px solid #10B981;background:#0A0A0A;}
+        .tl-dot.done{background:#10B981;}
+        .tl-dot.cancelled{background:#EF4444;border-color:#EF4444;}
+        .tl-dot.pending{border-color:#333;}
+        .tl-label{font-size:11px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;}
+        .tl-value{font-size:13px;color:#fff;font-weight:600;margin-top:2px;}
+        .tl-value.pending-val{color:#444;font-style:italic;}
+        .tl-value.cancelled-val{color:#EF4444;font-weight:700;}
+        .metrics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;}
+        .metric-card{background:#111;border:1px solid #1A1A1A;border-radius:10px;padding:14px;text-align:center;}
+        .metric-val{font-size:22px;font-weight:900;color:#10B981;}
+        .metric-val.warn{color:#F59E0B;}
+        .metric-val.danger{color:#EF4444;}
+        .metric-val.na{color:#444;font-size:16px;}
+        .metric-lbl{font-size:10px;color:#666;text-transform:uppercase;font-weight:700;margin-top:4px;line-height:1.3;}
+        .step-metrics-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px;}
+        .step-card{background:#111;border:1px solid #1A1A1A;border-radius:8px;padding:10px;text-align:center;}
+        .step-label{font-size:9px;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:4px;}
+        .step-val{font-size:16px;font-weight:700;color:#fff;}
+        .step-val.missing{color:#444;}
+        .cancelled-banner{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:10px 14px;margin-bottom:16px;color:#EF4444;font-weight:700;font-size:13px;}
+        .section-hd{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#10B981;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #1A1A1A;}
+        .loader{width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:50px auto;}
+        .modal-loader{width:28px;height:28px;border:3px solid #333;border-top-color:#10B981;border-radius:50%;animation:spin 0.8s linear infinite;margin:30px auto;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
+        .btn-apply{background:var(--accent);color:#000;border:none;padding:10px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
+        .btn-apply:hover,.btn-top:hover{opacity:0.8;}
+    </style>
+</head>
+<body>
+<div class="header">
+    <div>
+        <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-1px;">📦 Order Consolidation AI</h1>
+        <p style="color:#888;margin-top:5px;">Advanced Box & Item level Breakdown (Live Cost Analytics)</p>
+    </div>
+    <div style="display:flex;gap:15px;">
+        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
+        <button onclick="loadBundles()" class="btn-top" style="background:#10B981;color:#fff;">🔄 Refresh Data</button>
+    </div>
+</div>
 
-# For brevity, I'm including only the two new templates. In your actual file, keep the existing ones above.
+<div class="nav-tabs">
+    <a href="/bundling" class="nav-tab active">📦 Bundle Intelligence</a>
+    <a href="/bundling/status" class="nav-tab">📡 Status Intelligence</a>
+    <a href="/bundling/summary" class="nav-tab">📅 Summary</a>
+    <a href="/bundling/region_weekly" class="nav-tab">📊 Region Weekly</a>
+    <a href="/bundling/region_summary" class="nav-tab">🌍 Region Summary</a>
+</div>
+
+<div class="filter-box">
+    <div class="f-group search-box">
+        <label>🔍 Search (Order ID or Customer)</label>
+        <input type="text" id="searchInput" class="f-input" placeholder="e.g. 12345 or John Doe">
+    </div>
+    <div class="f-group">
+        <label>📅 From Date</label>
+        <input type="date" id="dateFrom" class="f-input">
+    </div>
+    <div class="f-group">
+        <label>📅 To Date</label>
+        <input type="date" id="dateTo" class="f-input">
+    </div>
+    <div class="f-group">
+        <label>🏷️ Source</label>
+        <select id="sourceSelect" class="f-input">
+            <option value="all">All Sources</option>
+            <option value="ECL QC Center">ECL QC Center</option>
+            <option value="ECL Zone">ECL Zone</option>
+            <option value="GE Zone">GE Zone</option>
+        </select>
+    </div>
+    <div class="f-group">
+        <label>&nbsp;</label>
+        <button class="btn-apply" onclick="applyFilters()">Apply Filters</button>
+    </div>
+</div>
+
+<div class="source-kpi-grid">
+    <div class="source-card">
+        <div class="source-title">ECL QC Center</div>
+        <div class="source-stats">
+            <div class="stat-item"><div class="stat-value" id="qc-orders">0</div><div class="stat-label">Orders</div></div>
+            <div class="stat-item"><div class="stat-value" id="qc-boxes">0</div><div class="stat-label">Bundles</div></div>
+        </div>
+    </div>
+    <div class="source-card">
+        <div class="source-title">PK Zone (ECL & GE Zone)</div>
+        <div class="source-stats">
+            <div class="stat-item"><div class="stat-value" id="pk-orders">0</div><div class="stat-label">Orders</div></div>
+            <div class="stat-item"><div class="stat-value" id="pk-boxes">0</div><div class="stat-label">Bundles</div></div>
+        </div>
+    </div>
+</div>
+
+<div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-val" id="kpi-bundles">0</div><div class="kpi-lbl">Total Bundles Packed</div></div>
+    <div class="kpi-card"><div class="kpi-val" id="kpi-orders">0</div><div class="kpi-lbl">Total Orders Merged</div></div>
+    <div class="kpi-card" style="border-left-color:#F59E0B"><div class="kpi-val" id="kpi-saved" style="color:#F59E0B">0</div><div class="kpi-lbl" style="color:#F59E0B;">🚚 Shipments Saved</div></div>
+    <div class="kpi-card" style="border-left-color:#10B981"><div class="kpi-val" id="kpi-money" style="color:#10B981">£0</div><div class="kpi-lbl" style="color:#10B981;">💰 Total Saved (Est)</div></div>
+</div>
+
+<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888;">AI Calculating Savings & Merging Data...</p></div>
+
+<div id="content" style="display:none;">
+    <table>
+        <thead>
+            <tr>
+                <th>Timeline & Source</th>
+                <th>Client Info</th>
+                <th>Master Box Analytics</th>
+                <th>📦 The Box Breakdown <small style="color:#555;font-size:9px;">(click order for journey)</small></th>
+            </tr>
+        </thead>
+        <tbody id="tb"></tbody>
+    </table>
+</div>
+
+<!-- JOURNEY MODAL -->
+<div class="modal-overlay" id="journeyModal" onclick="closeModal(event)">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModalDirect()">✕</button>
+        <div id="modalBody"><div class="modal-loader"></div></div>
+    </div>
+</div>
+
+<script>
+let allBundles = [];
+
+function statusPill(status) {
+    if (!status || status === '—') return '';
+    const s = status.toLowerCase();
+    let bg='rgba(255,255,255,0.05)', color='#555';
+    if (s.includes('deliver'))  { bg='rgba(16,185,129,0.15)';  color='#10B981'; }
+    else if (s.includes('freight'))  { bg='rgba(99,102,241,0.15)';  color='#818cf8'; }
+    else if (s.includes('courier'))  { bg='rgba(139,92,246,0.15)';  color='#a78bfa'; }
+    else if (s.includes('cancel'))   { bg='rgba(239,68,68,0.15)';   color='#f87171'; }
+    else if (s.includes('qc'))       { bg='rgba(245,158,11,0.15)';  color='#fbbf24'; }
+    else if (s.includes('hand'))     { bg='rgba(59,130,246,0.15)';  color='#60a5fa'; }
+    else if (s.includes('pending'))  { bg='rgba(245,158,11,0.12)';  color='#f59e0b'; }
+    return `<span class="status-pill" style="background:${bg};color:${color}">📡 ${status}</span>`;
+}
+
+async function loadBundles() {
+    document.getElementById('content').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+    try {
+        const r = await fetch('/api/nexus/bundling_data');
+        const d = await r.json();
+        allBundles = d.bundles || [];
+        let s = d.source_stats || {};
+        document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
+        document.getElementById('kpi-orders').innerText  = d.kpi?.total_orders_bundled || 0;
+        document.getElementById('kpi-saved').innerText   = d.kpi?.saved_shipments || 0;
+        let money = d.kpi?.total_savings_gbp || 0;
+        document.getElementById('kpi-money').innerText = '£' + money.toLocaleString(undefined,{minimumFractionDigits:2});
+        document.getElementById('qc-orders').innerText = s['ECL QC Center']?.orders || 0;
+        document.getElementById('qc-boxes').innerText  = s['ECL QC Center']?.boxes  || 0;
+        document.getElementById('pk-orders').innerText = s['PK Zone']?.orders || 0;
+        document.getElementById('pk-boxes').innerText  = s['PK Zone']?.boxes  || 0;
+        applyFilters();
+    } catch(e) {
+        console.error(e);
+        document.getElementById('loading').innerHTML = '<div style="color:#EF4444;">Error loading data. Check console for details.</div>';
+    }
+}
+
+function applyFilters() {
+    const search = document.getElementById('searchInput').value.toLowerCase().trim();
+    const from   = document.getElementById('dateFrom').value;
+    const to     = document.getElementById('dateTo').value;
+    const source = document.getElementById('sourceSelect').value;
+    let filtered = allBundles.filter(b => {
+        if (source !== 'all' && b.source !== source) return false;
+        if (from && b.date_std < from) return false;
+        if (to   && b.date_std > to)   return false;
+        if (search) {
+            const mo = b.orders.some(o => o.order_id.toLowerCase().includes(search));
+            const mc = b.customer && b.customer.toLowerCase().includes(search);
+            return mo || mc;
+        }
+        return true;
+    });
+    renderTable(filtered);
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+}
+
+function renderTable(bundles) {
+    let h = '';
+    if (!bundles.length) {
+        h = '<tr><td colspan="4" style="text-align:center;padding:60px;color:#666;font-weight:bold;">No Bundled Orders Found.</td></tr>';
+    } else {
+        bundles.forEach(b => {
+            let items = b.orders.map(o => {
+                let shortTitle = o.title && o.title.length > 40 ? o.title.substring(0,40)+'...' : (o.title || '');
+                return `
+                <div class="bundle-item">
+                    <div>
+                        <span class="order-link" onclick="openJourney('${o.order_id}')">${o.order_id} <span style="font-size:10px">▼</span></span>
+                        ${statusPill(o.status)}
+                        <div style="font-size:10px;color:#666;margin-top:2px;">Wt: ${o.weight} kg</div>
+                    </div>
+                    <div class="title-preview">${shortTitle}</div>
+                    <div style="font-weight:800;text-align:right;">${o.item_count} pieces</div>
+                </div>`;
+            }).join('');
+            let savStr   = (b.savings_gbp||0).toFixed(2);
+            let actualWt = b.bundle_weight_kg||0;
+            let billedWt = Math.max(Math.ceil(actualWt),1);
+            h += `<tr>
+                <td><b>${b.date||''}</b><br><span style="color:#888;font-size:10px;">${b.source||''}</span></td>
+                <td><b>${b.customer||''}</b><br><span style="color:#666;font-size:11px;">${b.vendor||''}</span><br><span style="color:#666;font-size:11px;">${b.country||''}</span></td>
+                <td>
+                    <div style="background:#111;padding:8px;border-radius:6px;border:1px solid #222;">
+                        <small style="color:#888">TID:</small> <span style="font-family:monospace;font-weight:800;">${b.tid}</span><br>
+                        <small style="color:#888">BOX ID:</small> <b style="color:#10B981">${b.boxes_val}</b>
+                    </div>
+                    <div style="margin-top:8px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);padding:8px;border-radius:6px;">
+                        <div style="font-size:11px;color:#888;display:flex;justify-content:space-between;margin-bottom:4px;"><span>Total Wt:</span><b>${actualWt} kg</b></div>
+                        <div style="font-size:11px;color:#888;display:flex;justify-content:space-between;margin-bottom:4px;"><span>Billed Wt:</span><b>${billedWt} kg</b></div>
+                        <div style="font-size:13px;color:#10B981;display:flex;justify-content:space-between;font-weight:800;"><span>💰 Saved:</span><span>£${savStr}</span></div>
+                    </div>
+                </td>
+                <td><div class="bundle-box">${items}</div></td>
+            </tr>`;
+        });
+    }
+    document.getElementById('tb').innerHTML = h;
+}
+
+async function openJourney(orderId) {
+    document.getElementById('journeyModal').classList.add('open');
+    document.getElementById('modalBody').innerHTML = '<div class="modal-loader"></div><p style="text-align:center;color:#666;font-size:13px;">Fetching order journey...</p>';
+    try {
+        const r = await fetch('/api/nexus/order_journey/' + encodeURIComponent(orderId));
+        const d = await r.json();
+        if (!d.success) {
+            document.getElementById('modalBody').innerHTML = `<div style="text-align:center;padding:30px;"><div style="font-size:40px;margin-bottom:12px;">🔍</div><div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;">Order Not Found</div><div style="font-size:13px;color:#666;">${d.message}</div></div>`;
+            return;
+        }
+        const tl = d.timeline, km = d.key_metrics, steps = d.step_metrics || [];
+        function mColor(val) {
+            if (!val||val==='N/A') return 'na';
+            const n = parseFloat(val);
+            if (isNaN(n)) return '';
+            if (n<=1) return '';
+            if (n<=3) return 'warn';
+            return 'danger';
+        }
+        let cb = d.is_cancelled ? `<div class="cancelled-banner">⚠️ This order was CANCELLED on ${tl.cancelled_at||'N/A'}</div>` : '';
+        function tlItem(label,val,type) {
+            let dc=val?'done':'pending', vc=val?'':'pending-val';
+            if(type==='cancelled'){dc=val?'cancelled':'pending';vc=val?'cancelled-val':'pending-val';}
+            return `<div class="tl-item"><div class="tl-dot ${dc}"></div><div class="tl-label">${label}</div><div class="tl-value ${vc}">${val||'— Not yet'}</div></div>`;
+        }
+        
+        let stepHtml = '';
+        if (steps.length) {
+            stepHtml = '<div class="section-hd">⏱️ Step Durations</div><div class="step-metrics-grid">';
+            steps.forEach(s => {
+                let valClass = s.duration ? '' : 'missing';
+                stepHtml += `<div class="step-card"><div class="step-label">${s.label}</div><div class="step-val ${valClass}">${s.duration || '—'}</div></div>`;
+            });
+            stepHtml += '</div>';
+        }
+
+        document.getElementById('modalBody').innerHTML = `
+            <div class="modal-title">📦 Order Journey</div>
+            <div style="font-family:monospace;color:#10B981;font-size:13px;margin-bottom:20px;">${d.order_id}</div>
+            ${cb}
+            <div class="section-hd">⭐ Key Metrics</div>
+            <div class="metrics-grid">
+                <div class="metric-card"><div class="metric-val ${mColor(km.qc_to_handover)}">${km.qc_to_handover||'N/A'}</div><div class="metric-lbl">QC Approved → Handover</div></div>
+                <div class="metric-card"><div class="metric-val ${mColor(km.handover_to_freight)}">${km.handover_to_freight||'N/A'}</div><div class="metric-lbl">Handover → Freight</div></div>
+                <div class="metric-card"><div class="metric-val ${mColor(km.total_journey)}">${km.total_journey||'N/A'}</div><div class="metric-lbl">Total Journey</div></div>
+            </div>
+            ${stepHtml}
+            <div class="section-hd">🗺️ Full Timeline</div>
+            <div class="timeline">
+                ${tlItem('📋 Order Created',tl.created_at,'normal')}
+                ${tlItem('✅ Accepted',tl.accepted_at,'normal')}
+                ${tlItem('🚚 Pickup Ready',tl.pickup_ready_at,'normal')}
+                ${tlItem('🔍 QC Pending',tl.qc_pending_at,'normal')}
+                ${tlItem('✅ QC Approved',tl.qc_approved_at,'normal')}
+                ${tlItem('🤝 Handed to Logistics Partner',tl.handedover_at,'normal')}
+                ${tlItem('✈️ Freight',tl.freight_at,'normal')}
+                ${tlItem('🚁 Courier Assigned',tl.courier_at,'normal')}
+                ${tlItem('📬 Delivered',tl.delivered_at,'normal')}
+                ${tl.cancelled_at?tlItem('❌ Cancelled',tl.cancelled_at,'cancelled'):''}
+            </div>`;
+    } catch(e) {
+        document.getElementById('modalBody').innerHTML = `<div style="color:#EF4444;text-align:center;padding:30px;">Error: ${e.message}</div>`;
+    }
+}
+function closeModal(e) { if(e.target===document.getElementById('journeyModal')) closeModalDirect(); }
+function closeModalDirect() { document.getElementById('journeyModal').classList.remove('open'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModalDirect(); });
+window.onload = loadBundles;
+document.getElementById('searchInput').addEventListener('keyup',e=>{ if(e.key==='Enter') applyFilters(); });
+</script>
+</body>
+</html>'''
+
+STATUS_INTELLIGENCE_HTML = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>📡 Status Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#6366f1;--muted:#71717A;--input-bg:#050505;}
+        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
+        .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
+        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
+        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
+        .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+        .filter-bar{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:24px;}
+        .filter-row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;}
+        .filter-row:last-child{margin-bottom:0;}
+        .f-group{display:flex;flex-direction:column;gap:5px;}
+        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:7px;font-family:'Inter';outline:none;font-size:13px;}
+        .f-input:focus{border-color:var(--accent);}
+        .f-grow{flex:1;min-width:200px;}
+        .quick-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+        .qbtn{padding:6px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#666;font-size:12px;font-family:'Inter';font-weight:600;cursor:pointer;transition:all 0.2s;}
+        .qbtn:hover{background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.3);color:#818cf8;}
+        .qbtn.active{background:rgba(99,102,241,0.18);border-color:rgba(99,102,241,0.5);color:#818cf8;}
+        .apply-btn{padding:8px 20px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;border-radius:7px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Inter';}
+        .apply-btn:hover{opacity:0.85;}
+        .clear-btn{padding:8px 16px;background:rgba(255,255,255,0.05);border:1px solid #333;border-radius:7px;color:#888;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter';}
+        .clear-btn:hover{background:rgba(239,68,68,0.1);border-color:#ef4444;color:#ef4444;}
+        .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+        .sum-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;border-left:3px solid var(--accent);}
+        .sum-val{font-size:28px;font-weight:900;color:#fff;margin-bottom:2px;}
+        .sum-lbl{font-size:11px;color:#666;text-transform:uppercase;font-weight:700;}
+        .status-breakdown{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:24px;}
+        .sb-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;}
+        .sb-pills{display:flex;flex-wrap:wrap;gap:8px;}
+        .sb-pill{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid transparent;transition:all 0.2s;}
+        .sb-pill:hover{transform:translateY(-1px);}
+        .sb-pill.selected{box-shadow:0 0 0 2px #fff;}
+        .result-count{font-size:13px;color:#666;margin-bottom:12px;}
+        .result-count b{color:#fff;}
+        table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;border:1px solid var(--border);overflow:hidden;}
+        th{background:#050505;padding:12px 16px;font-size:10px;color:#666;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;letter-spacing:0.5px;}
+        td{padding:12px 16px;border-bottom:1px solid #111;vertical-align:middle;font-size:13px;}
+        tr:hover td{background:#0d0d0d;}
+        .order-id{font-family:monospace;font-weight:800;color:#a5b4fc;}
+        .status-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;}
+        .src-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(255,255,255,0.06);color:#888;}
+        .loader{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:40px auto;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .empty{text-align:center;padding:60px;color:#444;}
+        .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
+    </style>
+</head>
+<body>
+<div class="header">
+    <div>
+        <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-1px;">📡 Status Intelligence</h1>
+        <p style="color:#888;margin-top:4px;">Filter orders by date range & latest status</p>
+    </div>
+    <div style="display:flex;gap:12px;">
+        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
+        <button onclick="loadData()" class="btn-top" style="background:#6366f1;color:#fff;">🔄 Refresh</button>
+    </div>
+</div>
+
+<div class="nav-tabs">
+    <a href="/bundling" class="nav-tab">📦 Bundle Intelligence</a>
+    <a href="/bundling/status" class="nav-tab active">📡 Status Intelligence</a>
+    <a href="/bundling/summary" class="nav-tab">📅 Summary</a>
+    <a href="/bundling/region_weekly" class="nav-tab">📊 Region Weekly</a>
+    <a href="/bundling/region_summary" class="nav-tab">🌍 Region Summary</a>
+</div>
+
+<div class="filter-bar">
+    <div class="filter-row">
+        <div class="f-group" style="flex:1">
+            <div class="f-label">⚡ Quick Select</div>
+            <div class="quick-btns">
+                <button class="qbtn" onclick="quickDate(this,'today')">Today</button>
+                <button class="qbtn" onclick="quickDate(this,'7d')">Last 7 Days</button>
+                <button class="qbtn" onclick="quickDate(this,'15d')">Last 15 Days</button>
+                <button class="qbtn" onclick="quickDate(this,'30d')">Last 30 Days</button>
+                <button class="qbtn" onclick="quickDate(this,'week')">This Week</button>
+                <button class="qbtn" onclick="quickDate(this,'month')">This Month</button>
+            </div>
+        </div>
+    </div>
+    <div class="filter-row">
+        <div class="f-group">
+            <div class="f-label">📅 From Date</div>
+            <input type="date" id="dateFrom" class="f-input">
+        </div>
+        <div class="f-group">
+            <div class="f-label">📅 To Date</div>
+            <input type="date" id="dateTo" class="f-input">
+        </div>
+        <div class="f-group f-grow">
+            <div class="f-label">🔍 Search Order / Customer</div>
+            <input type="text" id="searchInput" class="f-input" placeholder="Order ID or customer name...">
+        </div>
+        <div class="f-group">
+            <div class="f-label">🏷️ Source</div>
+            <select id="sourceSelect" class="f-input">
+                <option value="all">All Sources</option>
+                <option value="ECL QC Center">ECL QC Center</option>
+                <option value="ECL Zone">ECL Zone</option>
+                <option value="GE Zone">GE Zone</option>
+            </select>
+        </div>
+        <div class="f-group" style="flex-direction:row;gap:8px;align-items:flex-end;">
+            <button class="clear-btn" onclick="clearFilters()">Clear</button>
+            <button class="apply-btn" onclick="applyFilters()">Apply Filters</button>
+        </div>
+    </div>
+</div>
+
+<div class="status-breakdown" id="statusBreakdown" style="display:none;">
+    <div class="sb-title">📊 Filter by Status — click to select/deselect</div>
+    <div class="sb-pills" id="statusPills"></div>
+</div>
+
+<div class="summary-grid">
+    <div class="sum-card"><div class="sum-val" id="s-total">0</div><div class="sum-lbl">Total Orders</div></div>
+    <div class="sum-card" style="border-left-color:#10B981"><div class="sum-val" id="s-delivered" style="color:#10B981">0</div><div class="sum-lbl">Delivered</div></div>
+    <div class="sum-card" style="border-left-color:#F59E0B"><div class="sum-val" id="s-transit" style="color:#F59E0B">0</div><div class="sum-lbl">In Transit / Freight</div></div>
+    <div class="sum-card" style="border-left-color:#EF4444"><div class="sum-val" id="s-cancelled" style="color:#EF4444">0</div><div class="sum-lbl">Cancelled</div></div>
+</div>
+
+<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#666;font-size:13px;">Loading orders & statuses...</p></div>
+
+<div id="content" style="display:none;">
+    <div class="result-count" id="resultCount"></div>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Order ID</th>
+                <th>Date</th>
+                <th>Latest Status</th>
+                <th>Source</th>
+                <th>Customer</th>
+                <th>Country</th>
+                <th>Weight</th>
+            </tr>
+        </thead>
+        <tbody id="tb"></tbody>
+    </table>
+</div>
+
+<script>
+let allOrders = [];
+let selectedStatus = null;
+
+function getStatusStyle(status) {
+    if (!status || status === '—') return {bg:'rgba(255,255,255,0.05)',color:'#555'};
+    const s = status.toLowerCase();
+    if (s.includes('deliver'))  return {bg:'rgba(16,185,129,0.15)',  color:'#10B981'};
+    if (s.includes('freight'))  return {bg:'rgba(99,102,241,0.15)',  color:'#818cf8'};
+    if (s.includes('courier'))  return {bg:'rgba(139,92,246,0.15)',  color:'#a78bfa'};
+    if (s.includes('cancel'))   return {bg:'rgba(239,68,68,0.15)',   color:'#f87171'};
+    if (s.includes('qc'))       return {bg:'rgba(245,158,11,0.15)',  color:'#fbbf24'};
+    if (s.includes('hand'))     return {bg:'rgba(59,130,246,0.15)',  color:'#60a5fa'};
+    if (s.includes('pending'))  return {bg:'rgba(245,158,11,0.12)',  color:'#f59e0b'};
+    return {bg:'rgba(255,255,255,0.06)', color:'#94a3b8'};
+}
+
+function fmtIso(d){ return d.toISOString().split('T')[0]; }
+function getMonday(d){ const day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1); return new Date(d.setDate(diff)); }
+
+function quickDate(btn, period) {
+    document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const today = new Date(); today.setHours(0,0,0,0);
+    let from, to = new Date(today);
+    switch(period){
+        case 'today': from = new Date(today); break;
+        case '7d':    from = new Date(today); from.setDate(from.getDate()-6); break;
+        case '15d':   from = new Date(today); from.setDate(from.getDate()-14); break;
+        case '30d':   from = new Date(today); from.setDate(from.getDate()-29); break;
+        case 'week':  from = getMonday(new Date(today)); to = new Date(from); to.setDate(to.getDate()+6); break;
+        case 'month': from = new Date(today.getFullYear(),today.getMonth(),1);
+                      to   = new Date(today.getFullYear(),today.getMonth()+1,0); break;
+    }
+    document.getElementById('dateFrom').value = fmtIso(from);
+    document.getElementById('dateTo').value   = fmtIso(to);
+}
+
+function clearFilters() {
+    document.getElementById('dateFrom').value    = '';
+    document.getElementById('dateTo').value      = '';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('sourceSelect').value = 'all';
+    document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+    selectedStatus = null;
+    document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
+    applyFilters();
+}
+
+function selectStatus(pill, status) {
+    if (selectedStatus === status) {
+        selectedStatus = null;
+        document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
+    } else {
+        selectedStatus = status;
+        document.querySelectorAll('.sb-pill').forEach(p=>p.classList.remove('selected'));
+        pill.classList.add('selected');
+    }
+    applyFilters();
+}
+
+function buildStatusPills(orders) {
+    const counts = {};
+    orders.forEach(o => { counts[o.status] = (counts[o.status]||0)+1; });
+    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+    let html = '';
+    sorted.forEach(([status, count]) => {
+        const st = getStatusStyle(status);
+        const esc = status.replace(/'/g,"\\'");
+        html += `<span class="sb-pill" onclick="selectStatus(this,'${esc}')"
+            style="background:${st.bg};color:${st.color};border-color:${st.color}33">
+            ${status} <b style="margin-left:4px;opacity:0.8">${count}</b>
+        </span>`;
+    });
+    document.getElementById('statusPills').innerHTML = html;
+    document.getElementById('statusBreakdown').style.display = sorted.length ? 'block' : 'none';
+}
+
+function applyFilters() {
+    const search = document.getElementById('searchInput').value.toLowerCase().trim();
+    const from   = document.getElementById('dateFrom').value;
+    const to     = document.getElementById('dateTo').value;
+    const source = document.getElementById('sourceSelect').value;
+    let filtered = allOrders.filter(o => {
+        if (source !== 'all' && o.source !== source) return false;
+        if (from && o.date_std < from) return false;
+        if (to   && o.date_std > to)   return false;
+        if (selectedStatus && o.status !== selectedStatus) return false;
+        if (search) {
+            return o.order_id.toLowerCase().includes(search) ||
+                   (o.customer && o.customer.toLowerCase().includes(search));
+        }
+        return true;
+    });
+    const delivered = filtered.filter(o=>o.status.toLowerCase().includes('deliver')).length;
+    const transit   = filtered.filter(o=>o.status.toLowerCase().includes('freight')||o.status.toLowerCase().includes('courier')).length;
+    const cancelled = filtered.filter(o=>o.status.toLowerCase().includes('cancel')).length;
+    document.getElementById('s-total').innerText     = filtered.length.toLocaleString();
+    document.getElementById('s-delivered').innerText = delivered.toLocaleString();
+    document.getElementById('s-transit').innerText   = transit.toLocaleString();
+    document.getElementById('s-cancelled').innerText = cancelled.toLocaleString();
+    buildStatusPills(filtered);
+    document.getElementById('resultCount').innerHTML = `Showing <b>${filtered.length.toLocaleString()}</b> of <b>${allOrders.length.toLocaleString()}</b> orders`;
+    renderTable(filtered);
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+}
+
+function renderTable(orders) {
+    if (!orders.length) {
+        document.getElementById('tb').innerHTML = `<tr><td colspan="8"><div class="empty"><div style="font-size:40px;margin-bottom:12px;">🔍</div><div>No orders found</div></div></td></tr>`;
+        return;
+    }
+    let h = '';
+    orders.forEach((o,i) => {
+        const st = getStatusStyle(o.status);
+        h += `<tr>
+            <td style="color:#555;font-size:11px;">${i+1}</td>
+            <td><span class="order-id">${o.order_id}</span></td>
+            <td style="color:#888;white-space:nowrap;">${o.date||'—'}</td>
+            <td><span class="status-pill" style="background:${st.bg};color:${st.color}">${o.status}</span></td>
+            <td><span class="src-badge">${o.source}</span></td>
+            <td style="color:#ccc;">${o.customer||'—'}</td>
+            <td style="color:#888;">${o.country||'—'}</td>
+            <td style="color:#888;">${o.weight||'—'} kg</td>
+        </tr>`;
+    });
+    document.getElementById('tb').innerHTML = h;
+}
+
+async function loadData() {
+    document.getElementById('content').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('statusBreakdown').style.display = 'none';
+    try {
+        const r = await fetch('/api/nexus/status_intelligence');
+        const d = await r.json();
+        allOrders = d.orders || [];
+        applyFilters();
+    } catch(e) {
+        document.getElementById('loading').innerHTML = `<div style="color:#EF4444;text-align:center;padding:40px;">Error: ${e.message}</div>`;
+    }
+}
+
+document.getElementById('searchInput').addEventListener('keyup',e=>{ if(e.key==='Enter') applyFilters(); });
+window.onload = loadData;
+</script>
+</body>
+</html>'''
+
+SUMMARY_HTML = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>📊 Summary Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        :root{--bg:#000;--card:#0A0A0A;--border:#1A1A1A;--text:#FAFAFA;--accent:#8b5cf6;--muted:#71717A;--input-bg:#050505;}
+        body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);padding:40px;margin:0;padding-bottom:60px;}
+        .header{margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+        .nav-tabs{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
+        .nav-tab{padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;border:1px solid var(--border);color:#888;transition:all 0.2s;}
+        .nav-tab:hover{border-color:var(--accent);color:var(--accent);}
+        .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+        .summary-section{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:24px;}
+        .section-title{font-size:18px;font-weight:800;margin-bottom:16px;color:var(--accent);}
+        .filter-row{display:flex;gap:15px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px;}
+        .f-group{display:flex;flex-direction:column;gap:5px;}
+        .f-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+        .f-input{background:var(--input-bg);border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-family:'Inter';outline:none;min-width:150px;}
+        .f-input:focus{border-color:var(--accent);}
+        .btn-apply{background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;}
+        .btn-apply:hover{opacity:0.8;}
+        table{width:100%;border-collapse:collapse;background:#111;border-radius:12px;overflow:hidden;border:1px solid var(--border);}
+        th{background:#050505;padding:12px;font-size:11px;color:#888;text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--border);text-align:left;}
+        td{padding:12px;border-bottom:1px solid #222;color:#ccc;font-size:13px;}
+        .loader{width:30px;height:30px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .btn-top{padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;}
+        .no-data{text-align:center;padding:40px;color:#666;font-size:14px;}
+    </style>
+</head>
+<body>
+<div class="header">
+    <div>
+        <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-1px;">📊 Summary Intelligence</h1>
+        <p style="color:#888;margin-top:4px;">Daily, weekly & monthly aggregated reports</p>
+    </div>
+    <div style="display:flex;gap:12px;">
+        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
+        <button onclick="location.reload()" class="btn-top" style="background:#8b5cf6;color:#fff;">🔄 Refresh</button>
+    </div>
+</div>
+
+<div class="nav-tabs">
+    <a href="/bundling" class="nav-tab">📦 Bundle Intelligence</a>
+    <a href="/bundling/status" class="nav-tab">📡 Status Intelligence</a>
+    <a href="/bundling/summary" class="nav-tab active">📊 Summary</a>
+    <a href="/bundling/region_weekly" class="nav-tab">📊 Region Weekly</a>
+    <a href="/bundling/region_summary" class="nav-tab">🌍 Region Summary</a>
+</div>
+
+<!-- DAILY SECTION -->
+<div class="summary-section">
+    <div class="section-title">📅 Daily Summary</div>
+    <div class="filter-row">
+        <div class="f-group">
+            <div class="f-label">From Date</div>
+            <input type="date" id="dailyFrom" class="f-input" value="2025-01-01">
+        </div>
+        <div class="f-group">
+            <div class="f-label">To Date</div>
+            <input type="date" id="dailyTo" class="f-input" value="2025-12-31">
+        </div>
+        <button class="btn-apply" onclick="loadSummary('daily')">Apply</button>
+    </div>
+    <div id="dailyLoading" style="display:none;"><div class="loader"></div></div>
+    <div id="dailyTable"></div>
+</div>
+
+<!-- WEEKLY SECTION -->
+<div class="summary-section">
+    <div class="section-title">📆 Weekly Summary (Mon–Sun)</div>
+    <div class="filter-row">
+        <div class="f-group">
+            <div class="f-label">From Date</div>
+            <input type="date" id="weeklyFrom" class="f-input" value="2025-01-01">
+        </div>
+        <div class="f-group">
+            <div class="f-label">To Date</div>
+            <input type="date" id="weeklyTo" class="f-input" value="2025-12-31">
+        </div>
+        <button class="btn-apply" onclick="loadSummary('weekly')">Apply</button>
+    </div>
+    <div id="weeklyLoading" style="display:none;"><div class="loader"></div></div>
+    <div id="weeklyTable"></div>
+</div>
+
+<!-- MONTHLY SECTION -->
+<div class="summary-section">
+    <div class="section-title">📆 Monthly Summary</div>
+    <div class="filter-row">
+        <div class="f-group">
+            <div class="f-label">From Date</div>
+            <input type="date" id="monthlyFrom" class="f-input" value="2025-01-01">
+        </div>
+        <div class="f-group">
+            <div class="f-label">To Date</div>
+            <input type="date" id="monthlyTo" class="f-input" value="2025-12-31">
+        </div>
+        <button class="btn-apply" onclick="loadSummary('monthly')">Apply</button>
+    </div>
+    <div id="monthlyLoading" style="display:none;"><div class="loader"></div></div>
+    <div id="monthlyTable"></div>
+</div>
+
+<script>
+async function loadSummary(period) {
+    const fromId = period + 'From';
+    const toId = period + 'To';
+    const from = document.getElementById(fromId).value;
+    const to = document.getElementById(toId).value;
+    if (!from || !to) {
+        alert('Please select both dates');
+        return;
+    }
+    const loadingId = period + 'Loading';
+    const tableId = period + 'Table';
+    document.getElementById(loadingId).style.display = 'block';
+    document.getElementById(tableId).innerHTML = '';
+    try {
+        const url = `/api/nexus/summary_data?period=${period}&start_date=${from}&end_date=${to}`;
+        const r = await fetch(url);
+        const d = await r.json();
+        document.getElementById(loadingId).style.display = 'none';
+        if (!d.success) {
+            document.getElementById(tableId).innerHTML = `<div class="no-data">${d.message || 'Error loading data'}</div>`;
+            return;
+        }
+        if (!d.data || d.data.length === 0) {
+            document.getElementById(tableId).innerHTML = '<div class="no-data">No data for selected range</div>';
+            return;
+        }
+        let html = '<table><thead><tr>';
+        if (period === 'daily') {
+            html += '<th>Date</th><th>Bundles</th><th>Orders</th><th>Total Weight (kg)</th>';
+        } else if (period === 'weekly') {
+            html += '<th>Week Start (Mon)</th><th>Week End (Sun)</th><th>Bundles</th><th>Orders</th><th>Total Weight (kg)</th>';
+        } else if (period === 'monthly') {
+            html += '<th>Month</th><th>Bundles</th><th>Orders</th><th>Total Weight (kg)</th>';
+        }
+        html += '</tr></thead><tbody>';
+        d.data.forEach(row => {
+            html += '<tr>';
+            if (period === 'daily') {
+                html += `<td>${row.period}</td><td>${row.bundles}</td><td>${row.orders}</td><td>${row.weight}</td>`;
+            } else if (period === 'weekly') {
+                html += `<td>${row.week_start}</td><td>${row.week_end}</td><td>${row.bundles}</td><td>${row.orders}</td><td>${row.weight}</td>`;
+            } else if (period === 'monthly') {
+                html += `<td>${row.month}</td><td>${row.bundles}</td><td>${row.orders}</td><td>${row.weight}</td>`;
+            }
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        document.getElementById(tableId).innerHTML = html;
+    } catch(e) {
+        document.getElementById(loadingId).style.display = 'none';
+        document.getElementById(tableId).innerHTML = `<div class="no-data">Error: ${e.message}</div>`;
+    }
+}
+
+// Set default dates to current year
+window.onload = function() {
+    const today = new Date();
+    const year = today.getFullYear();
+    document.getElementById('dailyFrom').value = year + '-01-01';
+    document.getElementById('dailyTo').value = year + '-12-31';
+    document.getElementById('weeklyFrom').value = year + '-01-01';
+    document.getElementById('weeklyTo').value = year + '-12-31';
+    document.getElementById('monthlyFrom').value = year + '-01-01';
+    document.getElementById('monthlyTo').value = year + '-12-31';
+    loadSummary('daily');
+    loadSummary('weekly');
+    loadSummary('monthly');
+}
+</script>
+</body>
+</html>'''
 
 REGION_WEEKLY_HTML = '''<!DOCTYPE html>
 <html lang="en">
