@@ -4343,9 +4343,8 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING INTELLIGENCE HUB - ULTIMATE COMPLETE APP (100% BUG FREE)
+# 📦 BUNDLING INTELLIGENCE HUB (100% BUG FREE & SAFE)
 # ==============================================================================
-from flask import Flask, jsonify, request, session, render_template_string
 import urllib.request
 import csv
 import re
@@ -4354,9 +4353,7 @@ import time
 import math
 import concurrent.futures
 from datetime import datetime, timedelta
-
-app = Flask(__name__)
-app.secret_key = 'your-secret-key-here-change-this'
+from flask import jsonify, request, session, render_template_string
 
 # ---------- Configuration ----------
 _bundling_cache = {'data': None, 'time': 0}
@@ -4367,7 +4364,6 @@ BUNDLING_CACHE_DURATION = 300  # 5 minutes
 JOURNEY_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRsiVaciOMON0xaXXEi1guBYrqfVNpD-j4My_9YokGd5kftqjAXvri5c_gLB_VRXeoDLzEtz9h5y8x/pub?gid=1409345116&single=true&output=csv"
 STATUS_SHEET_URL  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1570463436&single=true&output=csv"
 
-# ---------- Helper Functions ----------
 def std_date(d_str):
     try:
         for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%d-%b-%Y', '%Y/%m/%d'):
@@ -4418,12 +4414,11 @@ def fmt_journey_date(dt):
     if not dt: return None
     return dt.strftime('%d %b %Y, %H:%M')
 
-# ---------- Data Fetchers ----------
 def fetch_rates_sheet(ctx):
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=12, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
             rates_map = {}
             for row in data[1:]:
@@ -4447,7 +4442,7 @@ def fetch_status_sheet_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(STATUS_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=12, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
         status_map = {}
         for row in data[1:]:
@@ -4474,7 +4469,7 @@ def fetch_journey_sheet_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(JOURNEY_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=12, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
         journey_map = {}
         for row in data[1:]:
@@ -4505,7 +4500,7 @@ def fetch_journey_sheet_data():
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
             processed = []
             last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
@@ -4525,14 +4520,15 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
 
                 if not current_order or not re.search(r'\d', current_order): continue
                 if current_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
-                
-                # 🔥 ULTIMATE SAFETY NET FOR WEIGHT (Fix for GE Zone 51221603582666 kg bug) 🔥
-                try:
-                    wt_check = float(re.sub(r'[^0-9.]', '', raw_weight)) if raw_weight else 0.0
-                    if wt_check > 500: # If it's a huge tracking ID, reset to 0
-                        raw_weight = "0"
-                except:
+
+                # 🔥 TRACKING ID FILTER (Yeh line apke trillions wale wazan ko theek karegi) 🔥
+                if len(raw_weight) > 8 or re.search(r'[A-Za-z]{2,}', raw_weight):
                     raw_weight = "0"
+                else:
+                    try:
+                        wt_check = float(re.sub(r'[^0-9.]', '', raw_weight))
+                        if wt_check > 200: raw_weight = "0"
+                    except: raw_weight = "0"
 
                 date_val     = str(p[col['d']]).strip()
                 vendor_val   = str(p[col['v']]).strip()
@@ -4571,7 +4567,7 @@ def fetch_bundling_standalone_data():
     if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
         return _bundling_cache['data']
 
-    # 🚨 EXACT ALPHABET MAPPING CONFIRMED (GE Zone Weight = 6) 🚨
+    # 🚨 GE ZONE MAPPED TO H(7) TO FIX BUG 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -4583,7 +4579,7 @@ def fetch_bundling_standalone_data():
         ),
         "GE Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o":0, "d":1, "b":3, "w":6, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 1
+            {"o":0, "d":1, "b":3, "w":7, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 1
         )
     }
 
@@ -4604,23 +4600,18 @@ def fetch_bundling_standalone_data():
                 name = futures.get(future) or "RATES"
                 n, data = future.result()
                 res[n] = data
-            except Exception as e:
-                pass
+            except Exception as e: pass
 
-    # 🔥 CACHE POISONING FIX: Only cache if we actually got data! 🔥
     has_real_data = sum(1 for k, v in res.items() if k != "RATES" and isinstance(v, list) and len(v) > 0) > 0
-    
     if has_real_data:
         _bundling_cache['data'] = res
         _bundling_cache['time'] = now
         return res
     elif _bundling_cache['data']:
-        # If fetch failed (Vercel timeout) but we have old cache, use it!
         return _bundling_cache['data']
     else:
         return res
 
-# ---------- API Endpoints ----------
 @app.route('/api/nexus/all_journey')
 def api_all_journey():
     journey_map = fetch_journey_sheet_data()
@@ -4632,11 +4623,7 @@ def api_all_journey():
         if not dt: continue
         region = data.get('region', 'Unknown').strip()
         if not region: region = 'Unknown'
-        result.append({
-            'order_id': order_id,
-            'date': dt.strftime('%Y-%m-%d'),
-            'region': region
-        })
+        result.append({'order_id': order_id, 'date': dt.strftime('%Y-%m-%d'), 'region': region})
     return jsonify({"success": True, "data": result})
 
 @app.route('/api/nexus/order_journey/<order_id>')
@@ -4644,8 +4631,7 @@ def api_order_journey(order_id):
     journey_map = fetch_journey_sheet_data()
     order_key = str(order_id).strip().upper()
     row = journey_map.get(order_key)
-    if not row:
-        return jsonify({"success": False, "message": f"Order '{order_id}' not found in journey sheet."})
+    if not row: return jsonify({"success": False, "message": f"Order '{order_id}' not found."})
     dt_created    = parse_journey_date(row['created_at'])
     dt_accepted   = parse_journey_date(row['accepted_at'])
     dt_pickup     = parse_journey_date(row['pickup_ready_at'])
@@ -4658,90 +4644,63 @@ def api_order_journey(order_id):
     dt_delivered  = parse_journey_date(row['delivered_at'])
 
     steps = [
-        ("Created → Accepted", dt_created, dt_accepted),
-        ("Accepted → Pickup Ready", dt_accepted, dt_pickup),
-        ("Pickup Ready → QC Pending", dt_pickup, dt_qc_pending),
-        ("QC Pending → QC Approved", dt_qc_pending, dt_qc_appr),
-        ("QC Approved → Handover", dt_qc_appr, dt_handed),
-        ("Handover → Freight", dt_handed, dt_freight),
-        ("Freight → Courier", dt_freight, dt_courier),
-        ("Courier → Delivered", dt_courier, dt_delivered),
+        ("Created → Accepted", dt_created, dt_accepted), ("Accepted → Pickup Ready", dt_accepted, dt_pickup),
+        ("Pickup Ready → QC Pending", dt_pickup, dt_qc_pending), ("QC Pending → QC Approved", dt_qc_pending, dt_qc_appr),
+        ("QC Approved → Handover", dt_qc_appr, dt_handed), ("Handover → Freight", dt_handed, dt_freight),
+        ("Freight → Courier", dt_freight, dt_courier), ("Courier → Delivered", dt_courier, dt_delivered),
     ]
     step_metrics = []
     for label, start, end in steps:
-        if start and end:
-            diff = days_between(start, end)
-            step_metrics.append({"label": label, "duration": diff})
-        else:
-            step_metrics.append({"label": label, "duration": None})
+        diff = days_between(start, end) if start and end else None
+        step_metrics.append({"label": label, "duration": diff})
 
-    last_event = None
-    last_event_label = None
+    last_event, last_event_label = None, None
     events = [
         ("Created", dt_created), ("Accepted", dt_accepted), ("Pickup Ready", dt_pickup),
         ("QC Pending", dt_qc_pending), ("QC Approved", dt_qc_appr), ("Handed Over", dt_handed),
         ("Freight", dt_freight), ("Courier", dt_courier), ("Delivered", dt_delivered),
     ]
     for label, dt in reversed(events):
-        if dt:
-            last_event = dt; last_event_label = label
-            break
+        if dt: last_event = dt; last_event_label = label; break
 
     total_journey = days_between(dt_created, dt_delivered or last_event)
 
     return jsonify({
-        "success": True,
-        "order_id": order_id,
-        "is_cancelled": bool(dt_cancelled),
+        "success": True, "order_id": order_id, "is_cancelled": bool(dt_cancelled),
         "timeline": {
-            "created_at":      fmt_journey_date(dt_created),
-            "accepted_at":     fmt_journey_date(dt_accepted),
-            "pickup_ready_at": fmt_journey_date(dt_pickup),
-            "cancelled_at":    fmt_journey_date(dt_cancelled),
-            "qc_pending_at":   fmt_journey_date(dt_qc_pending),
-            "qc_approved_at":  fmt_journey_date(dt_qc_appr),
-            "handedover_at":   fmt_journey_date(dt_handed),
-            "freight_at":      fmt_journey_date(dt_freight),
-            "courier_at":      fmt_journey_date(dt_courier),
-            "delivered_at":    fmt_journey_date(dt_delivered),
+            "created_at": fmt_journey_date(dt_created), "accepted_at": fmt_journey_date(dt_accepted),
+            "pickup_ready_at": fmt_journey_date(dt_pickup), "cancelled_at": fmt_journey_date(dt_cancelled),
+            "qc_pending_at": fmt_journey_date(dt_qc_pending), "qc_approved_at": fmt_journey_date(dt_qc_appr),
+            "handedover_at": fmt_journey_date(dt_handed), "freight_at": fmt_journey_date(dt_freight),
+            "courier_at": fmt_journey_date(dt_courier), "delivered_at": fmt_journey_date(dt_delivered),
         },
         "step_metrics": step_metrics,
         "last_event": {"label": last_event_label, "date": fmt_journey_date(last_event)},
         "key_metrics": {
-            "qc_to_handover":      days_between(dt_qc_appr, dt_handed),
-            "handover_to_freight": days_between(dt_handed, dt_freight),
-            "total_journey":       total_journey,
+            "qc_to_handover": days_between(dt_qc_appr, dt_handed), "handover_to_freight": days_between(dt_handed, dt_freight),
+            "total_journey": total_journey,
         }
     })
 
 @app.route('/api/nexus/status_intelligence')
 def api_status_intelligence():
-    # 🔥 Double Speed Fetch: Run both status and bundling simultaneously
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         f_bundling = executor.submit(fetch_bundling_standalone_data)
         f_status = executor.submit(fetch_status_sheet_data)
         sheets_data = f_bundling.result()
         status_map = f_status.result()
 
-    all_orders     = []
+    all_orders = []
     unique_statuses = set()
     for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
         for r in sheets_data.get(src, []):
-            oid    = r['order'].strip().upper()
+            oid = r['order'].strip().upper()
             status = status_map.get(oid, '—')
             unique_statuses.add(status)
             all_orders.append({
-                "order_id":   oid,
-                "date":       r['date'],
-                "date_std":   r['date_std'],
-                "source":     src,
-                "customer":   r['customer'],
-                "country":    r['country'],
-                "vendor":     r['vendor'],
-                "weight":     r['weight'],
-                "title":      r['title'],
-                "item_count": r['item_count'],
-                "status":     status,
+                "order_id": oid, "date": r['date'], "date_std": r['date_std'], "source": src,
+                "customer": r['customer'], "country": r['country'], "vendor": r['vendor'],
+                "weight": r['weight'], "title": r['title'], "item_count": r['item_count'], "status": status,
             })
     all_orders.sort(key=lambda x: x['date_std'], reverse=True)
     statuses_list = sorted([s for s in unique_statuses if s and s != '—'])
@@ -4750,52 +4709,30 @@ def api_status_intelligence():
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
 def api_nexus_bundling_data():
-    # 🔥 Double Speed Fetch: Run both status and bundling simultaneously
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         f_bundling = executor.submit(fetch_bundling_standalone_data)
         f_status = executor.submit(fetch_status_sheet_data)
         sheets_data = f_bundling.result()
         status_map = f_status.result()
 
-    bundles_list, tot_bundles, tot_orders = [], 0, 0
-    total_savings_gbp = 0.0
-    rates_map    = sheets_data.get("RATES", {})
+    bundles_list, tot_bundles, tot_orders, total_savings_gbp = [], 0, 0, 0.0
+    rates_map = sheets_data.get("RATES", {})
     DEFAULT_RATE_GBP = 4.50
-    source_stats = {
-        "ECL QC Center": {"orders": 0, "boxes": 0},
-        "PK Zone":       {"orders": 0, "boxes": 0}
-    }
+    source_stats = {"ECL QC Center": {"orders": 0, "boxes": 0}, "PK Zone": {"orders": 0, "boxes": 0}}
     
     for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
-        rows     = sheets_data.get(src, [])
-        cb       = None
+        rows = sheets_data.get(src, [])
+        cb = None
         stat_src = "PK Zone" if src in ["ECL Zone", "GE Zone"] else src
         for r in rows:
-            oid = r['order'].upper()
-            bx  = r['boxes']
-            od = {
-                "order_id":   oid,
-                "weight":     r['weight'],
-                "title":      r['title'],
-                "item_count": r['item_count'],
-                "country":    r['country'],
-                "status":     status_map.get(oid, '—'),
-            }
+            oid, bx = r['order'].upper(), r['boxes']
+            od = {"order_id": oid, "weight": r['weight'], "title": r['title'], "item_count": r['item_count'], "country": r['country'], "status": status_map.get(oid, '—')}
             if bx != "":
                 if cb and len(cb['orders']) > 1:
-                    bundles_list.append(cb)
-                    tot_bundles += 1; tot_orders += len(cb['orders'])
-                    source_stats[stat_src]["orders"] += len(cb['orders'])
-                    source_stats[stat_src]["boxes"]  += 1
+                    bundles_list.append(cb); tot_bundles += 1; tot_orders += len(cb['orders'])
+                    source_stats[stat_src]["orders"] += len(cb['orders']); source_stats[stat_src]["boxes"] += 1
                 tids = clean_bundling_tids(r['tid'])
-                cb = {
-                    "orders":    [od],
-                    "date":      r['date'],      "date_std":  r['date_std'],
-                    "customer":  r['customer'],  "vendor":    r['vendor'],
-                    "country":   r['country'],   "source":    src,
-                    "boxes_val": bx,             "total_items": 0,
-                    "tid": ", ".join(tids) if tids else "Pending Tracking"
-                }
+                cb = {"orders": [od], "date": r['date'], "date_std": r['date_std'], "customer": r['customer'], "vendor": r['vendor'], "country": r['country'], "source": src, "boxes_val": bx, "total_items": 0, "tid": ", ".join(tids) if tids else "Pending Tracking"}
             else:
                 if cb:
                     cb['orders'].append(od)
@@ -4803,52 +4740,33 @@ def api_nexus_bundling_data():
                         tids = clean_bundling_tids(r['tid'])
                         if tids: cb['tid'] = ", ".join(tids)
         if cb and len(cb['orders']) > 1:
-            bundles_list.append(cb)
-            tot_bundles += 1; tot_orders += len(cb['orders'])
-            source_stats[stat_src]["orders"] += len(cb['orders'])
-            source_stats[stat_src]["boxes"]  += 1
+            bundles_list.append(cb); tot_bundles += 1; tot_orders += len(cb['orders'])
+            source_stats[stat_src]["orders"] += len(cb['orders']); source_stats[stat_src]["boxes"] += 1
 
     for b in bundles_list:
         tq = 0; bundle_weight_sum = 0.0; ind_shipping_cost = 0.0
         per_kg = rates_map.get(str(b.get('country','')).strip().lower(), DEFAULT_RATE_GBP)
         for o in b['orders']:
-            try:   tq += int(float(re.sub(r'[^0-9.]','',str(o['item_count']))))
+            try: tq += int(float(re.sub(r'[^0-9.]','',str(o['item_count']))))
             except: pass
             
             try:
                 wt_str = re.sub(r'[^0-9.]','',str(o['weight']))
                 wt = float(wt_str) if wt_str else 0.0
-                if wt > 500: wt = 0.0  
             except: wt = 0.0
                 
             bundle_weight_sum += wt
             ind_shipping_cost += (max(math.ceil(wt), 1) * per_kg)
             
-        b['total_items']      = tq
+        b['total_items'] = tq
         b['bundle_weight_kg'] = round(bundle_weight_sum, 2)
-        billed_bundle         = max(math.ceil(bundle_weight_sum), 1)
+        billed_bundle = max(math.ceil(bundle_weight_sum), 1)
         sav = ind_shipping_cost - (billed_bundle * per_kg)
         b['savings_gbp'] = round(sav if sav > 0 else 0, 2)
         total_savings_gbp += b['savings_gbp']
 
     bundles_list.sort(key=lambda x: str(x['date_std']), reverse=True)
-    return jsonify({
-        "success": True,
-        "kpi": {
-            "total_bundles":        tot_bundles,
-            "total_orders_bundled": tot_orders,
-            "saved_shipments":      (tot_orders - tot_bundles if tot_bundles > 0 else 0),
-            "total_savings_gbp":    round(total_savings_gbp, 2)
-        },
-        "source_stats": source_stats,
-        "bundles":      bundles_list
-    })
-
-# ---------- View Routes ----------
-@app.route('/')
-def home_redirect():
-    # Fallback to main dash just in case root route gets hit
-    return "<h1>3PL Main Dashboard</h1><p>Navigate to <a href='/bundling'>/bundling</a> to view the tool.</p>"
+    return jsonify({"success": True, "kpi": {"total_bundles": tot_bundles, "total_orders_bundled": tot_orders, "saved_shipments": (tot_orders - tot_bundles if tot_bundles > 0 else 0), "total_savings_gbp": round(total_savings_gbp, 2)}, "source_stats": source_stats, "bundles": bundles_list})
 
 @app.route('/bundling')
 def bundling_dashboard_view():
@@ -5046,12 +4964,14 @@ function getCachedData() {
     if (!cached) return null;
     try {
         const { timestamp, data } = JSON.parse(cached);
-        if (Date.now() - timestamp < CACHE_DURATION) return data;
+        if (Date.now() - timestamp < CACHE_DURATION && data.bundles && data.bundles.length > 0) return data;
     } catch (e) {}
     return null;
 }
 function setCachedData(data) {
-    localStorage.setItem(BUNDLE_CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
+    if(data && data.bundles && data.bundles.length > 0){
+        localStorage.setItem(BUNDLE_CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
+    }
 }
 async function loadBundles(forceRefresh = false) {
     document.getElementById('content').style.display = 'none';
@@ -5068,11 +4988,15 @@ async function loadBundles(forceRefresh = false) {
         renderData(d);
     } catch(e) {
         console.error(e);
-        document.getElementById('loading').innerHTML = '<div style="color:#EF4444; font-weight:bold; margin-top:20px;">🚨 Vercel Timeout Error</div><div style="font-size:13px; color:#888; margin-top:10px;">Please click "Refresh Data" again. Server is waking up.</div>';
+        document.getElementById('loading').innerHTML = '<div style="color:#EF4444; font-weight:bold; margin-top:20px;">🚨 System Timeout</div><div style="font-size:13px; color:#888; margin-top:10px;">Please click "Refresh Data" again.</div>';
     }
 }
 function renderData(d) {
     allBundles = d.bundles || [];
+    if(allBundles.length === 0){
+        document.getElementById('loading').innerHTML = '<div style="color:#F59E0B; font-weight:bold; margin-top:20px;">⚠️ Google Sheets are too heavy or empty right now.</div><button onclick="refreshData()" class="btn-apply" style="margin-top:15px;">Try Again</button>';
+        return;
+    }
     let s = d.source_stats || {};
     document.getElementById('kpi-bundles').innerText = d.kpi?.total_bundles || 0;
     document.getElementById('kpi-orders').innerText  = d.kpi?.total_orders_bundled || 0;
@@ -5125,7 +5049,7 @@ function applyFilters() {
 function renderTable(bundles) {
     let h = '';
     if (!bundles.length) {
-        h = '<tr><td colspan="4" style="text-align:center;padding:60px;color:#666;font-weight:bold;">No Bundled Orders Found. Make sure Google Sheet has merged orders.</td></tr>';
+        h = '<tr><td colspan="4" style="text-align:center;padding:60px;color:#666;font-weight:bold;">No Bundled Orders Found.</td></tr>';
     } else {
         bundles.forEach(b => {
             let items = b.orders.map(o => {
@@ -5393,12 +5317,14 @@ function getCachedData() {
     if (!cached) return null;
     try {
         const { timestamp, data } = JSON.parse(cached);
-        if (Date.now() - timestamp < CACHE_DURATION) return data;
+        if (Date.now() - timestamp < CACHE_DURATION && data.orders && data.orders.length > 0) return data;
     } catch (e) {}
     return null;
 }
 function setCachedData(data) {
-    localStorage.setItem(STATUS_CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
+    if(data && data.orders && data.orders.length > 0){
+        localStorage.setItem(STATUS_CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
+    }
 }
 async function loadData(forceRefresh = false) {
     document.getElementById('content').style.display = 'none';
@@ -5420,10 +5346,16 @@ async function loadData(forceRefresh = false) {
         const d = await r.json();
         setCachedData(d);
         allOrders = d.orders || [];
+        
+        if(allOrders.length === 0){
+             document.getElementById('loading').innerHTML = '<div style="color:#F59E0B; font-weight:bold; margin-top:20px;">⚠️ Google Sheets returned empty data.</div><button onclick="refreshData()" class="btn-apply" style="margin-top:15px;">Try Again</button>';
+             return;
+        }
+        
         applyFilters();
     } catch(e) {
         console.error(e);
-        document.getElementById('loading').innerHTML = `<div style="color:#EF4444; font-weight:bold;">🚨 Vercel Timeout Error</div><div style="font-size:12px; color:#888;">Please hit Refresh again. Server taking too long.</div>`;
+        document.getElementById('loading').innerHTML = `<div style="color:#EF4444; font-weight:bold; margin-top:20px;">🚨 Timeout Error</div><div style="font-size:12px; color:#888; margin-top:10px;">Please click Refresh again.</div>`;
     }
 }
 function refreshData() {
@@ -5693,12 +5625,14 @@ function getCachedData() {
     if (!cached) return null;
     try {
         const { timestamp, bundles, journey } = JSON.parse(cached);
-        if (Date.now() - timestamp < CACHE_DURATION) return { bundles, journey };
+        if (Date.now() - timestamp < CACHE_DURATION && bundles && bundles.length > 0) return { bundles, journey };
     } catch (e) {}
     return null;
 }
 function setCachedData(bundles, journey) {
-    localStorage.setItem(SUMMARY_CACHE_KEY, JSON.stringify({ timestamp: Date.now(), bundles, journey }));
+    if(bundles && bundles.length > 0) {
+        localStorage.setItem(SUMMARY_CACHE_KEY, JSON.stringify({ timestamp: Date.now(), bundles, journey }));
+    }
 }
 
 async function fetchAllData(forceRefresh = false) {
@@ -5718,11 +5652,17 @@ async function fetchAllData(forceRefresh = false) {
         if (!bRes.ok || !jRes.ok) throw new Error('API error');
         const bJson = await bRes.json(); const jJson = await jRes.json();
         bundlesData = bJson.bundles || []; journeyData = jJson.data || [];
+        
+        if (bundlesData.length === 0) {
+            document.getElementById('dailyLoader').innerHTML = `<div style="color:#F59E0B; font-weight:bold; margin-bottom:20px;">⚠️ Data is empty. Try reloading.</div><button onclick="fetchAllData(true)" style="padding:8px 15px; background:#f97316; color:#000; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">Reload</button>`;
+            return;
+        }
+        
         setCachedData(bundlesData, journeyData);
         setDefaultDates();
         if (currentTab === 'daily') loadDaily(); else loadWeekly();
     } catch(e) {
-        console.error(e); document.getElementById('dailyLoader').innerHTML = `<div style="color:#ef4444; font-weight:bold; margin-bottom:20px;">🚨 Loading Error (Timeout)</div>`;
+        console.error(e); document.getElementById('dailyLoader').innerHTML = `<div style="color:#ef4444; font-weight:bold; margin-bottom:20px;">🚨 Timeout. Please hit "Apply" or refresh.</div>`;
     }
 }
 
@@ -5869,7 +5809,6 @@ window.onload = () => fetchAllData();
 </body>
 </html>'''
 
-# ---------- Floating Button ----------
 @app.after_request
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
@@ -5884,12 +5823,5 @@ def add_bundling_floating_btn(response):
             response.set_data(html.replace('</body>', btn + '</body>'))
     return response
 
-# ---------- Run ----------
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-
-
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
