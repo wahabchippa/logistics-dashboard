@@ -5123,8 +5123,8 @@ BUNDLING_HTML = '''<!DOCTYPE html>
 <body>
 <div class="header">
     <div>
-        <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-1px;">📦 Order Consolidation AI</h1>
-        <p style="color:#888;margin-top:5px;">Advanced Box & Item level Breakdown (Live Cost Analytics)</p>
+        <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-1px;">📦 Bundling Order Consolidation AI</h1>
+        <p style="color:#888;margin-top:5px;">Check you bundle order here )</p>
     </div>
     <div style="display:flex;gap:15px;">
         <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
@@ -5175,7 +5175,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
         </div>
     </div>
     <div class="source-card">
-        <div class="source-title">PK Zone (ECL & GE Zone)</div>
+        <div class="source-title">PK ZONE</div>
         <div class="source-stats">
             <div class="stat-item"><div class="stat-value" id="pk-orders">0</div><div class="stat-label">Orders</div></div>
             <div class="stat-item"><div class="stat-value" id="pk-boxes">0</div><div class="stat-label">Bundles</div></div>
