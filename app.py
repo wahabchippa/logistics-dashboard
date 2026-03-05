@@ -4431,7 +4431,7 @@ def fmt_journey_date(dt):
     return dt.strftime('%d %b %Y, %H:%M')
 
 # ==============================================================================
-# DATA FETCHERS
+# DATA FETCHERS (UPDATED: SEQUENTIAL + RETRIES)
 # ==============================================================================
 
 def fetch_rates_sheet(ctx):
@@ -4439,7 +4439,7 @@ def fetch_rates_sheet(ctx):
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
             rates_map = {}
             for row in data[1:]:
@@ -4450,7 +4450,9 @@ def fetch_rates_sheet(ctx):
                     try: rates_map[country] = float(re.sub(r'[^0-9.]', '', rate_str))
                     except: pass
             return "RATES", rates_map
-    except: return "RATES", {}
+    except Exception as e:
+        print(f"[WARN] Rates sheet failed: {e}")
+        return "RATES", {}
 
 def fetch_status_sheet_data():
     """Fetch & cache status sheet: col A = fleek_id, col B = latest_status"""
@@ -4463,7 +4465,7 @@ def fetch_status_sheet_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(STATUS_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
         status_map = {}
         for row in data[1:]:
@@ -4475,7 +4477,8 @@ def fetch_status_sheet_data():
         _status_cache['data'] = status_map
         _status_cache['time'] = now
         return status_map
-    except:
+    except Exception as e:
+        print(f"[WARN] Status sheet failed: {e}")
         return {}
 
 def fetch_journey_sheet_data():
@@ -4489,7 +4492,7 @@ def fetch_journey_sheet_data():
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(JOURNEY_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+        with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
             data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
         journey_map = {}
         for row in data[1:]:
@@ -4512,64 +4515,71 @@ def fetch_journey_sheet_data():
         _journey_cache['data'] = journey_map
         _journey_cache['time'] = now
         return journey_map
-    except:
+    except Exception as e:
+        print(f"[WARN] Journey sheet failed: {e}")
         return {}
 
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
-    """Parallel Fetch for Orders"""
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
-            data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
-            processed = []
-            last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
+    """Fetch a single sheet with retry logic (called sequentially now)"""
+    for attempt in range(3):  # retry up to 3 times
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
+                data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+                processed = []
+                last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
 
-            for row in data[start_idx:]:
-                if not row: continue
-                p = row + [''] * 60
+                for row in data[start_idx:]:
+                    if not row: continue
+                    p = row + [''] * 60
 
-                raw_order  = str(p[col['o']]).strip()
-                raw_weight = str(p[col['w']]).strip()
-                raw_title  = str(p[col['title']]).strip()
+                    raw_order  = str(p[col['o']]).strip()
+                    raw_weight = str(p[col['w']]).strip()
+                    raw_title  = str(p[col['title']]).strip()
 
-                if not raw_order and not raw_weight and not raw_title: continue
+                    if not raw_order and not raw_weight and not raw_title: continue
 
-                # MERGED ROWS LOGIC (CARRY FORWARD)
-                if raw_order: last_order = raw_order
-                current_order = raw_order if raw_order else last_order
+                    # MERGED ROWS LOGIC (CARRY FORWARD)
+                    if raw_order: last_order = raw_order
+                    current_order = raw_order if raw_order else last_order
 
-                if not current_order or not re.search(r'\d', current_order): continue
-                if current_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
+                    if not current_order or not re.search(r'\d', current_order): continue
+                    if current_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
 
-                date_val     = str(p[col['d']]).strip()
-                vendor_val   = str(p[col['v']]).strip()
-                customer_val = str(p[col['c']]).strip()
-                country_val  = str(p[col['cn']]).strip()
-                tid_val      = str(p[col['t']]).strip()
+                    date_val     = str(p[col['d']]).strip()
+                    vendor_val   = str(p[col['v']]).strip()
+                    customer_val = str(p[col['c']]).strip()
+                    country_val  = str(p[col['cn']]).strip()
+                    tid_val      = str(p[col['t']]).strip()
 
-                if date_val:     last_date     = date_val
-                if vendor_val:   last_vendor   = vendor_val
-                if customer_val: last_customer = customer_val
-                if country_val:  last_country  = country_val
-                if tid_val:      last_tid      = tid_val
+                    if date_val:     last_date     = date_val
+                    if vendor_val:   last_vendor   = vendor_val
+                    if customer_val: last_customer = customer_val
+                    if country_val:  last_country  = country_val
+                    if tid_val:      last_tid      = tid_val
 
-                box_val = str(p[col['b']]).strip()
+                    box_val = str(p[col['b']]).strip()
 
-                processed.append({
-                    'order':      current_order,
-                    'date':       date_val     if date_val     else last_date,
-                    'date_std':   std_date(date_val if date_val else last_date),
-                    'boxes':      box_val,
-                    'weight':     raw_weight,
-                    'vendor':     vendor_val   if vendor_val   else last_vendor,
-                    'title':      raw_title    if raw_title    else "N/A",
-                    'item_count': str(p[col['ic']]).strip() or "0",
-                    'customer':   customer_val if customer_val else last_customer,
-                    'country':    country_val  if country_val  else last_country,
-                    'tid':        tid_val      if tid_val      else last_tid
-                })
-            return name, processed
-    except: return name, []
+                    processed.append({
+                        'order':      current_order,
+                        'date':       date_val     if date_val     else last_date,
+                        'date_std':   std_date(date_val if date_val else last_date),
+                        'boxes':      box_val,
+                        'weight':     raw_weight,
+                        'vendor':     vendor_val   if vendor_val   else last_vendor,
+                        'title':      raw_title    if raw_title    else "N/A",
+                        'item_count': str(p[col['ic']]).strip() or "0",
+                        'customer':   customer_val if customer_val else last_customer,
+                        'country':    country_val  if country_val  else last_country,
+                        'tid':        tid_val      if tid_val      else last_tid
+                    })
+                print(f"[OK] {name} loaded ({len(processed)} rows)")
+                return name, processed
+        except Exception as e:
+            print(f"[WARN] {name} attempt {attempt+1} failed: {e}")
+            time.sleep(2)  # wait before retry
+    print(f"[ERROR] {name} failed after 3 attempts")
+    return name, []  # return empty after all retries
 
 def fetch_bundling_standalone_data():
     global _bundling_cache
@@ -4586,7 +4596,8 @@ def fetch_bundling_standalone_data():
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1
+            {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 
+            0   # start at row 0 (no header)
         ),
         "ECL Zone": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
@@ -4598,18 +4609,20 @@ def fetch_bundling_standalone_data():
         )
     }
 
-    res = {}
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(fetch_single_bundling_sheet, name, url, col, start_idx, ctx)
-                   for name, (url, col, start_idx) in BUNDLING_SOURCES.items()]
-        futures.append(executor.submit(fetch_rates_sheet, ctx))
-        for future in concurrent.futures.as_completed(futures):
-            name, data = future.result()
-            res[name] = data
+    res = {}
+    # Fetch sequentially to avoid overwhelming the network
+    for name, (url, col, start_idx) in BUNDLING_SOURCES.items():
+        name, data = fetch_single_bundling_sheet(name, url, col, start_idx, ctx)
+        res[name] = data
+        time.sleep(0.5)  # small delay between requests
+
+    # Fetch rates separately
+    rates_name, rates_data = fetch_rates_sheet(ctx)
+    res[rates_name] = rates_data
 
     _bundling_cache['data'] = res
     _bundling_cache['time'] = now
