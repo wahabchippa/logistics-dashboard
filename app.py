@@ -4457,37 +4457,58 @@ def fetch_journey():
         _jc["data"]=jm; _jc["time"]=now; return jm
     except: return {}
 
-def fetch_sheet(name,url,col,start,cx):
+def fetch_sheet(name, url, col, start, cx):
     for attempt in range(2):
         try:
-            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
-            with urllib.request.urlopen(req,timeout=25,context=cx) as r:
-                data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
-            rows=[]; lo=ld=lv=lc=lcn=lt=""
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=25, context=cx) as r:
+                data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
+
+            rows = []
             for row in data[start:]:
-                if not row: continue
-                p=row+[""]*60
-                ro=str(p[col["o"]]).strip(); rw=str(p[col["w"]]).strip(); rti=str(p[col["title"]]).strip()
-                if not ro and not rw and not rti: continue
-                if ro: lo=ro
-                co=ro if ro else lo
-                if not co or not re.search(r"\d",co): continue
-                if co.lower() in ["n/a","nan","order","orderid","order id"]: continue
-                dv=str(p[col["d"]]).strip(); vv=str(p[col["v"]]).strip()
-                cv=str(p[col["c"]]).strip(); cnv=str(p[col["cn"]]).strip(); tv=str(p[col["t"]]).strip()
-                if dv: ld=dv
-                if vv: lv=vv
-                if cv: lc=cv
-                if cnv: lcn=cnv
-                if tv: lt=tv
-                rows.append({"order":co,"date":dv or ld,"date_std":sd(dv or ld),
-                    "boxes":str(p[col["b"]]).strip(),"weight":rw,
-                    "vendor":vv or lv,"title":rti or "N/A","item_count":str(p[col["ic"]]).strip() or "0",
-                    "customer":cv or lc,"country":cnv or lcn,"tid":tv or lt})
-            print(f"[OK] {name}: {len(rows)} rows"); return name,rows
+                if not row:
+                    continue
+                p = row + [""] * 60
+
+                # Require an explicit Order ID in THIS row (no carry-forward)
+                ro = str(p[col["o"]]).strip()
+                if not ro or ro.lower() in ["n/a", "nan", "order", "orderid", "order id"]:
+                    continue
+                # Must contain at least one digit (real ID)
+                if not re.search(r"\d", ro):
+                    continue
+
+                dv  = str(p[col["d"]]).strip()
+                bx  = str(p[col["b"]]).strip()
+                rw  = str(p[col["w"]]).strip()
+                vv  = str(p[col["v"]]).strip()
+                rti = str(p[col["title"]]).strip() or "N/A"
+                ic  = str(p[col["ic"]]).strip() or "0"
+                cv  = str(p[col["c"]]).strip()
+                cnv = str(p[col["cn"]]).strip()
+                tv  = str(p[col["t"]]).strip()
+
+                # Build row using ONLY values present on this row
+                rows.append({
+                    "order": ro,
+                    "date": dv,
+                    "date_std": sd(dv),
+                    "boxes": bx,
+                    "weight": rw,
+                    "vendor": vv,
+                    "title": rti,
+                    "item_count": ic,
+                    "customer": cv,
+                    "country": cnv,
+                    "tid": tv
+                })
+
+            print(f"[OK] {name}: {len(rows)} rows")
+            return name, rows
         except Exception as e:
-            print(f"[WARN] {name} attempt {attempt+1}: {e}"); time.sleep(1)
-    return name,[]
+            print(f"[WARN] {name} attempt {attempt+1}: {e}")
+            time.sleep(1)
+    return name, []
 
 def fetch_all():
     global _bc
@@ -4517,51 +4538,115 @@ def fetch_all():
 
 @app.route("/api/nexus/app_data")
 def api_app_data():
-    sheets=fetch_all(); sm=fetch_status(); rm=sheets.get("RATES",{}); DR=4.50
-    bundles=[]; tb=to2=0; tsav=0.0
-    ss={"ECL QC Center":{"orders":0,"boxes":0},"PK Zone":{"orders":0,"boxes":0}}
-    for src in ["ECL QC Center","ECL Zone","GE Zone"]:
-        rows=sheets.get(src,[]); cb=None
-        pk="PK Zone" if src in ["ECL Zone","GE Zone"] else src
+    sheets = fetch_all()
+    sm = fetch_status()
+    rm = sheets.get("RATES", {})
+    DR = 4.50
+
+    bundles = []
+    tb = to2 = 0
+    tsav = 0.0
+    ss = {"ECL QC Center": {"orders": 0, "boxes": 0}, "PK Zone": {"orders": 0, "boxes": 0}}
+
+    for src in ["ECL QC Center", "ECL Zone", "GE Zone"]:
+        rows = sheets.get(src, [])
+        cb = None
+        pk = "PK Zone" if src in ["ECL Zone", "GE Zone"] else src
+
         for r in rows:
-            oid=r["order"].upper(); bx=r["boxes"]
-            od={"order_id":oid,"weight":r["weight"],"title":r["title"],
-                "item_count":r["item_count"],"country":r["country"],"status":sm.get(oid,"—")}
-            if bx!="":
-                if cb and len(cb["orders"])>1:
-                    bundles.append(cb); tb+=1; to2+=len(cb["orders"])
-                    ss[pk]["orders"]+=len(cb["orders"]); ss[pk]["boxes"]+=1
-                tids=ctids(r["tid"])
-                cb={"orders":[od],"date":r["date"],"date_std":r["date_std"],
-                    "customer":r["customer"],"vendor":r["vendor"],"country":r["country"],
-                    "source":src,"region":grg(r["country"]),"boxes_val":bx,
-                    "tid":", ".join(tids) if tids else "Pending Tracking"}
+            oid = str(r["order"]).strip().upper()
+            if not oid:
+                # Hard guard: never process rows without a real order id
+                continue
+
+            bx = str(r["boxes"]).strip()
+            od = {
+                "order_id": oid,
+                "weight": r["weight"],
+                "title": r["title"],
+                "item_count": r["item_count"],
+                "country": r["country"],
+                "status": sm.get(oid, "—")
+            }
+
+            # New box line starts a new bundle
+            if bx != "":
+                # Flush previous bundle if valid (>=2 orders)
+                if cb and len(cb["orders"]) > 1:
+                    bundles.append(cb)
+                    tb += 1
+                    to2 += len(cb["orders"])
+                    ss[pk]["orders"] += len(cb["orders"])
+                    ss[pk]["boxes"] += 1
+
+                tids = ctids(r["tid"])
+                cb = {
+                    "orders": [od],
+                    "date": r["date"],
+                    "date_std": r["date_std"],
+                    "customer": r["customer"],
+                    "vendor": r["vendor"],
+                    "country": r["country"],
+                    "source": src,
+                    "region": grg(r["country"]),
+                    "boxes_val": bx,
+                    "tid": ", ".join(tids) if tids else "Pending Tracking"
+                }
             else:
+                # Continuation rows within the same bundle (no boxes value)
                 if cb:
-                    cb["orders"].append(od)
-                    if r["tid"] not in ["N/A",""] and cb["tid"]=="Pending Tracking":
-                        t2=ctids(r["tid"])
-                        if t2: cb["tid"]=", ".join(t2)
-        if cb and len(cb["orders"])>1:
-            bundles.append(cb); tb+=1; to2+=len(cb["orders"])
-            ss[pk]["orders"]+=len(cb["orders"]); ss[pk]["boxes"]+=1
+                    # De-duplicate order IDs within the same bundle
+                    if not any(o["order_id"] == oid for o in cb["orders"]):
+                        cb["orders"].append(od)
+                        # If tracking appears later, update pending tracking
+                        if r["tid"] not in ["N/A", "", None] and cb["tid"] == "Pending Tracking":
+                            t2 = ctids(r["tid"])
+                            if t2:
+                                cb["tid"] = ", ".join(t2)
+
+        # Final flush for the source
+        if cb and len(cb["orders"]) > 1:
+            bundles.append(cb)
+            tb += 1
+            to2 += len(cb["orders"])
+            ss[pk]["orders"] += len(cb["orders"])
+            ss[pk]["boxes"] += 1
+
+    # Costing and savings calculation remain unchanged
     for b in bundles:
-        tq=0; bw=0.0; isc=0.0
-        pr=rm.get(str(b.get("country","")).strip().lower(),DR)
+        tq = 0
+        bw = 0.0
+        isc = 0.0
+        pr = rm.get(str(b.get("country", "")).strip().lower(), DR)
         for o in b["orders"]:
-            try: tq+=int(float(re.sub(r"[^0-9.]","",str(o["item_count"]))))
-            except: pass
-            try: wt=float(re.sub(r"[^0-9.]","",str(o["weight"])) or 0)
-            except: wt=0.0
-            bw+=wt; isc+=(max(math.ceil(wt),1)*pr)
-        b["total_items"]=tq; b["weight_kg"]=round(bw,2)
-        sv=isc-(max(math.ceil(bw),1)*pr); b["savings_gbp"]=round(sv if sv>0 else 0,2)
-        tsav+=b["savings_gbp"]
-    bundles.sort(key=lambda x:x["date_std"],reverse=True)
-    return jsonify({"success":True,
-        "kpi":{"total_bundles":tb,"total_orders_bundled":to2,
-               "saved_shipments":to2-tb if tb>0 else 0,"total_savings_gbp":round(tsav,2)},
-        "source_stats":ss,"bundles":bundles})
+            try:
+                tq += int(float(re.sub(r"[^0-9.]", "", str(o["item_count"])) or 0))
+            except:
+                pass
+            try:
+                wt = float(re.sub(r"[^0-9.]", "", str(o["weight"])) or 0)
+            except:
+                wt = 0.0
+            bw += wt
+            isc += (max(math.ceil(wt), 1) * pr)
+        b["total_items"] = tq
+        b["weight_kg"] = round(bw, 2)
+        sv = isc - (max(math.ceil(bw), 1) * pr)
+        b["savings_gbp"] = round(sv if sv > 0 else 0, 2)
+        tsav += b["savings_gbp"]
+
+    bundles.sort(key=lambda x: x["date_std"], reverse=True)
+    return jsonify({
+        "success": True,
+        "kpi": {
+            "total_bundles": tb,
+            "total_orders_bundled": to2,
+            "saved_shipments": to2 - tb if tb > 0 else 0,
+            "total_savings_gbp": round(tsav, 2)
+        },
+        "source_stats": ss,
+        "bundles": bundles
+    })
 
 @app.route("/api/nexus/order_journey/<oid>")
 def api_order_journey(oid):
