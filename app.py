@@ -1315,6 +1315,8 @@ def logout():
 
 # ===== DASHBOARD =====
 @app.route('/')
+def home():
+    return '<h1>Bundling Tool is Running</h1><p>Go to <a href="/bundling">/bundling</a></p>'
 @login_required
 def dashboard():
     role = session.get('role', 'guest')
@@ -6164,10 +6166,6 @@ def add_bundling_floating_btn(response):
 # ---------- Run ----------
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-
-# ==============================================================================
-# 🛑 BUNDLING BLOCK END
-# ==============================================================================
 
 
 
