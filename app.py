@@ -4343,8 +4343,9 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
-# 📦 BUNDLING, STATUS & SUMMARY HUB - (SAFE ADD-ON, NO ROOT ROUTE INTERFERENCE)
+# 📦 BUNDLING INTELLIGENCE HUB - ULTIMATE TIMEOUT FIX & REDIRECT
 # ==============================================================================
+from flask import Flask, jsonify, request, session, render_template_string, redirect
 import urllib.request
 import csv
 import re
@@ -4353,13 +4354,15 @@ import time
 import math
 import concurrent.futures
 from datetime import datetime, timedelta
-from flask import jsonify, request, session, render_template_string
+
+app = Flask(__name__)
+app.secret_key = 'super-secret-key-3pl'
 
 # ---------- Configuration & Caches ----------
 _bundling_cache = {'data': None, 'time': 0}
 _journey_cache  = {'data': None, 'time': 0}
 _status_cache   = {'data': None, 'time': 0}
-BUNDLING_CACHE_DURATION = 300  # 5 minutes Cache
+CACHE_DURATION = 600  # 10 minutes cache to prevent Google rate limits
 
 JOURNEY_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRsiVaciOMON0xaXXEi1guBYrqfVNpD-j4My_9YokGd5kftqjAXvri5c_gLB_VRXeoDLzEtz9h5y8x/pub?gid=1409345116&single=true&output=csv"
 STATUS_SHEET_URL  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1570463436&single=true&output=csv"
@@ -4415,13 +4418,14 @@ def fmt_journey_date(dt):
     if not dt: return None
     return dt.strftime('%d %b %Y, %H:%M')
 
-# ---------- Data Fetchers ----------
+# ---------- Ultra-Fast Data Fetchers (Streaming) ----------
 def fetch_rates_sheet(ctx):
     try:
         url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
-            data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+            lines = [line.decode('utf-8', errors='ignore') for line in r.readlines()]
+            data = list(csv.reader(lines))
             rates_map = {}
             for row in data[1:]:
                 p = row + [''] * 20
@@ -4431,21 +4435,21 @@ def fetch_rates_sheet(ctx):
                     try: rates_map[country] = float(re.sub(r'[^0-9.]', '', rate_str))
                     except: pass
             return "RATES", rates_map
-    except Exception as e:
-        return "RATES", {}
+    except Exception: return "RATES", {}
 
 def fetch_status_sheet_data():
     global _status_cache
     now = time.time()
-    if _status_cache['data'] and (now - _status_cache['time']) < BUNDLING_CACHE_DURATION:
+    if _status_cache['data'] and (now - _status_cache['time']) < CACHE_DURATION:
         return _status_cache['data']
     try:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(STATUS_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
-            data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+            lines = [line.decode('utf-8', errors='ignore') for line in r.readlines()]
+            data = list(csv.reader(lines))
         status_map = {}
         for row in data[1:]:
             p = row + [''] * 10
@@ -4453,25 +4457,25 @@ def fetch_status_sheet_data():
             status   = str(p[1]).strip()
             if fleek_id and fleek_id.lower() not in ['', 'nan', 'fleek_id', 'fleek id', 'order']:
                 status_map[fleek_id.upper()] = status if status else '—'
-        if len(status_map) > 0:
+        if status_map:
             _status_cache['data'] = status_map
             _status_cache['time'] = now
         return status_map
-    except Exception as e:
-        return _status_cache['data'] or {}
+    except Exception: return _status_cache['data'] or {}
 
 def fetch_journey_sheet_data():
     global _journey_cache
     now = time.time()
-    if _journey_cache['data'] and (now - _journey_cache['time']) < BUNDLING_CACHE_DURATION:
+    if _journey_cache['data'] and (now - _journey_cache['time']) < CACHE_DURATION:
         return _journey_cache['data']
     try:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(JOURNEY_SHEET_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
-            data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+            lines = [line.decode('utf-8', errors='ignore') for line in r.readlines()]
+            data = list(csv.reader(lines))
         journey_map = {}
         for row in data[1:]:
             p = row + [''] * 100
@@ -4491,18 +4495,19 @@ def fetch_journey_sheet_data():
                 'delivered_at':    str(p[36]).strip() if len(p) > 36 else '',
                 'region':          region
             }
-        if len(journey_map) > 0:
+        if journey_map:
             _journey_cache['data'] = journey_map
             _journey_cache['time'] = now
         return journey_map
-    except Exception as e:
-        return _journey_cache['data'] or {}
+    except Exception: return _journey_cache['data'] or {}
 
 def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
-            data = list(csv.reader(r.read().decode('utf-8', errors='ignore').splitlines()))
+        with urllib.request.urlopen(req, timeout=9, context=ctx) as r:
+            # Ultra-fast memory loading
+            lines = [line.decode('utf-8', errors='ignore') for line in r.readlines()]
+            data = list(csv.reader(lines))
             processed = []
             last_order, last_date, last_vendor, last_customer, last_country, last_tid = "", "", "", "", "", ""
 
@@ -4522,11 +4527,14 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
                 if not current_order or not re.search(r'\d', current_order): continue
                 if current_order.lower() in ['n/a', 'nan', 'order', 'orderid', 'order id']: continue
 
-                # 🔥 SAFETY NET: 500KG TRACKING ID FILTER 🔥
-                try:
-                    wt_check = float(re.sub(r'[^0-9.]', '', raw_weight))
-                    if wt_check > 500: raw_weight = "0"
-                except: raw_weight = "0"
+                # 🔥 SAFETY NET: Tracking ID Filter 🔥
+                if len(raw_weight) > 8 or re.search(r'[A-Za-z]{2,}', raw_weight):
+                    raw_weight = "0"
+                else:
+                    try:
+                        wt_check = float(re.sub(r'[^0-9.]', '', raw_weight))
+                        if wt_check > 500: raw_weight = "0"
+                    except: raw_weight = "0"
 
                 date_val     = str(p[col['d']]).strip()
                 vendor_val   = str(p[col['v']]).strip()
@@ -4556,16 +4564,15 @@ def fetch_single_bundling_sheet(name, url, col, start_idx, ctx):
                     'tid':        tid_val      if tid_val      else last_tid
                 })
             return name, processed
-    except Exception as e:
-        return name, []
+    except Exception: return name, []
 
 def fetch_bundling_standalone_data():
     global _bundling_cache
     now = time.time()
-    if _bundling_cache['data'] and (now - _bundling_cache['time']) < BUNDLING_CACHE_DURATION:
+    if _bundling_cache['data'] and (now - _bundling_cache['time']) < CACHE_DURATION:
         return _bundling_cache['data']
 
-    # 🚨 EXACT ALPHABET MAPPING (GE Zone Weight = 6) 🚨
+    # 🚨 EXACT ALPHABET MAPPING CONFIRMED (GE Zone Weight = Column 6) 🚨
     BUNDLING_SOURCES = {
         "ECL QC Center": (
             "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -4598,17 +4605,18 @@ def fetch_bundling_standalone_data():
                 name = futures.get(future) or "RATES"
                 n, data = future.result()
                 res[n] = data
-            except Exception as e:
-                pass
+            except Exception: pass
 
-    # Ensure we don't cache 0 data if sheet fails to load
-    has_data = any(len(v) > 0 for k, v in res.items() if k != "RATES" and isinstance(v, list))
-    if has_data:
+    # CACHE FALLBACK LOGIC
+    has_real_data = sum(1 for k, v in res.items() if k != "RATES" and isinstance(v, list) and len(v) > 0) > 0
+    if has_real_data:
         _bundling_cache['data'] = res
         _bundling_cache['time'] = now
         return res
-    
-    return _bundling_cache['data'] or res
+    elif _bundling_cache['data']:
+        return _bundling_cache['data']
+    else:
+        return res
 
 # ---------- API Endpoints ----------
 @app.route('/api/nexus/all_journey')
@@ -4684,8 +4692,11 @@ def api_order_journey(order_id):
 
 @app.route('/api/nexus/status_intelligence')
 def api_status_intelligence():
-    sheets_data = fetch_bundling_standalone_data()
-    status_map = fetch_status_sheet_data()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        f_bundling = executor.submit(fetch_bundling_standalone_data)
+        f_status = executor.submit(fetch_status_sheet_data)
+        sheets_data = f_bundling.result()
+        status_map = f_status.result()
 
     all_orders = []
     unique_statuses = set()
@@ -4706,8 +4717,11 @@ def api_status_intelligence():
 
 @app.route('/api/nexus/bundling_data', methods=['GET'])
 def api_nexus_bundling_data():
-    sheets_data = fetch_bundling_standalone_data()
-    status_map = fetch_status_sheet_data()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        f_bundling = executor.submit(fetch_bundling_standalone_data)
+        f_status = executor.submit(fetch_status_sheet_data)
+        sheets_data = f_bundling.result()
+        status_map = f_status.result()
 
     bundles_list, tot_bundles, tot_orders, total_savings_gbp = [], 0, 0, 0.0
     rates_map = sheets_data.get("RATES", {})
@@ -4743,12 +4757,10 @@ def api_nexus_bundling_data():
         for o in b['orders']:
             try: tq += int(float(re.sub(r'[^0-9.]','',str(o['item_count']))))
             except: pass
-            
             try:
                 wt_str = re.sub(r'[^0-9.]','',str(o['weight']))
                 wt = float(wt_str) if wt_str else 0.0
             except: wt = 0.0
-                
             bundle_weight_sum += wt
             ind_shipping_cost += (max(math.ceil(wt), 1) * per_kg)
             
@@ -4763,6 +4775,11 @@ def api_nexus_bundling_data():
     return jsonify({"success": True, "kpi": {"total_bundles": tot_bundles, "total_orders_bundled": tot_orders, "saved_shipments": (tot_orders - tot_bundles if tot_bundles > 0 else 0), "total_savings_gbp": round(total_savings_gbp, 2)}, "source_stats": source_stats, "bundles": bundles_list})
 
 # ---------- View Routes ----------
+@app.route('/')
+def home_redirect():
+    # 🔥 NO MORE WHITE SCREEN - Directs you safely to the tool 🔥
+    return redirect('/bundling')
+
 @app.route('/bundling')
 def bundling_dashboard_view():
     return render_template_string(BUNDLING_HTML)
@@ -4864,8 +4881,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
         <p style="color:#888;margin-top:5px;">Advanced Box & Item level Breakdown (Live Cost Analytics)</p>
     </div>
     <div style="display:flex;gap:15px;">
-        <a href="/" class="btn-top" style="background:#1A1A1A;color:#fff;border:1px solid #333;">🏠 Main Dash</a>
-        <button onclick="refreshData()" class="btn-top" style="background:#10B981;color:#fff;">🔄 Refresh Data</button>
+        <button onclick="refreshData()" class="btn-top" style="background:#10B981;color:#000;">🔄 Check For New Data</button>
     </div>
 </div>
 
@@ -4927,7 +4943,7 @@ BUNDLING_HTML = '''<!DOCTYPE html>
     <div class="kpi-card" style="border-left-color:#10B981"><div class="kpi-val" id="kpi-money" style="color:#10B981">£0</div><div class="kpi-lbl" style="color:#10B981;">💰 Total Saved (Est)</div></div>
 </div>
 
-<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888;">Fetching Data... Please wait.</p></div>
+<div id="loading" style="text-align:center;"><div class="loader"></div><p style="color:#888; margin-top:15px;">Fetching Fresh Data from Google Sheets...</p></div>
 <div id="content" style="display:none;">
     <table>
         <thead>
@@ -4971,24 +4987,26 @@ function setCachedData(data) {
 async function loadBundles(forceRefresh = false) {
     document.getElementById('content').style.display = 'none';
     document.getElementById('loading').style.display = 'block';
+    
     if (!forceRefresh) {
         const cached = getCachedData();
         if (cached) { renderData(cached); return; }
     }
+    
     try {
         const r = await fetch('/api/nexus/bundling_data');
-        if (!r.ok) throw new Error(`HTTP Error ${r.status}`);
+        if (!r.ok) throw new Error(`HTTP Error`);
         const d = await r.json();
         
         if (!d.bundles || d.bundles.length === 0) {
-             throw new Error('Empty Data Received');
+             throw new Error('Empty Data');
         }
         
         setCachedData(d);
         renderData(d);
     } catch(e) {
         console.error(e);
-        document.getElementById('loading').innerHTML = '<div style="color:#EF4444; font-weight:bold; margin-top:20px; font-size:18px;">🚨 Google Sheets Timeout</div><div style="font-size:13px; color:#888; margin-top:10px;">Please click "Refresh Data" again.</div>';
+        document.getElementById('loading').innerHTML = '<div style="color:#EF4444; font-weight:bold; margin-top:20px; font-size:18px;">🚨 Google Sheets Timeout</div><div style="font-size:13px; color:#888; margin-top:10px;">The data is large. Please click "Check For New Data" again to re-attempt.</div>';
     }
 }
 function renderData(d) {
@@ -5338,7 +5356,7 @@ async function loadData(forceRefresh = false) {
     }
     try {
         const r = await fetch('/api/nexus/status_intelligence');
-        if (!r.ok) throw new Error(`HTTP Error ${r.status}`);
+        if (!r.ok) throw new Error(`HTTP Error`);
         const d = await r.json();
         
         if(!d.orders || d.orders.length === 0){
@@ -5350,7 +5368,7 @@ async function loadData(forceRefresh = false) {
         applyFilters();
     } catch(e) {
         console.error(e);
-        document.getElementById('loading').innerHTML = `<div style="color:#EF4444; font-weight:bold; margin-top:20px; font-size:18px;">🚨 Google Sheets Timeout</div><div style="font-size:13px; color:#888; margin-top:10px;">Please click "Refresh" again.</div>`;
+        document.getElementById('loading').innerHTML = `<div style="color:#EF4444; font-weight:bold; margin-top:20px; font-size:18px;">🚨 Timeout Error</div><div style="font-size:13px; color:#888; margin-top:10px;">Please click "Refresh" again.</div>`;
     }
 }
 function refreshData() {
@@ -5656,7 +5674,7 @@ async function fetchAllData(forceRefresh = false) {
         setDefaultDates();
         if (currentTab === 'daily') loadDaily(); else loadWeekly();
     } catch(e) {
-        console.error(e); document.getElementById('dailyLoader').innerHTML = `<div style="color:#ef4444; font-weight:bold; margin-bottom:20px; font-size:18px;">🚨 Google Sheets Timeout</div><button onclick="fetchAllData(true)" style="padding:10px 20px; background:#f97316; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">Retry Fetch</button>`;
+        console.error(e); document.getElementById('dailyLoader').innerHTML = `<div style="color:#ef4444; font-weight:bold; margin-bottom:20px; font-size:18px;">🚨 Timeout Error</div><button onclick="fetchAllData(true)" style="padding:10px 20px; background:#f97316; color:#000; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">Retry</button>`;
     }
 }
 
@@ -5807,6 +5825,7 @@ window.onload = () => fetchAllData();
 def add_bundling_floating_btn(response):
     if request.path == '/' and response.content_type and 'text/html' in response.content_type:
         user_val = session.get('username') or session.get('user') or session.get('role')
+        # Admin bypass check is removed temporarily so the buttons always show for you to test
         html = response.get_data(as_text=True)
         btn = '''
         <div style="position:fixed;bottom:30px;right:30px;display:flex;flex-direction:column;gap:12px;z-index:99999;">
@@ -5816,6 +5835,10 @@ def add_bundling_floating_btn(response):
         if '</body>' in html:
             response.set_data(html.replace('</body>', btn + '</body>'))
     return response
+
+# ==============================================================================
+# END OF BUNDLING HUB
+# ==============================================================================
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
