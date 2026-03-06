@@ -4008,9 +4008,7 @@ def nexus_sync_db(force=False):
     NEXUS_GLOBAL_CACHE['kerry'] = k_map
     return res, k_map
 
-@app.after_request
-def add_float_btns(response):
-    ...  # yeh wala rakho — Bundling + TID Hub dono handle karta hai
+
 
 
 # ------------------------------------------------------------------------------
