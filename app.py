@@ -5409,6 +5409,66 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
 .section-title{font-size:20px;font-weight:800;color:var(--t1);letter-spacing:-.5px;}
 .section-sub{font-size:12px;color:var(--t3);margin-top:2px;}
 
+/* ===================== ANALYTICS ===================== */
+.an-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:24px;}
+.an-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px;}
+.an-card{
+  background:var(--card);border:1px solid var(--bd);
+  border-radius:16px;padding:22px;box-shadow:var(--shadow);
+  position:relative;overflow:hidden;
+}
+.an-card-title{
+  font-size:11px;font-weight:800;text-transform:uppercase;
+  letter-spacing:1px;color:var(--t3);margin-bottom:16px;
+  display:flex;align-items:center;gap:8px;
+}
+.an-card-title .dot{width:7px;height:7px;border-radius:50%;}
+.donut-wrap{display:flex;align-items:center;gap:24px;}
+.donut-svg{flex-shrink:0;}
+.donut-legend{flex:1;}
+.legend-item{
+  display:flex;align-items:center;gap:10px;
+  padding:7px 10px;border-radius:8px;
+  margin-bottom:6px;
+  transition:.15s;
+}
+.legend-item.clk-item{cursor:pointer;}
+.legend-item.clk-item:hover{background:var(--hover);}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.legend-label{font-size:12px;font-weight:600;color:var(--t1);flex:1;}
+.legend-val{font-size:13px;font-weight:900;color:var(--t1);}
+.legend-pct{font-size:10px;color:var(--t3);margin-left:4px;}
+.an-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.an-bar-label{font-size:11px;color:var(--t2);width:130px;flex-shrink:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.an-bar-track{flex:1;height:14px;background:var(--s2);border-radius:7px;overflow:hidden;cursor:pointer;transition:.15s;}
+.an-bar-track:hover{opacity:.8;}
+.an-bar-fill{height:100%;border-radius:7px;transition:.7s;}
+.an-bar-val{font-size:11px;font-weight:800;width:45px;text-align:right;}
+.an-stat-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--bd);}
+.an-stat-row:last-child{border-bottom:none;}
+.an-stat-label{font-size:12px;color:var(--t3);font-weight:600;}
+.an-stat-val{font-size:14px;font-weight:900;color:var(--t1);}
+.an-hero{text-align:center;padding:20px 0;}
+.an-hero-val{font-size:42px;font-weight:900;letter-spacing:-2px;}
+.an-hero-label{font-size:11px;color:var(--t3);text-transform:uppercase;font-weight:700;letter-spacing:1px;margin-top:4px;}
+.an-trend{display:flex;align-items:center;gap:6px;justify-content:center;margin-top:8px;}
+.an-trend-up{color:var(--green);font-size:12px;font-weight:800;}
+.an-trend-dn{color:var(--red);font-size:12px;font-weight:800;}
+.guest-blur{filter:blur(6px);pointer-events:none;user-select:none;}
+.guest-lock{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  background:rgba(0,0,0,.5);
+  backdrop-filter:blur(2px);
+  border-radius:16px;
+  z-index:10;
+}
+.guest-lock-icon{font-size:28px;margin-bottom:8px;}
+.guest-lock-text{font-size:12px;color:var(--t3);font-weight:600;}
+@media(max-width:900px){.an-grid{grid-template-columns:1fr 1fr;}.an-grid-2{grid-template-columns:1fr;}}
+@media(max-width:600px){.an-grid{grid-template-columns:1fr;}}
+
 /* Empty state */
 .empty-state{
   text-align:center;padding:80px 20px;
@@ -5473,6 +5533,9 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     </button>
     <button class="tab" onclick="sw('regional',this)">
       <span class="tab-icon">🌍</span> Regional View
+    </button>
+    <button class="tab" onclick="sw('analytics',this)">
+      <span class="tab-icon">📈</span> Analytics
     </button>
   </div>
 </div>
@@ -5703,6 +5766,11 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     </div>
     <div id="regCards"></div>
   </div>
+
+  <!-- ===== ANALYTICS TAB ===== -->
+  <div class="pane" id="pane-analytics">
+    <div id="analyticsBody"></div>
+  </div>
 </div>
 
 <!-- JOURNEY MODAL -->
@@ -5788,7 +5856,7 @@ function hardRefresh(){D=null;g("gLoad").style.display="block";document.querySel
 // ============================================================
 // TAB SWITCH
 // ============================================================
-const _rendered={bundle:false,status:false,summary:false,week4:false,regional:false};
+const _rendered={bundle:false,status:false,summary:false,week4:false,regional:false,analytics:false};
 function sw(name,tab){
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   tab.classList.add("active");
@@ -5802,6 +5870,7 @@ function sw(name,tab){
       else if(name==="summary") rSummary();
       else if(name==="week4") rW4();
       else if(name==="regional") rRegional();
+      else if(name==="analytics") rAnalytics();
     },30);
   }
 }
@@ -6416,6 +6485,278 @@ async function openJ(oid){
         ${tl.cancelled_at?ti("❌ Cancelled",tl.cancelled_at,"c"):""}
       </div>`;
   }catch(e){g("jBody").innerHTML=`<div style="color:var(--red)">Error: ${e.message}</div>`;}
+}
+
+// ============================================================
+// ANALYTICS TAB
+// ============================================================
+const AN_COLORS=["#4d9fff","#00e676","#ffd60a","#c77dff","#ff9500","#ff453a","#5ac8fa","#69f0ae","#ffab40","#e040fb","#80cbc4","#f48fb1"];
+
+function rAnalytics(){
+  if(!D) return;
+  const cont=g("analyticsBody");
+  cont.innerHTML=`<div class="lw"><div class="ld"></div><p class="lp">Building analytics...</p></div>`;
+  setTimeout(()=>_buildAnalytics(cont),30);
+}
+
+function _buildAnalytics(cont){
+  const bundles=D.bundles||[];
+  if(!bundles.length){cont.innerHTML=`<div class="empty-state"><div class="empty-icon">📊</div><div>No data available.</div></div>`;return;}
+
+  // ── Compute all metrics ──
+  const totalBundles=bundles.length;
+  const totalOrders=bundles.reduce((a,b)=>a+b.orders.length,0);
+  const totalWeight=bundles.reduce((a,b)=>a+(b.weight_kg||0),0);
+  const totalSaved=bundles.reduce((a,b)=>a+(b.savings_gbp||0),0);
+
+  // Source breakdown
+  const srcMap={};
+  bundles.forEach(b=>{
+    if(!srcMap[b.source])srcMap[b.source]={bundles:0,orders:0,weight:0,saved:0};
+    srcMap[b.source].bundles++;
+    srcMap[b.source].orders+=b.orders.length;
+    srcMap[b.source].weight+=b.weight_kg||0;
+    srcMap[b.source].saved+=b.savings_gbp||0;
+  });
+
+  // Region breakdown
+  const regMap={};
+  bundles.forEach(b=>{
+    const rg=b.region||"EU";
+    if(!regMap[rg])regMap[rg]={orders:0,bundles:0,weight:0};
+    regMap[rg].orders+=b.orders.length;
+    regMap[rg].bundles++;
+    regMap[rg].weight+=b.weight_kg||0;
+  });
+  const regArr=Object.entries(regMap).sort((a,b)=>b[1].orders-a[1].orders);
+
+  // Status breakdown
+  const stMap={};
+  bundles.forEach(b=>b.orders.forEach(o=>{
+    const st=o.status||"Unknown";
+    stMap[st]=(stMap[st]||0)+1;
+  }));
+  const stArr=Object.entries(stMap).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+  // Daily volume (last 30 days)
+  const dayMap={};
+  bundles.forEach(b=>{
+    if(!dayMap[b.date_std])dayMap[b.date_std]={orders:0,bundles:0};
+    dayMap[b.date_std].orders+=b.orders.length;
+    dayMap[b.date_std].bundles++;
+  });
+  const dayArr=Object.entries(dayMap).sort((a,b)=>a[0]<b[0]?-1:1).slice(-30);
+
+  // Weight distribution
+  const wtBuckets={"<5kg":0,"5-10kg":0,"10-20kg":0,"20-30kg":0,"30kg+":0};
+  bundles.forEach(b=>{
+    const w=b.weight_kg||0;
+    if(w<5)wtBuckets["<5kg"]++;
+    else if(w<10)wtBuckets["5-10kg"]++;
+    else if(w<20)wtBuckets["10-20kg"]++;
+    else if(w<30)wtBuckets["20-30kg"]++;
+    else wtBuckets["30kg+"]++;
+  });
+
+  // Top customers
+  const custMap={};
+  bundles.forEach(b=>{
+    const c=b.customer||"Unknown";
+    if(!custMap[c])custMap[c]={orders:0,saved:0};
+    custMap[c].orders+=b.orders.length;
+    custMap[c].saved+=b.savings_gbp||0;
+  });
+  const topCust=Object.entries(custMap).sort((a,b)=>b[1].orders-a[1].orders).slice(0,8);
+
+  // ── Build HTML ──
+  let html="";
+
+  // Row 1: Hero KPIs
+  html+=`<div class="an-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px">
+    ${heroCard("£"+totalSaved.toLocaleString(undefined,{minimumFractionDigits:2}),"Total Savings","var(--green)","💰")}
+    ${heroCard(totalBundles.toLocaleString(),"Total Bundles","var(--blue)","📦")}
+    ${heroCard(totalOrders.toLocaleString(),"Total Orders","var(--yellow)","🛒")}
+    ${heroCard(totalWeight.toFixed(1)+" kg","Total Weight","var(--purple)","⚖️")}
+  </div>`;
+
+  // Row 2: Source Donut + Status Donut
+  html+=`<div class="an-grid-2">`;
+  html+=donutCard("Orders by Source",Object.entries(srcMap).map(([k,v],i)=>({label:k,val:v.orders,color:AN_COLORS[i]})),totalOrders,"src_orders");
+  html+=donutCard("Orders by Status",stArr.map(([k,v],i)=>({label:k,val:v,color:AN_COLORS[i]})),totalOrders,"st_orders");
+  html+=`</div>`;
+
+  // Row 3: Top Regions bar + Weight distribution donut
+  html+=`<div class="an-grid-2">`;
+  html+=barCard("Top Regions by Orders",regArr.slice(0,10).map(([k,v],i)=>({label:k,val:v.orders,color:AN_COLORS[i%AN_COLORS.length]})),"reg_orders");
+  html+=donutCard("Weight Distribution",Object.entries(wtBuckets).map(([k,v],i)=>({label:k,val:v,color:AN_COLORS[i]})),totalBundles,"wt_dist");
+  html+=`</div>`;
+
+  // Row 4: Top Customers + Savings by Source
+  html+=`<div class="an-grid-2">`;
+  html+=barCard("Top Customers by Orders",topCust.map(([k,v],i)=>({label:k,val:v.orders,color:AN_COLORS[i%AN_COLORS.length]})),"cust_orders");
+  html+=barCard("Savings by Source (£)",Object.entries(srcMap).map(([k,v],i)=>({label:k,val:Math.round(v.saved),color:AN_COLORS[i]})),"src_saved",true);
+  html+=`</div>`;
+
+  // Row 5: Daily trend
+  html+=trendCard("Daily Order Volume (Last 30 Days)",dayArr);
+
+  cont.innerHTML=html;
+
+  // Animate donut rings after insert
+  setTimeout(()=>{
+    document.querySelectorAll(".donut-ring").forEach(el=>{
+      el.style.strokeDashoffset=el.dataset.target;
+    });
+  },50);
+}
+
+function heroCard(val,label,color,icon){
+  return `<div class="an-card" style="border-top:3px solid ${color}">
+    <div class="an-hero">
+      <div style="font-size:28px;margin-bottom:8px">${icon}</div>
+      <div class="an-hero-val" style="color:${color}">${val}</div>
+      <div class="an-hero-label">${label}</div>
+    </div>
+  </div>`;
+}
+
+function donutCard(title,items,total,uid){
+  const R=70,C=2*Math.PI*R,sz=180;
+  let offset=0;
+  let rings="";
+  items.forEach(item=>{
+    const pct=total>0?item.val/total:0;
+    const dash=pct*C;
+    rings+=`<circle class="donut-ring" cx="90" cy="90" r="${R}"
+      fill="none" stroke="${item.color}" stroke-width="22"
+      stroke-dasharray="${dash} ${C-dash}"
+      stroke-dashoffset="${-offset+C/4}"
+      data-target="${-offset+C/4}"
+      style="transition:stroke-dashoffset .8s ease;cursor:${GUEST?"default":"pointer"}"
+      ${GUEST?"":` onclick="anDrillDown('${uid}','${item.label.replace(/'/g,"\'")}')"`}
+    />`;
+    offset+=dash;
+  });
+  const legendHtml=items.map(item=>{
+    const pct=total>0?(item.val/total*100).toFixed(1):0;
+    return `<div class="legend-item ${GUEST?"":"clk-item"}" 
+      ${GUEST?"":` onclick="anDrillDown('${uid}','${item.label.replace(/'/g,"\'")}')"`}>
+      <div class="legend-dot" style="background:${item.color}"></div>
+      <div class="legend-label">${item.label}</div>
+      <div class="legend-val">${item.val.toLocaleString()}</div>
+      <div class="legend-pct">${pct}%</div>
+    </div>`;
+  }).join("");
+
+  return `<div class="an-card">
+    <div class="an-card-title"><div class="dot" style="background:var(--acc)"></div>${title}</div>
+    <div class="donut-wrap">
+      <svg class="donut-svg" width="${sz}" height="${sz}" viewBox="0 0 180 180">
+        <circle cx="90" cy="90" r="${R}" fill="none" stroke="var(--bd)" stroke-width="22"/>
+        ${rings}
+        <text x="90" y="86" text-anchor="middle" fill="var(--t1)" font-size="22" font-weight="900" font-family="Inter,sans-serif">${total.toLocaleString()}</text>
+        <text x="90" y="104" text-anchor="middle" fill="var(--t3)" font-size="10" font-family="Inter,sans-serif">TOTAL</text>
+      </svg>
+      <div class="donut-legend">${legendHtml}</div>
+    </div>
+  </div>`;
+}
+
+function barCard(title,items,uid,isMoney=false){
+  const maxV=Math.max(...items.map(i=>i.val),1);
+  const rows=items.map(item=>{
+    const pct=(item.val/maxV*100).toFixed(1);
+    const disp=isMoney?"£"+item.val.toLocaleString():item.val.toLocaleString();
+    return `<div class="an-bar-row">
+      <div class="an-bar-label" title="${item.label}">${item.label}</div>
+      <div class="an-bar-track" ${GUEST?"":` onclick="anDrillDown('${uid}','${item.label.replace(/'/g,"\'")}')"`}>
+        <div class="an-bar-fill" style="width:${pct}%;background:${item.color}"></div>
+      </div>
+      <div class="an-bar-val" style="color:${item.color}">${disp}</div>
+    </div>`;
+  }).join("");
+  return `<div class="an-card">
+    <div class="an-card-title"><div class="dot" style="background:var(--yellow)"></div>${title}</div>
+    ${rows}
+  </div>`;
+}
+
+function trendCard(title,dayArr){
+  if(!dayArr.length) return "";
+  const maxV=Math.max(...dayArr.map(d=>d[1].orders),1);
+  const W=800,H=120,pad=10;
+  const pts=dayArr.map((d,i)=>{
+    const x=pad+(i/(dayArr.length-1||1))*(W-pad*2);
+    const y=H-pad-(d[1].orders/maxV)*(H-pad*2);
+    return `${x},${y}`;
+  }).join(" ");
+  const ptsFill=`${pad},${H} `+pts+` ${W-pad},${H}`;
+  // x-axis labels (every 5th)
+  let labels="";
+  dayArr.forEach((d,i)=>{
+    if(i%5===0||i===dayArr.length-1){
+      const x=pad+(i/(dayArr.length-1||1))*(W-pad*2);
+      const short=d[0].slice(5);
+      labels+=`<text x="${x}" y="${H+14}" text-anchor="middle" fill="var(--t4)" font-size="9" font-family="Inter,sans-serif">${short}</text>`;
+    }
+  });
+  // Dots
+  let dots="";
+  dayArr.forEach((d,i)=>{
+    const x=pad+(i/(dayArr.length-1||1))*(W-pad*2);
+    const y=H-pad-(d[1].orders/maxV)*(H-pad*2);
+    dots+=`<circle cx="${x}" cy="${y}" r="3" fill="var(--acc)" 
+      ${GUEST?"":` style="cursor:pointer" onclick="anDrillDown('daily','${d[0]}')"`}/>`;
+  });
+
+  return `<div class="an-card" style="margin-bottom:24px">
+    <div class="an-card-title"><div class="dot" style="background:var(--cyan)"></div>${title}</div>
+    <svg width="100%" viewBox="0 0 ${W} ${H+20}" preserveAspectRatio="none" style="overflow:visible">
+      <defs>
+        <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--acc)" stop-opacity=".3"/>
+          <stop offset="100%" stop-color="var(--acc)" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <polygon points="${ptsFill}" fill="url(#tg)"/>
+      <polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+      ${labels}
+    </svg>
+  </div>`;
+}
+
+// ── Drill Down Modal ──
+function anDrillDown(uid,label){
+  if(GUEST) return;
+  const bundles=D.bundles||[];
+  let list=[];let title="";
+
+  if(uid==="src_orders"||uid==="src_saved"){
+    list=bundles.filter(b=>b.source===label).flatMap(b=>b.orders.map(o=>({...o,date:b.date_std,source:b.source,customer:b.customer})));
+    title=`${label} — All Orders (${list.length})`;
+  } else if(uid==="st_orders"){
+    list=bundles.flatMap(b=>b.orders.filter(o=>(o.status||"Unknown")===label).map(o=>({...o,date:b.date_std,source:b.source,customer:b.customer})));
+    title=`Status: ${label} (${list.length} orders)`;
+  } else if(uid==="reg_orders"){
+    list=bundles.filter(b=>(b.region||"EU")===label).flatMap(b=>b.orders.map(o=>({...o,date:b.date_std,source:b.source,customer:b.customer})));
+    title=`Region: ${label} (${list.length} orders)`;
+  } else if(uid==="wt_dist"){
+    const rng={"<5kg":[0,5],"5-10kg":[5,10],"10-20kg":[10,20],"20-30kg":[20,30],"30kg+":[30,9999]};
+    const r=rng[label]||[0,9999];
+    list=bundles.filter(b=>(b.weight_kg||0)>=r[0]&&(b.weight_kg||0)<r[1]).flatMap(b=>b.orders.map(o=>({...o,date:b.date_std,source:b.source,customer:b.customer})));
+    title=`Weight ${label} (${list.length} orders)`;
+  } else if(uid==="cust_orders"){
+    list=bundles.filter(b=>b.customer===label).flatMap(b=>b.orders.map(o=>({...o,date:b.date_std,source:b.source,customer:b.customer})));
+    title=`Customer: ${label} (${list.length} orders)`;
+  } else if(uid==="daily"){
+    list=bundles.filter(b=>b.date_std===label).flatMap(b=>b.orders.map(o=>({...o,date:b.date_std,source:b.source,customer:b.customer})));
+    title=`Date: ${label} (${list.length} orders)`;
+  }
+
+  if(!list.length){alert("No orders found.");return;}
+  g("oTit").textContent=title;
+  showOrdModal(list);
 }
 
 function cMod(id){document.getElementById(id).classList.remove("open");}
