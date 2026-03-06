@@ -4588,7 +4588,6 @@ FULL_ACCESS = {
     "albash@joinfleek.com",
     "waris@joinfleek.com",
     "moiz@joinfleek.com",
-    "areeb@joinfleek.com",
 }
 
 def user_mode():
@@ -4715,10 +4714,12 @@ def fetch_sheet(name,url,col,start,cx):
                 if not row: continue
                 p=row+[""]*60
                 ro=str(p[col["o"]]).strip(); rw=str(p[col["w"]]).strip(); rti=str(p[col["title"]]).strip()
-                if not ro and not rw and not rti: continue
+                rw_clean=rw.replace("0","").replace(".","").strip()
+                if not ro and not rw_clean and not rti: continue
                 if ro: lo=ro
                 co=ro if ro else lo
                 if not co or not re.search(r"\d",co): continue
+                if not ro and not rti and (not rw or float(rw or 0)==0): continue
                 if co.lower() in ["n/a","nan","order","orderid","order id"]: continue
                 dv=str(p[col["d"]]).strip(); vv=str(p[col["v"]]).strip()
                 cv=str(p[col["c"]]).strip(); cnv=str(p[col["cn"]]).strip(); tv=str(p[col["t"]]).strip()
@@ -6053,10 +6054,18 @@ function rSummary(){
   const mon=new Date(ws);mon.setHours(0,0,0,0);
   const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
   const bundles=wkBundles(mon);
-  let html="";
-  if(!bundles.length) html=`<div class="empty-state"><div class="empty-icon">📭</div><div>No data for selected week.</div></div>`;
-  else SRCS.forEach(src=>{html+=buildCard(src,bundles,wl);});
-  g("sumCards").innerHTML=html;
+  const cont=g("sumCards");
+  cont.innerHTML="";
+  if(!bundles.length){cont.innerHTML=`<div class="empty-state"><div class="empty-icon">📭</div><div>No data.</div></div>`;return;}
+  let i=0;
+  function next(){
+    if(i>=SRCS.length) return;
+    const tmp=document.createElement("div");
+    tmp.innerHTML=buildCard(SRCS[i],bundles,wl);
+    cont.appendChild(tmp.firstChild);
+    i++; setTimeout(next,0);
+  }
+  next();
 }
 
 function setW4Now(btn){
@@ -6068,17 +6077,45 @@ function rW4(){
   if(!D) return;
   const ws=g("w4e").value; if(!ws) return;
   const lat=new Date(ws);lat.setHours(0,0,0,0);
-  let html="";
-  for(let i=0;i<4;i++){
-    const mon=new Date(lat);mon.setDate(mon.getDate()-i*7);
-    const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
+  const cont=g("w4cards");
+  cont.innerHTML="";
+  // Build queue: [weekIndex, srcIndex]
+  const queue=[];
+  for(let wi=0;wi<4;wi++){
+    queue.push({wi,si:-1}); // week header
+    const mon=new Date(lat);mon.setDate(mon.getDate()-wi*7);
     const bundles=wkBundles(mon);
-    html+=`<div style="margin-bottom:8px"><div class="wklabel">📅 Week ${4-i}: ${wl}</div>`;
-    if(!bundles.length){html+=`<div class="empty-state" style="padding:30px;margin-bottom:20px"><div>No data</div></div>`;}
-    else SRCS.forEach(src=>{html+=buildCard(src,bundles,wl);});
-    html+="</div>";
+    if(bundles.length) for(let si=0;si<SRCS.length;si++) queue.push({wi,si,mon:new Date(mon),bundles});
+    else queue.push({wi,si:-2});
   }
-  g("w4cards").innerHTML=html;
+  const wDivs={};
+  function next(qi){
+    if(qi>=queue.length) return;
+    const item=queue[qi];
+    if(item.si===-1){
+      // Create week wrapper
+      const mon=new Date(lat);mon.setDate(mon.getDate()-item.wi*7);
+      const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
+      const d=document.createElement("div");
+      d.style.marginBottom="8px";
+      d.innerHTML=`<div class="wklabel">📅 Week ${4-item.wi}: ${wl}</div>`;
+      cont.appendChild(d);
+      wDivs[item.wi]=d;
+    } else if(item.si===-2){
+      const d=document.createElement("div");
+      d.className="empty-state";d.style.padding="30px";d.style.marginBottom="20px";
+      d.textContent="No data";
+      wDivs[item.wi].appendChild(d);
+    } else {
+      const mon=item.mon;
+      const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
+      const tmp=document.createElement("div");
+      tmp.innerHTML=buildCard(SRCS[item.si],item.bundles,wl);
+      wDivs[item.wi].appendChild(tmp.firstChild);
+    }
+    setTimeout(()=>next(qi+1),0);
+  }
+  next(0);
 }
 
 function setRWk(offset,btn){
@@ -6122,11 +6159,20 @@ function rRegional(){
       ${buildWeekStats(bundles)}
     </div>
   </div>`;
-  Object.entries(groups).forEach(([gname,srcs])=>{
+  const cont=g("regCards");
+  cont.innerHTML=html; // inject summary cards first
+  const groupArr=Object.entries(groups);
+  let gi=0;
+  function nextReg(){
+    if(gi>=groupArr.length) return;
+    const [gname,srcs]=groupArr[gi];
     const gb=bundles.filter(b=>srcs.includes(b.source));
-    html+=buildRegCard(gname,gb,wl);
-  });
-  g("regCards").innerHTML=html;
+    const tmp=document.createElement("div");
+    tmp.innerHTML=buildRegCard(gname,gb,wl);
+    cont.appendChild(tmp.firstChild);
+    gi++; setTimeout(nextReg,0);
+  }
+  nextReg();
 }
 
 function buildWeekStats(bundles){
