@@ -12,7 +12,7 @@ import random
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
+
 
 # ========== CACHE ==========
 CACHE = {}
@@ -1265,53 +1265,293 @@ def sidebar(active, role='guest'):
     return SIDEBAR_HTML.format(**kwargs)
 
 # ===== LOGIN =====
+# ==============================================================================
+# ✅ NEW EMAIL LOGIN SYSTEM
+# Yahan naye users add karein — format: "email@domain.com": "password"
+# ==============================================================================
+
+USERS = {
+    "husaain@joinfleek.com":      "hussain123",
+    "wahab.chippa@joinfleek.com": "Rocket#2024",
+    "albash@joinfleek.com":       "Albash123",
+    "waris@joinfleek.com":        "waris123",
+    "moiz@joinfleek.com":         "moiz1234",
+}
+
+# Guest login ke liye ek simple password (optional, agar seedha guest button chahiye)
+GUEST_PASSWORD = ""  # empty = no password needed, sirf "Guest" button click
+
+# ==============================================================================
+# LOGIN ROUTE — Is poori route ko replace karein
+# ==============================================================================
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
     if request.method == 'POST':
         action = request.form.get('action')
+
+        # ===== GUEST LOGIN =====
         if action == 'guest':
             session['logged_in'] = True
-            session['role'] = 'guest'
+            session['role']      = 'guest'
+            session.pop('email', None)
+            return redirect(url_for('dashboard'))
+
+        # ===== EMAIL + PASSWORD LOGIN =====
+        email    = (request.form.get('email') or '').strip().lower()
+        password = (request.form.get('password') or '').strip()
+
+        if email in USERS and USERS[email] == password:
+            session['logged_in'] = True
+            session['role']      = 'admin'   # full access — existing code breaks nahi hoga
+            session['email']     = email      # bundling tool ke liye zarori
             return redirect(url_for('dashboard'))
         else:
-            if request.form.get('password') == ADMIN_PASSWORD:
-                session['logged_in'] = True
-                session['role'] = 'admin'
-                return redirect(url_for('dashboard'))
-            else:
-                error = 'Invalid admin password. Please try again.'
-                
-    return render_template_string('''
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Login - 3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
-<div class="login-container">
-    <div class="login-card">
-        <div class="login-logo">3P</div>
-        <h1 class="login-title">Welcome Back</h1>
-        <p class="login-subtitle">Access your 3PL Dashboard</p>
-        {% if error %}<div class="error-message">{{ error }}</div>{% endif %}
-        <form class="login-form" method="POST">
-            <div class="form-group">
-                <label class="form-label">Admin Password</label>
-                <input type="password" name="password" class="form-input" placeholder="Enter password" autofocus>
-            </div>
-            <button type="submit" name="action" value="admin" class="login-btn">Sign In as Admin</button>
-            <div class="divider">
-                <span class="divider-line"></span>
-                <span>OR</span>
-                <span class="divider-line"></span>
-            </div>
-            <button type="submit" name="action" value="guest" class="login-btn guest-btn">Continue as Guest (View Only)</button>
-        </form>
-    </div>
-</div></body></html>''', error=error, favicon=FAVICON)
+            error = 'Invalid email or password. Please try again.'
 
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
+    return render_template_string(LOGIN_HTML, error=error, favicon=FAVICON)
+
+
+# ==============================================================================
+# LOGIN HTML TEMPLATE
+# ==============================================================================
+
+LOGIN_HTML = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — 3PL Dashboard</title>
+{{ favicon|safe }}
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #0a0a14;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  /* ---- animated background ---- */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 20% 30%, rgba(79,70,229,0.15) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 40% at 80% 70%, rgba(16,185,129,0.1) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .card {
+    position: relative; z-index: 1;
+    background: rgba(15,15,30,0.95);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 44px 40px;
+    width: 100%; max-width: 400px;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+    backdrop-filter: blur(20px);
+  }
+
+  .logo {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: #fff;
+    margin: 0 auto 22px;
+    box-shadow: 0 8px 20px rgba(79,70,229,0.4);
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 22px; font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 6px;
+  }
+
+  .subtitle {
+    text-align: center;
+    font-size: 13px; color: #64748b;
+    margin-bottom: 30px;
+  }
+
+  .error {
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.35);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #fca5a5;
+    font-size: 12px;
+    margin-bottom: 18px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .form { display: flex; flex-direction: column; gap: 14px; }
+
+  .group { display: flex; flex-direction: column; gap: 6px; }
+
+  label {
+    font-size: 11px; font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+  }
+
+  input[type="email"],
+  input[type="password"] {
+    width: 100%;
+    padding: 11px 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    color: #f1f5f9;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  input:focus {
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.2);
+  }
+
+  .btn-main {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    border: none; border-radius: 10px;
+    color: #fff;
+    font-size: 14px; font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.15s;
+    box-shadow: 0 4px 15px rgba(79,70,229,0.35);
+  }
+  .btn-main:hover { opacity: 0.9; transform: translateY(-1px); }
+
+  .divider {
+    display: flex; align-items: center; gap: 10px;
+    margin: 6px 0;
+  }
+  .divider-line { flex: 1; height: 1px; background: rgba(255,255,255,0.08); }
+  .divider-text { font-size: 11px; color: #475569; }
+
+  .btn-guest {
+    width: 100%;
+    padding: 11px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    color: #94a3b8;
+    font-size: 13px; font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+  }
+  .btn-guest:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.2);
+    color: #e2e8f0;
+  }
+
+  .footer-note {
+    text-align: center;
+    font-size: 11px; color: #334155;
+    margin-top: 22px;
+  }
+
+  .eye-btn {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    color: #475569; font-size: 16px; padding: 4px;
+    transition: color 0.2s;
+  }
+  .eye-btn:hover { color: #94a3b8; }
+  .pwd-wrap { position: relative; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">3P</div>
+  <h1>Welcome Back</h1>
+  <p class="subtitle">3PL Operations Dashboard</p>
+
+  {% if error %}
+  <div class="error">⚠️ {{ error }}</div>
+  {% endif %}
+
+  <form method="POST" class="form">
+
+    <div class="group">
+      <label for="email">Email Address</label>
+      <input type="email" id="email" name="email"
+             placeholder="you@joinfleek.com"
+             autocomplete="email" required autofocus>
+    </div>
+
+    <div class="group">
+      <label for="password">Password</label>
+      <div class="pwd-wrap">
+        <input type="password" id="password" name="password"
+               placeholder="••••••••"
+               autocomplete="current-password" required>
+        <button type="button" class="eye-btn" onclick="togglePwd()" id="eyeBtn">👁</button>
+      </div>
+    </div>
+
+    <button type="submit" name="action" value="login" class="btn-main">
+      Sign In
+    </button>
+
+    <div class="divider">
+      <div class="divider-line"></div>
+      <span class="divider-text">OR</span>
+      <div class="divider-line"></div>
+    </div>
+
+    <button type="submit" name="action" value="guest" class="btn-guest">
+      👀 Continue as Guest (View Only)
+    </button>
+
+  </form>
+
+  <p class="footer-note">Authorized Fleek Operations Personnel Only</p>
+</div>
+
+<script>
+function togglePwd(){
+  const inp = document.getElementById('password');
+  const btn = document.getElementById('eyeBtn');
+  if(inp.type === 'password'){ inp.type='text'; btn.textContent='🙈'; }
+  else { inp.type='password'; btn.textContent='👁'; }
+}
+</script>
+</body>
+</html>
+'''
+
+
+# ==============================================================================
+# LOGOUT ROUTE — yeh waise hi rahega, koi change nahi
+# ==============================================================================
+
+# @app.route('/logout')
+# def logout():
+#     session.clear()
+#     return redirect(url_for('login'))
+
+# NOTE: Upar wala logout route pehle se existing code mein hai — use rehne do.
+# Sirf upper wala USERS dict + login() function + LOGIN_HTML replace karein.
 
 # ===== DASHBOARD =====
 @app.route('/')
