@@ -4859,242 +4859,647 @@ def add_float_btns(response):
     return response
 
 BUNDLING_HTML = r"""<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bundling Intelligence Hub</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#05050f;--s1:#0c0c1e;--s2:#11112a;--s3:#161632;
-  --bd:#1e1e3f;--bd2:#252550;
-  --t1:#e8eaf6;--t2:#9fa8da;--t3:#5c6bc0;--t4:#3949ab;
-  --green:#00e676;--green2:#00c853;--blue:#448aff;--blue2:#2979ff;
-  --purple:#e040fb;--orange:#ff6d00;--yellow:#ffd740;--red:#ff1744;
-  --cyan:#00e5ff;--acc:#5c6bc0;
+
+/* ===================== THEME VARIABLES ===================== */
+[data-theme="dark"]{
+  --bg:#000000;
+  --s1:#0a0a0a;
+  --s2:#111111;
+  --s3:#161616;
+  --bd:#1f1f1f;
+  --bd2:#2a2a2a;
+  --t1:#ffffff;
+  --t2:#e0e0e0;
+  --t3:#888888;
+  --t4:#555555;
+  --card:#0d0d0d;
+  --input:#050505;
+  --hover:rgba(255,255,255,0.04);
+  --shadow:0 4px 24px rgba(0,0,0,0.8);
+  --green:#00e676;--green2:#00c853;
+  --blue:#4d9fff;--blue2:#2979ff;
+  --purple:#c77dff;--orange:#ff9500;
+  --yellow:#ffd60a;--red:#ff453a;
+  --cyan:#5ac8fa;--acc:#4d9fff;
+  --tab-active-bg:#111111;
+  --tab-active-border:#4d9fff;
 }
-body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;}
-/* TOPBAR */
-.topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 28px;
-  background:var(--s1);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:200;
-  backdrop-filter:blur(12px);}
-.tbl-left{display:flex;align-items:center;gap:12px;}
-.tbl-ico{width:38px;height:38px;background:linear-gradient(135deg,#1e88e5,#5c6bc0);
-  border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;}
-.tbl-title{font-size:16px;font-weight:800;color:var(--t1);}
+[data-theme="light"]{
+  --bg:#f0f2f5;
+  --s1:#ffffff;
+  --s2:#f8f9fa;
+  --s3:#f0f2f5;
+  --bd:#e0e4eb;
+  --bd2:#d0d5dd;
+  --t1:#0a0a0a;
+  --t2:#1a1a2e;
+  --t3:#4a5568;
+  --t4:#9aa5b4;
+  --card:#ffffff;
+  --input:#f8f9fa;
+  --hover:rgba(0,0,0,0.03);
+  --shadow:0 4px 20px rgba(0,0,0,0.08);
+  --green:#00875a;--green2:#006644;
+  --blue:#0052cc;--blue2:#0747a6;
+  --purple:#6554c0;--orange:#ff7722;
+  --yellow:#ff8b00;--red:#de350b;
+  --cyan:#008da6;--acc:#0052cc;
+  --tab-active-bg:#ffffff;
+  --tab-active-border:#0052cc;
+}
+
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;transition:background .25s,color .25s;}
+
+/* ===================== TOPBAR ===================== */
+.topbar{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:0 28px;height:60px;
+  background:var(--s1);
+  border-bottom:1px solid var(--bd);
+  position:sticky;top:0;z-index:200;
+  box-shadow:var(--shadow);
+}
+.tbl-left{display:flex;align-items:center;gap:14px;}
+.tbl-ico{
+  width:36px;height:36px;
+  background:linear-gradient(135deg,#0052cc,#4d9fff);
+  border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:18px;box-shadow:0 4px 12px rgba(77,159,255,0.3);
+}
+.tbl-brand{display:flex;flex-direction:column;}
+.tbl-title{font-size:15px;font-weight:800;color:var(--t1);letter-spacing:-.3px;}
 .tbl-sub{font-size:11px;color:var(--t3);margin-top:1px;}
-.tbtn{padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;
-  font-family:inherit;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;transition:.15s;}
-.tbtn:hover{filter:brightness(1.15);}
-/* TABS */
-.tabs-wrap{padding:18px 28px 0;background:var(--s1);border-bottom:1px solid var(--bd);}
-.tabs{display:flex;gap:4px;}
-.tab{padding:10px 20px;border-radius:8px 8px 0 0;font-weight:700;font-size:13px;cursor:pointer;
-  border:1px solid transparent;border-bottom:none;color:var(--t3);transition:.15s;background:transparent;}
-.tab:hover{color:var(--t2);background:rgba(92,107,192,.1);}
-.tab.active{background:var(--s2);color:var(--t1);border-color:var(--bd);border-bottom-color:var(--s2);}
-/* PANES */
-.main{padding:24px 28px;}
-.pane{display:none;}.pane.active{display:block;}
-/* FILTER BAR */
-.fbar{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:16px 20px;margin-bottom:22px;}
-.frow{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+
+/* Theme Toggle */
+.theme-pill{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 14px;
+  background:var(--s2);
+  border:1px solid var(--bd);
+  border-radius:20px;
+  cursor:pointer;
+  font-size:12px;font-weight:700;
+  color:var(--t2);
+  transition:.2s;
+  font-family:inherit;
+}
+.theme-pill:hover{border-color:var(--acc);color:var(--acc);}
+.theme-pill .icon{font-size:14px;}
+
+.tbtn{
+  padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;border:none;
+  display:inline-flex;align-items:center;gap:6px;
+  text-decoration:none;transition:.15s;
+  white-space:nowrap;
+}
+.tbtn:hover{filter:brightness(1.1);transform:translateY(-1px);}
+.tbtn-back{background:var(--s2);color:var(--t2);border:1px solid var(--bd);}
+.tbtn-refresh{background:linear-gradient(135deg,#00875a,#00e676);color:#000;}
+
+/* ===================== TABS ===================== */
+.tabs-wrap{
+  background:var(--s1);
+  border-bottom:1px solid var(--bd);
+  padding:0 28px;
+}
+.tabs{display:flex;gap:0;overflow-x:auto;}
+.tab{
+  padding:16px 22px;
+  font-weight:600;font-size:13px;cursor:pointer;
+  color:var(--t3);
+  border-bottom:3px solid transparent;
+  white-space:nowrap;
+  transition:.2s;
+  display:flex;align-items:center;gap:8px;
+  background:transparent;border-top:none;border-left:none;border-right:none;
+  font-family:inherit;
+}
+.tab:hover{color:var(--t1);background:var(--hover);}
+.tab.active{
+  color:var(--acc);
+  border-bottom-color:var(--acc);
+  background:transparent;
+}
+.tab .tab-icon{font-size:14px;}
+
+/* ===================== MAIN CONTENT ===================== */
+.main{padding:24px 28px;max-width:1600px;}
+.pane{display:none;animation:fadeIn .2s ease;}
+.pane.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+/* ===================== FILTER BAR ===================== */
+.fbar{
+  background:var(--s1);
+  border:1px solid var(--bd);
+  border-radius:14px;
+  padding:18px 22px;
+  margin-bottom:22px;
+  box-shadow:var(--shadow);
+}
+.frow{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;}
 .frow:last-child{margin-bottom:0;}
-.fg{display:flex;flex-direction:column;gap:4px;}
-.fl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
-.fi{background:var(--bg);border:1px solid var(--bd);color:var(--t1);padding:8px 11px;border-radius:7px;
-  font-family:inherit;outline:none;font-size:13px;transition:.2s;}
-.fi:focus{border-color:var(--acc);}
-.fg-grow{flex:1;min-width:180px;}
+.fg{display:flex;flex-direction:column;gap:5px;}
+.fl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+.fi{
+  background:var(--input);
+  border:1px solid var(--bd);
+  color:var(--t1);
+  padding:9px 13px;
+  border-radius:8px;
+  font-family:inherit;
+  outline:none;
+  font-size:13px;
+  transition:.2s;
+  min-width:0;
+}
+.fi:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(77,159,255,0.12);}
+.fi option{background:var(--s1);color:var(--t1);}
+.fg-grow{flex:1;min-width:200px;}
 .qbtns{display:flex;gap:6px;flex-wrap:wrap;}
-.qb{padding:6px 12px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:6px;
-  color:var(--t3);font-size:12px;font-family:inherit;font-weight:600;cursor:pointer;transition:.15s;}
-.qb:hover,.qb.on{background:rgba(92,107,192,.18);border-color:var(--acc);color:var(--t2);}
-.abtn{padding:8px 20px;background:linear-gradient(135deg,#3949ab,#5c6bc0);border:none;border-radius:8px;
-  color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
-.cbtn{padding:8px 14px;background:rgba(255,255,255,.04);border:1px solid var(--bd);border-radius:8px;
-  color:var(--t3);font-size:13px;cursor:pointer;font-family:inherit;}
+.qb{
+  padding:7px 14px;
+  background:var(--s2);
+  border:1px solid var(--bd);
+  border-radius:20px;
+  color:var(--t3);
+  font-size:12px;font-family:inherit;font-weight:600;
+  cursor:pointer;transition:.15s;
+}
+.qb:hover{color:var(--t1);border-color:var(--bd2);}
+.qb.on{background:rgba(77,159,255,.12);border-color:var(--acc);color:var(--acc);}
+.abtn{
+  padding:9px 22px;
+  background:linear-gradient(135deg,var(--blue2),var(--acc));
+  border:none;border-radius:8px;
+  color:#fff;font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit;
+  box-shadow:0 4px 12px rgba(77,159,255,0.25);
+  transition:.15s;
+}
+.abtn:hover{transform:translateY(-1px);filter:brightness(1.1);}
+.cbtn{
+  padding:9px 16px;
+  background:transparent;
+  border:1px solid var(--bd);
+  border-radius:8px;
+  color:var(--t3);font-size:13px;
+  cursor:pointer;font-family:inherit;transition:.15s;
+}
 .cbtn:hover{border-color:var(--red);color:var(--red);}
-/* KPI CARDS */
+
+/* ===================== KPI CARDS ===================== */
 .kg{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
-.kc{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:20px 18px;
-  border-left:3px solid var(--green);}
-.kv{font-size:34px;font-weight:900;letter-spacing:-1.5px;margin-bottom:4px;color:var(--t1);}
-.kl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+.kc{
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:14px;
+  padding:20px 18px;
+  position:relative;
+  overflow:hidden;
+  box-shadow:var(--shadow);
+  transition:.2s;
+}
+.kc:hover{transform:translateY(-2px);border-color:var(--green);}
+.kc::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:var(--green);}
+.kc-accent-yellow::before{background:var(--yellow);}
+.kc-accent-blue::before{background:var(--blue);}
+.kc-accent-green::before{background:var(--green);}
+.kv{font-size:30px;font-weight:900;letter-spacing:-1px;margin-bottom:4px;color:var(--t1);}
+.kl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
+
+/* Source Stats */
 .sg{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
-.sc{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px;
-  border-left:3px solid var(--green);}
-.sct{font-size:12px;font-weight:800;color:var(--green);margin-bottom:12px;}
+.sc{
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:14px;
+  padding:18px 20px;
+  box-shadow:var(--shadow);
+  transition:.2s;
+}
+.sc:hover{transform:translateY(-2px);}
+.sct{font-size:11px;font-weight:800;color:var(--green);margin-bottom:14px;
+  text-transform:uppercase;letter-spacing:1px;display:flex;align-items:center;gap:8px;}
+.sct::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);}
 .scst{display:flex;justify-content:space-around;text-align:center;}
-.scv{font-size:22px;font-weight:900;color:var(--t1);}
-.scl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;}
-/* MAIN TABLE */
-.tw{overflow-x:auto;}
-table.mt{width:100%;border-collapse:collapse;background:var(--s1);border-radius:12px;
-  border:1px solid var(--bd);overflow:hidden;}
-table.mt th{background:var(--bg);padding:12px 14px;font-size:10px;color:var(--t3);
-  text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--bd);text-align:left;}
-table.mt td{padding:12px 14px;border-bottom:1px solid var(--s2);vertical-align:top;font-size:13px;}
-table.mt tr:hover td{background:rgba(255,255,255,.015);}
-.bbox{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;}
-.bi{display:grid;grid-template-columns:165px 1fr 50px;gap:8px;padding:7px 0;
-  border-bottom:1px dashed var(--bd);align-items:start;}
+.scv{font-size:24px;font-weight:900;color:var(--t1);}
+.scl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;margin-top:3px;}
+
+/* ===================== MAIN TABLE ===================== */
+.tw{overflow-x:auto;border-radius:12px;}
+table.mt{
+  width:100%;border-collapse:collapse;
+  background:var(--card);
+  border-radius:12px;
+  border:1px solid var(--bd);
+  overflow:hidden;
+  box-shadow:var(--shadow);
+}
+table.mt th{
+  background:var(--s2);
+  padding:13px 16px;font-size:10px;
+  color:var(--t3);text-transform:uppercase;font-weight:800;
+  border-bottom:1px solid var(--bd);text-align:left;
+  letter-spacing:.8px;
+}
+table.mt td{
+  padding:14px 16px;
+  border-bottom:1px solid var(--bd);
+  vertical-align:top;font-size:13px;
+  color:var(--t1);
+}
+table.mt tr:last-child td{border-bottom:none;}
+table.mt tr:hover td{background:var(--hover);}
+.bbox{
+  background:var(--s2);
+  border:1px solid var(--bd);
+  border-radius:10px;
+  padding:10px 12px;
+}
+.bi{
+  display:grid;grid-template-columns:170px 1fr 50px;
+  gap:10px;padding:8px 0;
+  border-bottom:1px dashed var(--bd);align-items:start;
+}
 .bi:last-child{border-bottom:none;padding-bottom:0;}
-.olink{color:var(--green);font-weight:800;cursor:pointer;font-family:monospace;font-size:12px;
-  background:rgba(0,230,118,.07);padding:3px 7px;border-radius:4px;border:1px solid rgba(0,230,118,.2);
-  display:inline-flex;align-items:center;gap:3px;transition:.15s;}
-.olink:hover{background:rgba(0,230,118,.18);}
-.spill{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;
-  margin-top:2px;white-space:nowrap;}
-/* STATUS */
-.pbx{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:14px 18px;margin-bottom:18px;}
-.sp{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;
-  border:1px solid transparent;transition:.15s;display:inline-block;}
+.olink{
+  color:var(--green);font-weight:800;cursor:pointer;
+  font-family:monospace;font-size:12px;
+  background:rgba(0,230,118,.08);
+  padding:4px 8px;border-radius:6px;
+  border:1px solid rgba(0,230,118,.2);
+  display:inline-flex;align-items:center;gap:4px;
+  transition:.15s;
+}
+.olink:hover{background:rgba(0,230,118,.18);transform:translateY(-1px);}
+.spill{
+  display:inline-block;padding:3px 9px;
+  border-radius:20px;font-size:11px;font-weight:700;
+  margin-top:3px;white-space:nowrap;
+}
+
+/* ===================== STATUS FILTER ===================== */
+.pbx{
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:12px;
+  padding:16px 20px;
+  margin-bottom:18px;
+}
+.sp{
+  padding:6px 14px;border-radius:20px;
+  font-size:12px;font-weight:700;
+  cursor:pointer;border:1px solid transparent;
+  transition:.15s;display:inline-block;
+  font-family:inherit;
+}
 .sp:hover{transform:translateY(-1px);}
 .sp.on{box-shadow:0 0 0 2px var(--t1);}
-/* PROVIDER CARD (Summary) */
-.pcard{background:var(--s1);border:1px solid var(--bd);border-radius:16px;overflow:hidden;margin-bottom:28px;}
-.phdr{display:flex;justify-content:space-between;align-items:center;
-  padding:18px 22px 14px;border-bottom:1px solid var(--bd);flex-wrap:wrap;gap:12px;
-  background:linear-gradient(135deg,rgba(30,30,63,.8),rgba(17,17,42,.8));}
+
+/* ===================== PROVIDER CARD ===================== */
+.pcard{
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:16px;
+  overflow:hidden;
+  margin-bottom:24px;
+  box-shadow:var(--shadow);
+  transition:.2s;
+}
+.pcard:hover{border-color:var(--bd2);}
+.phdr{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:20px 24px;
+  border-bottom:1px solid var(--bd);
+  flex-wrap:wrap;gap:14px;
+  background:var(--s2);
+}
 .phdr-left{display:flex;flex-direction:column;gap:6px;}
-.pname{font-size:18px;font-weight:900;color:var(--t1);letter-spacing:-.3px;}
-.pname-sub{font-size:11px;color:var(--t3);}
+.pname{font-size:17px;font-weight:800;color:var(--t1);letter-spacing:-.3px;}
+.pname-sub{font-size:11px;color:var(--t3);font-weight:500;}
 .pname-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.stars{color:var(--yellow);font-size:15px;letter-spacing:1px;}
-.pbadge{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:800;}
-.pbadge.up{background:rgba(0,230,118,.15);color:var(--green);border:1px solid rgba(0,230,118,.3);}
-.pbadge.dn{background:rgba(255,23,68,.15);color:#ff5252;border:1px solid rgba(255,23,68,.3);}
-.pkbadge{background:linear-gradient(135deg,#ff6d00,#ff8f00);color:#fff;padding:4px 12px;
-  border-radius:20px;font-size:11px;font-weight:800;}
-.pstats{display:flex;gap:24px;align-items:center;flex-wrap:wrap;}
-.pstat{text-align:center;cursor:pointer;transition:.15s;padding:6px 10px;border-radius:8px;
-  border:1px solid transparent;}
-.pstat:hover{background:rgba(255,255,255,.06);border-color:var(--bd);}
-.pstat-v{font-size:24px;font-weight:900;}
-.pstat-l{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:2px;}
-.csvbtn{padding:5px 12px;background:var(--s2);border:1px solid var(--bd);color:var(--t3);
-  border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;transition:.15s;}
+.stars{color:var(--yellow);font-size:14px;letter-spacing:1.5px;}
+.pbadge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:800;}
+.pbadge.up{background:rgba(0,230,118,.12);color:var(--green);border:1px solid rgba(0,230,118,.25);}
+.pbadge.dn{background:rgba(255,69,58,.12);color:var(--red);border:1px solid rgba(255,69,58,.25);}
+.pkbadge{
+  background:linear-gradient(135deg,#ff9500,#ffd60a);
+  color:#000;padding:4px 12px;
+  border-radius:20px;font-size:11px;font-weight:800;
+}
+.pstats{display:flex;gap:20px;align-items:center;flex-wrap:wrap;}
+.pstat{
+  text-align:center;cursor:pointer;
+  padding:8px 14px;border-radius:10px;
+  border:1px solid transparent;
+  transition:.15s;min-width:70px;
+  background:var(--s3);
+}
+.pstat:hover{background:var(--hover);border-color:var(--bd);}
+.pstat-v{font-size:22px;font-weight:900;letter-spacing:-.5px;}
+.pstat-l{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:2px;letter-spacing:.8px;}
+.csvbtn{
+  padding:6px 14px;
+  background:var(--s3);
+  border:1px solid var(--bd);
+  color:var(--t3);
+  border-radius:8px;font-size:11px;
+  cursor:pointer;font-family:inherit;transition:.15s;
+  font-weight:700;
+}
 .csvbtn:hover{border-color:var(--yellow);color:var(--yellow);}
-/* MATRIX TABLE */
-.tw2{overflow-x:auto;padding:0 2px 4px;}
+
+/* ===================== MATRIX TABLE ===================== */
+.tw2{overflow-x:auto;padding:2px 4px 6px;}
 table.mx{width:100%;border-collapse:collapse;min-width:860px;}
-table.mx th.dh{background:var(--bg);text-align:center;padding:10px 4px;font-size:11px;
-  font-weight:700;color:var(--t2);border-bottom:2px solid var(--acc);border-left:1px solid var(--bd);}
-table.mx th.sh{background:rgba(0,0,0,.4);text-align:center;padding:5px 3px;font-size:9px;
-  font-weight:700;color:var(--t4);text-transform:uppercase;border-bottom:1px solid var(--bd);
-  border-left:1px solid rgba(255,255,255,.04);}
-table.mx th.rh{background:var(--bg);text-align:left;padding:10px 14px;font-size:10px;
-  font-weight:700;color:var(--t3);text-transform:uppercase;border-bottom:1px solid var(--bd);}
-table.mx td{padding:9px 5px;text-align:center;border-bottom:1px solid rgba(255,255,255,.04);
-  border-left:1px solid rgba(255,255,255,.03);font-size:12px;font-weight:600;color:var(--t2);}
-table.mx td.rc{text-align:left;padding:9px 14px;font-weight:700;color:var(--t1);font-size:13px;border-left:none;}
+table.mx th.dh{
+  background:var(--s2);text-align:center;
+  padding:11px 4px;font-size:11px;font-weight:700;
+  color:var(--t2);border-bottom:2px solid var(--acc);
+  border-left:1px solid var(--bd);
+}
+table.mx th.sh{
+  background:var(--s3);text-align:center;
+  padding:6px 3px;font-size:9px;font-weight:700;
+  color:var(--t4);text-transform:uppercase;
+  border-bottom:1px solid var(--bd);
+  border-left:1px solid var(--bd);
+  letter-spacing:.5px;
+}
+table.mx th.rh{
+  background:var(--s2);text-align:left;
+  padding:11px 16px;font-size:10px;font-weight:700;
+  color:var(--t3);text-transform:uppercase;
+  border-bottom:1px solid var(--bd);
+  letter-spacing:.8px;
+}
+table.mx td{
+  padding:10px 6px;text-align:center;
+  border-bottom:1px solid var(--bd);
+  border-left:1px solid var(--bd);
+  font-size:12px;font-weight:600;color:var(--t2);
+}
+table.mx td.rc{
+  text-align:left;padding:10px 16px;
+  font-weight:700;color:var(--t1);
+  font-size:13px;border-left:none;
+  background:var(--s2);
+}
 table.mx td.vo{color:var(--blue);}
 table.mx td.vb{color:var(--green);}
 table.mx td.vw{color:var(--yellow);}
 table.mx td.vl{color:var(--purple);}
 table.mx td.vg{color:var(--red);}
 table.mx td.dash{color:var(--t4);font-size:10px;}
-table.mx tr:hover td{background:rgba(255,255,255,.02);}
-table.mx tr.ttr td{background:rgba(92,107,192,.08);font-weight:900;font-size:13px;}
-table.mx tr.ttr td.rc{color:var(--yellow);}
-table.mx tr.ttr td.vo{color:#7986cb;}
+table.mx tr:hover td{background:var(--hover);}
+table.mx tr.ttr td{
+  background:rgba(77,159,255,.06);
+  font-weight:900;font-size:13px;
+}
+table.mx tr.ttr td.rc{color:var(--yellow);background:rgba(255,214,10,.06);}
+table.mx tr.ttr td.vo{color:#7bb3f0;}
 table.mx tr.ttr td.vb{color:#4db6ac;}
 table.mx tr.ttr td.vw{color:var(--yellow);}
 table.mx td.clk{cursor:pointer;}
 table.mx td.clk:hover{opacity:.7;text-decoration:underline;}
-table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
-/* REGIONAL */
+table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
+
+/* ===================== REGIONAL ===================== */
 .reg-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
-.mini-card{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:18px;}
-.mini-title{font-size:13px;font-weight:800;color:var(--t2);margin-bottom:14px;
-  display:flex;align-items:center;gap:8px;}
+.mini-card{
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:14px;
+  padding:20px;
+  box-shadow:var(--shadow);
+}
+.mini-title{
+  font-size:13px;font-weight:800;color:var(--t1);
+  margin-bottom:16px;display:flex;align-items:center;gap:8px;
+}
 .mini-title .dot{width:8px;height:8px;border-radius:50%;}
-.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
-.bar-label{font-size:11px;color:var(--t2);width:110px;flex-shrink:0;font-weight:600;}
-.bar-track{flex:1;height:14px;background:var(--s2);border-radius:7px;overflow:hidden;}
-.bar-fill{height:100%;border-radius:7px;transition:.5s;}
-.bar-val{font-size:11px;font-weight:700;width:50px;text-align:right;}
-/* LOADER */
-.lw{text-align:center;padding:60px;}
-.ld{width:42px;height:42px;border:3px solid var(--bd);border-top-color:var(--acc);
-  border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 14px;}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+.bar-label{font-size:11px;color:var(--t2);width:120px;flex-shrink:0;font-weight:600;}
+.bar-track{flex:1;height:12px;background:var(--s2);border-radius:6px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:6px;transition:.6s;}
+.bar-val{font-size:11px;font-weight:700;width:40px;text-align:right;color:var(--t2);}
+
+/* ===================== WEEK LABEL ===================== */
+.wklabel{
+  font-size:11px;color:var(--t3);
+  background:var(--s2);
+  border:1px solid var(--bd);
+  border-radius:8px;
+  padding:6px 14px;
+  display:inline-block;
+  margin-bottom:20px;
+  font-weight:600;
+}
+
+/* ===================== LOADER ===================== */
+.lw{text-align:center;padding:80px 20px;}
+.ld{
+  width:40px;height:40px;
+  border:3px solid var(--bd);
+  border-top-color:var(--acc);
+  border-radius:50%;
+  animation:sp .7s linear infinite;
+  margin:0 auto 14px;
+}
 @keyframes sp{to{transform:rotate(360deg)}}
-/* MODALS */
-.mov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;
-  backdrop-filter:blur(8px);justify-content:center;align-items:center;}
+.lp{color:var(--t3);font-size:13px;font-weight:500;}
+.lp2{color:var(--t4);font-size:11px;margin-top:6px;}
+
+/* ===================== MODALS ===================== */
+.mov{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.85);z-index:9999;
+  backdrop-filter:blur(10px);
+  justify-content:center;align-items:center;
+  padding:20px;
+}
 .mov.open{display:flex;}
-.mdl{background:var(--s1);border:1px solid var(--bd);border-radius:16px;padding:26px;
-  width:100%;max-width:660px;max-height:88vh;overflow-y:auto;position:relative;}
-.mdl.wide{max-width:900px;}
-.mcl{position:absolute;top:13px;right:13px;background:var(--s2);border:1px solid var(--bd);
-  color:var(--t1);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px;
-  display:flex;align-items:center;justify-content:center;}
-.mcl:hover{background:var(--red);}
-/* Journey */
-.tl{position:relative;padding-left:24px;margin-top:14px;}
-.tl::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;
-  background:linear-gradient(180deg,var(--green),var(--bd));}
-.tli{position:relative;margin-bottom:13px;}
-.tld{position:absolute;left:-20px;top:2px;width:10px;height:10px;border-radius:50%;
-  border:2px solid var(--green);background:var(--s1);}
-.tld.done{background:var(--green);}.tld.can{background:var(--red);border-color:var(--red);}
+.mdl{
+  background:var(--s1);
+  border:1px solid var(--bd);
+  border-radius:18px;
+  padding:28px;
+  width:100%;max-width:680px;
+  max-height:88vh;overflow-y:auto;
+  position:relative;
+  box-shadow:0 20px 60px rgba(0,0,0,0.7);
+}
+.mdl.wide{max-width:920px;}
+.mcl{
+  position:absolute;top:14px;right:14px;
+  background:var(--s2);border:1px solid var(--bd);
+  color:var(--t1);width:32px;height:32px;
+  border-radius:50%;cursor:pointer;font-size:14px;
+  display:flex;align-items:center;justify-content:center;
+  transition:.15s;
+}
+.mcl:hover{background:var(--red);border-color:var(--red);}
+
+/* Journey Timeline */
+.tl{position:relative;padding-left:26px;margin-top:14px;}
+.tl::before{
+  content:'';position:absolute;
+  left:8px;top:0;bottom:0;width:2px;
+  background:linear-gradient(180deg,var(--green),var(--bd));
+}
+.tli{position:relative;margin-bottom:14px;}
+.tld{
+  position:absolute;left:-20px;top:2px;
+  width:10px;height:10px;border-radius:50%;
+  border:2px solid var(--green);background:var(--s1);
+}
+.tld.done{background:var(--green);}
+.tld.can{background:var(--red);border-color:var(--red);}
 .tld.pend{border-color:var(--bd);}
-.tll{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;}
-.tlv{font-size:13px;color:var(--t1);font-weight:600;margin-top:1px;}
-.tlv.pv{color:var(--bd);font-style:italic;}.tlv.cv{color:var(--red);}
+.tll{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
+.tlv{font-size:13px;color:var(--t1);font-weight:600;margin-top:2px;}
+.tlv.pv{color:var(--t4);font-style:italic;}
+.tlv.cv{color:var(--red);}
 .mg{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
-.mc{background:var(--bg);border:1px solid var(--bd);border-radius:9px;padding:12px;text-align:center;}
+.mc{
+  background:var(--s2);border:1px solid var(--bd);
+  border-radius:10px;padding:14px;text-align:center;
+}
 .mv{font-size:20px;font-weight:900;color:var(--green);}
 .mv.w{color:var(--yellow);}.mv.d{color:var(--red);}.mv.n{color:var(--t3);font-size:14px;}
-.ml{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:3px;}
-.stp-g{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:16px;}
-.stp{background:var(--bg);border:1px solid var(--bd);border-radius:7px;padding:8px;text-align:center;}
-.stpv{font-size:13px;font-weight:700;}.stpl{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-bottom:2px;}
-.cbanner{background:rgba(255,23,68,.1);border:1px solid rgba(255,23,68,.3);border-radius:7px;padding:9px 13px;margin-bottom:14px;color:var(--red);font-weight:700;font-size:12px;}
-.shd{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin:14px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--bd);}
-.mld{width:24px;height:24px;border:3px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:sp .7s linear infinite;margin:24px auto;}
-/* RC */
-.rc{font-size:12px;color:var(--t3);margin-bottom:10px;}.rc b{color:var(--t1);}
-/* WEEK LABEL */
-.wklabel{font-size:11px;color:var(--t3);background:var(--bg);border:1px solid var(--bd);
-  border-radius:6px;padding:4px 12px;display:inline-block;margin-bottom:18px;}
+.ml{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:4px;}
+.stp-g{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px;}
+.stp{background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px;text-align:center;}
+.stpv{font-size:13px;font-weight:700;color:var(--t1);}
+.stpl{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-bottom:2px;}
+.cbanner{
+  background:rgba(255,69,58,.1);border:1px solid rgba(255,69,58,.3);
+  border-radius:8px;padding:10px 14px;margin-bottom:14px;
+  color:var(--red);font-weight:700;font-size:12px;
+}
+.shd{
+  font-size:10px;font-weight:800;text-transform:uppercase;
+  letter-spacing:1px;color:var(--acc);
+  margin:16px 0 10px;padding-bottom:7px;
+  border-bottom:1px solid var(--bd);
+}
+.mld{width:24px;height:24px;border:3px solid var(--bd);border-top-color:var(--green);border-radius:50%;animation:sp .7s linear infinite;margin:28px auto;}
+.rc{font-size:12px;color:var(--t3);margin-bottom:10px;}
+.rc b{color:var(--t1);}
+
+/* ===================== SECTION HEADER ===================== */
+.section-header{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:20px;flex-wrap:wrap;gap:10px;
+}
+.section-title{font-size:20px;font-weight:800;color:var(--t1);letter-spacing:-.5px;}
+.section-sub{font-size:12px;color:var(--t3);margin-top:2px;}
+
+/* Empty state */
+.empty-state{
+  text-align:center;padding:80px 20px;
+  color:var(--t3);
+  background:var(--card);
+  border:1px solid var(--bd);
+  border-radius:14px;
+}
+.empty-icon{font-size:48px;margin-bottom:16px;opacity:.4;}
+
 /* Responsive */
-@media(max-width:768px){.kg{grid-template-columns:1fr 1fr;}.sg{grid-template-columns:1fr;}.reg-grid{grid-template-columns:1fr;}.main{padding:14px;}}
+@media(max-width:900px){
+  .kg{grid-template-columns:1fr 1fr;}
+  .sg{grid-template-columns:1fr;}
+  .reg-grid{grid-template-columns:1fr;}
+  .main{padding:16px;}
+  .topbar{padding:0 16px;}
+  .tabs-wrap{padding:0 16px;}
+  .tab{padding:14px 14px;font-size:12px;}
+}
+@media(max-width:600px){
+  .kg{grid-template-columns:1fr;}
+  .pstats{gap:10px;}
+}
 </style>
 </head>
 <body>
+
+<!-- TOPBAR -->
 <div class="topbar">
   <div class="tbl-left">
     <div class="tbl-ico">📦</div>
-    <div><div class="tbl-title">Bundling Intelligence Hub</div><div class="tbl-sub">Live Cost Analytics · Order Consolidation</div></div>
+    <div class="tbl-brand">
+      <div class="tbl-title">Bundling Intelligence Hub</div>
+      <div class="tbl-sub">Live Cost Analytics · Order Consolidation</div>
+    </div>
   </div>
-  <div style="display:flex;gap:10px;align-items:center;">
-    <a href="/" class="tbtn" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)">🏠 Main Dash</a>
-    <button class="tbtn" style="background:linear-gradient(135deg,#00c853,#00e676);color:#000" onclick="hardRefresh()">🔄 Refresh Data</button>
+  <div class="topbar-right">
+    <button class="theme-pill" onclick="toggleTheme()" id="themePill">
+      <span class="icon">☀️</span>
+      <span id="themeLabel">Light Mode</span>
+    </button>
+    <a href="/" class="tbtn tbtn-back">← Main Dash</a>
+    <button class="tbtn tbtn-refresh" onclick="hardRefresh()">🔄 Refresh</button>
   </div>
 </div>
+
+<!-- TABS -->
 <div class="tabs-wrap">
   <div class="tabs">
-    <div class="tab active" onclick="sw('bundle',this)">📦 Bundle Intelligence</div>
-    <div class="tab" onclick="sw('status',this)">📡 Status Intelligence</div>
-    <div class="tab" onclick="sw('summary',this)">📊 Weekly Summary</div>
-    <div class="tab" onclick="sw('week4',this)">📅 4-Week Summary</div>
-    <div class="tab" onclick="sw('regional',this)">🌍 Regional View</div>
+    <button class="tab active" onclick="sw('bundle',this)">
+      <span class="tab-icon">📦</span> Bundle Intelligence
+    </button>
+    <button class="tab" onclick="sw('status',this)">
+      <span class="tab-icon">📡</span> Status Intelligence
+    </button>
+    <button class="tab" onclick="sw('summary',this)">
+      <span class="tab-icon">📊</span> Weekly Summary
+    </button>
+    <button class="tab" onclick="sw('week4',this)">
+      <span class="tab-icon">📅</span> 4-Week Summary
+    </button>
+    <button class="tab" onclick="sw('regional',this)">
+      <span class="tab-icon">🌍</span> Regional View
+    </button>
   </div>
 </div>
-<div class="main">
-  <div id="gLoad" class="lw"><div class="ld"></div><p style="color:var(--t3);font-size:13px">Loading data from all sources...</p><p style="color:var(--t3);font-size:11px;margin-top:6px" id="lStat">Connecting...</p></div>
 
-  <!-- BUNDLE TAB -->
+<!-- MAIN -->
+<div class="main">
+  <!-- GLOBAL LOADER -->
+  <div id="gLoad" class="lw">
+    <div class="ld"></div>
+    <p class="lp">Loading data from all sources...</p>
+    <p class="lp2" id="lStat">Connecting...</p>
+  </div>
+
+  <!-- ===== BUNDLE TAB ===== -->
   <div class="pane active" id="pane-bundle">
     <div class="fbar">
       <div class="frow">
-        <div class="fg fg-grow"><div class="fl">🔍 Search Order ID or Customer</div><input type="text" id="bq" class="fi" placeholder="e.g. 12345 or John Doe" oninput="rBundle()"></div>
-        <div class="fg"><div class="fl">📅 From</div><input type="date" id="bf" class="fi" onchange="rBundle()"></div>
-        <div class="fg"><div class="fl">📅 To</div><input type="date" id="bt" class="fi" onchange="rBundle()"></div>
-        <div class="fg"><div class="fl">Source</div>
+        <div class="fg fg-grow">
+          <div class="fl">🔍 Search Order ID or Customer</div>
+          <input type="text" id="bq" class="fi" placeholder="e.g. 12345 or John Doe" oninput="rBundle()">
+        </div>
+        <div class="fg">
+          <div class="fl">📅 From</div>
+          <input type="date" id="bf" class="fi" onchange="rBundle()">
+        </div>
+        <div class="fg">
+          <div class="fl">📅 To</div>
+          <input type="date" id="bt" class="fi" onchange="rBundle()">
+        </div>
+        <div class="fg">
+          <div class="fl">Source</div>
           <select id="bs" class="fi" onchange="rBundle()">
             <option value="all">All Sources</option>
             <option value="ECL QC Center">ECL QC Center</option>
@@ -5104,33 +5509,66 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
         </div>
       </div>
     </div>
+
     <div class="sg">
-      <div class="sc"><div class="sct">ECL QC Center</div><div class="scst">
-        <div><div class="scv" id="bqo">0</div><div class="scl">Orders</div></div>
-        <div><div class="scv" id="bqb">0</div><div class="scl">Bundles</div></div>
-      </div></div>
-      <div class="sc"><div class="sct" style="color:#7986cb">PK Zone (ECL & GE)</div><div class="scst">
-        <div><div class="scv" id="bpo">0</div><div class="scl">Orders</div></div>
-        <div><div class="scv" id="bpb">0</div><div class="scl">Bundles</div></div>
-      </div></div>
+      <div class="sc">
+        <div class="sct">ECL QC Center</div>
+        <div class="scst">
+          <div><div class="scv" id="bqo">0</div><div class="scl">Orders</div></div>
+          <div style="width:1px;background:var(--bd);"></div>
+          <div><div class="scv" id="bqb">0</div><div class="scl">Bundles</div></div>
+        </div>
+      </div>
+      <div class="sc" style="border-left:3px solid var(--blue)">
+        <div class="sct" style="color:var(--blue)">PK Zone (ECL &amp; GE)</div>
+        <div class="scst">
+          <div><div class="scv" id="bpo">0</div><div class="scl">Orders</div></div>
+          <div style="width:1px;background:var(--bd);"></div>
+          <div><div class="scv" id="bpb">0</div><div class="scl">Bundles</div></div>
+        </div>
+      </div>
     </div>
+
     <div class="kg">
-      <div class="kc"><div class="kv" id="bk1">0</div><div class="kl">Total Bundles Packed</div></div>
-      <div class="kc"><div class="kv" id="bk2">0</div><div class="kl">Total Orders Merged</div></div>
-      <div class="kc" style="border-left-color:var(--yellow)"><div class="kv" id="bk3" style="color:var(--yellow)">0</div><div class="kl" style="color:var(--yellow)">🚚 Shipments Saved</div></div>
-      <div class="kc" style="border-left-color:var(--green)"><div class="kv" id="bk4" style="color:var(--green)">£0</div><div class="kl" style="color:var(--green)">💰 Total Saved (Est)</div></div>
+      <div class="kc">
+        <div class="kv" id="bk1">0</div>
+        <div class="kl">Total Bundles Packed</div>
+      </div>
+      <div class="kc">
+        <div class="kv" id="bk2">0</div>
+        <div class="kl">Total Orders Merged</div>
+      </div>
+      <div class="kc kc-accent-yellow">
+        <div class="kv" id="bk3" style="color:var(--yellow)">0</div>
+        <div class="kl" style="color:var(--yellow)">🚚 Shipments Saved</div>
+      </div>
+      <div class="kc kc-accent-green">
+        <div class="kv" id="bk4" style="color:var(--green)">£0</div>
+        <div class="kl" style="color:var(--green)">💰 Total Saved (Est.)</div>
+      </div>
     </div>
-    <div class="tw"><table class="mt">
-      <thead><tr><th>Date & Source</th><th>Client</th><th>Box Analytics</th><th>📦 Orders (click → Journey)</th></tr></thead>
-      <tbody id="btb"></tbody>
-    </table></div>
+
+    <div class="tw">
+      <table class="mt">
+        <thead>
+          <tr>
+            <th>Date &amp; Source</th>
+            <th>Client</th>
+            <th>📦 Box Analytics</th>
+            <th>Orders (click → Journey)</th>
+          </tr>
+        </thead>
+        <tbody id="btb"></tbody>
+      </table>
+    </div>
   </div>
 
-  <!-- STATUS TAB -->
+  <!-- ===== STATUS TAB ===== -->
   <div class="pane" id="pane-status">
     <div class="fbar">
       <div class="frow">
-        <div class="fg" style="flex:1"><div class="fl">⚡ Quick Select</div>
+        <div class="fg" style="flex:1">
+          <div class="fl">⚡ Quick Select</div>
           <div class="qbtns">
             <button class="qb" onclick="qs(this,'today')">Today</button>
             <button class="qb" onclick="qs(this,'7d')">Last 7 Days</button>
@@ -5144,8 +5582,12 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
       <div class="frow">
         <div class="fg"><div class="fl">📅 From</div><input type="date" id="sf" class="fi"></div>
         <div class="fg"><div class="fl">📅 To</div><input type="date" id="st" class="fi"></div>
-        <div class="fg fg-grow"><div class="fl">🔍 Search</div><input type="text" id="sq" class="fi" placeholder="Order ID or customer..."></div>
-        <div class="fg"><div class="fl">Source</div>
+        <div class="fg fg-grow">
+          <div class="fl">🔍 Search</div>
+          <input type="text" id="sq" class="fi" placeholder="Order ID or customer...">
+        </div>
+        <div class="fg">
+          <div class="fl">Source</div>
           <select id="ss" class="fi">
             <option value="all">All Sources</option>
             <option value="ECL QC Center">ECL QC Center</option>
@@ -5153,74 +5595,106 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
             <option value="GE Zone">GE Zone</option>
           </select>
         </div>
-        <div class="fg" style="flex-direction:row;gap:7px;align-items:flex-end">
+        <div class="fg" style="flex-direction:row;gap:8px;align-items:flex-end">
           <button class="cbtn" onclick="clrSt()">Clear</button>
-          <button class="abtn" onclick="rStatus()">Apply Filters</button>
+          <button class="abtn" onclick="rStatus()">Apply</button>
         </div>
       </div>
     </div>
+
     <div id="spw" style="display:none" class="pbx">
-      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--acc);margin-bottom:10px">📊 Filter by Status — click to select</div>
+      <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--acc);margin-bottom:10px">
+        📊 Filter by Status — click to select
+      </div>
       <div id="spills" style="display:flex;flex-wrap:wrap;gap:7px"></div>
     </div>
+
     <div class="kg">
       <div class="kc"><div class="kv" id="stot">0</div><div class="kl">Total Orders</div></div>
-      <div class="kc" style="border-left-color:var(--green)"><div class="kv" id="sdel" style="color:var(--green)">0</div><div class="kl" style="color:var(--green)">Delivered</div></div>
-      <div class="kc" style="border-left-color:var(--yellow)"><div class="kv" id="str2" style="color:var(--yellow)">0</div><div class="kl" style="color:var(--yellow)">In Transit</div></div>
-      <div class="kc" style="border-left-color:var(--red)"><div class="kv" id="scan" style="color:var(--red)">0</div><div class="kl" style="color:var(--red)">Cancelled</div></div>
+      <div class="kc kc-accent-green"><div class="kv" id="sdel" style="color:var(--green)">0</div><div class="kl" style="color:var(--green)">Delivered</div></div>
+      <div class="kc kc-accent-yellow"><div class="kv" id="str2" style="color:var(--yellow)">0</div><div class="kl" style="color:var(--yellow)">In Transit</div></div>
+      <div class="kc" style="--kc-accent:var(--red)"><div class="kv" id="scan" style="color:var(--red)">0</div><div class="kl" style="color:var(--red)">Cancelled</div></div>
     </div>
     <div class="rc" id="src2"></div>
-    <div class="tw"><table class="mt">
-      <thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Status</th><th>Source</th><th>Customer</th><th>Country</th><th>Weight</th></tr></thead>
-      <tbody id="stb"></tbody>
-    </table></div>
+    <div class="tw">
+      <table class="mt">
+        <thead>
+          <tr>
+            <th>#</th><th>Order ID</th><th>Date</th><th>Status</th>
+            <th>Source</th><th>Customer</th><th>Country</th><th>Weight</th>
+          </tr>
+        </thead>
+        <tbody id="stb"></tbody>
+      </table>
+    </div>
   </div>
 
-  <!-- WEEKLY SUMMARY TAB -->
+  <!-- ===== WEEKLY SUMMARY TAB ===== -->
   <div class="pane" id="pane-summary">
     <div class="fbar">
       <div class="frow" style="align-items:flex-end;gap:14px">
-        <div class="fg"><div class="fl">Week Starting (Monday)</div><input type="date" id="ws" class="fi"></div>
-        <div class="fg"><div class="fl">&nbsp;</div>
+        <div class="fg">
+          <div class="fl">Week Starting (Monday)</div>
+          <input type="date" id="ws" class="fi">
+        </div>
+        <div class="fg">
+          <div class="fl">&nbsp;</div>
           <div class="qbtns">
             <button class="qb on" onclick="setWk(0,this)">This Week</button>
             <button class="qb" onclick="setWk(-1,this)">Last Week</button>
             <button class="qb" onclick="setWk(-2,this)">2 Weeks Ago</button>
           </div>
         </div>
-        <div class="fg"><div class="fl">&nbsp;</div><button class="abtn" onclick="rSummary()">Load Week</button></div>
+        <div class="fg">
+          <div class="fl">&nbsp;</div>
+          <button class="abtn" onclick="rSummary()">Load Week</button>
+        </div>
       </div>
     </div>
     <div id="sumCards"></div>
   </div>
 
-  <!-- 4-WEEK TAB -->
+  <!-- ===== 4-WEEK TAB ===== -->
   <div class="pane" id="pane-week4">
     <div class="fbar">
       <div class="frow" style="align-items:flex-end;gap:14px">
-        <div class="fg"><div class="fl">Latest Monday</div><input type="date" id="w4e" class="fi"></div>
-        <div class="fg"><div class="fl">&nbsp;</div>
+        <div class="fg">
+          <div class="fl">Latest Monday</div>
+          <input type="date" id="w4e" class="fi">
+        </div>
+        <div class="fg">
+          <div class="fl">&nbsp;</div>
           <button class="qb on" onclick="setW4Now(this)">Current 4 Weeks</button>
         </div>
-        <div class="fg"><div class="fl">&nbsp;</div><button class="abtn" onclick="rW4()">Load</button></div>
+        <div class="fg">
+          <div class="fl">&nbsp;</div>
+          <button class="abtn" onclick="rW4()">Load</button>
+        </div>
       </div>
     </div>
     <div id="w4cards"></div>
   </div>
 
-  <!-- REGIONAL VIEW TAB -->
+  <!-- ===== REGIONAL VIEW TAB ===== -->
   <div class="pane" id="pane-regional">
     <div class="fbar">
       <div class="frow" style="align-items:flex-end;gap:14px">
-        <div class="fg"><div class="fl">Week Starting (Monday)</div><input type="date" id="rws" class="fi"></div>
-        <div class="fg"><div class="fl">&nbsp;</div>
+        <div class="fg">
+          <div class="fl">Week Starting (Monday)</div>
+          <input type="date" id="rws" class="fi">
+        </div>
+        <div class="fg">
+          <div class="fl">&nbsp;</div>
           <div class="qbtns">
             <button class="qb on" onclick="setRWk(0,this)">This Week</button>
             <button class="qb" onclick="setRWk(-1,this)">Last Week</button>
             <button class="qb" onclick="setRWk(-2,this)">2 Weeks Ago</button>
           </div>
         </div>
-        <div class="fg"><div class="fl">&nbsp;</div><button class="abtn" onclick="rRegional()">Load</button></div>
+        <div class="fg">
+          <div class="fl">&nbsp;</div>
+          <button class="abtn" onclick="rRegional()">Load</button>
+        </div>
       </div>
     </div>
     <div id="regCards"></div>
@@ -5229,18 +5703,54 @@ table.mx th.ds,table.mx td.ds{border-left:1px solid var(--bd);}
 
 <!-- JOURNEY MODAL -->
 <div class="mov" id="jMov" onclick="if(event.target===this)cMod('jMov')">
-  <div class="mdl"><button class="mcl" onclick="cMod('jMov')">✕</button><div id="jBody"><div class="mld"></div></div></div>
+  <div class="mdl">
+    <button class="mcl" onclick="cMod('jMov')">✕</button>
+    <div id="jBody"><div class="mld"></div></div>
+  </div>
 </div>
 
 <!-- ORDERS MODAL -->
 <div class="mov" id="oMov" onclick="if(event.target===this)cMod('oMov')">
-  <div class="mdl wide"><button class="mcl" onclick="cMod('oMov')">✕</button>
+  <div class="mdl wide">
+    <button class="mcl" onclick="cMod('oMov')">✕</button>
     <div style="font-size:15px;font-weight:800;color:var(--yellow);margin-bottom:16px" id="oTit">Orders</div>
     <div id="oBody"></div>
   </div>
 </div>
 
 <script>
+// ============================================================
+// THEME TOGGLE
+// ============================================================
+function toggleTheme(){
+  const html=document.documentElement;
+  const isDark=html.getAttribute('data-theme')==='dark';
+  html.setAttribute('data-theme',isDark?'light':'dark');
+  const pill=document.getElementById('themePill');
+  const lbl=document.getElementById('themeLabel');
+  if(isDark){
+    pill.querySelector('.icon').textContent='🌙';
+    lbl.textContent='Dark Mode';
+  } else {
+    pill.querySelector('.icon').textContent='☀️';
+    lbl.textContent='Light Mode';
+  }
+  try{localStorage.setItem('bih_theme',isDark?'light':'dark');}catch(e){}
+}
+// Load saved theme
+(function(){
+  try{
+    const saved=localStorage.getItem('bih_theme');
+    if(saved==='light'){
+      document.documentElement.setAttribute('data-theme','light');
+      document.addEventListener('DOMContentLoaded',function(){
+        const pill=document.getElementById('themePill');
+        if(pill){pill.querySelector('.icon').textContent='🌙';document.getElementById('themeLabel').textContent='Dark Mode';}
+      });
+    }
+  }catch(e){}
+})();
+
 // ============================================================
 // GLOBAL STATE
 // ============================================================
@@ -5264,22 +5774,20 @@ async function init(){
     g("gLoad").style.display="none";
     g("pane-bundle").classList.add("active");
     rBundle();
-    // pre-render others in bg
     setTimeout(()=>{rSummary();rW4();rRegional();},200);
   }catch(e){
-    g("gLoad").innerHTML=`<div style="color:var(--red);font-size:14px">❌ ${e.message}<br><br><button class="abtn" onclick="init()">Retry</button></div>`;
+    g("gLoad").innerHTML=`<div style="color:var(--red);font-size:14px">Error: ${e.message}<br><br><button class="abtn" onclick="init()">Retry</button></div>`;
   }
 }
 function hardRefresh(){D=null;g("gLoad").style.display="block";document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));init();}
 
 // ============================================================
-// TAB SWITCH - use RAF to avoid UI blocking
+// TAB SWITCH
 // ============================================================
 function sw(name,tab){
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   tab.classList.add("active");
   document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));
-  // defer heavy render to next frame
   requestAnimationFrame(()=>{
     g("pane-"+name).classList.add("active");
     if(name==="status"&&D) rStatus();
@@ -5351,13 +5859,13 @@ function rBundle(){
       <td><b style="font-size:14px">${b.date||""}</b><br><span style="color:var(--t3);font-size:11px">${b.source}</span></td>
       <td><b>${b.customer||""}</b><br><span style="color:var(--t3);font-size:11px">${b.vendor||""}</span><br><span style="color:var(--t3);font-size:11px">${b.country||""}</span></td>
       <td>
-        <div style="background:var(--bg);padding:8px;border-radius:6px;border:1px solid var(--bd)">
+        <div class="bbox">
           <span style="color:var(--t3);font-size:11px">TID:</span> <b style="font-family:monospace;font-size:11px">${b.tid}</b><br>
           <span style="color:var(--t3);font-size:11px">BOX:</span> <b style="color:var(--green)">${b.boxes_val}</b>
         </div>
-        <div style="margin-top:6px;background:rgba(0,230,118,.07);border:1px solid rgba(0,230,118,.2);padding:8px;border-radius:6px">
-          <div style="font-size:11px;display:flex;justify-content:space-between;color:var(--t3);margin-bottom:2px"><span>Total Wt:</span><b>${aw} kg</b></div>
-          <div style="font-size:11px;display:flex;justify-content:space-between;color:var(--t3);margin-bottom:2px"><span>Billed Wt:</span><b>${bw} kg</b></div>
+        <div style="margin-top:8px;background:rgba(0,230,118,.07);border:1px solid rgba(0,230,118,.2);padding:10px;border-radius:8px">
+          <div style="font-size:11px;display:flex;justify-content:space-between;color:var(--t3);margin-bottom:3px"><span>Total Wt:</span><b>${aw} kg</b></div>
+          <div style="font-size:11px;display:flex;justify-content:space-between;color:var(--t3);margin-bottom:3px"><span>Billed Wt:</span><b>${bw} kg</b></div>
           <div style="font-size:13px;color:var(--green);display:flex;justify-content:space-between;font-weight:800"><span>💰 Saved:</span><span>£${(b.savings_gbp||0).toFixed(2)}</span></div>
         </div>
       </td>
@@ -5432,7 +5940,7 @@ function rStatus(){
 function selSt(pill,st){SEL=SEL===st?null:st;rStatus();}
 
 // ============================================================
-// SUMMARY — provider card builder
+// SUMMARY
 // ============================================================
 function wkBundles(mon){
   const s=new Date(mon);s.setHours(0,0,0,0);
@@ -5445,7 +5953,6 @@ function buildCard(src,bundles,wkLabel){
   const totO=sb.reduce((a,b)=>a+b.orders.length,0);
   const totB=sb.length;
   const totW=sb.reduce((a,b)=>a+(b.weight_kg||0),0);
-  // compute prev week approx for badge
   const rm={};
   sb.forEach(b=>{
     const rg=b.region||"EU"; const d=new Date(b.date_std);
@@ -5465,14 +5972,7 @@ function buildCard(src,bundles,wkLabel){
   }));
   const uid=(src+"_"+wkLabel).replace(/[\s\/\-]/g,"_");
   window["RM_"+uid]=rm; window["RM_"+uid+"_dt"]=dt;
-  window["RM_"+uid+"_all"]=sb; // all bundles for this src+week
-
-  function dCell(v,cls,rg,di){
-    if(!v) return `<td class="dash">-</td>`;
-    const disp=Number.isInteger(v)?v:v.toFixed(1);
-    if(rg!=null&&!GUEST) return `<td class="${cls} clk" onclick="showOrd('${uid}','${rg}',${di})">${disp}</td>`;
-    return `<td class="${cls}">${disp}</td>`;
-  }
+  window["RM_"+uid+"_all"]=sb;
 
   let rows="";
   regs.forEach(rg=>{
@@ -5484,7 +5984,6 @@ function buildCard(src,bundles,wkLabel){
     });
     rows+="</tr>";
   });
-  // TOTAL ROW — all clickable
   rows+=`<tr class="ttr"><td class="rc">TOTAL</td>`;
   dt.forEach((t,di)=>{
     const sep=di>0?"ds":"";
@@ -5505,15 +6004,15 @@ function buildCard(src,bundles,wkLabel){
         <div class="pname-sub">${wkLabel}</div>
       </div>
       <div class="pstats">
-        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\'${uid}\',\'O\')"'}>
+        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\''+uid+'\',\'O\')"'}>
           <div class="pstat-v" style="color:var(--blue)">${totO.toLocaleString()}</div>
           <div class="pstat-l">ORDERS</div>
         </div>
-        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\'${uid}\',\'B\')"'}>
+        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\''+uid+'\',\'B\')"'}>
           <div class="pstat-v" style="color:var(--green)">${totB.toLocaleString()}</div>
           <div class="pstat-l">BOXES</div>
         </div>
-        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\'${uid}\',\'W\')"'}>
+        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\''+uid+'\',\'W\')"'}>
           <div class="pstat-v" style="color:var(--yellow)">${totWDisp}</div>
           <div class="pstat-l">WEIGHT</div>
         </div>
@@ -5533,9 +6032,6 @@ function buildCard(src,bundles,wkLabel){
   </div>`;
 }
 
-// ============================================================
-// RENDER SUMMARY
-// ============================================================
 function setWk(offset,btn){
   document.querySelectorAll("#pane-summary .qb").forEach(b=>b.classList.remove("on"));
   if(btn)btn.classList.add("on");
@@ -5548,14 +6044,11 @@ function rSummary(){
   const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
   const bundles=wkBundles(mon);
   let html="";
-  if(!bundles.length) html=`<div style="text-align:center;padding:60px;color:var(--t3)">No data for selected week.</div>`;
+  if(!bundles.length) html=`<div class="empty-state"><div class="empty-icon">📭</div><div>No data for selected week.</div></div>`;
   else SRCS.forEach(src=>{html+=buildCard(src,bundles,wl);});
   g("sumCards").innerHTML=html;
 }
 
-// ============================================================
-// RENDER 4-WEEK
-// ============================================================
 function setW4Now(btn){
   document.querySelectorAll("#pane-week4 .qb").forEach(b=>b.classList.remove("on"));
   if(btn)btn.classList.add("on");
@@ -5571,16 +6064,13 @@ function rW4(){
     const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
     const bundles=wkBundles(mon);
     html+=`<div style="margin-bottom:8px"><div class="wklabel">📅 Week ${4-i}: ${wl}</div>`;
-    if(!bundles.length){html+=`<div style="text-align:center;padding:30px;color:var(--t3);background:var(--s1);border-radius:12px;margin-bottom:20px">No data</div>`;}
+    if(!bundles.length){html+=`<div class="empty-state" style="padding:30px;margin-bottom:20px"><div>No data</div></div>`;}
     else SRCS.forEach(src=>{html+=buildCard(src,bundles,wl);});
     html+="</div>";
   }
   g("w4cards").innerHTML=html;
 }
 
-// ============================================================
-// REGIONAL VIEW (QC Center + PK Zone combined)
-// ============================================================
 function setRWk(offset,btn){
   document.querySelectorAll("#pane-regional .qb").forEach(b=>b.classList.remove("on"));
   if(btn)btn.classList.add("on");
@@ -5592,10 +6082,8 @@ function rRegional(){
   const mon=new Date(ws);mon.setHours(0,0,0,0);
   const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
   const bundles=wkBundles(mon);
-  // Group: QC Center = ECL QC Center, PK Zone = ECL Zone + GE Zone
   const groups={"QC Center":["ECL QC Center"],"PK Zone":["ECL Zone","GE Zone"]};
   let html=`<div class="wklabel">📅 ${wl}</div>`;
-  // Summary bar charts
   const regTotals={};
   bundles.forEach(b=>{
     const rg=b.region||"EU";
@@ -5616,7 +6104,7 @@ function rRegional(){
   });
   html+=`<div class="reg-grid">
     <div class="mini-card">
-      <div class="mini-title"><div class="dot" style="background:var(--blue)"></div>Orders by Region (This Week)</div>
+      <div class="mini-title"><div class="dot" style="background:var(--blue)"></div>Orders by Region</div>
       ${barHtml||'<div style="color:var(--t3)">No data</div>'}
     </div>
     <div class="mini-card">
@@ -5624,7 +6112,6 @@ function rRegional(){
       ${buildWeekStats(bundles)}
     </div>
   </div>`;
-  // Provider cards
   Object.entries(groups).forEach(([gname,srcs])=>{
     const gb=bundles.filter(b=>srcs.includes(b.source));
     html+=buildRegCard(gname,gb,wl);
@@ -5710,15 +6197,15 @@ function buildRegCard(gname,bundles,wl){
         <div class="pname-sub">${wl}</div>
       </div>
       <div class="pstats">
-        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\'${uid}\',\'O\')"'}>
+        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\''+uid+'\',\'O\')"'}>
           <div class="pstat-v" style="color:var(--blue)">${totO.toLocaleString()}</div>
           <div class="pstat-l">ORDERS</div>
         </div>
-        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\'${uid}\',\'B\')"'}>
+        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\''+uid+'\',\'B\')"'}>
           <div class="pstat-v" style="color:var(--green)">${totB.toLocaleString()}</div>
           <div class="pstat-l">BOXES</div>
         </div>
-        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\'${uid}\',\'W\')"'}>
+        <div class="pstat" ${GUEST?"":'onclick="showAllOrd(\''+uid+'\',\'W\')"'}>
           <div class="pstat-v" style="color:var(--yellow)">${totWDisp}</div>
           <div class="pstat-l">WEIGHT</div>
         </div>
@@ -5820,7 +6307,7 @@ async function openJ(oid){
     }
     let sh="";
     if(steps.length){sh="<div class='shd'>⏱️ Step Durations</div><div class='stp-g'>";
-      steps.forEach(s=>{sh+=`<div class="stp"><div class="stpl">${s.label}</div><div class="stpv ${s.duration?"":"" }" style="color:${s.duration?"var(--t1)":"var(--t3)"}">${s.duration||"—"}</div></div>`;});
+      steps.forEach(s=>{sh+=`<div class="stp"><div class="stpl">${s.label}</div><div class="stpv" style="color:${s.duration?"var(--t1)":"var(--t3)"}">${s.duration||"—"}</div></div>`;});
       sh+="</div>";}
     g("jBody").innerHTML=`
       <div style="font-size:16px;font-weight:800;margin-bottom:3px">📦 Order Journey</div>
