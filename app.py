@@ -4806,7 +4806,9 @@ def api_app_data():
             bw+=wt
             if wt>0: isc+=(max(math.ceil(wt),1)*pr)
         b["total_items"]=tq; b["weight_kg"]=round(bw,2)
-        sv=isc-(max(math.ceil(bw),1)*pr); b["savings_gbp"]=round(sv if sv>0 else 0,2)
+        bc=max(math.ceil(bw),1)*pr
+        sv=isc-bc; b["savings_gbp"]=round(sv if sv>0 else 0,2)
+        b["rate_gbp"]=round(pr,2); b["indiv_cost"]=round(isc,2); b["bundle_cost"]=round(bc,2)
         tsav+=b["savings_gbp"]
     bundles.sort(key=lambda x:x["date_std"],reverse=True)
     return jsonify({"success":True,
@@ -4842,7 +4844,11 @@ def bundling_spa():
         return "<div style='text-align:center;padding:100px;background:#05050f;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>",403
     gflag="true" if mode=="guest" else "false"
     email=(session.get("email") or session.get("user_email") or session.get("username") or "").lower().strip()
-    html=BUNDLING_HTML.replace("window.onload=init;","const GUEST="+gflag+";\nconst USER_EMAIL='"+email+"';\nwindow.onload=init;")
+    # inject rates for client-side savings calc
+    import json as _json
+    sheets=fetch_all(); rm=sheets.get("RATES",{})
+    rm_js="const RATES_MAP="+_json.dumps(rm)+";"
+    html=BUNDLING_HTML.replace("window.onload=init;","const GUEST="+gflag+";\nconst USER_EMAIL='"+email+"';\n"+rm_js+"\nwindow.onload=init;")
     return render_template_string(html)
 
 @app.after_request
@@ -7200,7 +7206,8 @@ function splitBundleWeight(bundle){
 function calcBundleComparison(bundle,rm){
   const DR=4.50;
   const country=(bundle.country||"").toLowerCase();
-  const pr=rm[country]||DR;
+  // Prefer server-injected rate, fallback to ratesCache, fallback to DR
+  const pr=bundle.rate_gbp||rm[country]||(window._ratesCache&&window._ratesCache[country])||DR;
   const totalBW=bundle.weight_kg||0;
   const splitWeights=splitBundleWeight(bundle);
   let indivCost=0;
@@ -7214,9 +7221,12 @@ function calcBundleComparison(bundle,rm){
       status:o.status,weight:o.weight};
   });
   const bundleBilled=Math.max(Math.ceil(totalBW),1);
-  const bundleCost=bundleBilled*pr;
-  const saved=Math.max(indivCost-bundleCost,0);
-  return{orderBreakdown,indivCost,bundleCost,saved,rate:pr,totalBW,bundleBilled};
+  // Prefer server-calculated values
+  const bundleCost=bundle.bundle_cost!=null?bundle.bundle_cost:(bundleBilled*pr);
+  const serverIndivCost=bundle.indiv_cost!=null?bundle.indiv_cost:null;
+  const finalIndivCost=serverIndivCost!=null?serverIndivCost:indivCost;
+  const saved=bundle.savings_gbp!=null?bundle.savings_gbp:Math.max(finalIndivCost-bundleCost,0);
+  return{orderBreakdown,indivCost:finalIndivCost,bundleCost,saved,rate:pr,totalBW,bundleBilled};
 }
 
 // ============================================================
@@ -7373,8 +7383,6 @@ function rCustomers(){
   if(!cont) return;
   const q=(g("custQ")?.value||"").toLowerCase();
   const sort=g("custSort")?.value||"orders";
-  const rm=window._ratesCache||{};
-  const DR=4.50;
   // Build customer map
   const custMap={};
   (D.bundles||[]).forEach(b=>{
@@ -7390,8 +7398,7 @@ function rCustomers(){
     c.dates.push(b.date_std);
     c.countries.add(b.country||"—");
     c.sources.add(b.source);
-    const comp=calcBundleComparison(b,rm);
-    c.saved+=comp.saved;
+    c.saved+=b.savings_gbp||0;
     c.weight+=b.weight_kg||0;
     b.orders.forEach(o=>{
       c.orders++;
@@ -7457,9 +7464,6 @@ function _buildRoute(cont){
   const DAYS_LBL=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const FLT_DAYS=[1,3,5]; // Tue=1, Thu=3, Sat=5
   const countryMap={};
-  const rm=window._ratesCache||{};
-  const DR=4.50;
-
   (D.bundles||[]).forEach(b=>{
     const cn=b.country||"Unknown";
     const d=new Date(b.date_std);
@@ -7470,9 +7474,7 @@ function _buildRoute(cont){
     cm.days[di].bundles++;
     cm.days[di].orders+=b.orders.length;
     cm.days[di].weight+=b.weight_kg||0;
-    const pr=rm[cn.toLowerCase()]||DR;
-    const comp=calcBundleComparison(b,rm);
-    cm.days[di].saved+=comp.saved;
+    cm.days[di].saved+=b.savings_gbp||0;
   });
 
   const sorted=Object.entries(countryMap).sort((a,b)=>b[1].total-a[1].total).slice(0,12);
@@ -7548,10 +7550,8 @@ function _buildRoute(cont){
 // CACHE RATES for client-side use
 // ============================================================
 function cacheRates(){
-  // Extract rates from bundles data heuristically
-  // We don't have direct rates on client but we can reverse-engineer from savings
-  // Just use defaults — the real rate is in the API
-  window._ratesCache={};
+  // Use server-injected RATES_MAP (country_lower -> rate)
+  window._ratesCache=(typeof RATES_MAP!=="undefined")?RATES_MAP:{};
 }
 
 function cMod(id){document.getElementById(id).classList.remove("open");}
