@@ -4803,7 +4803,8 @@ def api_app_data():
             except: pass
             try: wt=float(re.sub(r"[^0-9.]","",str(o["weight"])) or 0)
             except: wt=0.0
-            bw+=wt; isc+=(max(math.ceil(wt),1)*pr)
+            bw+=wt
+            if wt>0: isc+=(max(math.ceil(wt),1)*pr)
         b["total_items"]=tq; b["weight_kg"]=round(bw,2)
         sv=isc-(max(math.ceil(bw),1)*pr); b["savings_gbp"]=round(sv if sv>0 else 0,2)
         tsav+=b["savings_gbp"]
@@ -5835,6 +5836,7 @@ function starsFor(n){return "★".repeat(n)+"☆".repeat(5-n);}
 // ============================================================
 // BUNDLE TAB
 // ============================================================
+const BUNDLE_PAGE=50; let _bPage=0, _bFiltered=[];
 function rBundle(){
   if(!D) return;
   const q=g("bq").value.toLowerCase().trim(),fr=g("bf").value,to=g("bt").value,src=g("bs").value;
@@ -5847,7 +5849,7 @@ function rBundle(){
   g("bk2").textContent=kpi.total_orders_bundled||0;
   g("bk3").textContent=kpi.saved_shipments||0;
   g("bk4").textContent="£"+(kpi.total_savings_gbp||0).toLocaleString(undefined,{minimumFractionDigits:2});
-  const fl=(D.bundles||[]).filter(b=>{
+  _bFiltered=(D.bundles||[]).filter(b=>{
     if(src!=="all"&&b.source!==src) return false;
     if(fr&&b.date_std<fr) return false;
     if(to&&b.date_std>to) return false;
@@ -5855,9 +5857,23 @@ function rBundle(){
                   (b.customer&&b.customer.toLowerCase().includes(q));
     return true;
   });
+  _bPage=0;
+  g("btb").innerHTML="";
+  renderBundlePage();
+}
+function renderBundlePage(){
+  const start=_bPage*BUNDLE_PAGE;
+  const slice=_bFiltered.slice(start,start+BUNDLE_PAGE);
+  const tbody=g("btb");
+  // Remove old load-more row
+  const old=document.getElementById("bLoadMore");
+  if(old) old.remove();
+  if(!_bFiltered.length){
+    tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;padding:50px;color:var(--t3)">No bundles found.</td></tr>`;
+    return;
+  }
   let h="";
-  if(!fl.length){h=`<tr><td colspan="4" style="text-align:center;padding:50px;color:var(--t3)">No bundles found.</td></tr>`;}
-  else fl.forEach(b=>{
+  slice.forEach(b=>{
     const items=b.orders.map(o=>`
       <div class="bi">
         <div><span class="olink" onclick="openJ('${o.order_id}')">${o.order_id} ▾</span>
@@ -5883,7 +5899,21 @@ function rBundle(){
       <td><div class="bbox">${items}</div></td>
     </tr>`;
   });
-  g("btb").innerHTML=h;
+  const tmp=document.createElement("tbody");
+  tmp.innerHTML=h;
+  while(tmp.firstChild) tbody.appendChild(tmp.firstChild);
+  // Load more button
+  const shown=start+slice.length;
+  if(shown<_bFiltered.length){
+    const tr=document.createElement("tr");
+    tr.id="bLoadMore";
+    tr.innerHTML=`<td colspan="4" style="text-align:center;padding:20px">
+      <button class="abtn" onclick="_bPage++;renderBundlePage()">
+        Load More (${shown} of ${_bFiltered.length})
+      </button>
+    </td>`;
+    tbody.appendChild(tr);
+  }
 }
 
 // ============================================================
