@@ -4841,7 +4841,8 @@ def bundling_spa():
     if not mode:
         return "<div style='text-align:center;padding:100px;background:#05050f;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>",403
     gflag="true" if mode=="guest" else "false"
-    html=BUNDLING_HTML.replace("window.onload=init;","const GUEST="+gflag+";\nwindow.onload=init;")
+    email=(session.get("email") or session.get("user_email") or session.get("username") or "").lower().strip()
+    html=BUNDLING_HTML.replace("window.onload=init;","const GUEST="+gflag+";\nconst USER_EMAIL='"+email+"';\nwindow.onload=init;")
     return render_template_string(html)
 
 @app.after_request
@@ -4867,6 +4868,7 @@ BUNDLING_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bundling Intelligence Hub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111827'/%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%231e1b4b'/%3E%3Ctext x='16' y='14' font-family='Arial' font-size='7' font-weight='900' fill='%23a78bfa' text-anchor='middle'%3E3PL%3C/text%3E%3Ctext x='16' y='24' font-family='Arial' font-size='6' font-weight='700' fill='%2360a5fa' text-anchor='middle'%3EDASH%3C/text%3E%3C/svg%3E">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -5482,6 +5484,147 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
 .empty-icon{font-size:48px;margin-bottom:16px;opacity:.4;}
 
 /* =========================================
+   USER CARD IN SIDEBAR
+   ========================================= */
+.sb-user-card{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-radius:10px;
+  background:rgba(139,92,246,.08);
+  border:1px solid rgba(139,92,246,.2);
+  margin-bottom:8px;
+}
+.sb-user-avatar{
+  width:34px;height:34px;border-radius:50%;
+  background:linear-gradient(135deg,#7c3aed,#8b5cf6);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:900;color:#fff;flex-shrink:0;
+  box-shadow:0 2px 8px rgba(139,92,246,.4);
+}
+.sb-user-info{overflow:hidden;flex:1;}
+.sb-user-email{font-size:10px;font-weight:700;color:#a78bfa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sb-user-role{font-size:9px;color:var(--sb-text);margin-top:1px;text-transform:uppercase;letter-spacing:.8px;}
+.sb-last-update{font-size:9px;color:var(--sb-text);margin-bottom:8px;padding:0 4px;letter-spacing:.3px;}
+
+/* =========================================
+   KPI CARDS - UPGRADED
+   ========================================= */
+.kc-inner{display:flex;align-items:flex-start;justify-content:space-between;}
+.kc-icon{
+  width:44px;height:44px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;flex-shrink:0;
+}
+.kc-data{flex:1;}
+.kc-trend{
+  font-size:10px;font-weight:700;margin-top:6px;
+  display:flex;align-items:center;gap:4px;
+}
+.kc-trend.up{color:var(--green);}
+.kc-trend.dn{color:var(--red);}
+.kc-trend.neu{color:var(--t3);}
+
+/* =========================================
+   ORDER SEARCH
+   ========================================= */
+.os-result-card{
+  background:var(--s2);border:1px solid var(--bd);
+  border-radius:16px;padding:24px;margin-bottom:18px;
+  box-shadow:var(--shadow);
+}
+.os-header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:20px;}
+.os-order-id{font-size:22px;font-weight:900;font-family:monospace;color:var(--acc);letter-spacing:-.5px;}
+.os-status-badge{padding:6px 14px;border-radius:8px;font-size:12px;font-weight:800;border:1.5px solid transparent;}
+.os-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;}
+.os-info-box{background:var(--s3);border:1px solid var(--bd);border-radius:12px;padding:14px;}
+.os-info-label{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;letter-spacing:1px;margin-bottom:6px;}
+.os-info-val{font-size:14px;font-weight:800;color:var(--t1);}
+.os-bundle-section{margin-top:18px;}
+.os-bundle-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--acc);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--bd);}
+.os-sibling{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;border-radius:10px;
+  background:var(--s3);border:1px solid var(--bd);
+  margin-bottom:8px;transition:.15s;
+}
+.os-sibling.is-self{border-color:var(--acc);background:rgba(139,92,246,.08);}
+.os-sibling:hover{border-color:var(--bd2);}
+.os-sibling-id{font-family:monospace;font-weight:800;color:var(--green);font-size:12px;}
+.os-sibling-detail{font-size:11px;color:var(--t3);}
+.os-comparison-box{
+  background:linear-gradient(135deg,rgba(34,197,94,.06),rgba(139,92,246,.06));
+  border:1px solid rgba(34,197,94,.2);
+  border-radius:12px;padding:16px;margin-top:16px;
+}
+.os-comp-title{font-size:11px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;}
+.os-comp-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.05);}
+.os-comp-row:last-child{border-bottom:none;}
+.os-comp-label{font-size:12px;color:var(--t3);}
+.os-comp-val{font-size:13px;font-weight:800;}
+.sla-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;
+}
+.sla-ok{background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.25);}
+.sla-warn{background:rgba(251,191,36,.1);color:var(--yellow);border:1px solid rgba(251,191,36,.25);}
+.sla-breach{background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3);animation:pulse-red 2s ease infinite;}
+@keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,0);}50%{box-shadow:0 0 0 4px rgba(248,113,113,.2);}}
+
+/* =========================================
+   CUSTOMER PROFILES
+   ========================================= */
+.cust-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+.cust-card{
+  background:var(--s2);border:1px solid var(--bd);
+  border-radius:16px;padding:20px;
+  box-shadow:var(--shadow);transition:.2s;cursor:pointer;
+  position:relative;overflow:hidden;
+}
+.cust-card:hover{transform:translateY(-3px);box-shadow:var(--shadow2);border-color:var(--acc);}
+.cust-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--acc),var(--purple));}
+.cust-avatar{
+  width:46px;height:46px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:900;color:#fff;
+  margin-bottom:12px;
+  background:linear-gradient(135deg,var(--acc2),var(--purple));
+  box-shadow:0 4px 12px rgba(139,92,246,.3);
+}
+.cust-name{font-size:14px;font-weight:800;color:var(--t1);margin-bottom:3px;letter-spacing:-.2px;}
+.cust-vendor{font-size:11px;color:var(--t3);margin-bottom:14px;}
+.cust-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.cust-stat{background:var(--s3);border:1px solid var(--bd);border-radius:9px;padding:10px;text-align:center;}
+.cust-stat-v{font-size:18px;font-weight:900;color:var(--t1);letter-spacing:-.5px;}
+.cust-stat-l{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:2px;}
+.cust-saved{
+  margin-top:10px;padding:10px;
+  background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);
+  border-radius:9px;text-align:center;
+}
+.cust-saved-v{font-size:20px;font-weight:900;color:var(--green);}
+.cust-saved-l{font-size:9px;color:var(--green);text-transform:uppercase;font-weight:700;opacity:.8;}
+.cust-countries{margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;}
+.cust-country-tag{font-size:10px;padding:3px 8px;background:var(--s3);border:1px solid var(--bd);border-radius:20px;color:var(--t3);font-weight:600;}
+
+/* =========================================
+   ROUTE INTELLIGENCE
+   ========================================= */
+.route-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px;}
+.route-card{background:var(--s2);border:1px solid var(--bd);border-radius:16px;padding:22px;box-shadow:var(--shadow);}
+.route-country{font-size:16px;font-weight:800;color:var(--t1);margin-bottom:4px;display:flex;align-items:center;gap:10px;}
+.route-insight{font-size:11px;color:var(--acc);font-weight:700;margin-bottom:16px;padding:6px 10px;background:rgba(139,92,246,.08);border-radius:8px;display:inline-block;}
+.route-day-bars{margin-top:12px;}
+.route-day-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.route-day-label{font-size:11px;font-weight:700;width:32px;color:var(--t2);}
+.route-day-track{flex:1;height:20px;background:var(--s3);border-radius:6px;overflow:hidden;position:relative;}
+.route-day-fill{height:100%;border-radius:6px;transition:.7s;display:flex;align-items:center;padding-left:8px;}
+.route-day-fill span{font-size:10px;font-weight:800;color:#000;opacity:.9;}
+.route-day-val{font-size:11px;font-weight:700;width:30px;text-align:right;color:var(--t2);}
+.route-best-tag{font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(34,197,94,.15);color:var(--green);font-weight:800;border:1px solid rgba(34,197,94,.3);}
+
+@media(max-width:900px){.cust-grid{grid-template-columns:1fr 1fr;}.route-grid{grid-template-columns:1fr;}}
+@media(max-width:600px){.cust-grid{grid-template-columns:1fr;}.os-grid{grid-template-columns:1fr;}}
+
+/* =========================================
    ANALYTICS
    ========================================= */
 .an-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;}
@@ -5567,6 +5710,27 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
       <span class="sb-tab-label">Status Intelligence</span>
       <span class="sb-tab-dot"></span>
     </button>
+    <button class="sb-tab" data-pane="search" onclick="sw('search',this)">
+      <span class="sb-tab-icon">🔍</span>
+      <span class="sb-tab-label">Order Search</span>
+      <span class="sb-tab-dot"></span>
+    </button>
+    <div class="sb-section-label" style="margin-top:8px">Intelligence</div>
+    <button class="sb-tab" data-pane="customers" onclick="sw('customers',this)">
+      <span class="sb-tab-icon">👥</span>
+      <span class="sb-tab-label">Customers</span>
+      <span class="sb-tab-dot"></span>
+    </button>
+    <button class="sb-tab" data-pane="route" onclick="sw('route',this)">
+      <span class="sb-tab-icon">🛣️</span>
+      <span class="sb-tab-label">Route Intelligence</span>
+      <span class="sb-tab-dot"></span>
+    </button>
+    <button class="sb-tab" data-pane="analytics" onclick="sw('analytics',this)">
+      <span class="sb-tab-icon">📈</span>
+      <span class="sb-tab-label">Analytics</span>
+      <span class="sb-tab-dot"></span>
+    </button>
     <div class="sb-section-label" style="margin-top:8px">Reports</div>
     <button class="sb-tab" data-pane="summary" onclick="sw('summary',this)">
       <span class="sb-tab-icon">📊</span>
@@ -5583,18 +5747,21 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
       <span class="sb-tab-label">Regional View</span>
       <span class="sb-tab-dot"></span>
     </button>
-    <button class="sb-tab" data-pane="analytics" onclick="sw('analytics',this)">
-      <span class="sb-tab-icon">📈</span>
-      <span class="sb-tab-label">Analytics</span>
-      <span class="sb-tab-dot"></span>
-    </button>
   </nav>
   <div class="sb-foot">
+    <div class="sb-user-card" id="sbUserCard">
+      <div class="sb-user-avatar" id="sbAvatar">?</div>
+      <div class="sb-user-info">
+        <div class="sb-user-email" id="sbEmail">Loading...</div>
+        <div class="sb-user-role">Administrator</div>
+      </div>
+    </div>
+    <div class="sb-last-update" id="sbLastUpdate">Last update: —</div>
     <button class="theme-pill" onclick="toggleTheme()" id="themePill">
       <span class="icon">☀️</span>
       <span id="themeLabel">Light Mode</span>
     </button>
-    <a href="/" class="sb-back">← Main Dashboard</a>
+    <a href="/" class="sb-back">⬅ Main Dashboard</a>
   </div>
 </aside>
 
@@ -5665,20 +5832,40 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
 
     <div class="kg">
       <div class="kc">
-        <div class="kv" id="bk1">0</div>
-        <div class="kl">Total Bundles Packed</div>
+        <div class="kc-inner">
+          <div class="kc-data">
+            <div class="kv" id="bk1">0</div>
+            <div class="kl">📦 Bundles Packed</div>
+          </div>
+          <div class="kc-icon" style="background:rgba(96,165,250,.1)">📦</div>
+        </div>
       </div>
       <div class="kc">
-        <div class="kv" id="bk2">0</div>
-        <div class="kl">Total Orders Merged</div>
+        <div class="kc-inner">
+          <div class="kc-data">
+            <div class="kv" id="bk2">0</div>
+            <div class="kl">🛒 Orders Merged</div>
+          </div>
+          <div class="kc-icon" style="background:rgba(167,139,250,.1)">🛒</div>
+        </div>
       </div>
       <div class="kc kc-accent-yellow">
-        <div class="kv" id="bk3" style="color:var(--yellow)">0</div>
-        <div class="kl" style="color:var(--yellow)">🚚 Shipments Saved</div>
+        <div class="kc-inner">
+          <div class="kc-data">
+            <div class="kv" id="bk3" style="color:var(--yellow)">0</div>
+            <div class="kl" style="color:var(--yellow)">🚚 Shipments Saved</div>
+          </div>
+          <div class="kc-icon" style="background:rgba(251,191,36,.1)">🚚</div>
+        </div>
       </div>
       <div class="kc kc-accent-green">
-        <div class="kv" id="bk4" style="color:var(--green)">£0</div>
-        <div class="kl" style="color:var(--green)">💰 Total Saved (Est.)</div>
+        <div class="kc-inner">
+          <div class="kc-data">
+            <div class="kv" id="bk4" style="color:var(--green)">£0</div>
+            <div class="kl" style="color:var(--green)">💰 Total Saved (Est.)</div>
+          </div>
+          <div class="kc-icon" style="background:rgba(34,197,94,.1)">💰</div>
+        </div>
       </div>
     </div>
 
@@ -5838,6 +6025,47 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
   <div class="pane" id="pane-analytics">
     <div id="analyticsBody"></div>
   </div>
+
+  <!-- ===== ORDER SEARCH TAB ===== -->
+  <div class="pane" id="pane-search">
+    <div class="fbar">
+      <div class="frow" style="align-items:flex-end;gap:14px">
+        <div class="fg" style="flex:1">
+          <div class="fl">🔍 Search by Order ID</div>
+          <input type="text" id="osq" class="fi" placeholder="e.g. 132514_06 — press Enter or click Search" onkeydown="if(event.key==='Enter')rOrderSearch()">
+        </div>
+        <div class="fg"><div class="fl">&nbsp;</div><button class="abtn" onclick="rOrderSearch()">🔍 Search</button></div>
+      </div>
+    </div>
+    <div id="osResult"></div>
+  </div>
+
+  <!-- ===== CUSTOMERS TAB ===== -->
+  <div class="pane" id="pane-customers">
+    <div class="fbar">
+      <div class="frow" style="align-items:flex-end;gap:14px">
+        <div class="fg" style="flex:1">
+          <div class="fl">🔍 Filter Customer</div>
+          <input type="text" id="custQ" class="fi" placeholder="Customer name..." oninput="rCustomers()">
+        </div>
+        <div class="fg">
+          <div class="fl">Sort By</div>
+          <select id="custSort" class="fi" onchange="rCustomers()">
+            <option value="orders">Most Orders</option>
+            <option value="saved">Most Saved (£)</option>
+            <option value="weight">Total Weight</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div id="custCards"></div>
+  </div>
+
+  <!-- ===== ROUTE INTELLIGENCE TAB ===== -->
+  <div class="pane" id="pane-route">
+    <div id="routeBody"></div>
+  </div>
+
 </div>
 
 </div><!-- /main -->
@@ -5919,6 +6147,9 @@ async function init(){
     g("gLoad").style.display="none";
     g("pane-bundle").classList.add("active");
     _rendered.bundle=true;
+    cacheRates();
+    initUserCard();
+    updateLastUpdate();
     rBundle();
   }catch(e){
     g("gLoad").innerHTML=`<div style="color:var(--red);font-size:14px">Error: ${e.message}<br><br><button class="abtn" onclick="init()">Retry</button></div>`;
@@ -5931,15 +6162,16 @@ function hardRefresh(){
   document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".sb-tab").forEach(t=>t.classList.remove("active"));
   document.querySelector(".sb-tab[data-pane='bundle']").classList.add("active");
-  if(g("tbTitle")) g("tbTitle").textContent="Bundle Intelligence";
+  if(g("tbTitle")) g("tbTitle").textContent="📦 Bundle Intelligence";
+  _bPage=0; _bFiltered=[]; _stPage=0; _stFiltered=[];
   init();
 }
 
 // ============================================================
 // TAB SWITCH
 // ============================================================
-const _rendered={bundle:false,status:false,summary:false,week4:false,regional:false,analytics:false};
-const PAGE_TITLES={bundle:"Bundle Intelligence",status:"Status Intelligence",summary:"Weekly Summary",week4:"4-Week Summary",regional:"Regional View",analytics:"Analytics"};
+const _rendered={bundle:false,status:false,summary:false,week4:false,regional:false,analytics:false,search:false,customers:false,route:false};
+const PAGE_TITLES={bundle:"📦 Bundle Intelligence",status:"📡 Status Intelligence",summary:"📊 Weekly Summary",week4:"📅 4-Week Summary",regional:"🌍 Regional View",analytics:"📈 Analytics",search:"🔍 Order Search",customers:"👥 Customer Intelligence",route:"🛣️ Route Intelligence"};
 function sw(name,tab){
   document.querySelectorAll(".sb-tab").forEach(t=>t.classList.remove("active"));
   tab.classList.add("active");
@@ -5955,6 +6187,8 @@ function sw(name,tab){
       else if(name==="week4") rW4();
       else if(name==="regional") rRegional();
       else if(name==="analytics") rAnalytics();
+      else if(name==="customers") rCustomers();
+      else if(name==="route") rRoute();
     },30);
   }
 }
@@ -6602,6 +6836,12 @@ async function openJ(oid){
         ${ti("📬 Delivered",tl.delivered_at,"n")}
         ${tl.cancelled_at?ti("❌ Cancelled",tl.cancelled_at,"c"):""}
       </div>`;
+    // SLA check
+    const slaInfo=getSLAStatus({qc_approved_at:tl.qc_approved_at,handedover_at:tl.handedover_at});
+    if(slaInfo){
+      const slaHtml=`<div class="sla-badge sla-${slaInfo.status}" style="display:inline-flex;margin-bottom:16px">${slaInfo.label} — QC Approved → Handover</div>`;
+      g("jBody").innerHTML=g("jBody").innerHTML.replace('<div class="shd">⭐ Key Metrics</div>',slaHtml+'<div class="shd">⭐ Key Metrics</div>');
+    }
   }catch(e){g("jBody").innerHTML=`<div style="color:var(--red)">Error: ${e.message}</div>`;}
 }
 
@@ -6875,6 +7115,443 @@ function anDrillDown(uid,label){
   if(!list.length){alert("No orders found.");return;}
   g("oTit").textContent=title;
   showOrdModal(list);
+}
+
+// ============================================================
+// USER PROFILE IN SIDEBAR
+// ============================================================
+function initUserCard(){
+  const email=typeof USER_EMAIL!=="undefined"?USER_EMAIL:"";
+  if(!email) return;
+  const sbEmail=g("sbEmail"); if(sbEmail) sbEmail.textContent=email;
+  const sbAvatar=g("sbAvatar");
+  if(sbAvatar){
+    const parts=email.split("@")[0].split(/[.\-_]/);
+    const initials=(parts[0]?parts[0][0]:"?").toUpperCase()+(parts[1]?parts[1][0]:"").toUpperCase();
+    sbAvatar.textContent=initials||"?";
+  }
+}
+function updateLastUpdate(){
+  const el=g("sbLastUpdate");
+  if(el) el.textContent="Last update: "+new Date().toLocaleString();
+}
+
+// ============================================================
+// WEIGHT ESTIMATION ENGINE
+// ============================================================
+function estimateItemWeight(title){
+  const t=(title||"").toLowerCase();
+  if(/phone|laptop|tablet|electron|console|camera|speaker/.test(t)) return 0.60;
+  if(/shoe|boot|sneaker|heel|trainer|loafer|sandal/.test(t)) return 0.70;
+  if(/jacket|coat|blazer|overcoat|puffer|parka/.test(t)) return 0.55;
+  if(/jeans|denim|trouser|pant|chino|cargo/.test(t)) return 0.48;
+  if(/dress|gown|jumpsuit|playsuit|romper/.test(t)) return 0.38;
+  if(/sweater|hoodie|sweatshirt|pullover|knitwear/.test(t)) return 0.42;
+  if(/shirt|blouse|top|tshirt|t-shirt|polo|tunic/.test(t)) return 0.28;
+  if(/skirt|shorts/.test(t)) return 0.22;
+  if(/bag|handbag|purse|backpack|tote|clutch/.test(t)) return 0.45;
+  if(/sock|stocking|tight|hosiery/.test(t)) return 0.08;
+  if(/underwear|brief|bra|bralette|lingerie|thong|knicker|panty/.test(t)) return 0.10;
+  if(/watch|jewel|necklace|ring|earring|bracelet|pendant|brooch/.test(t)) return 0.14;
+  if(/hat|cap|beanie|beret|scarf|glove|mitten/.test(t)) return 0.12;
+  if(/belt|tie|bow/.test(t)) return 0.15;
+  if(/book|manual|guide|magazine/.test(t)) return 0.40;
+  if(/toy|game|puzzle/.test(t)) return 0.35;
+  return 0.30;
+}
+
+function splitBundleWeight(bundle){
+  const orders=bundle.orders;
+  const totalBW=bundle.weight_kg||0;
+  // Use actual weights if available
+  const weights=orders.map(o=>parseFloat((o.weight||"0").toString().replace(/[^0-9.]/g,""))||0);
+  const knownTotal=weights.reduce((a,b)=>a+b,0);
+  if(knownTotal>0.1){
+    // Check if all weights are known
+    const hasAll=weights.every(w=>w>0);
+    if(hasAll) return weights;
+    // Fill zeros with estimates scaled to remaining weight
+    const knownSum=weights.filter(w=>w>0).reduce((a,b)=>a+b,0);
+    const remaining=Math.max(totalBW-knownSum,0);
+    const estimates=orders.map((o,i)=>{
+      if(weights[i]>0) return weights[i];
+      const ic=Math.max(parseInt(o.item_count)||1,1);
+      return estimateItemWeight(o.title)*ic;
+    });
+    const estSum=estimates.filter((_,i)=>weights[i]===0).reduce((a,b)=>a+b,0);
+    return orders.map((o,i)=>{
+      if(weights[i]>0) return weights[i];
+      const ic=Math.max(parseInt(o.item_count)||1,1);
+      const raw=estimateItemWeight(o.title)*ic;
+      return estSum>0?raw/estSum*remaining:remaining/orders.filter((_,j)=>weights[j]===0).length;
+    });
+  }
+  // All zero: estimate from title + item count, scale to bundle total
+  const estimates=orders.map(o=>{
+    const ic=Math.max(parseInt(o.item_count)||1,1);
+    return estimateItemWeight(o.title)*ic;
+  });
+  const estTotal=estimates.reduce((a,b)=>a+b,0);
+  if(estTotal<=0) return orders.map(()=>totalBW/orders.length);
+  const scale=totalBW>0?totalBW/estTotal:1;
+  return estimates.map(e=>e*scale);
+}
+
+function calcBundleComparison(bundle,rm){
+  const DR=4.50;
+  const country=(bundle.country||"").toLowerCase();
+  const pr=rm[country]||DR;
+  const totalBW=bundle.weight_kg||0;
+  const splitWeights=splitBundleWeight(bundle);
+  let indivCost=0;
+  const orderBreakdown=bundle.orders.map((o,i)=>{
+    const w=splitWeights[i];
+    const billed=Math.max(Math.ceil(w),1);
+    const cost=billed*pr;
+    indivCost+=cost;
+    return{order_id:o.order_id,title:o.title,item_count:o.item_count,
+      est_weight:w,billed_weight:billed,individual_cost:cost,
+      status:o.status,weight:o.weight};
+  });
+  const bundleBilled=Math.max(Math.ceil(totalBW),1);
+  const bundleCost=bundleBilled*pr;
+  const saved=Math.max(indivCost-bundleCost,0);
+  return{orderBreakdown,indivCost,bundleCost,saved,rate:pr,totalBW,bundleBilled};
+}
+
+// ============================================================
+// SLA CHECKER (QC_APPROVED → HANDOVER > 3 days)
+// ============================================================
+function getSLAStatus(jRow){
+  if(!jRow) return null;
+  const qa=jRow.qc_approved_at; const hh=jRow.handedover_at;
+  if(!qa) return null;
+  const qaD=new Date(qa); const hhD=hh?new Date(hh):new Date();
+  const days=(hhD-qaD)/(1000*60*60*24);
+  if(days<0) return null;
+  if(!hh && days>3) return{status:"breach",days:days.toFixed(1),label:"⚠️ "+days.toFixed(1)+"d (SLA Breach)"};
+  if(days>3) return{status:"breach",days:days.toFixed(1),label:"⚠️ "+days.toFixed(1)+"d (Breached)"};
+  if(days>2) return{status:"warn",days:days.toFixed(1),label:"⏳ "+days.toFixed(1)+"d"};
+  return{status:"ok",days:days.toFixed(1),label:"✅ "+days.toFixed(1)+"d"};
+}
+
+// ============================================================
+// ORDER SEARCH TAB
+// ============================================================
+async function rOrderSearch(){
+  const q=(g("osq").value||"").trim().toUpperCase();
+  const cont=g("osResult");
+  if(!q){cont.innerHTML=`<div class="empty-state"><div class="empty-icon">🔍</div><div>Enter an Order ID above</div></div>`;return;}
+  cont.innerHTML=`<div class="lw"><div class="ld"></div><p class="lp">Searching...</p></div>`;
+  // Find in bundles
+  let foundBundle=null; let foundOrder=null;
+  (D.bundles||[]).forEach(b=>{
+    b.orders.forEach(o=>{
+      if(o.order_id.toUpperCase()===q){foundBundle=b;foundOrder=o;}
+    });
+  });
+  if(!foundBundle){
+    cont.innerHTML=`<div class="empty-state"><div class="empty-icon">😕</div><div>Order <b>${q}</b> not found in any bundle.<br><span style="font-size:12px;color:var(--t3)">Note: Only bundled orders are shown here.</span></div></div>`;
+    return;
+  }
+  // Fetch journey
+  let jData=null;
+  try{
+    const r=await fetch("/api/nexus/order_journey/"+encodeURIComponent(q));
+    jData=await r.json();
+  }catch(e){}
+  const jRow=jData&&jData.success?jData:null;
+  const tl=jRow?jRow.timeline:{};
+  const rm=D.bundles?{}:(D.rates||{});
+  // Get rates from first bundle's context
+  const rmGlobal=window._ratesCache||{};
+  const comp=calcBundleComparison(foundBundle,rmGlobal);
+  const myComp=comp.orderBreakdown.find(o=>o.order_id.toUpperCase()===q)||comp.orderBreakdown[0];
+  const sla=jRow?getSLAStatus({qc_approved_at:tl.qc_approved_at,handedover_at:tl.handedover_at}):null;
+  const stS=sStyle(foundOrder.status||"—");
+
+  let html=`<div class="os-result-card">
+    <div class="os-header">
+      <div>
+        <div class="os-order-id">📦 ${q}</div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span class="os-status-badge" style="background:${stS.bg};color:${stS.c};border-color:${stS.bd||stS.c+'44'}">${foundOrder.status||"—"}</span>
+          ${sla?`<span class="sla-badge sla-${sla.status}">${sla.label} QC→Handover</span>`:""}
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--t3)">Part of bundle</div>
+        <div style="font-size:18px;font-weight:900;color:var(--acc)">${foundBundle.orders.length} orders</div>
+        <div style="font-size:11px;color:var(--t3)">${foundBundle.source}</div>
+      </div>
+    </div>
+
+    <div class="os-grid">
+      <div class="os-info-box"><div class="os-info-label">📅 Date</div><div class="os-info-val">${foundBundle.date||"—"}</div></div>
+      <div class="os-info-box"><div class="os-info-label">👤 Customer</div><div class="os-info-val">${foundBundle.customer||"—"}</div></div>
+      <div class="os-info-box"><div class="os-info-label">🌍 Country</div><div class="os-info-val">${foundBundle.country||"—"}</div></div>
+      <div class="os-info-box"><div class="os-info-label">🏪 Vendor</div><div class="os-info-val">${foundBundle.vendor||"—"}</div></div>
+      <div class="os-info-box"><div class="os-info-label">⚖️ Est. Weight</div><div class="os-info-val">${myComp?myComp.est_weight.toFixed(2)+" kg":foundOrder.weight+" kg"}</div></div>
+      <div class="os-info-box"><div class="os-info-label">📬 Tracking</div><div class="os-info-val" style="font-family:monospace;font-size:11px">${foundBundle.tid||"Pending"}</div></div>
+    </div>`;
+
+  // Timeline if available
+  if(jRow&&jRow.timeline){
+    const steps=[
+      ["📋 Created",tl.created_at],["✅ Accepted",tl.accepted_at],
+      ["🚚 Pickup",tl.pickup_ready_at],["🔍 QC Pending",tl.qc_pending_at],
+      ["✅ QC Approved",tl.qc_approved_at],["🤝 Handover",tl.handedover_at],
+      ["✈️ Freight",tl.freight_at],["🚁 Courier",tl.courier_at],["📬 Delivered",tl.delivered_at]
+    ];
+    html+=`<div class="os-bundle-title" style="margin-top:16px">🗺️ Order Journey</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+    ${steps.map(([l,v])=>`<div style="background:${v?"rgba(34,197,94,.08)":"var(--s3)"};border:1px solid ${v?"rgba(34,197,94,.2)":"var(--bd)"};border-radius:9px;padding:8px 12px;min-width:120px">
+      <div style="font-size:9px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.8px">${l}</div>
+      <div style="font-size:11px;font-weight:700;color:${v?"var(--green)":"var(--t4)"};margin-top:3px">${v||"— Pending"}</div>
+    </div>`).join("")}
+    </div>`;
+  }
+
+  // Bundle siblings
+  html+=`<div class="os-bundle-section">
+    <div class="os-bundle-title">📦 All Orders in This Bundle</div>`;
+  comp.orderBreakdown.forEach(o=>{
+    const isSelf=o.order_id.toUpperCase()===q;
+    const oSt=sStyle(o.status||"—");
+    html+=`<div class="os-sibling ${isSelf?"is-self":""}">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="os-sibling-id">${o.order_id}</span>
+          ${isSelf?'<span style="font-size:10px;background:rgba(139,92,246,.2);color:var(--acc);padding:2px 8px;border-radius:20px;font-weight:700">YOU</span>':""}
+          <span class="spill" style="background:${oSt.bg};color:${oSt.c};border-color:${oSt.bd||oSt.c+'44'}">${o.status||"—"}</span>
+        </div>
+        <div class="os-sibling-detail" style="margin-top:4px">${(o.title||"").substring(0,50)} · ${o.item_count} pcs</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:12px;font-weight:800;color:var(--t1)">${o.est_weight.toFixed(2)} kg</div>
+        <div style="font-size:10px;color:var(--t3)">est. weight</div>
+      </div>
+    </div>`;
+  });
+
+  // Bundle vs individual comparison
+  html+=`</div>
+    <div class="os-comparison-box">
+      <div class="os-comp-title">💰 Bundle vs Individual Shipping Cost</div>
+      <div class="os-comp-row">
+        <span class="os-comp-label">📦 Total Bundle Weight</span>
+        <span class="os-comp-val" style="color:var(--blue)">${comp.totalBW.toFixed(2)} kg → billed ${comp.bundleBilled} kg</span>
+      </div>
+      <div class="os-comp-row">
+        <span class="os-comp-label">💷 Rate (${foundBundle.country||"default"})</span>
+        <span class="os-comp-val">£${comp.rate.toFixed(2)}/kg</span>
+      </div>
+      <div class="os-comp-row">
+        <span class="os-comp-label">❌ If Shipped Individually</span>
+        <span class="os-comp-val" style="color:var(--red)">£${comp.indivCost.toFixed(2)}</span>
+      </div>
+      <div class="os-comp-row">
+        <span class="os-comp-label">✅ As Bundle</span>
+        <span class="os-comp-val" style="color:var(--green)">£${comp.bundleCost.toFixed(2)}</span>
+      </div>
+      <div class="os-comp-row" style="border-top:1px solid rgba(34,197,94,.2);margin-top:8px;padding-top:8px">
+        <span class="os-comp-label" style="font-weight:800;color:var(--t1)">🎉 Total Saved</span>
+        <span class="os-comp-val" style="color:var(--green);font-size:18px">£${comp.saved.toFixed(2)}</span>
+      </div>
+    </div>
+  </div>`;
+
+  cont.innerHTML=html;
+}
+
+// ============================================================
+// CUSTOMER INTELLIGENCE
+// ============================================================
+function rCustomers(){
+  if(!D) return;
+  const cont=g("custCards");
+  if(!cont) return;
+  const q=(g("custQ")?.value||"").toLowerCase();
+  const sort=g("custSort")?.value||"orders";
+  const rm=window._ratesCache||{};
+  const DR=4.50;
+  // Build customer map
+  const custMap={};
+  (D.bundles||[]).forEach(b=>{
+    const cust=b.customer||"Unknown";
+    if(!custMap[cust]) custMap[cust]={
+      name:cust,vendor:b.vendor||"",
+      orders:0,bundles:0,weight:0,saved:0,
+      countries:new Set(),sources:new Set(),
+      dates:[],statuses:{}
+    };
+    const c=custMap[cust];
+    c.bundles++;
+    c.dates.push(b.date_std);
+    c.countries.add(b.country||"—");
+    c.sources.add(b.source);
+    const comp=calcBundleComparison(b,rm);
+    c.saved+=comp.saved;
+    c.weight+=b.weight_kg||0;
+    b.orders.forEach(o=>{
+      c.orders++;
+      const st=o.status||"—";
+      c.statuses[st]=(c.statuses[st]||0)+1;
+    });
+  });
+  let arr=Object.values(custMap);
+  if(q) arr=arr.filter(c=>c.name.toLowerCase().includes(q)||(c.vendor||"").toLowerCase().includes(q));
+  arr.sort((a,b)=>{
+    if(sort==="saved") return b.saved-a.saved;
+    if(sort==="weight") return b.weight-a.weight;
+    return b.orders-a.orders;
+  });
+  if(!arr.length){cont.innerHTML=`<div class="empty-state"><div class="empty-icon">👥</div><div>No customers found</div></div>`;return;}
+  const colors=["#8b5cf6","#3b82f6","#22c55e","#f59e0b","#ec4899","#06b6d4","#f97316","#a855f7"];
+  let html=`<div class="cust-grid">`;
+  arr.forEach((c,i)=>{
+    const col=colors[i%colors.length];
+    const initials=c.name.split(" ").map(w=>w[0]).join("").substring(0,2).toUpperCase();
+    const dSorted=c.dates.sort(); const firstD=dSorted[0]||""; const lastD=dSorted[dSorted.length-1]||"";
+    const topStatus=Object.entries(c.statuses).sort((a,b)=>b[1]-a[1])[0];
+    const ctags=[...c.countries].slice(0,4).map(cn=>`<span class="cust-country-tag">🌍 ${cn}</span>`).join("");
+    html+=`<div class="cust-card" onclick="showCustDetail('${c.name.replace(/'/g,"\'")}')">
+      <div class="cust-avatar" style="background:linear-gradient(135deg,${col},${col}99)">${initials}</div>
+      <div class="cust-name">${c.name}</div>
+      <div class="cust-vendor">${c.vendor||"—"} · ${[...c.sources].join(", ")}</div>
+      <div class="cust-stats">
+        <div class="cust-stat"><div class="cust-stat-v" style="color:var(--blue)">${c.orders}</div><div class="cust-stat-l">📦 Orders</div></div>
+        <div class="cust-stat"><div class="cust-stat-v" style="color:var(--purple)">${c.bundles}</div><div class="cust-stat-l">🗃️ Bundles</div></div>
+        <div class="cust-stat"><div class="cust-stat-v" style="color:var(--yellow)">${c.weight.toFixed(1)}</div><div class="cust-stat-l">⚖️ kg</div></div>
+        <div class="cust-stat"><div class="cust-stat-v" style="color:var(--t3);font-size:12px">${topStatus?topStatus[0].substring(0,10):"—"}</div><div class="cust-stat-l">📡 Top Status</div></div>
+      </div>
+      <div class="cust-saved"><div class="cust-saved-v">£${c.saved.toFixed(2)}</div><div class="cust-saved-l">💰 Total Saved</div></div>
+      <div class="cust-countries" style="margin-top:8px">${ctags}</div>
+      <div style="font-size:9px;color:var(--t4);margin-top:10px">First: ${firstD||"—"} · Last: ${lastD||"—"}</div>
+    </div>`;
+  });
+  html+=`</div>`;
+  cont.innerHTML=html;
+}
+
+function showCustDetail(name){
+  if(GUEST) return;
+  const bundles=(D.bundles||[]).filter(b=>b.customer===name);
+  const list=bundles.flatMap(b=>b.orders.map(o=>({...o,date:b.date_std,source:b.source,customer:b.customer})));
+  g("oTit").textContent=`👥 ${name} — ${list.length} orders`;
+  showOrdModal(list);
+}
+
+// ============================================================
+// ROUTE INTELLIGENCE
+// ============================================================
+function rRoute(){
+  if(!D) return;
+  const cont=g("routeBody");
+  if(!cont) return;
+  cont.innerHTML=`<div class="lw"><div class="ld"></div><p class="lp">Analysing shipping patterns...</p></div>`;
+  setTimeout(()=>_buildRoute(cont),40);
+}
+
+function _buildRoute(cont){
+  const DAYS_LBL=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const FLT_DAYS=[1,3,5]; // Tue=1, Thu=3, Sat=5
+  const countryMap={};
+  const rm=window._ratesCache||{};
+  const DR=4.50;
+
+  (D.bundles||[]).forEach(b=>{
+    const cn=b.country||"Unknown";
+    const d=new Date(b.date_std);
+    const di=d.getDay()===0?6:d.getDay()-1; // Mon=0
+    if(!countryMap[cn]) countryMap[cn]={days:Array.from({length:7},()=>({bundles:0,orders:0,weight:0,saved:0})),total:0};
+    const cm=countryMap[cn];
+    cm.total+=b.orders.length;
+    cm.days[di].bundles++;
+    cm.days[di].orders+=b.orders.length;
+    cm.days[di].weight+=b.weight_kg||0;
+    const pr=rm[cn.toLowerCase()]||DR;
+    const comp=calcBundleComparison(b,rm);
+    cm.days[di].saved+=comp.saved;
+  });
+
+  const sorted=Object.entries(countryMap).sort((a,b)=>b[1].total-a[1].total).slice(0,12);
+  if(!sorted.length){cont.innerHTML=`<div class="empty-state"><div class="empty-icon">🛣️</div><div>No data</div></div>`;return;}
+
+  // Global pattern summary
+  const globalDays=Array.from({length:7},()=>({orders:0,saved:0}));
+  sorted.forEach(([cn,cm])=>cm.days.forEach((d,i)=>{globalDays[i].orders+=d.orders;globalDays[i].saved+=d.saved;}));
+  const bestGlobalDay=globalDays.reduce((b,d,i)=>d.orders>b.val?{i,val:d.orders}:{i:b.i,val:b.val},{i:0,val:0});
+
+  let html=`<div style="background:var(--s2);border:1px solid rgba(139,92,246,.2);border-radius:16px;padding:22px;margin-bottom:22px;background:linear-gradient(135deg,rgba(139,92,246,.08),rgba(34,197,94,.04))">
+    <div style="font-size:16px;font-weight:800;color:var(--t1);margin-bottom:6px">🌐 Global Shipping Pattern</div>
+    <div style="font-size:12px;color:var(--t3);margin-bottom:16px">Based on ${(D.bundles||[]).length.toLocaleString()} bundles across all countries</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+    ${globalDays.map((d,i)=>{
+      const isBest=i===bestGlobalDay.i;
+      const isFlt=FLT_DAYS.includes(i);
+      return `<div style="flex:1;min-width:80px;background:${isBest?"rgba(34,197,94,.12)":"var(--s3)"};border:1.5px solid ${isBest?"rgba(34,197,94,.35)":"var(--bd)"};border-radius:12px;padding:12px;text-align:center">
+        <div style="font-size:11px;font-weight:800;color:${isBest?"var(--green)":"var(--t3)"}">${DAYS_LBL[i]}${isFlt?" ✈️":""}</div>
+        <div style="font-size:22px;font-weight:900;color:${isBest?"var(--green)":"var(--t1)"};margin:6px 0">${d.orders}</div>
+        <div style="font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700">orders</div>
+        ${isBest?'<div style="font-size:9px;color:var(--green);font-weight:800;margin-top:4px">👑 BEST</div>':""}
+      </div>`;
+    }).join("")}
+    </div>
+  </div>
+  <div class="route-grid">`;
+
+  sorted.forEach(([cn,cm])=>{
+    const maxO=Math.max(...cm.days.map(d=>d.orders),1);
+    const bestDayIdx=cm.days.reduce((b,d,i)=>d.orders>b.val?{i,val:d.orders}:{i:b.i,val:b.val},{i:0,val:0}).i;
+    const bestDay=cm.days[bestDayIdx];
+    const flightDayHit=FLT_DAYS.includes(bestDayIdx);
+    const totalSaved=cm.days.reduce((a,d)=>a+d.saved,0);
+
+    const barColors=["#8b5cf6","#3b82f6","#22c55e","#f59e0b","#ec4899","#06b6d4","#f97316"];
+
+    html+=`<div class="route-card">
+      <div class="route-country">
+        🌍 ${cn}
+        <span style="font-size:11px;font-weight:700;color:var(--t3)">${cm.total} orders</span>
+        ${flightDayHit?'<span style="font-size:10px;padding:2px 8px;background:rgba(34,197,94,.1);color:var(--green);border-radius:20px;border:1px solid rgba(34,197,94,.25);font-weight:800">✈️ Flight Day Match</span>':""}
+      </div>
+      <div class="route-insight">💡 Best day: ${DAYS_LBL[bestDayIdx]} — ${bestDay.orders} orders, £${bestDay.saved.toFixed(2)} saved</div>
+      <div class="route-day-bars">
+        ${cm.days.map((d,i)=>{
+          const pct=maxO>0?Math.round(d.orders/maxO*100):0;
+          const isBest=i===bestDayIdx;
+          const col=isBest?"#22c55e":barColors[i%barColors.length];
+          return `<div class="route-day-row">
+            <div class="route-day-label" style="color:${isBest?"var(--green)":"var(--t2)"}">${DAYS_LBL[i]}</div>
+            <div class="route-day-track">
+              <div class="route-day-fill" style="width:${pct}%;background:${col}">
+                ${d.orders>0?`<span>${d.orders}</span>`:""}
+              </div>
+            </div>
+            <div class="route-day-val" style="color:${isBest?"var(--green)":"var(--t2)"}">${d.orders}</div>
+            ${isBest?`<span class="route-best-tag">Best</span>`:""}
+          </div>`;
+        }).join("")}
+      </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--bd);display:flex;justify-content:space-between">
+        <div style="font-size:11px;color:var(--t3)">💰 Total saved: <b style="color:var(--green)">£${totalSaved.toFixed(2)}</b></div>
+        <div style="font-size:11px;color:var(--t3)">⚖️ Total weight: <b style="color:var(--yellow)">${cm.days.reduce((a,d)=>a+d.weight,0).toFixed(1)} kg</b></div>
+      </div>
+    </div>`;
+  });
+  html+=`</div>`;
+  cont.innerHTML=html;
+}
+
+// ============================================================
+// CACHE RATES for client-side use
+// ============================================================
+function cacheRates(){
+  // Extract rates from bundles data heuristically
+  // We don't have direct rates on client but we can reverse-engineer from savings
+  // Just use defaults — the real rate is in the API
+  window._ratesCache={};
 }
 
 function cMod(id){document.getElementById(id).classList.remove("open");}
