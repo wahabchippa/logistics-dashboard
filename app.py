@@ -1545,10 +1545,10 @@ function togglePwd(){
 # LOGOUT ROUTE — yeh waise hi rahega, koi change nahi
 # ==============================================================================
 
-# @app.route('/logout')
-# def logout():
-#     session.clear()
-#     return redirect(url_for('login'))
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 # NOTE: Upar wala logout route pehle se existing code mein hai — use rehne do.
 # Sirf upper wala USERS dict + login() function + LOGIN_HTML replace karein.
