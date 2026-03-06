@@ -4579,13 +4579,8 @@ from datetime import datetime, timedelta
 from flask import jsonify, request, session, render_template_string
 
 _bc={"data":None,"time":0}; _jc={"data":None,"time":0}; _sc={"data":None,"time":0}
-CD=1200
-import threading
-def _prewarm():
-    time.sleep(3)
-    try: fetch_all()
-    except: pass
-threading.Thread(target=_prewarm, daemon=True).start()
+CD=600
+
 FULL_ACCESS = {
     "husaain@joinfleek.com",
     "wahab.chippa@joinfleek.com",
@@ -5028,13 +5023,6 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
   min-width:0;
 }
 .fi:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(77,159,255,0.12);}
-input[type="date"]::-webkit-calendar-picker-indicator{
-  filter: invert(1) opacity(0.6);
-  cursor:pointer;
-}
-[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator{
-  filter: invert(0) opacity(0.5);
-}
 .fi option{background:var(--s1);color:var(--t1);}
 .fg-grow{flex:1;min-width:200px;}
 .qbtns{display:flex;gap:6px;flex-wrap:wrap;}
@@ -5785,8 +5773,8 @@ async function init(){
     g("ws").value=fi(mon); g("w4e").value=fi(mon); g("rws").value=fi(mon);
     g("gLoad").style.display="none";
     g("pane-bundle").classList.add("active");
+    _rendered.bundle=true;
     rBundle();
-    setTimeout(()=>{rSummary();rW4();rRegional();},200);
   }catch(e){
     g("gLoad").innerHTML=`<div style="color:var(--red);font-size:14px">Error: ${e.message}<br><br><button class="abtn" onclick="init()">Retry</button></div>`;
   }
@@ -5796,14 +5784,22 @@ function hardRefresh(){D=null;g("gLoad").style.display="block";document.querySel
 // ============================================================
 // TAB SWITCH
 // ============================================================
+const _rendered={bundle:false,status:false,summary:false,week4:false,regional:false};
 function sw(name,tab){
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   tab.classList.add("active");
   document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));
-  requestAnimationFrame(()=>{
-    g("pane-"+name).classList.add("active");
-    if(name==="status"&&D) rStatus();
-  });
+  g("pane-"+name).classList.add("active");
+  if(!D) return;
+  if(!_rendered[name]){
+    _rendered[name]=true;
+    setTimeout(()=>{
+      if(name==="status") rStatus();
+      else if(name==="summary") rSummary();
+      else if(name==="week4") rW4();
+      else if(name==="regional") rRegional();
+    },30);
+  }
 }
 
 // ============================================================
