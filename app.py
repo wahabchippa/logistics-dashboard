@@ -1276,6 +1276,7 @@ USERS = {
     "albash@joinfleek.com":       "Albash123",
     "waris@joinfleek.com":        "waris123",
     "moiz@joinfleek.com":         "moiz1234",
+    "areeb@joinfleek.com":        "areeb123",
 }
 
 # Guest login ke liye ek simple password (optional, agar seedha guest button chahiye)
@@ -4587,6 +4588,7 @@ FULL_ACCESS = {
     "albash@joinfleek.com",
     "waris@joinfleek.com",
     "moiz@joinfleek.com",
+    "areeb@joinfleek.com",
 }
 
 def user_mode():
