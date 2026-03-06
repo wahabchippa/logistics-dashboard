@@ -4579,8 +4579,13 @@ from datetime import datetime, timedelta
 from flask import jsonify, request, session, render_template_string
 
 _bc={"data":None,"time":0}; _jc={"data":None,"time":0}; _sc={"data":None,"time":0}
-CD=600
-
+CD=1200
+import threading
+def _prewarm():
+    time.sleep(3)
+    try: fetch_all()
+    except: pass
+threading.Thread(target=_prewarm, daemon=True).start()
 FULL_ACCESS = {
     "husaain@joinfleek.com",
     "wahab.chippa@joinfleek.com",
