@@ -5023,6 +5023,13 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
   min-width:0;
 }
 .fi:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(77,159,255,0.12);}
+input[type="date"]::-webkit-calendar-picker-indicator{
+  filter: invert(1) opacity(0.6);
+  cursor:pointer;
+}
+[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator{
+  filter: invert(0) opacity(0.5);
+}
 .fi option{background:var(--s1);color:var(--t1);}
 .fg-grow{flex:1;min-width:200px;}
 .qbtns{display:flex;gap:6px;flex-wrap:wrap;}
