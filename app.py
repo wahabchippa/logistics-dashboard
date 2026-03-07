@@ -4630,14 +4630,27 @@ def sd(d):
 
 def ctids(raw):
     raw=str(raw).strip()
-    if not raw or raw.lower() in ["pending","none","n/a","-","tbd","update soon"]: return []
-    raw=re.sub(r"(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})",r" \1 ",raw)
+    # Reject blank, placeholders, formula artifacts
+    if not raw: return []
+    if raw.startswith("="): return []  # Google Sheets formula leaked
+    if raw.lower() in ["pending","none","n/a","-","tbd","update soon","#n/a","#ref!","#value!","#error!"]: return []
+    # Only extract real tracking ID patterns:
+    # 1550xxxxxxxxxx / 1500xxxxxxxxxx (15-16 digits)
+    # JDxxxxxxxxxx, YTxxxxxxxxxx, 1Zxxxxxxxxxxxxxxxx (UPS)
+    PATTERNS=[
+        r"\b(1[56]\d{12,14})\b",          # 1550... / 1560...
+        r"\b(0?15[05]\d{10,13})\b",       # 01550... 
+        r"\b(1Z[A-Z0-9]{15,18})\b",        # UPS
+        r"\b(JD\d{10,18})\b",             # DHL
+        r"\b(YT\d{10,18})\b",             # Yodel
+        r"\b(TT\d{10,18})\b",             # TT
+    ]
     out=[]
-    for t in [x.strip() for x in re.split(r"[,/\s;]+",raw) if x.strip()]:
-        t=re.sub(r"^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$","",t)
-        if len(t)>6 and re.search(r"\d",t) and t.lower() not in ["tracking","number"]:
-            out.append(("0"+t) if t.startswith("150") and len(t)>=12 and not t.startswith("0") else t)
-    return list(dict.fromkeys(out))
+    for pat in PATTERNS:
+        for m in re.finditer(pat,raw,re.IGNORECASE):
+            t=m.group(1).strip()
+            if t not in out: out.append(t)
+    return out
 
 def pdt(val):
     if not val or str(val).strip() in ["","nan","N/A","-","None","null"]: return None
@@ -4915,7 +4928,7 @@ def api_app_data():
                 cb={"orders":[od],"date":r["date"],"date_std":r["date_std"],
                     "customer":r["customer"],"vendor":r["vendor"],"country":ctry,
                     "source":src,"region":grg(ctry),"boxes_val":bx,
-                    "tid":", ".join(tids) if tids else "Pending Tracking"}
+                    "tid":", ".join(tids) if tids else ""}
             else:
                 if cb:
                     cb["orders"].append(od)
@@ -6648,7 +6661,7 @@ function renderBundlePage(){
       <td><b>${b.customer||""}</b><br><span style="color:var(--t3);font-size:11px">${b.vendor||""}</span><br><span style="color:var(--t3);font-size:11px">${b.country||""}</span></td>
       <td>
         <div class="bbox">
-          <span style="color:var(--t3);font-size:11px">TID:</span> <b style="font-family:monospace;font-size:11px">${b.tid}</b><br>
+          <span style="color:var(--t3);font-size:11px">TID:</span> <b style="font-family:monospace;font-size:11px">${b.tid||"—"}</b><br>
           <span style="color:var(--t3);font-size:11px">BOX:</span> <b style="color:var(--green)">${b.boxes_val}</b>
         </div>
         <div style="margin-top:8px;background:rgba(0,230,118,.07);border:1px solid rgba(0,230,118,.2);padding:10px;border-radius:8px">
