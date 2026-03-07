@@ -4600,6 +4600,28 @@ def user_mode():
 JS=("https://docs.google.com/spreadsheets/d/e/2PACX-1vQRsiVaciOMON0xaXXEi1guBYrqfVNpD-j4My_9YokGd5kftqjAXvri5c_gLB_VRXeoDLzEtz9h5y8x/pub?gid=1409345116&single=true&output=csv")
 SS=("https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1570463436&single=true&output=csv")
 
+def estimate_item_weight(title, item_count):
+    """Estimate weight per order using category keywords + piece count."""
+    t=(title or "").lower(); ic=max(item_count,1)
+    # Category weight per piece (kg)
+    if any(w in t for w in ['jacket','coat','blazer','puffer','parka','overcoat','bomber']): pw=0.55
+    elif any(w in t for w in ['shoe','shoes','boot','boots','sneaker','sneakers','heel','heels','trainer','loafer','sandal','footwear']): pw=0.70
+    elif any(w in t for w in ['jeans','denim','trouser','trousers','pant','pants','chino','cargo','legging']): pw=0.48
+    elif any(w in t for w in ['dress','gown','jumpsuit','playsuit','romper','overall']): pw=0.38
+    elif any(w in t for w in ['sweater','hoodie','sweatshirt','pullover','knitwear','knit','fleece']): pw=0.42
+    elif any(w in t for w in ['shirt','blouse','tshirt','t-shirt','polo','tunic','top','crop','vest','tank']): pw=0.28
+    elif any(w in t for w in ['skirt','shorts','short']): pw=0.22
+    elif any(w in t for w in ['bag','handbag','purse','backpack','tote','clutch','satchel']): pw=0.45
+    elif any(w in t for w in ['sock','socks','stocking','tight','tights','hosiery']): pw=0.08
+    elif any(w in t for w in ['underwear','brief','briefs','bra','bralette','lingerie','thong','knicker','panty']): pw=0.10
+    elif any(w in t for w in ['watch','jewel','jewellery','jewelry','necklace','ring','earring','bracelet','pendant','brooch']): pw=0.14
+    elif any(w in t for w in ['hat','cap','beanie','beret','scarf','gloves','mitten']): pw=0.12
+    elif any(w in t for w in ['belt','tie','bow tie','cufflink']): pw=0.15
+    elif any(w in t for w in ['phone','laptop','tablet','electronic','console','camera','speaker','tech']): pw=0.60
+    elif any(w in t for w in ['tracksuit','suit','set','co-ord']): pw=0.65
+    else: pw=0.30  # generic clothing default
+    return pw * ic
+
 def sd(d):
     for fmt in ("%Y-%m-%d","%d/%m/%Y","%m/%d/%Y","%d-%b-%y","%d-%b-%Y","%Y/%m/%d"):
         try: return datetime.strptime(str(d).split()[0],fmt).strftime("%Y-%m-%d")
@@ -4770,21 +4792,27 @@ def api_app_data():
     sheets=fetch_all(); sm=fetch_status(); rm=sheets.get("RATES",{}); DR=4.50
     bundles=[]; tb=to2=0; tsav=0.0
     ss={"ECL QC Center":{"orders":0,"boxes":0},"PK Zone":{"orders":0,"boxes":0}}
+    NA_VALS={"n/a","#n/a","not applicable","na","none","null","-","nan",""}
     for src in ["ECL QC Center","ECL Zone","GE Zone"]:
         rows=sheets.get(src,[]); cb=None
         pk="PK Zone" if src in ["ECL Zone","GE Zone"] else src
         for r in rows:
             oid=r["order"].upper(); bx=r["boxes"]
-            od={"order_id":oid,"weight":r["weight"],"title":r["title"],
-                "item_count":r["item_count"],"country":r["country"],"status":sm.get(oid,"—")}
+            # Skip N/A orders
+            if oid.lower().replace(" ","") in NA_VALS or "#n/a" in oid.lower(): continue
+            ttl=r["title"]; ctry=r["country"]
+            # Skip N/A titles or countries that break data
+            if not oid or not re.search(r"\d",oid): continue
+            od={"order_id":oid,"weight":r["weight"],"title":ttl,
+                "item_count":r["item_count"],"country":ctry,"status":sm.get(oid,"—")}
             if bx!="":
                 if cb and len(cb["orders"])>1:
                     bundles.append(cb); tb+=1; to2+=len(cb["orders"])
                     ss[pk]["orders"]+=len(cb["orders"]); ss[pk]["boxes"]+=1
                 tids=ctids(r["tid"])
                 cb={"orders":[od],"date":r["date"],"date_std":r["date_std"],
-                    "customer":r["customer"],"vendor":r["vendor"],"country":r["country"],
-                    "source":src,"region":grg(r["country"]),"boxes_val":bx,
+                    "customer":r["customer"],"vendor":r["vendor"],"country":ctry,
+                    "source":src,"region":grg(ctry),"boxes_val":bx,
                     "tid":", ".join(tids) if tids else "Pending Tracking"}
             else:
                 if cb:
@@ -4799,12 +4827,17 @@ def api_app_data():
         tq=0; bw=0.0; isc=0.0
         pr=rm.get(str(b.get("country","")).strip().lower(),DR)
         for o in b["orders"]:
-            try: tq+=int(float(re.sub(r"[^0-9.]","",str(o["item_count"]))))
-            except: pass
+            try: ic_raw=int(float(re.sub(r"[^0-9.]","",str(o["item_count"])) or 1)); tq+=ic_raw
+            except: ic_raw=1
             try: wt=float(re.sub(r"[^0-9.]","",str(o["weight"])) or 0)
             except: wt=0.0
             bw+=wt
-            if wt>0: isc+=(max(math.ceil(wt),1)*pr)
+            # For individual cost: use actual weight if available, else estimate from category+pieces
+            if wt>0:
+                indiv_wt=wt
+            else:
+                indiv_wt=estimate_item_weight(o["title"], ic_raw)
+            isc+=max(math.ceil(indiv_wt),1)*pr
         b["total_items"]=tq; b["weight_kg"]=round(bw,2)
         bc=max(math.ceil(bw),1)*pr
         sv=isc-bc; b["savings_gbp"]=round(sv if sv>0 else 0,2)
@@ -6069,6 +6102,30 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
 
   <!-- ===== ROUTE INTELLIGENCE TAB ===== -->
   <div class="pane" id="pane-route">
+    <div class="fbar">
+      <div class="frow" style="align-items:flex-end;gap:14px">
+        <div class="fg">
+          <div class="fl">📅 From Date</div>
+          <input type="date" id="rtFrom" class="fi" onchange="rRoute()">
+        </div>
+        <div class="fg">
+          <div class="fl">📅 To Date</div>
+          <input type="date" id="rtTo" class="fi" onchange="rRoute()">
+        </div>
+        <div class="fg">
+          <div class="fl">🌍 Country Filter</div>
+          <input type="text" id="rtCountry" class="fi" placeholder="e.g. United Kingdom" oninput="rRoute()">
+        </div>
+        <div class="fg"><div class="fl">&nbsp;</div>
+          <div style="display:flex;gap:8px">
+            <button class="qb on" onclick="setRouteRange(0,this)">All Time</button>
+            <button class="qb" onclick="setRouteRange(30,this)">30 Days</button>
+            <button class="qb" onclick="setRouteRange(7,this)">7 Days</button>
+            <button class="cbtn" onclick="clearRouteFilter(this)">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="routeBody"></div>
   </div>
 
@@ -6535,44 +6592,171 @@ function rW4(){
   const ws=g("w4e").value; if(!ws) return;
   const lat=new Date(ws);lat.setHours(0,0,0,0);
   const cont=g("w4cards");
-  cont.innerHTML="";
-  // Build queue: [weekIndex, srcIndex]
-  const queue=[];
+  cont.innerHTML=`<div class="lw"><div class="ld"></div><p class="lp">Building 4-week comparison...</p></div>`;
+  setTimeout(()=>_buildW4(lat,cont),40);
+}
+
+function _buildW4(lat,cont){
+  // Build 4 weeks of data
+  const weeks=[];
   for(let wi=0;wi<4;wi++){
-    queue.push({wi,si:-1}); // week header
     const mon=new Date(lat);mon.setDate(mon.getDate()-wi*7);
+    const sun=addD(mon,6);
     const bundles=wkBundles(mon);
-    if(bundles.length) for(let si=0;si<SRCS.length;si++) queue.push({wi,si,mon:new Date(mon),bundles});
-    else queue.push({wi,si:-2});
+    const qc=bundles.filter(b=>b.source==="ECL QC Center");
+    const pk=bundles.filter(b=>b.source==="ECL Zone"||b.source==="GE Zone");
+    const wStats=(arr)=>({
+      orders:arr.reduce((a,b)=>a+b.orders.length,0),
+      bundles:arr.length,
+      weight:arr.reduce((a,b)=>a+(b.weight_kg||0),0),
+      savings:arr.reduce((a,b)=>a+(b.savings_gbp||0),0),
+      items:arr.reduce((a,b)=>a+(b.total_items||0),0),
+      list:arr,
+    });
+    weeks.unshift({
+      label:`W${4-wi}`,
+      range:`${fi(mon)} – ${fi(sun)}`,
+      mon:new Date(mon),
+      qc:wStats(qc),
+      pk:wStats(pk),
+      all:wStats(bundles),
+    });
   }
-  const wDivs={};
-  function next(qi){
-    if(qi>=queue.length) return;
-    const item=queue[qi];
-    if(item.si===-1){
-      // Create week wrapper
-      const mon=new Date(lat);mon.setDate(mon.getDate()-item.wi*7);
-      const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
-      const d=document.createElement("div");
-      d.style.marginBottom="8px";
-      d.innerHTML=`<div class="wklabel">📅 Week ${4-item.wi}: ${wl}</div>`;
-      cont.appendChild(d);
-      wDivs[item.wi]=d;
-    } else if(item.si===-2){
-      const d=document.createElement("div");
-      d.className="empty-state";d.style.padding="30px";d.style.marginBottom="20px";
-      d.textContent="No data";
-      wDivs[item.wi].appendChild(d);
-    } else {
-      const mon=item.mon;
-      const wl=`${fi(mon)} – ${fi(addD(mon,6))}`;
-      const tmp=document.createElement("div");
-      tmp.innerHTML=buildCard(SRCS[item.si],item.bundles,wl);
-      wDivs[item.wi].appendChild(tmp.firstChild);
-    }
-    setTimeout(()=>next(qi+1),0);
-  }
-  next(0);
+
+  // Trend arrows
+  const arr=(a,b)=>a>b?"▲":a<b?"▼":"—";
+  const arrc=(a,b)=>a>b?"var(--green)":a<b?"var(--red)":"var(--t3)";
+
+  // Build horizontal comparison table
+  let html=`
+  <!-- SUMMARY COMPARISON BANNER -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;">
+  ${weeks.map((w,i)=>{
+    const prev=weeks[i-1];
+    const tot=w.all;
+    return `<div style="background:var(--s2);border:1px solid var(--bd);border-radius:16px;padding:18px;position:relative;overflow:hidden;box-shadow:var(--shadow)">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--acc),var(--blue))"></div>
+      <div style="font-size:11px;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">${w.label}</div>
+      <div style="font-size:10px;color:var(--t3);margin-bottom:14px">${w.range}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="text-align:center">
+          <div style="font-size:24px;font-weight:900;color:var(--blue)">${tot.orders.toLocaleString()}</div>
+          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700">Orders</div>
+          ${prev?`<div style="font-size:10px;font-weight:700;color:${arrc(tot.orders,prev.all.orders)}">${arr(tot.orders,prev.all.orders)} ${Math.abs(tot.orders-prev.all.orders)}</div>`:""}
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:24px;font-weight:900;color:var(--green)">${tot.bundles.toLocaleString()}</div>
+          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700">Bundles</div>
+          ${prev?`<div style="font-size:10px;font-weight:700;color:${arrc(tot.bundles,prev.all.bundles)}">${arr(tot.bundles,prev.all.bundles)} ${Math.abs(tot.bundles-prev.all.bundles)}</div>`:""}
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:900;color:var(--yellow)">${tot.weight.toFixed(0)}<span style="font-size:11px">kg</span></div>
+          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700">Weight</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;font-weight:900;color:var(--green)">£${tot.savings.toFixed(0)}</div>
+          <div style="font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700">Saved</div>
+          ${prev?`<div style="font-size:10px;font-weight:700;color:${arrc(tot.savings,prev.all.savings)}">${arr(tot.savings,prev.all.savings)} £${Math.abs(tot.savings-prev.all.savings).toFixed(0)}</div>`:""}
+        </div>
+      </div>
+    </div>`;
+  }).join("")}
+  </div>
+
+  <!-- QC CENTER vs PK ZONE HORIZONTAL TABLE -->
+  <div style="background:var(--s2);border:1px solid var(--bd);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:24px">
+    <div style="padding:18px 22px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:14px">
+      <div style="font-size:15px;font-weight:800;color:var(--t1)">📊 QC Center vs PK Zone — 4 Week Breakdown</div>
+    </div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;min-width:700px">
+      <thead>
+        <tr style="background:var(--s3)">
+          <th style="padding:12px 16px;text-align:left;font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:800;letter-spacing:1px;border-bottom:2px solid var(--bd);min-width:130px">Zone / Metric</th>
+          ${weeks.map(w=>`<th colspan="2" style="padding:12px 8px;text-align:center;font-size:11px;color:var(--acc);font-weight:800;border-bottom:2px solid var(--acc);border-left:1px solid var(--bd)">${w.label}<div style="font-size:9px;color:var(--t3);font-weight:600;margin-top:2px">${w.range}</div></th>`).join("")}
+        </tr>
+        <tr style="background:var(--s3)">
+          <th style="padding:6px 16px;font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;border-bottom:1px solid var(--bd)"></th>
+          ${weeks.map(()=>`<th style="padding:6px 6px;font-size:9px;color:var(--green);text-align:center;border-left:1px solid var(--bd);border-bottom:1px solid var(--bd);font-weight:700">QC</th><th style="padding:6px 6px;font-size:9px;color:var(--blue);text-align:center;border-bottom:1px solid var(--bd);font-weight:700">PK</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${[
+          {label:"📦 Bundles",qcF:w=>w.qc.bundles,pkF:w=>w.pk.bundles,fmt:v=>v.toLocaleString(),col:"var(--t1)"},
+          {label:"🛒 Orders",qcF:w=>w.qc.orders,pkF:w=>w.pk.orders,fmt:v=>v.toLocaleString(),col:"var(--blue)"},
+          {label:"⚖️ Weight (kg)",qcF:w=>w.qc.weight,pkF:w=>w.pk.weight,fmt:v=>v.toFixed(1),col:"var(--yellow)"},
+          {label:"🎁 Items",qcF:w=>w.qc.items,pkF:w=>w.pk.items,fmt:v=>v.toLocaleString(),col:"var(--purple)"},
+          {label:"💰 Saved (£)",qcF:w=>w.qc.savings,pkF:w=>w.pk.savings,fmt:v=>"£"+v.toFixed(2),col:"var(--green)"},
+          {label:"📊 Avg Wt/Bundle",qcF:w=>w.qc.bundles?w.qc.weight/w.qc.bundles:0,pkF:w=>w.pk.bundles?w.pk.weight/w.pk.bundles:0,fmt:v=>v.toFixed(1)+"kg",col:"var(--cyan)"},
+        ].map((row,ri)=>`<tr style="background:${ri%2===0?"var(--s3)":"var(--s2)"}">
+          <td style="padding:11px 16px;font-size:12px;font-weight:700;color:var(--t1);border-bottom:1px solid var(--bd)">${row.label}</td>
+          ${weeks.map(w=>{
+            const qv=row.qcF(w); const pv=row.pkF(w);
+            return `<td style="padding:11px 8px;text-align:center;font-size:13px;font-weight:800;color:${row.col};border-left:1px solid var(--bd);border-bottom:1px solid var(--bd)">${row.fmt(qv)}</td>
+                    <td style="padding:11px 8px;text-align:center;font-size:13px;font-weight:800;color:${row.col};border-bottom:1px solid var(--bd)">${row.fmt(pv)}</td>`;
+          }).join("")}
+        </tr>`).join("")}
+        <tr style="background:rgba(139,92,246,.06)">
+          <td style="padding:11px 16px;font-size:12px;font-weight:900;color:var(--acc);border-bottom:1px solid var(--bd)">🏆 TOTAL Orders</td>
+          ${weeks.map(w=>{
+            const tot=w.all.orders;
+            return `<td colspan="2" style="padding:11px 8px;text-align:center;font-size:15px;font-weight:900;color:var(--acc);border-left:1px solid var(--bd);border-bottom:1px solid var(--bd)">${tot.toLocaleString()}</td>`;
+          }).join("")}
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- BAR CHARTS COMPARISON -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px">
+    <div style="background:var(--s2);border:1px solid var(--bd);border-radius:16px;padding:20px;box-shadow:var(--shadow)">
+      <div style="font-size:13px;font-weight:800;color:var(--t1);margin-bottom:16px">📦 Orders per Week</div>
+      ${(()=>{
+        const maxO=Math.max(...weeks.map(w=>w.all.orders),1);
+        return weeks.map(w=>`
+          <div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--t2);margin-bottom:4px">
+              <span>${w.label}</span><span>${w.all.orders.toLocaleString()}</span>
+            </div>
+            <div style="height:8px;background:var(--s3);border-radius:4px;overflow:hidden;margin-bottom:3px">
+              <div style="height:100%;width:${(w.qc.orders/maxO*100).toFixed(1)}%;background:var(--green);border-radius:4px;display:inline-block"></div>
+            </div>
+            <div style="height:8px;background:var(--s3);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${(w.pk.orders/maxO*100).toFixed(1)}%;background:var(--blue);border-radius:4px;display:inline-block"></div>
+            </div>
+            <div style="display:flex;gap:12px;margin-top:3px;font-size:10px">
+              <span style="color:var(--green)">QC: ${w.qc.orders}</span>
+              <span style="color:var(--blue)">PK: ${w.pk.orders}</span>
+            </div>
+          </div>`).join("");
+      })()}
+    </div>
+    <div style="background:var(--s2);border:1px solid var(--bd);border-radius:16px;padding:20px;box-shadow:var(--shadow)">
+      <div style="font-size:13px;font-weight:800;color:var(--t1);margin-bottom:16px">💰 Savings per Week</div>
+      ${(()=>{
+        const maxS=Math.max(...weeks.map(w=>w.all.savings),1);
+        return weeks.map(w=>`
+          <div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--t2);margin-bottom:4px">
+              <span>${w.label}</span><span style="color:var(--green)">£${w.all.savings.toFixed(2)}</span>
+            </div>
+            <div style="height:8px;background:var(--s3);border-radius:4px;overflow:hidden;margin-bottom:3px">
+              <div style="height:100%;width:${(w.qc.savings/maxS*100).toFixed(1)}%;background:var(--green);border-radius:4px;display:inline-block"></div>
+            </div>
+            <div style="height:8px;background:var(--s3);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${(w.pk.savings/maxS*100).toFixed(1)}%;background:var(--blue);border-radius:4px;display:inline-block"></div>
+            </div>
+            <div style="display:flex;gap:12px;margin-top:3px;font-size:10px">
+              <span style="color:var(--green)">QC: £${w.qc.savings.toFixed(2)}</span>
+              <span style="color:var(--blue)">PK: £${w.pk.savings.toFixed(2)}</span>
+            </div>
+          </div>`).join("");
+      })()}
+    </div>
+  </div>`;
+
+  cont.innerHTML=html;
 }
 
 function setRWk(offset,btn){
@@ -7452,6 +7636,23 @@ function showCustDetail(name){
 // ============================================================
 // ROUTE INTELLIGENCE
 // ============================================================
+function setRouteRange(days,btn){
+  document.querySelectorAll("#pane-route .qb").forEach(b=>b.classList.remove("on"));
+  if(btn) btn.classList.add("on");
+  if(days===0){g("rtFrom").value="";g("rtTo").value="";}
+  else{
+    const to=new Date(); const from=new Date();
+    from.setDate(from.getDate()-days);
+    g("rtFrom").value=fi(from); g("rtTo").value=fi(to);
+  }
+  rRoute();
+}
+function clearRouteFilter(btn){
+  g("rtFrom").value=""; g("rtTo").value=""; g("rtCountry").value="";
+  document.querySelectorAll("#pane-route .qb").forEach(b=>b.classList.remove("on"));
+  document.querySelector("#pane-route .qb").classList.add("on");
+  rRoute();
+}
 function rRoute(){
   if(!D) return;
   const cont=g("routeBody");
@@ -7464,21 +7665,37 @@ function _buildRoute(cont){
   const DAYS_LBL=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const FLT_DAYS=[1,3,5]; // Tue=1, Thu=3, Sat=5
   const countryMap={};
-  (D.bundles||[]).forEach(b=>{
+
+  // Apply date + country filters
+  const fromV=g("rtFrom")?.value; const toV=g("rtTo")?.value;
+  const cntryQ=(g("rtCountry")?.value||"").toLowerCase().trim();
+  const fromD=fromV?new Date(fromV):null; if(fromD) fromD.setHours(0,0,0,0);
+  const toD=toV?new Date(toV):null; if(toD) toD.setHours(23,59,59,999);
+  const filteredBundles=(D.bundles||[]).filter(b=>{
+    const bd=new Date(b.date_std);
+    if(fromD&&bd<fromD) return false;
+    if(toD&&bd>toD) return false;
+    if(cntryQ&&!(b.country||"").toLowerCase().includes(cntryQ)) return false;
+    return true;
+  });
+  filteredBundles.forEach(b=>{
     const cn=b.country||"Unknown";
     const d=new Date(b.date_std);
     const di=d.getDay()===0?6:d.getDay()-1; // Mon=0
-    if(!countryMap[cn]) countryMap[cn]={days:Array.from({length:7},()=>({bundles:0,orders:0,weight:0,saved:0})),total:0};
+    if(!countryMap[cn]) countryMap[cn]={days:Array.from({length:7},()=>({bundles:0,orders:0,weight:0,saved:0,list:[]})),total:0};
     const cm=countryMap[cn];
     cm.total+=b.orders.length;
     cm.days[di].bundles++;
     cm.days[di].orders+=b.orders.length;
     cm.days[di].weight+=b.weight_kg||0;
     cm.days[di].saved+=b.savings_gbp||0;
+    b.orders.forEach(o=>cm.days[di].list.push({...o,date:b.date_std,customer:b.customer,source:b.source}));
   });
+  // Cache for drill-down
+  window._routeCountryMap=countryMap;
 
   const sorted=Object.entries(countryMap).sort((a,b)=>b[1].total-a[1].total).slice(0,12);
-  if(!sorted.length){cont.innerHTML=`<div class="empty-state"><div class="empty-icon">🛣️</div><div>No data</div></div>`;return;}
+  if(!sorted.length){cont.innerHTML=`<div class="empty-state"><div class="empty-icon">🛣️</div><div>No data for selected filters</div></div>`;return;}
 
   // Global pattern summary
   const globalDays=Array.from({length:7},()=>({orders:0,saved:0}));
@@ -7524,10 +7741,11 @@ function _buildRoute(cont){
           const pct=maxO>0?Math.round(d.orders/maxO*100):0;
           const isBest=i===bestDayIdx;
           const col=isBest?"#22c55e":barColors[i%barColors.length];
-          return `<div class="route-day-row">
+          const clickable=!GUEST&&d.orders>0;
+        return `<div class="route-day-row" ${clickable?`onclick="showRouteDrill('${cn.replace(/'/g,"\'")}',${i})" style="cursor:pointer"`:""}>
             <div class="route-day-label" style="color:${isBest?"var(--green)":"var(--t2)"}">${DAYS_LBL[i]}</div>
             <div class="route-day-track">
-              <div class="route-day-fill" style="width:${pct}%;background:${col}">
+              <div class="route-day-fill" style="width:${pct}%;background:${col};${clickable?"transition:.15s":""}" class="route-day-fill">
                 ${d.orders>0?`<span>${d.orders}</span>`:""}
               </div>
             </div>
@@ -7552,6 +7770,16 @@ function _buildRoute(cont){
 function cacheRates(){
   // Use server-injected RATES_MAP (country_lower -> rate)
   window._ratesCache=(typeof RATES_MAP!=="undefined")?RATES_MAP:{};
+}
+
+function showRouteDrill(country,dayIdx){
+  const DAYS_LBL=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+  const cm=window._routeCountryMap?.[country];
+  if(!cm) return;
+  const dayData=cm.days[dayIdx];
+  if(!dayData||!dayData.list?.length) return;
+  g("oTit").textContent=`🌍 ${country} — ${DAYS_LBL[dayIdx]} (${dayData.orders} orders, £${dayData.saved.toFixed(2)} saved)`;
+  showOrdModal(dayData.list);
 }
 
 function cMod(id){document.getElementById(id).classList.remove("open");}
