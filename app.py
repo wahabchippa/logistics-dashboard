@@ -4741,7 +4741,10 @@ def fetch_sheet(name,url,col,start,cx):
                 if ro: lo=ro
                 co=ro if ro else lo
                 if not co or not re.search(r"\d",co): continue
-                if not ro and not rti and (not rw or float(rw or 0)==0): continue
+                try:
+                    rw_float=float(rw or 0)
+                except: rw_float=0
+                if not ro and not rti and rw_float==0: continue
                 if co.lower() in ["n/a","nan","order","orderid","order id"]: continue
                 dv=str(p[col["d"]]).strip(); vv=str(p[col["v"]]).strip()
                 cv=str(p[col["c"]]).strip(); cnv=str(p[col["cn"]]).strip(); tv=str(p[col["t"]]).strip()
@@ -4750,8 +4753,12 @@ def fetch_sheet(name,url,col,start,cx):
                 if cv: lc=cv
                 if cnv: lcn=cnv
                 if tv: lt=tv
+                bxv=str(p[col["b"]]).strip()
+                # For QC Center also check col b-1 in case column shifted
+                if not bxv and col.get("b2") is not None:
+                    bxv=str(p[col["b2"]]).strip()
                 rows.append({"order":co,"date":dv or ld,"date_std":sd(dv or ld),
-                    "boxes":str(p[col["b"]]).strip(),"weight":rw,
+                    "boxes":bxv,"weight":rw,
                     "vendor":vv or lv,"title":rti or "N/A","item_count":str(p[col["ic"]]).strip() or "0",
                     "customer":cv or lc,"country":cnv or lcn,"tid":tv or lt})
             print(f"[OK] {name}: {len(rows)} rows"); return name,rows
@@ -4766,7 +4773,7 @@ def fetch_all():
     # ⚠️ CORRECT MAPPINGS — GE Zone weight=col 6 (H is index 7 but user confirmed col 6)
     SOURCES={
         "ECL QC Center":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o":0,"d":1,"b":3,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
+            {"o":0,"d":1,"b":3,"b2":2,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
         "ECL Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
             {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28},2),
         "GE Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
@@ -4967,12 +4974,12 @@ BUNDLING_HTML = r"""<!DOCTYPE html>
   --t3:#475569;
   --t4:#94a3b8;
   --card:#ffffff;
-  --sidebar:#0f172a;
-  --sb-border:#1e293b;
+  --sidebar:#ffffff;
+  --sb-border:#e2e8f0;
   --sb-text:#64748b;
-  --sb-active-bg:rgba(139,92,246,0.15);
-  --sb-active-border:#8b5cf6;
-  --sb-active-text:#a78bfa;
+  --sb-active-bg:rgba(109,40,217,0.08);
+  --sb-active-border:#7c3aed;
+  --sb-active-text:#6d28d9;
   --input:#f8fafc;
   --hover:rgba(0,0,0,0.025);
   --shadow:0 1px 4px rgba(0,0,0,0.07),0 4px 16px rgba(0,0,0,0.05);
@@ -5014,6 +5021,27 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
   background:linear-gradient(180deg,#0a0a0a 0%,#060606 100%);
   box-shadow:4px 0 20px rgba(0,0,0,0.5);
 }
+[data-theme="light"] .sidebar{
+  background:#ffffff;
+  box-shadow:2px 0 12px rgba(0,0,0,0.06);
+  border-right:1px solid #e2e8f0;
+}
+[data-theme="light"] .sb-head{border-bottom-color:#e2e8f0;}
+[data-theme="light"] .sb-tab{color:#64748b;}
+[data-theme="light"] .sb-tab:hover{color:#0f172a;background:rgba(0,0,0,0.04);}
+[data-theme="light"] .sb-tab.active{color:#6d28d9;background:rgba(109,40,217,0.08);border-left-color:#7c3aed;}
+[data-theme="light"] .sb-tab.active .sb-tab-icon{filter:none;}
+[data-theme="light"] .sb-ico{box-shadow:0 4px 16px rgba(109,40,217,0.3);}
+[data-theme="light"] .sb-section-label{color:#94a3b8;}
+[data-theme="light"] .sb-title{color:#0f172a;}
+[data-theme="light"] .sb-sub{color:#64748b;}
+[data-theme="light"] .sb-back{color:#64748b;}
+[data-theme="light"] .sb-back:hover{color:#0f172a;background:rgba(0,0,0,0.04);}
+[data-theme="light"] .theme-pill{background:#f8fafc;border-color:#e2e8f0;color:#475569;}
+[data-theme="light"] .theme-pill:hover{border-color:#7c3aed;color:#6d28d9;}
+[data-theme="light"] .sb-foot{border-top-color:#e2e8f0;}
+[data-theme="light"] .sb-user-card{background:rgba(109,40,217,0.06);border-color:rgba(109,40,217,0.15);}
+[data-theme="light"] .sb-last-update{color:#94a3b8;}
 .sb-head{padding:20px 18px 16px;border-bottom:1px solid var(--sb-border);}
 .sb-logo-wrap{display:flex;align-items:center;gap:12px;}
 .sb-ico{
@@ -5166,11 +5194,11 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 input[type="date"].fi{color-scheme:dark;}
 [data-theme="light"] input[type="date"].fi{color-scheme:light;}
 input[type="date"]::-webkit-calendar-picker-indicator{
-  cursor:pointer;opacity:0.8;
-  filter:invert(1) opacity(0.6) sepia(1) saturate(3) hue-rotate(220deg);
+  cursor:pointer;opacity:1;
+  filter:invert(1) brightness(2);
 }
 [data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator{
-  filter:none;opacity:0.6;
+  filter:none;opacity:0.8;
 }
 .fg-grow{flex:1;min-width:200px;}
 .qbtns{display:flex;gap:6px;flex-wrap:wrap;}
@@ -5786,6 +5814,22 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
       <span class="sb-tab-label">Regional View</span>
       <span class="sb-tab-dot"></span>
     </button>
+    <div class="sb-section-label" style="margin-top:8px" id="sbToolsLabel">Tools</div>
+    <button class="sb-tab" data-pane="receipt" onclick="sw('receipt',this)" id="sbReceipt">
+      <span class="sb-tab-icon">🧾</span>
+      <span class="sb-tab-label">Bundle Receipts</span>
+      <span class="sb-tab-dot"></span>
+    </button>
+    <button class="sb-tab" data-pane="predict" onclick="sw('predict',this)" id="sbPredict">
+      <span class="sb-tab-icon">🔮</span>
+      <span class="sb-tab-label">Prediction</span>
+      <span class="sb-tab-dot"></span>
+    </button>
+    <button class="sb-tab" data-pane="certificate" onclick="sw('certificate',this)" id="sbCertificate">
+      <span class="sb-tab-icon">🏅</span>
+      <span class="sb-tab-label">Savings Certificate</span>
+      <span class="sb-tab-dot"></span>
+    </button>
   </nav>
   <div class="sb-foot">
     <div class="sb-user-card" id="sbUserCard">
@@ -6129,6 +6173,65 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     <div id="routeBody"></div>
   </div>
 
+
+  <!-- ===== BUNDLE RECEIPT TAB ===== -->
+  <div class="pane" id="pane-receipt">
+    <div class="fbar">
+      <div class="frow" style="align-items:flex-end;gap:14px">
+        <div class="fg fg-grow">
+          <div class="fl">🔍 Search Bundle by Order ID or Customer</div>
+          <input type="text" id="rcptQ" class="fi" placeholder="e.g. 133325_02 or luciana rivera" oninput="rReceipt()">
+        </div>
+        <div class="fg">
+          <div class="fl">📅 From</div>
+          <input type="date" id="rcptFrom" class="fi" onchange="rReceipt()">
+        </div>
+        <div class="fg">
+          <div class="fl">📅 To</div>
+          <input type="date" id="rcptTo" class="fi" onchange="rReceipt()">
+        </div>
+        <div class="fg"><div class="fl">&nbsp;</div>
+          <button class="cbtn" onclick="g('rcptQ').value='';g('rcptFrom').value='';g('rcptTo').value='';rReceipt()">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div id="rcptList"></div>
+  </div>
+
+  <!-- ===== PREDICTION TAB ===== -->
+  <div class="pane" id="pane-predict">
+    <div id="predictBody"></div>
+  </div>
+
+  <!-- ===== SAVINGS CERTIFICATE TAB ===== -->
+  <div class="pane" id="pane-certificate">
+    <div class="fbar">
+      <div class="frow" style="align-items:flex-end;gap:14px;flex-wrap:wrap">
+        <div class="fg">
+          <div class="fl">📅 Quarter</div>
+          <select id="certQuarter" class="fi" onchange="rCertificate()">
+            <option value="Q1">Q1 (Jan–Mar)</option>
+            <option value="Q2">Q2 (Apr–Jun)</option>
+            <option value="Q3">Q3 (Jul–Sep)</option>
+            <option value="Q4">Q4 (Oct–Dec)</option>
+          </select>
+        </div>
+        <div class="fg">
+          <div class="fl">📅 Year</div>
+          <select id="certYear" class="fi" onchange="rCertificate()">
+            <option value="2026">2026</option>
+            <option value="2025">2025</option>
+            <option value="2024">2024</option>
+          </select>
+        </div>
+        <div class="fg"><div class="fl">&nbsp;</div>
+          <button class="abtn" onclick="printCertificate()">🖨️ Print / Save PDF</button>
+        </div>
+      </div>
+    </div>
+    <div id="certBody"></div>
+  </div>
+
 </div>
 
 </div><!-- /main -->
@@ -6213,6 +6316,17 @@ async function init(){
     cacheRates();
     initUserCard();
     updateLastUpdate();
+    // Hide tabs based on access
+    if(GUEST){
+      const hideIds=["sbPredict","sbCertificate","sbToolsLabel"];
+      hideIds.forEach(id=>{const el=g(id);if(el)el.style.display="none";});
+    }
+    // Auto-set current quarter
+    const _now=new Date();
+    const _qm=_now.getMonth();
+    const _q=_qm<3?"Q1":_qm<6?"Q2":_qm<9?"Q3":"Q4";
+    const _qs=g("certQuarter"); if(_qs) _qs.value=_q;
+    const _ys=g("certYear"); if(_ys) _ys.value=_now.getFullYear();
     rBundle();
   }catch(e){
     g("gLoad").innerHTML=`<div style="color:var(--red);font-size:14px">Error: ${e.message}<br><br><button class="abtn" onclick="init()">Retry</button></div>`;
@@ -6233,8 +6347,8 @@ function hardRefresh(){
 // ============================================================
 // TAB SWITCH
 // ============================================================
-const _rendered={bundle:false,status:false,summary:false,week4:false,regional:false,analytics:false,search:false,customers:false,route:false};
-const PAGE_TITLES={bundle:"📦 Bundle Intelligence",status:"📡 Status Intelligence",summary:"📊 Weekly Summary",week4:"📅 4-Week Summary",regional:"🌍 Regional View",analytics:"📈 Analytics",search:"🔍 Order Search",customers:"👥 Customer Intelligence",route:"🛣️ Route Intelligence"};
+const _rendered={bundle:false,status:false,summary:false,week4:false,regional:false,analytics:false,search:false,customers:false,route:false,receipt:false,predict:false,certificate:false};
+const PAGE_TITLES={bundle:"📦 Bundle Intelligence",status:"📡 Status Intelligence",summary:"📊 Weekly Summary",week4:"📅 4-Week Summary",regional:"🌍 Regional View",analytics:"📈 Analytics",search:"🔍 Order Search",customers:"👥 Customer Intelligence",route:"🛣️ Route Intelligence",receipt:"🧾 Bundle Receipts",predict:"🔮 Prediction",certificate:"🏅 Savings Certificate"};
 function sw(name,tab){
   document.querySelectorAll(".sb-tab").forEach(t=>t.classList.remove("active"));
   tab.classList.add("active");
@@ -6252,6 +6366,9 @@ function sw(name,tab){
       else if(name==="analytics") rAnalytics();
       else if(name==="customers") rCustomers();
       else if(name==="route") rRoute();
+      else if(name==="receipt") rReceipt();
+      else if(name==="predict") rPredict();
+      else if(name==="certificate") rCertificate();
     },30);
   }
 }
@@ -7770,6 +7887,418 @@ function _buildRoute(cont){
 function cacheRates(){
   // Use server-injected RATES_MAP (country_lower -> rate)
   window._ratesCache=(typeof RATES_MAP!=="undefined")?RATES_MAP:{};
+}
+
+// ============================================================
+// CSS for receipt / certificate (injected once)
+// ============================================================
+(function(){
+  const s=document.createElement("style");
+  s.textContent=`
+    .rcpt-card{background:var(--s2);border:1px solid var(--bd);border-radius:16px;padding:0;margin-bottom:16px;box-shadow:var(--shadow);overflow:hidden;transition:.2s;}
+    .rcpt-card:hover{border-color:var(--acc);transform:translateY(-2px);box-shadow:var(--shadow2);}
+    .rcpt-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:var(--s3);border-bottom:1px solid var(--bd);flex-wrap:wrap;gap:10px;}
+    .rcpt-bid{font-size:14px;font-weight:900;font-family:monospace;color:var(--acc);}
+    .rcpt-meta{font-size:11px;color:var(--t3);margin-top:2px;}
+    .rcpt-body{padding:16px 20px;}
+    .rcpt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+    .rcpt-stat{background:var(--s3);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center;}
+    .rcpt-stat-v{font-size:16px;font-weight:900;color:var(--t1);}
+    .rcpt-stat-l{font-size:9px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:3px;}
+    .rcpt-orders{margin-top:10px;}
+    .rcpt-order-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:var(--s3);border:1px solid var(--bd);margin-bottom:6px;}
+    .rcpt-order-id{font-family:monospace;font-weight:800;color:var(--green);font-size:11px;min-width:100px;}
+    .rcpt-order-title{flex:1;font-size:11px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .rcpt-order-wt{font-size:11px;font-weight:700;color:var(--t3);min-width:50px;text-align:right;}
+    .rcpt-download{padding:7px 16px;background:linear-gradient(135deg,#7c3aed,#8b5cf6);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:.15s;}
+    .rcpt-download:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(139,92,246,.4);}
+    .rcpt-savings-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:linear-gradient(90deg,rgba(34,197,94,.08),rgba(34,197,94,.03));border:1px solid rgba(34,197,94,.2);border-radius:10px;margin-top:10px;}
+    /* CERTIFICATE */
+    .cert-wrap{max-width:800px;margin:0 auto;}
+    .cert-box{background:var(--s1);border:3px solid var(--acc);border-radius:24px;padding:50px;text-align:center;position:relative;overflow:hidden;box-shadow:var(--shadow2);}
+    .cert-box::before{content:'';position:absolute;top:-60px;right:-60px;width:220px;height:220px;background:radial-gradient(circle,rgba(139,92,246,.15),transparent);border-radius:50%;}
+    .cert-box::after{content:'';position:absolute;bottom:-60px;left:-60px;width:220px;height:220px;background:radial-gradient(circle,rgba(34,197,94,.1),transparent);border-radius:50%;}
+    .cert-logo{font-size:52px;margin-bottom:12px;}
+    .cert-brand{font-size:28px;font-weight:900;color:var(--acc);letter-spacing:-1px;margin-bottom:4px;}
+    .cert-tagline{font-size:12px;color:var(--t3);text-transform:uppercase;letter-spacing:2px;margin-bottom:32px;}
+    .cert-title{font-size:16px;color:var(--t3);text-transform:uppercase;letter-spacing:3px;margin-bottom:8px;}
+    .cert-amount{font-size:64px;font-weight:900;color:var(--green);letter-spacing:-3px;line-height:1;margin-bottom:8px;}
+    .cert-subtitle{font-size:14px;color:var(--t2);margin-bottom:32px;}
+    .cert-quarter{font-size:22px;font-weight:800;color:var(--acc);margin-bottom:24px;}
+    .cert-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:24px 0;}
+    .cert-stat{background:var(--s2);border:1px solid var(--bd);border-radius:14px;padding:18px;}
+    .cert-stat-v{font-size:26px;font-weight:900;color:var(--t1);}
+    .cert-stat-l{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:4px;}
+    .cert-footer{font-size:11px;color:var(--t4);margin-top:24px;border-top:1px solid var(--bd);padding-top:16px;}
+    /* PREDICT */
+    .pred-card{background:var(--s2);border:1px solid var(--bd);border-radius:16px;padding:22px;box-shadow:var(--shadow);margin-bottom:18px;}
+    .pred-zone{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+    .pred-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;background:var(--s3);border:1px solid var(--bd);margin-bottom:8px;}
+    .pred-day{font-size:12px;font-weight:700;color:var(--t2);min-width:50px;}
+    .pred-bar-wrap{flex:1;height:14px;background:var(--s1);border-radius:7px;overflow:hidden;margin:0 12px;}
+    .pred-bar{height:100%;border-radius:7px;transition:.8s;}
+    .pred-val{font-size:12px;font-weight:800;min-width:60px;text-align:right;}
+    .pred-badge{font-size:9px;padding:2px 8px;border-radius:20px;font-weight:800;}
+    @media print{
+      .sidebar,.topbar,.fbar,.rcpt-download{display:none!important;}
+      .main{padding:0!important;overflow:visible!important;}
+      .cert-box{border:3px solid #7c3aed!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    }
+  `;
+  document.head.appendChild(s);
+})();
+
+// ============================================================
+// BUNDLE RECEIPT GENERATOR
+// ============================================================
+function rReceipt(){
+  if(!D) return;
+  const cont=g("rcptList");
+  if(!cont) return;
+  const q=(g("rcptQ")?.value||"").toLowerCase().trim();
+  const fromV=g("rcptFrom")?.value; const toV=g("rcptTo")?.value;
+  const fromD=fromV?new Date(fromV):null; if(fromD) fromD.setHours(0,0,0,0);
+  const toD=toV?new Date(toV):null; if(toD) toD.setHours(23,59,59,999);
+
+  let bundles=(D.bundles||[]).filter(b=>{
+    const bd=new Date(b.date_std);
+    if(fromD&&bd<fromD) return false;
+    if(toD&&bd>toD) return false;
+    if(q){
+      const inOrders=b.orders.some(o=>o.order_id.toLowerCase().includes(q));
+      const inCust=(b.customer||"").toLowerCase().includes(q);
+      if(!inOrders&&!inCust) return false;
+    }
+    return true;
+  });
+
+  if(!bundles.length){
+    cont.innerHTML=`<div class="empty-state"><div class="empty-icon">🧾</div><div>No bundles found</div></div>`;
+    return;
+  }
+
+  // Limit to 50 for performance
+  const total=bundles.length;
+  bundles=bundles.slice(0,50);
+
+  let html=`<div style="font-size:12px;color:var(--t3);margin-bottom:14px">Showing ${bundles.length} of ${total} bundles${total>50?" (search to filter)":""}</div>`;
+
+  bundles.forEach((b,bi)=>{
+    const oid=`RCPT-${b.date_std||"NODATE"}-${b.customer||"CUST"}`.replace(/[^A-Z0-9\-]/gi,"-").toUpperCase();
+    const stS=sStyle(b.orders[0]?.status||"—");
+    const savedColor=b.savings_gbp>0?"var(--green)":"var(--t3)";
+    html+=`<div class="rcpt-card" id="rcpt-${bi}">
+      <div class="rcpt-header">
+        <div>
+          <div class="rcpt-bid">📦 ${b.customer||"Unknown"} — ${b.date||"—"}</div>
+          <div class="rcpt-meta">${b.source} · ${b.country||"—"} · TID: ${b.tid||"Pending"}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:20px;font-weight:900;color:${savedColor}">£${(b.savings_gbp||0).toFixed(2)} saved</span>
+          <button class="rcpt-download" onclick="downloadReceipt(${bi})">🖨️ PDF</button>
+        </div>
+      </div>
+      <div class="rcpt-body">
+        <div class="rcpt-grid">
+          <div class="rcpt-stat"><div class="rcpt-stat-v" style="color:var(--blue)">${b.orders.length}</div><div class="rcpt-stat-l">📦 Orders</div></div>
+          <div class="rcpt-stat"><div class="rcpt-stat-v" style="color:var(--yellow)">${(b.weight_kg||0).toFixed(2)} kg</div><div class="rcpt-stat-l">⚖️ Total Wt</div></div>
+          <div class="rcpt-stat"><div class="rcpt-stat-v" style="color:var(--purple)">${Math.max(Math.ceil(b.weight_kg||0),1)} kg</div><div class="rcpt-stat-l">💷 Billed Wt</div></div>
+          <div class="rcpt-stat"><div class="rcpt-stat-v" style="color:var(--t3)">${b.vendor||"—"}</div><div class="rcpt-stat-l">🏪 Vendor</div></div>
+        </div>
+        <div class="rcpt-orders">
+        ${b.orders.map(o=>{
+          const os=sStyle(o.status||"—");
+          return `<div class="rcpt-order-row">
+            <span class="rcpt-order-id">${o.order_id}</span>
+            <span class="rcpt-order-title">${(o.title||"").substring(0,45)}</span>
+            <span class="spill" style="background:${os.bg};color:${os.c};border-color:${os.bd||os.c+'44'}">${o.status||"—"}</span>
+            <span class="rcpt-order-wt">${o.item_count||1} pcs · ${o.weight||0} kg</span>
+          </div>`;
+        }).join("")}
+        </div>
+        <div class="rcpt-savings-bar">
+          <div>
+            <div style="font-size:10px;color:var(--green);font-weight:800;text-transform:uppercase;letter-spacing:1px">💰 Shipping Savings</div>
+            <div style="font-size:11px;color:var(--t3);margin-top:2px">Individual: £${(b.indiv_cost||0).toFixed(2)} → Bundle: £${(b.bundle_cost||0).toFixed(2)}</div>
+          </div>
+          <div style="font-size:22px;font-weight:900;color:var(--green)">£${(b.savings_gbp||0).toFixed(2)}</div>
+        </div>
+      </div>
+    </div>`;
+  });
+
+  // Store bundles for PDF
+  window._rcptBundles=bundles;
+  cont.innerHTML=html;
+}
+
+function downloadReceipt(idx){
+  const b=window._rcptBundles?.[idx];
+  if(!b) return;
+  const DR=4.50;
+  const rate=b.rate_gbp||DR;
+  const date=b.date||"—";
+  const win=window.open("","_blank","width=700,height=900");
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Bundle Receipt</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;background:#fff;color:#111;padding:40px;max-width:680px;margin:0 auto;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #7c3aed;padding-bottom:20px;margin-bottom:24px;}
+  .brand{font-size:24px;font-weight:900;color:#7c3aed;letter-spacing:-1px;}
+  .brand-sub{font-size:11px;color:#888;margin-top:3px;}
+  .rcpt-no{font-size:13px;font-weight:700;color:#555;}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;}
+  .info-box{background:#f8f8f8;border-radius:8px;padding:14px;}
+  .info-label{font-size:9px;text-transform:uppercase;font-weight:700;color:#888;margin-bottom:5px;letter-spacing:1px;}
+  .info-val{font-size:14px;font-weight:700;color:#111;}
+  table{width:100%;border-collapse:collapse;margin-bottom:20px;}
+  th{background:#f1f0ff;padding:10px 12px;font-size:10px;text-transform:uppercase;font-weight:700;color:#555;text-align:left;border-bottom:2px solid #7c3aed;}
+  td{padding:9px 12px;border-bottom:1px solid #eee;font-size:12px;color:#333;}
+  .savings-box{background:linear-gradient(135deg,#f0fdf4,#f0f9ff);border:2px solid #22c55e;border-radius:12px;padding:20px;text-align:center;margin-bottom:20px;}
+  .savings-amount{font-size:40px;font-weight:900;color:#16a34a;}
+  .savings-label{font-size:11px;color:#555;text-transform:uppercase;letter-spacing:1px;margin-top:4px;}
+  .cost-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed #ddd;}
+  .cost-row:last-child{border-bottom:none;}
+  .footer{text-align:center;color:#888;font-size:10px;border-top:1px solid #eee;padding-top:16px;margin-top:24px;}
+  @media print{body{padding:20px;}button{display:none;}}
+</style>
+</head><body>
+<div class="header">
+  <div>
+    <div class="brand">🏢 Fleek 3PL</div>
+    <div class="brand-sub">Bundle Intelligence Platform</div>
+  </div>
+  <div style="text-align:right">
+    <div class="rcpt-no">Bundle Receipt</div>
+    <div style="font-size:11px;color:#888">${date}</div>
+    <div style="font-size:11px;color:#888">${b.source}</div>
+  </div>
+</div>
+<div class="info-grid">
+  <div class="info-box"><div class="info-label">Customer</div><div class="info-val">${b.customer||"—"}</div></div>
+  <div class="info-box"><div class="info-label">Country</div><div class="info-val">${b.country||"—"}</div></div>
+  <div class="info-box"><div class="info-label">Vendor</div><div class="info-val">${b.vendor||"—"}</div></div>
+  <div class="info-box"><div class="info-label">Tracking ID</div><div class="info-val" style="font-size:11px">${b.tid||"Pending"}</div></div>
+</div>
+<table>
+<tr><th>Order ID</th><th>Item / Description</th><th>Qty</th><th>Wt (kg)</th><th>Status</th></tr>
+${b.orders.map(o=>`<tr><td style="font-family:monospace;font-weight:700;color:#7c3aed">${o.order_id}</td><td>${(o.title||"").substring(0,40)}</td><td>${o.item_count||1}</td><td>${o.weight||0}</td><td><span style="background:${o.status==='QC_APPROVED'||o.status==='HANDED_OVER_TO_LOGISTICS_PARTNER'?'#dcfce7':'#f3e8ff'};color:${o.status==='QC_APPROVED'||o.status==='HANDED_OVER_TO_LOGISTICS_PARTNER'?'#16a34a':'#7c3aed'};padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700">${o.status||"—"}</span></td></tr>`).join("")}
+</table>
+<div style="margin-bottom:20px">
+  <div class="cost-row"><span style="font-weight:700">Total Bundle Weight</span><span>${(b.weight_kg||0).toFixed(2)} kg</span></div>
+  <div class="cost-row"><span style="font-weight:700">Billed Weight (ceil)</span><span>${Math.max(Math.ceil(b.weight_kg||0),1)} kg</span></div>
+  <div class="cost-row"><span style="font-weight:700">Rate per kg</span><span>£${rate.toFixed(2)}</span></div>
+  <div class="cost-row"><span style="color:#dc2626;font-weight:700">❌ If Shipped Individually</span><span style="color:#dc2626">£${(b.indiv_cost||0).toFixed(2)}</span></div>
+  <div class="cost-row"><span style="color:#16a34a;font-weight:700">✅ As Bundle</span><span style="color:#16a34a">£${(b.bundle_cost||0).toFixed(2)}</span></div>
+</div>
+<div class="savings-box">
+  <div class="savings-amount">£${(b.savings_gbp||0).toFixed(2)}</div>
+  <div class="savings-label">💰 Total Shipping Saved</div>
+</div>
+<div class="footer">Generated by Fleek 3PL Bundling Intelligence Platform · ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}<br>This is an internal shipping cost analysis document.</div>
+<script>setTimeout(()=>window.print(),300);<\/script>
+</body></html>`);
+  win.document.close();
+}
+
+// ============================================================
+// PREDICTION
+// ============================================================
+function rPredict(){
+  if(!D) return;
+  const cont=g("predictBody");
+  if(!cont) return;
+  cont.innerHTML=`<div class="lw"><div class="ld"></div><p class="lp">Analysing historical patterns...</p></div>`;
+  setTimeout(()=>_buildPredict(cont),60);
+}
+
+function _buildPredict(cont){
+  const DAYS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const FLT=[1,3,5];
+  // Build weekly stats per zone per day-of-week from last 8 weeks
+  const now=new Date(); now.setHours(0,0,0,0);
+  const cutoff=new Date(now); cutoff.setDate(cutoff.getDate()-56); // 8 weeks
+
+  const zones={
+    "ECL QC Center":{days:Array.from({length:7},()=>({orders:[],savings:[]}))},
+    "PK Zone":{days:Array.from({length:7},()=>({orders:[],savings:[]}))},
+  };
+
+  (D.bundles||[]).forEach(b=>{
+    const bd=new Date(b.date_std);
+    if(bd<cutoff||bd>=now) return;
+    const di=bd.getDay()===0?6:bd.getDay()-1;
+    const z=b.source==="ECL QC Center"?"ECL QC Center":"PK Zone";
+    zones[z].days[di].orders.push(b.orders.length);
+    zones[z].days[di].savings.push(b.savings_gbp||0);
+  });
+
+  const avg=(arr)=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
+  const med=(arr)=>{if(!arr.length)return 0;const s=[...arr].sort((a,b)=>a-b);const m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2;};
+
+  // Get current week Monday
+  const mon=new Date(now);
+  const day=mon.getDay(); mon.setDate(mon.getDate()-(day===0?6:day-1));
+  const todayDi=now.getDay()===0?6:now.getDay()-1;
+
+  let html=`
+  <div style="background:linear-gradient(135deg,rgba(139,92,246,.08),rgba(34,197,94,.05));border:1px solid rgba(139,92,246,.2);border-radius:16px;padding:20px;margin-bottom:22px">
+    <div style="font-size:16px;font-weight:800;color:var(--t1);margin-bottom:4px">🔮 This Week's Forecast</div>
+    <div style="font-size:11px;color:var(--t3)">Based on last 8 weeks of historical data · Updates with each data refresh</div>
+  </div>`;
+
+  let totalPredOrders=0; let totalPredSavings=0;
+
+  Object.entries(zones).forEach(([zname,zdata])=>{
+    const color=zname==="ECL QC Center"?"var(--green)":"var(--blue)";
+    const maxAvg=Math.max(...zdata.days.map(d=>avg(d.orders)),1);
+    let weekTotalOrders=0; let weekTotalSavings=0;
+
+    const rows=DAYS.map((dl,di)=>{
+      const d=zdata.days[di];
+      const dayDate=new Date(mon); dayDate.setDate(mon.getDate()+di);
+      const isPast=dayDate<now;
+      const isToday=di===todayDi;
+      const isFlt=FLT.includes(di);
+      const ordersAvg=avg(d.orders);
+      const savingsAvg=avg(d.savings);
+      const ordersLow=Math.max(0,Math.round(ordersAvg*0.75));
+      const ordersHigh=Math.round(ordersAvg*1.25);
+      weekTotalOrders+=Math.round(ordersAvg);
+      weekTotalSavings+=savingsAvg;
+      const pct=maxAvg>0?ordersAvg/maxAvg*100:0;
+      const confidence=d.orders.length>=4?"High":d.orders.length>=2?"Medium":"Low";
+      const confColor=confidence==="High"?"var(--green)":confidence==="Medium"?"var(--yellow)":"var(--red)";
+
+      return `<div class="pred-row" style="${isToday?"border-color:var(--acc);background:rgba(139,92,246,.06)":""}${isPast?"opacity:.5":""}">
+        <div class="pred-day">${dl}<div style="font-size:9px;color:var(--t4)">${dayDate.toLocaleDateString("en-GB",{day:"2-digit",month:"short"})}</div></div>
+        <div class="pred-bar-wrap"><div class="pred-bar" style="width:${pct.toFixed(1)}%;background:${color}"></div></div>
+        <div class="pred-val" style="color:${color}">${Math.round(ordersAvg)}<div style="font-size:9px;color:var(--t4)">${ordersLow}–${ordersHigh}</div></div>
+        <div style="display:flex;gap:5px;align-items:center;min-width:110px;justify-content:flex-end">
+          <span class="pred-badge" style="background:rgba(34,197,94,.1);color:var(--green)">£${savingsAvg.toFixed(0)}</span>
+          ${isFlt?`<span class="pred-badge" style="background:rgba(96,165,250,.1);color:var(--blue)">✈️</span>`:""}
+          ${isToday?`<span class="pred-badge" style="background:rgba(139,92,246,.15);color:var(--acc)">TODAY</span>`:""}
+          <span class="pred-badge" style="background:rgba(255,255,255,.04);color:${confColor}">${confidence}</span>
+        </div>
+      </div>`;
+    }).join("");
+
+    totalPredOrders+=weekTotalOrders;
+    totalPredSavings+=weekTotalSavings;
+
+    html+=`<div class="pred-card">
+      <div class="pred-zone" style="color:${color}">
+        <div style="width:8px;height:8px;border-radius:50%;background:${color};box-shadow:0 0 6px ${color}"></div>
+        ${zname}
+        <span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--t3)">~${weekTotalOrders} orders · ~£${weekTotalSavings.toFixed(0)} savings this week</span>
+      </div>
+      ${rows}
+    </div>`;
+  });
+
+  html+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:8px">
+    <div style="background:var(--s2);border:1px solid rgba(139,92,246,.2);border-radius:14px;padding:18px;text-align:center">
+      <div style="font-size:30px;font-weight:900;color:var(--acc)">${totalPredOrders}</div>
+      <div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:4px">📦 Expected Orders</div>
+    </div>
+    <div style="background:var(--s2);border:1px solid rgba(34,197,94,.2);border-radius:14px;padding:18px;text-align:center">
+      <div style="font-size:30px;font-weight:900;color:var(--green)">£${totalPredSavings.toFixed(0)}</div>
+      <div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:4px">💰 Expected Savings</div>
+    </div>
+    <div style="background:var(--s2);border:1px solid rgba(96,165,250,.2);border-radius:14px;padding:18px;text-align:center">
+      <div style="font-size:30px;font-weight:900;color:var(--blue)">${Math.round(totalPredOrders/7)}/day</div>
+      <div style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:700;margin-top:4px">📊 Daily Average</div>
+    </div>
+  </div>`;
+
+  cont.innerHTML=html;
+}
+
+// ============================================================
+// SAVINGS CERTIFICATE
+// ============================================================
+function rCertificate(){
+  if(GUEST) return;
+  const cont=g("certBody");
+  if(!cont) return;
+  const quarter=g("certQuarter")?.value||"Q1";
+  const year=parseInt(g("certYear")?.value||"2026");
+  const qMonths={Q1:[0,1,2],Q2:[3,4,5],Q3:[6,7,8],Q4:[9,10,11]};
+  const months=qMonths[quarter];
+  const qStart=new Date(year,months[0],1);
+  const qEnd=new Date(year,months[2]+1,0);
+  qEnd.setHours(23,59,59,999);
+
+  const bundles=(D.bundles||[]).filter(b=>{
+    const bd=new Date(b.date_std);
+    return bd>=qStart&&bd<=qEnd;
+  });
+
+  const totalSaved=bundles.reduce((a,b)=>a+(b.savings_gbp||0),0);
+  const totalOrders=bundles.reduce((a,b)=>a+b.orders.length,0);
+  const totalBundles=bundles.length;
+  const totalWeight=bundles.reduce((a,b)=>a+(b.weight_kg||0),0);
+  const shipsSaved=totalOrders-totalBundles;
+  const topCountry=Object.entries(bundles.reduce((m,b)=>{m[b.country||"—"]=(m[b.country||"—"]||0)+b.orders.length;return m;},{})).sort((a,b)=>b[1]-a[1])[0];
+
+  const qLabel=`${quarter} ${year}`;
+  const qRange=`${qStart.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})} – ${qEnd.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}`;
+
+  if(!totalBundles){
+    cont.innerHTML=`<div class="empty-state"><div class="empty-icon">🏅</div><div>No data for ${qLabel}</div></div>`;
+    return;
+  }
+
+  cont.innerHTML=`<div class="cert-wrap" id="certPrintArea">
+    <div class="cert-box">
+      <div class="cert-logo">🏢</div>
+      <div class="cert-brand">FLEEK 3PL</div>
+      <div class="cert-tagline">Bundling Intelligence Platform</div>
+      <div class="cert-title">Shipping Savings Certificate</div>
+      <div class="cert-amount">£${totalSaved.toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      <div class="cert-subtitle">Total shipping costs saved through smart bundling</div>
+      <div class="cert-quarter">${qLabel} · ${qRange}</div>
+      <div class="cert-stats">
+        <div class="cert-stat">
+          <div class="cert-stat-v" style="color:var(--blue)">${totalOrders.toLocaleString()}</div>
+          <div class="cert-stat-l">📦 Orders Processed</div>
+        </div>
+        <div class="cert-stat">
+          <div class="cert-stat-v" style="color:var(--green)">${totalBundles.toLocaleString()}</div>
+          <div class="cert-stat-l">🗃️ Bundles Created</div>
+        </div>
+        <div class="cert-stat">
+          <div class="cert-stat-v" style="color:var(--yellow)">${shipsSaved.toLocaleString()}</div>
+          <div class="cert-stat-l">🚚 Shipments Saved</div>
+        </div>
+        <div class="cert-stat">
+          <div class="cert-stat-v" style="color:var(--purple)">${totalWeight.toFixed(0)} kg</div>
+          <div class="cert-stat-l">⚖️ Total Weight</div>
+        </div>
+        <div class="cert-stat">
+          <div class="cert-stat-v" style="color:var(--cyan)">£${(totalOrders>0?totalSaved/totalOrders:0).toFixed(2)}</div>
+          <div class="cert-stat-l">💷 Avg Saved/Order</div>
+        </div>
+        <div class="cert-stat">
+          <div class="cert-stat-v" style="color:var(--orange)">${topCountry?topCountry[0]:"—"}</div>
+          <div class="cert-stat-l">🌍 Top Country</div>
+        </div>
+      </div>
+      <div style="margin:20px 0;padding:16px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:12px">
+        <div style="font-size:13px;color:var(--green);font-weight:700">💡 By bundling ${totalOrders.toLocaleString()} orders into ${totalBundles.toLocaleString()} shipments, Fleek 3PL saved the equivalent of ${shipsSaved.toLocaleString()} individual shipments — reducing both cost and carbon footprint.</div>
+      </div>
+      <div class="cert-footer">
+        Certified by Fleek 3PL Bundling Intelligence Platform · Generated ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"long",year:"numeric"})}<br>
+        This certificate reflects automated analysis of shipping operations data.
+      </div>
+    </div>
+  </div>`;
+}
+
+function printCertificate(){
+  if(GUEST) return;
+  window.print();
 }
 
 function showRouteDrill(country,dayIdx){
