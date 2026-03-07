@@ -4583,6 +4583,7 @@ def nexus_dashboard():
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
+# ==============================================================================
 # BUNDLING INTELLIGENCE HUB — COMPLETE FINAL VERSION
 # ==============================================================================
 import urllib.request, csv, re, ssl, time, math, concurrent.futures
@@ -5136,6 +5137,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 .sidebar{
   width:240px;flex-shrink:0;
   background:var(--sidebar);
+  transition:width 0.2s ease;
   border-right:1px solid var(--sb-border);
   display:flex;flex-direction:column;
   overflow:hidden;
@@ -6462,6 +6464,22 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
 // ============================================================
 // THEME TOGGLE
 // ============================================================
+function toggleSidebar(){
+  const sb=document.getElementById('sidebar');
+  if(!sb) return;
+  const isCollapsed=sb.classList.toggle('collapsed');
+  try{localStorage.setItem('sb_collapsed',isCollapsed?'1':'0');}catch(e){}
+}
+// Restore sidebar collapse state on load
+(function(){
+  try{
+    if(localStorage.getItem('sb_collapsed')==='1'){
+      const sb=document.getElementById('sidebar');
+      if(sb) sb.classList.add('collapsed');
+    }
+  }catch(e){}
+})();
+
 function toggleTheme(){
   const html=document.documentElement;
   const isDark=html.getAttribute('data-theme')==='dark';
