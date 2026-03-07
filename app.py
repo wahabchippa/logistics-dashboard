@@ -5038,10 +5038,10 @@ BUNDLING_HTML = r"""<!DOCTYPE html>
   --card:#0c0c0c;
   --sidebar:#070707;
   --sb-border:#1a1a1a;
-  --sb-text:#444444;
-  --sb-active-bg:rgba(138,43,226,0.12);
+  --sb-text:#888888;
+  --sb-active-bg:rgba(138,43,226,0.16);
   --sb-active-border:#7c3aed;
-  --sb-active-text:#a78bfa;
+  --sb-active-text:#c4b5fd;
   --input:#050505;
   --hover:rgba(255,255,255,0.03);
   --shadow:0 2px 12px rgba(0,0,0,0.9);
@@ -5147,12 +5147,12 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 .sb-head{padding:20px 18px 16px;border-bottom:1px solid var(--sb-border);}
 .sb-logo-wrap{display:flex;align-items:center;gap:12px;}
 .sb-ico{
-  width:40px;height:40px;flex-shrink:0;
-  background:linear-gradient(135deg,#7c3aed,#8b5cf6);
-  border-radius:12px;
+  width:36px;height:36px;flex-shrink:0;
+  background:linear-gradient(135deg,#5b21b6,#7c3aed);
+  border-radius:10px;
   display:flex;align-items:center;justify-content:center;
-  font-size:20px;
-  box-shadow:0 4px 16px rgba(139,92,246,0.4);
+  font-size:18px;
+  box-shadow:0 3px 12px rgba(139,92,246,0.5);
 }
 .sb-info{overflow:hidden;}
 .sb-title{font-size:13px;font-weight:800;color:#ffffff;letter-spacing:-.3px;white-space:nowrap;}
@@ -5163,13 +5163,13 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 .sb-nav::-webkit-scrollbar{width:0;}
 .sb-section-label{
   font-size:9px;font-weight:800;text-transform:uppercase;
-  letter-spacing:1.5px;color:var(--sb-text);
+  letter-spacing:1.5px;color:var(--t3);
   padding:8px 8px 6px;margin-top:4px;
 }
 .sb-tab{
-  display:flex;align-items:center;gap:12px;
-  padding:10px 12px;border-radius:10px;
-  font-size:12.5px;font-weight:600;
+  display:flex;align-items:center;gap:10px;
+  padding:9px 12px;border-radius:9px;
+  font-size:12px;font-weight:600;
   color:var(--sb-text);
   cursor:pointer;transition:.15s;
   border:1px solid transparent;
@@ -5177,7 +5177,8 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
   text-align:left;white-space:nowrap;
   letter-spacing:-.1px;
 }
-.sb-tab:hover{color:#ffffff;background:rgba(255,255,255,0.05);}
+.sb-tab:hover{color:var(--t1);background:rgba(255,255,255,0.07);}
+[data-theme="dark"] .sb-tab:hover{color:#e2e2e2;}
 .sb-tab.active{
   color:var(--sb-active-text);
   background:var(--sb-active-bg);
@@ -5187,7 +5188,19 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
   box-shadow:inset 3px 0 0 var(--sb-active-border), 0 0 12px rgba(139,92,246,0.1);
   border-left-color:var(--sb-active-border);
 }
-.sb-tab-icon{font-size:15px;flex-shrink:0;}
+.sb-tab-icon{
+  font-size:14px;flex-shrink:0;
+  width:28px;height:28px;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:7px;
+  background:rgba(255,255,255,0.04);
+  transition:.15s;
+}
+.sb-tab:hover .sb-tab-icon{background:rgba(255,255,255,0.08);}
+.sb-tab.active .sb-tab-icon{background:rgba(139,92,246,0.2);}
+[data-theme="light"] .sb-tab-icon{background:rgba(0,0,0,0.04);}
+[data-theme="light"] .sb-tab:hover .sb-tab-icon{background:rgba(0,0,0,0.07);}
+[data-theme="light"] .sb-tab.active .sb-tab-icon{background:rgba(109,40,217,0.1);}
 .sb-tab-label{flex:1;}
 .sb-tab-dot{
   width:6px;height:6px;border-radius:50%;
@@ -5218,9 +5231,43 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
   display:flex;align-items:center;gap:8px;
   padding:8px 12px;border-radius:10px;
   font-size:11.5px;font-weight:600;color:var(--sb-text);
-  text-decoration:none;transition:.15s;border:1px solid transparent;
+  text-decoration:none;transition:.15s;
+  border:1px solid rgba(255,255,255,0.08);
+  background:rgba(255,255,255,0.03);
+  font-weight:700;
 }
-.sb-back:hover{color:#fff;background:rgba(255,255,255,0.05);}
+.sb-back:hover{color:#fff;background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.15);}
+[data-theme="light"] .sb-back{border-color:rgba(0,0,0,0.08);background:rgba(0,0,0,0.02);color:#475569;font-weight:700;}
+[data-theme="light"] .sb-back:hover{color:#0f172a;background:rgba(0,0,0,0.06);border-color:rgba(0,0,0,0.12);}
+
+/* SIDEBAR TOGGLE */
+.sb-toggle{
+  background:transparent;border:none;cursor:pointer;
+  color:var(--sb-text);padding:4px;border-radius:6px;
+  transition:.15s;margin-left:auto;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.sb-toggle:hover{color:var(--t1);background:rgba(255,255,255,0.08);}
+[data-theme="light"] .sb-toggle:hover{background:rgba(0,0,0,0.06);}
+.sidebar.collapsed{width:60px;}
+.sidebar.collapsed .sb-info,
+.sidebar.collapsed .sb-tab-label,
+.sidebar.collapsed .sb-tab-dot,
+.sidebar.collapsed .sb-section-label,
+.sidebar.collapsed .sb-user-info,
+.sidebar.collapsed .sb-last-update,
+.sidebar.collapsed .theme-pill .icon+span,
+.sidebar.collapsed .sb-back svg+span,
+.sidebar.collapsed .sb-foot-divider{display:none;}
+.sidebar.collapsed .sb-tab{justify-content:center;padding:10px;gap:0;}
+.sidebar.collapsed .sb-tab-icon{width:32px;height:32px;font-size:15px;}
+.sidebar.collapsed .sb-foot{padding:10px 6px;}
+.sidebar.collapsed .theme-pill{justify-content:center;padding:9px;}
+.sidebar.collapsed .sb-back{justify-content:center;padding:8px;}
+.sidebar.collapsed .sb-nav{padding:8px 6px;}
+.sidebar.collapsed .sb-user-card{justify-content:center;padding:8px;}
+.sidebar.collapsed .sb-toggle svg{transform:rotate(180deg);}
+.sb-foot-divider{height:1px;background:var(--sb-border);margin:4px 0;}
 
 /* MAIN CONTENT AREA */
 .main-wrap{
@@ -5255,6 +5302,11 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
   color:#000;border-color:transparent;
   box-shadow:0 3px 12px rgba(34,197,94,.3);font-weight:800;
 }
+.tbtn-theme-inline{
+  background:var(--s2);color:var(--t2);
+  border-color:var(--bd);font-size:14px;padding:7px 10px;
+}
+.tbtn-theme-inline:hover{border-color:var(--acc);}
 
 /* MAIN SCROLL AREA */
 .main{
@@ -5297,11 +5349,23 @@ input[type="date"].fi{color-scheme:dark;}
 [data-theme="light"] input[type="date"].fi{color-scheme:light;}
 input[type="date"]::-webkit-calendar-picker-indicator{
   cursor:pointer;opacity:1;
-  filter:invert(1) brightness(2);
+  filter:invert(1) brightness(10) saturate(0);
+  background-color:transparent;
 }
 [data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator{
-  filter:none;opacity:0.8;
+  filter:none;opacity:0.7;
 }
+/* Make date input text visible in dark mode */
+[data-theme="dark"] input[type="date"].fi{
+  color:#e0e0e0;
+}
+[data-theme="dark"] input[type="date"].fi::-webkit-datetime-edit-fields-wrapper{
+  color:#e0e0e0;
+}
+[data-theme="dark"] input[type="date"].fi::-webkit-datetime-edit-text{color:#888;}
+[data-theme="dark"] input[type="date"].fi::-webkit-datetime-edit-month-field,
+[data-theme="dark"] input[type="date"].fi::-webkit-datetime-edit-day-field,
+[data-theme="dark"] input[type="date"].fi::-webkit-datetime-edit-year-field{color:#e0e0e0;}
 .fg-grow{flex:1;min-width:200px;}
 .qbtns{display:flex;gap:6px;flex-wrap:wrap;}
 .qb{
@@ -5865,6 +5929,13 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
         <div class="sb-title">Bundling Hub</div>
         <div class="sb-sub">Intelligence · Analytics</div>
       </div>
+      <button class="sb-toggle" id="sbToggle" onclick="toggleSidebar()" title="Toggle sidebar">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <rect x="2" y="4" width="12" height="1.5" rx=".75" fill="currentColor"/>
+          <rect x="2" y="7.25" width="8" height="1.5" rx=".75" fill="currentColor"/>
+          <rect x="2" y="10.5" width="12" height="1.5" rx=".75" fill="currentColor"/>
+        </svg>
+      </button>
     </div>
   </div>
   <nav class="sb-nav">
@@ -5934,6 +6005,17 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     </button>
   </nav>
   <div class="sb-foot">
+    <button class="theme-pill" onclick="toggleTheme()" id="themePill">
+      <span class="icon">☀️</span>
+      <span id="themeLabel">Light Mode</span>
+    </button>
+    <a href="/" class="sb-back">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="flex-shrink:0">
+        <path d="M9 11L5 7l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Main Dashboard
+    </a>
+    <div class="sb-foot-divider"></div>
     <div class="sb-user-card" id="sbUserCard">
       <div class="sb-user-avatar" id="sbAvatar">?</div>
       <div class="sb-user-info">
@@ -5941,21 +6023,17 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
         <div class="sb-user-role">Administrator</div>
       </div>
     </div>
-    <div class="sb-last-update" id="sbLastUpdate">Last update: —</div>
-    <button class="theme-pill" onclick="toggleTheme()" id="themePill">
-      <span class="icon">☀️</span>
-      <span id="themeLabel">Light Mode</span>
-    </button>
-    <a href="/" class="sb-back">⬅ Main Dashboard</a>
+    <div class="sb-last-update" id="sbLastUpdate">🕐 Last update: —</div>
   </div>
 </aside>
 
 <!-- MAIN CONTENT -->
 <div class="main-wrap">
   <div class="topbar">
-    <div class="tb-page-title" id="tbTitle">Bundle Intelligence</div>
+    <div class="tb-page-title" id="tbTitle">📦 Bundle Intelligence</div>
     <div class="tb-actions">
       <button class="tbtn tbtn-refresh" onclick="hardRefresh()">🔄 Refresh</button>
+      <button class="tbtn tbtn-theme-inline" id="themeInlineBtn" onclick="toggleTheme()" title="Toggle theme" style="display:none">☀️</button>
     </div>
   </div>
 
@@ -8093,7 +8171,11 @@ function rReceipt(){
       <div class="rcpt-header">
         <div>
           <div class="rcpt-bid">📦 ${b.customer||"Unknown"} — ${b.date||"—"}</div>
-          <div class="rcpt-meta">${b.source} · ${b.country||"—"} · TID: ${b.tid||"Pending"}</div>
+          <div class="rcpt-meta">
+            <span style="color:var(--green);font-weight:700">🌍 ${b.country||"Unknown Country"}</span>
+            &nbsp;·&nbsp;${b.source}&nbsp;·&nbsp;
+            <span style="font-family:monospace">TID: ${b.tid||"Pending"}</span>
+          </div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <span style="font-size:20px;font-weight:900;color:${savedColor}">£${(b.savings_gbp||0).toFixed(2)} saved</span>
@@ -8105,7 +8187,7 @@ function rReceipt(){
           <div class="rcpt-stat"><div class="rcpt-stat-v" style="color:var(--blue)">${b.orders.length}</div><div class="rcpt-stat-l">📦 Orders</div></div>
           <div class="rcpt-stat"><div class="rcpt-stat-v" style="color:var(--yellow)">${(b.weight_kg||0).toFixed(2)} kg</div><div class="rcpt-stat-l">⚖️ Total Wt</div></div>
           <div class="rcpt-stat"><div class="rcpt-stat-v" style="color:var(--purple)">${Math.max(Math.ceil(b.weight_kg||0),1)} kg</div><div class="rcpt-stat-l">💷 Billed Wt</div></div>
-          <div class="rcpt-stat"><div class="rcpt-stat-v" style="color:var(--t3)">${b.vendor||"—"}</div><div class="rcpt-stat-l">🏪 Vendor</div></div>
+          <div class="rcpt-stat"><div class="rcpt-stat-v" style="color:var(--cyan);font-size:14px">${b.country||"—"}</div><div class="rcpt-stat-l">🌍 Country</div></div>
         </div>
         <div class="rcpt-orders">
         ${b.orders.map(o=>{
@@ -8414,7 +8496,18 @@ function showRouteDrill(country,dayIdx){
 }
 
 function cMod(id){document.getElementById(id).classList.remove("open");}
-document.addEventListener("keydown",e=>{if(e.key==="Escape"){cMod("jMov");cMod("oMov");}});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){cMod("jMov");cMod("oMov");return;}
+  // Ctrl+F or Cmd+F on bundle tab — focus search
+  if((e.ctrlKey||e.metaKey)&&e.key==="f"){
+    const activePaneName=document.querySelector(".sb-tab.active")?.dataset?.pane;
+    const searchInput=activePaneName==="bundle"?g("bq"):
+                      activePaneName==="status"?g("sq"):
+                      activePaneName==="search"?g("osq"):
+                      activePaneName==="receipt"?g("rcptQ"):null;
+    if(searchInput){e.preventDefault();searchInput.focus();searchInput.select();}
+  }
+});
 window.onload=init;
 </script></body></html>"""
 
