@@ -1276,7 +1276,6 @@ USERS = {
     "albash@joinfleek.com":       "Albash123",
     "waris@joinfleek.com":        "waris123",
     "moiz@joinfleek.com":         "moiz1234",
-    "areeb@joinfleek.com"         "areeb1234"
 }
 
 # Guest login ke liye ek simple password (optional, agar seedha guest button chahiye)
@@ -1544,9 +1543,18 @@ function togglePwd(){
 </html>
 '''
 
+
 # ==============================================================================
 # LOGOUT ROUTE — yeh waise hi rahega, koi change nahi
 # ==============================================================================
+
+# @app.route('/logout')
+# def logout():
+#     session.clear()
+#     return redirect(url_for('login'))
+
+# NOTE: Upar wala logout route pehle se existing code mein hai — use rehne do.
+# Sirf upper wala USERS dict + login() function + LOGIN_HTML replace karein.
 
 @app.route('/logout')
 def logout():
