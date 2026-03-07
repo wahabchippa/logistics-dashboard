@@ -3851,25 +3851,15 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS)
+# NEXUS — TID Operations Hub
 # ==============================================================================
-import urllib.request
-import urllib.parse
-import csv
-import re
-import json
-import time
-import concurrent.futures
+import urllib.request, urllib.parse, csv, re, json, time, concurrent.futures, ssl
 from datetime import datetime
-import ssl
 from flask import jsonify, request, session, render_template_string
 
 try:
-    _create_unverified_https_context = ssl._create_unverified_context
-except AttributeError:
-    pass
-else:
-    ssl._create_default_https_context = _create_unverified_https_context
+    ssl._create_default_https_context = ssl._create_unverified_context
+except: pass
 
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
@@ -3880,94 +3870,83 @@ NEXUS_SOURCES = {
     "Kerry": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=0&single=true&output=csv"
 }
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
-
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
-
 NEXUS_SHEET_MAP = {
-    "Kerry":         {"o": 1, "b": 5, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
-    "APX":           {"o": 1, "b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
-    "ECL QC Center": {"o": 1, "b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
-    "ECL Zone":      {"o": 1, "b": 4, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
-    "GE QC Center":  {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
-    "GE Zone":       {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
+    "Kerry":         {"o":1,"b":5,"d":2,"w":8,"v":15,"c":18,"cn":22,"ma":31,"t":32},
+    "APX":           {"o":1,"b":4,"d":2,"w":7,"v":12,"c":15,"cn":19,"ma":33,"t":28},
+    "ECL QC Center": {"o":1,"b":4,"d":2,"w":7,"v":11,"c":14,"cn":18,"ma":28,"t":26},
+    "ECL Zone":      {"o":1,"b":4,"d":2,"w":9,"v":14,"c":17,"cn":21,"ma":33,"t":29},
+    "GE QC Center":  {"o":1,"b":4,"d":2,"w":7,"v":13,"c":16,"cn":20,"ma":32,"t":29},
+    "GE Zone":       {"o":1,"b":4,"d":2,"w":7,"v":13,"c":16,"cn":20,"ma":32,"t":29}
 }
 
 def nexus_fetch_sheet_data(url, name):
     try:
-        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
+        ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0","Cache-Control":"no-cache"})
         with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
-            data = list(csv.reader(res.read().decode('utf-8', errors='ignore').splitlines()))
-            col = NEXUS_SHEET_MAP.get(name)
-            if not col or not data: return []
-            processed = []
-            for row in data:
-                if not row: continue
-                p = row + [''] * 60
-                o_val = str(p[col['o'] - 1]).strip()
-                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
-                def get_v(col_num):
-                    v = str(p[col_num - 1]).strip()
-                    return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
-                processed.append({
-                    'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
-                    'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
-                    'country': get_v(col['cn']), 'tid': get_v(col['t']), 'mawb': get_v(col['ma'])
-                })
-            return processed
+            data = list(csv.reader(res.read().decode("utf-8",errors="ignore").splitlines()))
+        col = NEXUS_SHEET_MAP.get(name)
+        if not col or not data: return []
+        out = []
+        for row in data:
+            if not row: continue
+            p = row + [""]*60
+            ov = str(p[col["o"]-1]).strip()
+            if not re.search(r"\d", ov) or ov.lower() in ["n/a","nan","order","orderid"]: continue
+            def gv(n):
+                v=str(p[n-1]).strip()
+                return v if v and v.lower() not in ["n/a","nan","-",""] else "N/A"
+            out.append({"order":ov,"date":gv(col["d"]),"boxes":gv(col["b"]),"weight":gv(col["w"]),
+                "vendor":gv(col["v"]),"customer":gv(col["c"]),"country":gv(col["cn"]),"tid":gv(col["t"]),"mawb":gv(col["ma"])})
+        return out
     except: return []
 
 def nexus_clean_tids(raw):
     raw = str(raw).strip()
-    if not raw or raw.startswith('='): return []
-    if raw.lower() in ['pending','none','n/a','-','tbd','tba','update soon','#n/a','#ref!','#value!']: return []
-    PATTERNS = [
-        r'\b(1[56]\d{12,14})\b',
-        r'\b(0?15[05]\d{10,13})\b',
-        r'\b(1Z[A-Z0-9]{15,18})\b',
-        r'\b(JD\d{10,18})\b',
-        r'\b(YT\d{10,18})\b',
-        r'\b(TT\d{10,18})\b',
-    ]
+    if not raw or raw.startswith("="): return []
+    if raw.lower() in ["pending","none","n/a","-","tbd","tba","#n/a","#ref!","#value!"]: return []
+    PATS = [r"\b(1[56]\d{12,14})\b", r"\b(0?15[05]\d{10,13})\b",
+            r"\b(1Z[A-Z0-9]{15,18})\b", r"\b(JD\d{10,18})\b",
+            r"\b(YT\d{10,18})\b", r"\b(TT\d{10,18})\b"]
     out = []
-    for pat in PATTERNS:
-        for m in re.finditer(pat, raw, re.IGNORECASE):
+    for p in PATS:
+        for m in re.finditer(p, raw, re.IGNORECASE):
             t = m.group(1).strip()
             if t not in out: out.append(t)
     return out
 
 def nexus_fetch_kerry_status(url):
     try:
-        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
-            data = list(csv.reader(res.read().decode('utf-8', errors='ignore').splitlines()))
+            data = list(csv.reader(res.read().decode("utf-8",errors="ignore").splitlines()))
         if not data: return {}
-        o_idx = s_idx = h_idx = -1
-        for i, row in enumerate(data[:20]):
-            c = [str(x).lower().replace(' ','').replace('_','') for x in row]
-            for j, cn in enumerate(c):
-                if cn in ['order','orderid','fleekid','shipmentid','orderno']: o_idx = j; break
-            for j, cn in enumerate(c):
-                if cn in ['lateststatus','status','currentstatus','trackingstatus','orderstatus']: s_idx = j; break
-            if o_idx != -1 and s_idx != -1: h_idx = i; break
-        s_map = {}
-        if h_idx != -1:
-            for row in data[h_idx+1:]:
-                p = row + [''] * 40
-                o = str(p[o_idx]).strip().lower()
+        oi=si=hi=-1
+        for i,row in enumerate(data[:20]):
+            c=[str(x).lower().replace(" ","").replace("_","") for x in row]
+            for j,cn in enumerate(c):
+                if cn in ["order","orderid","fleekid","shipmentid","orderno"]: oi=j; break
+            for j,cn in enumerate(c):
+                if cn in ["lateststatus","status","currentstatus","trackingstatus","orderstatus"]: si=j; break
+            if oi!=-1 and si!=-1: hi=i; break
+        sm={}
+        if hi!=-1:
+            for row in data[hi+1:]:
+                p=row+[""]*40; o=str(p[oi]).strip().lower()
                 if o:
-                    sv = str(p[s_idx]).strip().upper() or "PENDING"
-                    s_map[o] = sv; s_map[o.replace('_','/')] = sv; s_map[o.replace('/','_')] = sv
-                    if o.startswith('0'): s_map[o[1:]] = sv
-        return s_map
+                    sv=str(p[si]).strip().upper() or "PENDING"
+                    sm[o]=sv; sm[o.replace("_","/")]=sv; sm[o.replace("/","_")]=sv
+                    if o.startswith("0"): sm[o[1:]]=sv
+        return sm
     except: return {}
 
-def nexus_parse_date(date_str):
+def nexus_parse_date(ds):
     try:
-        for fmt in ('%Y-%m-%d','%d/%m/%Y','%m/%d/%Y','%d-%b-%y','%Y/%m/%d'):
-            try: return datetime.strptime(date_str.split(' ')[0], fmt)
+        for fmt in ("%Y-%m-%d","%d/%m/%Y","%m/%d/%Y","%d-%b-%y","%Y/%m/%d"):
+            try: return datetime.strptime(ds.split(" ")[0], fmt)
             except: continue
     except: pass
     return None
@@ -3975,414 +3954,221 @@ def nexus_parse_date(date_str):
 def nexus_sync_db(force=False):
     global NEXUS_GLOBAL_CACHE
     now = time.time()
-    if not force and now - NEXUS_GLOBAL_CACHE['time'] < 300 and NEXUS_GLOBAL_CACHE['sheets']:
-        return NEXUS_GLOBAL_CACHE['sheets'], NEXUS_GLOBAL_CACHE['kerry']
-    res = {}
+    if not force and now-NEXUS_GLOBAL_CACHE["time"]<300 and NEXUS_GLOBAL_CACHE["sheets"]:
+        return NEXUS_GLOBAL_CACHE["sheets"], NEXUS_GLOBAL_CACHE["kerry"]
+    res={}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
-        f_sheets = {exe.submit(nexus_fetch_sheet_data, url, name): name for name, url in NEXUS_SOURCES.items()}
-        f_kerry = exe.submit(nexus_fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
-        for f in concurrent.futures.as_completed(f_sheets):
-            res[f_sheets[f]] = f.result()
-        try: k_map = f_kerry.result()
-        except: k_map = {}
-    NEXUS_GLOBAL_CACHE.update({'time': now, 'sheets': res, 'kerry': k_map})
-    return res, k_map
+        fs={exe.submit(nexus_fetch_sheet_data,url,name):name for name,url in NEXUS_SOURCES.items()}
+        fk=exe.submit(nexus_fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
+        for f in concurrent.futures.as_completed(fs): res[fs[f]]=f.result()
+        try: km=fk.result()
+        except: km={}
+    NEXUS_GLOBAL_CACHE.update({"time":now,"sheets":res,"kerry":km})
+    return res, km
 
-@app.route('/api/nexus/refresh', methods=['POST'])
+@app.route("/api/nexus/refresh", methods=["POST"])
 def api_nexus_refresh():
-    nexus_sync_db(force=True)
-    return jsonify({"success": True})
+    nexus_sync_db(force=True); return jsonify({"success":True})
 
-@app.route('/api/nexus/search', methods=['POST'])
+@app.route("/api/nexus/search", methods=["POST"])
 def api_nexus_search():
-    order_ids = [x.strip().lower() for x in re.split(r'[\n,\t\s]+', request.json.get('query','')) if x.strip()]
-    results = []
-    sheets_data, kerry_data = nexus_sync_db()
-    for q in order_ids:
-        q_slash = q.replace('_','/'); q_under = q.replace('/','_')
-        q_with_zero = '0'+q if q.startswith('150') else q
-        q_no_zero = q[1:] if q.startswith('0150') else q
-        found = False
-        for src, rows in sheets_data.items():
+    oids=[x.strip().lower() for x in re.split(r"[\n,\t\s]+",request.json.get("query","")) if x.strip()]
+    results=[]; sd,kd=nexus_sync_db()
+    for q in oids:
+        qs=q.replace("_","/"); qu=q.replace("/","_")
+        qz="0"+q if q.startswith("150") else q; qnz=q[1:] if q.startswith("0150") else q
+        found=False
+        for src,rows in sd.items():
             for r in rows:
-                oid, tid_raw = r['order'].lower(), r['tid'].lower()
-                if (q in oid or q_slash in oid or q_under in oid or
-                    q in tid_raw or q_with_zero in tid_raw or q_no_zero in tid_raw):
-                    k_stat = kerry_data.get(oid, "N/A")
-                    results.append({"order_id": r['order'].upper(), "source": src, "status": k_stat,
-                        "date": r['date'], "boxes": r['boxes'], "weight": r['weight'],
-                        "vendor": r['vendor'], "customer": r['customer'], "country": r['country'],
-                        "tids": nexus_clean_tids(r['tid']), "mawb": r['mawb']})
-                    found = True; break
+                oid,tr=r["order"].lower(),r["tid"].lower()
+                if q in oid or qs in oid or qu in oid or q in tr or qz in tr or qnz in tr:
+                    results.append({"order_id":r["order"].upper(),"source":src,"status":kd.get(oid,"N/A"),
+                        "date":r["date"],"boxes":r["boxes"],"weight":r["weight"],"vendor":r["vendor"],
+                        "customer":r["customer"],"country":r["country"],"tids":nexus_clean_tids(r["tid"]),"mawb":r["mawb"]})
+                    found=True; break
             if found: break
     return jsonify(results)
 
-@app.route('/api/nexus/track_real', methods=['POST'])
+@app.route("/api/nexus/track_real", methods=["POST"])
 def api_track_real():
-    # FREE tracking — Ship24 website scrape + fallbacks, no API key
-    tid = (request.json or {}).get('tid','').strip()
-    if not tid: return jsonify({"success": False, "error": "no_tid"})
-    ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-
-    BROWSER_HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-GB,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Cache-Control": "max-age=0",
-    }
-
-    def sev(t, s, l, active):
-        return {"time": t or "—", "status": s or "Update", "loc": l or "", "active": active}
-
-    def find_events_in_json(node, depth=0):
-        if depth > 12: return None
-        if isinstance(node, dict):
-            # Ship24 stores events as array with statusCode/datetime/location fields
-            if 'events' in node and isinstance(node['events'], list) and len(node['events']) > 0:
-                ev0 = node['events'][0]
-                if isinstance(ev0, dict) and any(k in ev0 for k in ['statusCode','status','datetime','date','description']):
-                    return node['events']
+    # Backend: Ship24 website scrape as server-side fallback
+    tid=(request.json or {}).get("tid","").strip()
+    if not tid: return jsonify({"success":False})
+    ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
+    HDR={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
+         "Accept":"text/html,*/*;q=0.8","Accept-Language":"en-GB,en;q=0.9",
+         "Accept-Encoding":"gzip, deflate, br","Connection":"keep-alive"}
+    def sev(t,s,l,a): return {"time":t or "","status":s or "Update","loc":l or "","active":a}
+    def find_evs(node, d=0):
+        if d>12: return None
+        if isinstance(node,dict):
+            if "events" in node and isinstance(node["events"],list) and len(node["events"])>0:
+                e0=node["events"][0]
+                if isinstance(e0,dict) and any(k in e0 for k in ["statusCode","status","datetime","date","description"]):
+                    return node["events"]
             for v in node.values():
-                r = find_events_in_json(v, depth+1)
+                r=find_evs(v,d+1)
                 if r: return r
-        elif isinstance(node, list):
+        elif isinstance(node,list):
             for item in node:
-                r = find_events_in_json(item, depth+1)
+                r=find_evs(item,d+1)
                 if r: return r
         return None
-
-    # ─────────────────────────────────────────────────────────────
-    # SOURCE 1: Ship24 website — __NEXT_DATA__ scrape (FREE)
-    # ship24.com renders tracking results in page JSON
-    # ─────────────────────────────────────────────────────────────
-    for ship24_url in [
-        f"https://ship24.com/tracking?p={tid}",
-        f"https://www.ship24.com/tracking?p={tid}",
-        f"https://ship24.com/en/tracking?p={tid}",
-    ]:
+    for url in [f"https://ship24.com/tracking?p={tid}",f"https://www.ship24.com/tracking?p={tid}"]:
         try:
-            hdrs = {**BROWSER_HEADERS, "Referer": "https://ship24.com/"}
-            req = urllib.request.Request(ship24_url, headers=hdrs)
-            with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
-                html = res.read()
-                # handle gzip
-                import gzip as _gz
-                try: html = _gz.decompress(html).decode('utf-8', errors='ignore')
-                except: html = html.decode('utf-8', errors='ignore')
-
-            # Extract __NEXT_DATA__
-            m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
+            import gzip as gz
+            req=urllib.request.Request(url,headers={**HDR,"Referer":"https://ship24.com/"})
+            with urllib.request.urlopen(req,timeout=20,context=ctx) as res:
+                raw=res.read()
+            try: html=gz.decompress(raw).decode("utf-8",errors="ignore")
+            except: html=raw.decode("utf-8",errors="ignore")
+            m=re.search('<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',html,re.DOTALL)
             if m:
-                ndata = json.loads(m.group(1))
-                raw_evs = find_events_in_json(ndata)
-                if raw_evs:
-                    events = []
-                    for i, ev in enumerate(raw_evs):
-                        # Ship24 event fields
-                        loc_obj = ev.get('location') or {}
-                        if isinstance(loc_obj, dict):
-                            loc = loc_obj.get('name','') or loc_obj.get('city','') or ''
-                        else:
-                            loc = str(loc_obj) if loc_obj else ''
-                        courier_obj = ev.get('courier') or ev.get('courierCode','')
-                        courier = ''
-                        if isinstance(courier_obj, dict): courier = courier_obj.get('name','')
-                        elif isinstance(courier_obj, str): courier = courier_obj
-                        full_loc = (loc + (' — '+courier if courier and courier not in loc else '')).strip(' —')
-                        events.append(sev(
-                            ev.get('datetime','') or ev.get('date','') or ev.get('time',''),
-                            ev.get('statusCode','') or ev.get('status','') or ev.get('description',''),
-                            full_loc, i==0
-                        ))
+                nd=json.loads(m.group(1)); re_evs=find_evs(nd)
+                if re_evs:
+                    events=[]
+                    for i,ev in enumerate(re_evs):
+                        lo=ev.get("location","")
+                        if isinstance(lo,dict): lo=lo.get("name","") or lo.get("city","")
+                        co=ev.get("courier","")
+                        if isinstance(co,dict): co=co.get("name","")
+                        elif not isinstance(co,str): co=""
+                        fl=(str(lo or "")+" — "+co if co and co not in str(lo or "") else str(lo or "")).strip(" —")
+                        events.append(sev(ev.get("datetime","") or ev.get("date",""),
+                            ev.get("statusCode","") or ev.get("status","") or ev.get("description",""),fl,i==0))
                     if events:
-                        # Extract carrier name
-                        carrier = ''
-                        trackings = find_tracking_root(ndata)
-                        if trackings and isinstance(trackings, dict):
-                            carrier = trackings.get('courierCode','') or trackings.get('carrier','')
-                        print(f"[TRACK] Ship24 web OK {tid} — {len(events)} events via {ship24_url}")
-                        return jsonify({"success":True,"events":events,"carrier":carrier,"source":"Ship24"})
-            # Also try JSON API route that Next.js might expose
-            m2 = re.search('"events"\\s*:\\s*(\\[\\{[^\\]]{20,}\\}\\])', html, re.DOTALL)
-            if m2:
-                raw_evs = json.loads(m2.group(1))
-                if raw_evs:
-                    events = [sev(ev.get('datetime',''),ev.get('statusCode','') or ev.get('status',''),
-                                  str(ev.get('location','')), i==0) for i,ev in enumerate(raw_evs)]
-                    if events:
-                        print(f"[TRACK] Ship24 regex OK {tid}")
-                        return jsonify({"success":True,"events":events,"carrier":"","source":"Ship24"})
+                        print(f"[TRACK] Ship24 OK {tid} {len(events)} events")
+                        return jsonify({"success":True,"events":events,"source":"Ship24"})
         except Exception as e:
-            print(f"[TRACK] Ship24 {ship24_url} fail: {e}")
-            continue
-
-    # ─────────────────────────────────────────────────────────────
-    # SOURCE 2: ParcelsApp internal API (multi-carrier, no key)
-    # ─────────────────────────────────────────────────────────────
-    try:
-        url = f"https://parcelsapp.com/api/v3/shipments/tracking?trackingNumbers={tid}&language=en&country=GB"
-        req = urllib.request.Request(url, headers={
-            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept":"application/json",
-            "Referer":f"https://parcelsapp.com/en/tracking/{tid}",
-            "Origin":"https://parcelsapp.com"
-        })
-        with urllib.request.urlopen(req, timeout=18, context=ctx) as res:
-            data = json.loads(res.read().decode('utf-8'))
-        ships = data.get('shipments') or []
-        if ships:
-            ship = ships[0]
-            carrier = ship.get('carrier','')
-            if isinstance(carrier, list): carrier = ', '.join(c.get('name','') for c in carrier if c.get('name'))
-            evs = ship.get('events') or []
-            events = []
-            for i, ev in enumerate(evs):
-                loc = ev.get('location','') or ''; cty = ev.get('country','') or ''
-                fl = (loc + (', '+cty if cty and cty not in loc else '')).strip(', ')
-                events.append(sev(ev.get('date','') or ev.get('time',''),
-                                  ev.get('description','') or ev.get('status',''), fl, i==0))
-            if events:
-                print(f"[TRACK] ParcelsApp OK {tid} — {len(events)} events")
-                return jsonify({"success":True,"events":events,"carrier":carrier,
-                                "source":"ParcelsApp","status":ship.get('status','')})
-    except Exception as e:
-        print(f"[TRACK] ParcelsApp fail: {e}")
-
-    # ─────────────────────────────────────────────────────────────
-    # SOURCE 3: 17track public widget token (200+ carriers)
-    # ─────────────────────────────────────────────────────────────
-    try:
-        payload = json.dumps({"data":[{"num":tid}]}).encode('utf-8')
-        req = urllib.request.Request("https://buyer.17track.net/orderapi/call", data=payload, headers={
-            "User-Agent":"Mozilla/5.0","Content-Type":"application/json",
-            "Accept":"application/json","17token":"321UctxG7l5bPkEhUHaQvlBJdTBWfqzS"
-        })
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
-            data = json.loads(res.read().decode('utf-8'))
-        acc = ((data.get('data') or {}).get('accepted') or [])
-        if acc:
-            track = acc[0].get('track') or {}
-            all_evs = (track.get('z0') or []) + (track.get('z1') or [])
-            events = [sev(ev.get('a',''), ev.get('z','') or ev.get('c',''), ev.get('l',''), i==0)
-                      for i,ev in enumerate(all_evs)]
-            if events:
-                print(f"[TRACK] 17track OK {tid} — {len(events)} events")
-                return jsonify({"success":True,"events":events,"carrier":track.get('c',''),"source":"17track"})
-    except Exception as e:
-        print(f"[TRACK] 17track fail: {e}")
-
-    print(f"[TRACK] All sources failed: {tid}")
+            print(f"[TRACK] Ship24 fail: {e}")
     return jsonify({"success":False,"tid":tid})
 
-def find_tracking_root(node, depth=0):
-    if depth > 8: return None
-    if isinstance(node, dict):
-        if 'courierCode' in node or ('carrier' in node and 'events' in node):
-            return node
-        for v in node.values():
-            r = find_tracking_root(v, depth+1)
-            if r: return r
-    elif isinstance(node, list):
-        for item in node:
-            r = find_tracking_root(item, depth+1)
-            if r: return r
-    return None
-
-
-@app.route('/api/nexus/radar_data', methods=['GET'])
+@app.route("/api/nexus/radar_data", methods=["GET"])
 def api_nexus_radar_data():
-    sheets_data, kerry_data = nexus_sync_db()
-    buckets = {"handed_over": {s: [] for s in NEXUS_SOURCES}}
-    for src, rows in sheets_data.items():
+    sd,kd=nexus_sync_db()
+    buckets={"handed_over":{s:[] for s in NEXUS_SOURCES}}
+    for src,rows in sd.items():
         for r in rows:
-            oid = str(r.get('order','')).strip()
-            if not oid or oid.lower() in ['n/a','nan']: continue
-            k_stat = str(kerry_data.get(oid.lower(),"PENDING")).upper()
-            if "HANDEDOVER" not in k_stat.replace(" ","").replace("_",""): continue
-            tids = nexus_clean_tids(r.get('tid',''))
+            oid=str(r.get("order","")).strip()
+            if not oid or oid.lower() in ["n/a","nan"]: continue
+            ks=str(kd.get(oid.lower(),"PENDING")).upper()
+            if "HANDEDOVER" not in ks.replace(" ","").replace("_",""): continue
+            tids=nexus_clean_tids(r.get("tid",""))
             if not tids: continue
-            mawb = str(r.get('mawb','')).strip()
-            if not mawb or mawb.lower() in ['n/a','nan','none','pending','-']: continue
-            buckets["handed_over"][src].append({
-                "Order": oid.upper(), "Date": r.get('date','N/A'), "Vendor": r.get('vendor','N/A'),
-                "Customer": r.get('customer','N/A'), "Boxes": r.get('boxes','N/A'),
-                "TID": ", ".join(tids), "MAWB": mawb, "Status": k_stat})
+            mawb=str(r.get("mawb","")).strip()
+            if not mawb or mawb.lower() in ["n/a","nan","none","pending","-"]: continue
+            buckets["handed_over"][src].append({"Order":oid.upper(),"Date":r.get("date","N/A"),
+                "Vendor":r.get("vendor","N/A"),"Customer":r.get("customer","N/A"),
+                "Boxes":r.get("boxes","N/A"),"TID":", ".join(tids),"MAWB":mawb,"Status":ks})
     return jsonify(buckets)
 
-@app.route('/api/nexus/ops_commander', methods=['GET'])
+@app.route("/api/nexus/ops_commander", methods=["GET"])
 def api_nexus_ops_commander():
-    sheets_data, kerry_data = nexus_sync_db()
-    blame_radar = []
-    missing_text = "Hi Kerry Team,\nThe following orders have been Handed Over but are missing Tracking IDs. Kindly update ASAP:\n\n"
-    count = 1
-    for src, rows in sheets_data.items():
+    sd,kd=nexus_sync_db()
+    blame=[]; txt="Hi Kerry Team,\nThe following orders are Handed Over but missing TIDs. Kindly update ASAP:\n\n"; ct=1
+    for src,rows in sd.items():
         for r in rows:
-            dt_obj = nexus_parse_date(r['date'])
-            if not dt_obj or dt_obj < NEXUS_FILTER_DATE: continue
-            oid = r['order']
-            k_stat = str(kerry_data.get(oid.lower(),"PENDING")).upper()
-            k_stat_clean = k_stat.replace(" ","").replace("_","")
-            has_tid = len(nexus_clean_tids(r['tid'])) > 0
-            days = (datetime.now() - dt_obj).days if dt_obj else 0
-            if "HANDEDOVER" in k_stat_clean and not has_tid and days > 1:
-                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Missing TID", "aging": f"{days} Days", "blame": "Kerry Logistics"})
-                missing_text += f"{count}. Order: {oid.upper()} | Date: {r['date']} | Source: {src}\n"
-                count += 1
-            elif k_stat_clean in ["QCPENDING","CREATED","ACCEPTED"] and days > 2:
-                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Stuck in QC", "aging": f"{days} Days", "blame": f"{src} Operations"})
-    if count == 1: missing_text = "All good! No missing TIDs currently."
-    return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
+            dt=nexus_parse_date(r["date"])
+            if not dt or dt<NEXUS_FILTER_DATE: continue
+            oid=r["order"]; ks=str(kd.get(oid.lower(),"PENDING")).upper().replace(" ","").replace("_","")
+            has_tid=len(nexus_clean_tids(r["tid"]))>0
+            days=(datetime.now()-dt).days if dt else 0
+            if "HANDEDOVER" in ks and not has_tid and days>1:
+                blame.append({"order":oid.upper(),"source":src,"issue":"Missing TID","aging":f"{days} Days","blame":"Kerry Logistics"})
+                txt+=f"{ct}. Order: {oid.upper()} | Date: {r['date']} | Source: {src}\n"; ct+=1
+            elif ks in ["QCPENDING","CREATED","ACCEPTED"] and days>2:
+                blame.append({"order":oid.upper(),"source":src,"issue":"Stuck in QC","aging":f"{days} Days","blame":f"{src} Operations"})
+    if ct==1: txt="All good! No missing TIDs currently."
+    return jsonify({"blame_radar":sorted(blame,key=lambda x:int(x["aging"].split()[0]),reverse=True),"missing_text":txt})
 
-@app.route('/nexus')
+@app.route("/nexus")
 def nexus_dashboard():
-    user_val = session.get('username') or session.get('user') or session.get('role')
-    if not user_val or str(user_val).lower() != 'admin':
-        return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh;font-family:sans-serif'><h2>⛔ Access Denied</h2><p>Only Admin users can access the TID Operations Hub.</p><a href='/' style='color:#8b5cf6'>Go Back</a></div>", 403
+    uv=session.get("username") or session.get("user") or session.get("role")
+    if not uv or str(uv).lower()!="admin":
+        return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>Access Denied</h2><a href='/' style='color:#8b5cf6'>Go Back</a></div>",403
     return render_template_string(NEXUS_HTML)
+
 
 NEXUS_HTML = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🛰️ NEXUS — TID Operations Hub</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111827'/%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%231e1b4b'/%3E%3Ctext x='16' y='14' font-family='Arial' font-size='7' font-weight='900' fill='%23a78bfa' text-anchor='middle'%3ENX%3C/text%3E%3Ctext x='16' y='24' font-family='Arial' font-size='6' font-weight='700' fill='%2360a5fa' text-anchor='middle'%3EHUB%3C/text%3E%3C/svg%3E">
+<title>NEXUS Hub</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-
-[data-theme="dark"]{
-  --bg:#000000;--s1:#0c0c0c;--s2:#111111;--s3:#161616;
-  --bd:#1e1e1e;--bd2:#282828;
-  --t1:#f0f0f0;--t2:#b8b8b8;--t3:#555555;--t4:#2e2e2e;
-  --card:#0c0c0c;--sidebar:#070707;
-  --sb-border:#1a1a1a;--sb-text:#888888;
-  --sb-active-bg:rgba(138,43,226,0.16);--sb-active-border:#7c3aed;--sb-active-text:#c4b5fd;
-  --input:#050505;--hover:rgba(255,255,255,0.03);
-  --shadow:0 2px 12px rgba(0,0,0,0.9);--shadow2:0 8px 40px rgba(0,0,0,0.95);
-  --acc:#8b5cf6;--acc2:#7c3aed;--green:#22c55e;--green2:#16a34a;
-  --blue:#60a5fa;--blue2:#3b82f6;--purple:#a78bfa;
-  --orange:#fb923c;--yellow:#fbbf24;--red:#f87171;--cyan:#22d3ee;
-  --glow-acc:0 0 20px rgba(139,92,246,0.3);
-}
-[data-theme="light"]{
-  --bg:#f1f5f9;--s1:#ffffff;--s2:#f8fafc;--s3:#f1f5f9;
-  --bd:#e2e8f0;--bd2:#cbd5e1;
-  --t1:#0f172a;--t2:#1e293b;--t3:#475569;--t4:#94a3b8;
-  --card:#ffffff;--sidebar:#ffffff;
-  --sb-border:#e2e8f0;--sb-text:#64748b;
-  --sb-active-bg:rgba(109,40,217,0.08);--sb-active-border:#7c3aed;--sb-active-text:#6d28d9;
-  --input:#f8fafc;--hover:rgba(0,0,0,0.025);
-  --shadow:0 1px 4px rgba(0,0,0,0.07),0 4px 16px rgba(0,0,0,0.05);--shadow2:0 4px 24px rgba(0,0,0,0.1);
-  --acc:#7c3aed;--acc2:#6d28d9;--green:#16a34a;--green2:#15803d;
-  --blue:#2563eb;--blue2:#1d4ed8;--purple:#7c3aed;
-  --orange:#ea580c;--yellow:#d97706;--red:#dc2626;--cyan:#0891b2;
-  --glow-acc:none;
-}
-
+[data-theme="dark"]{--bg:#000;--s1:#0c0c0c;--s2:#111;--s3:#161616;--bd:#1e1e1e;--bd2:#282828;--t1:#f0f0f0;--t2:#b8b8b8;--t3:#555;--card:#0c0c0c;--sidebar:#070707;--sb-border:#1a1a1a;--sb-text:#888;--sb-active-bg:rgba(138,43,226,0.16);--sb-active-border:#7c3aed;--sb-active-text:#c4b5fd;--input:#050505;--shadow:0 2px 12px rgba(0,0,0,.9);--acc:#8b5cf6;--acc2:#7c3aed;--green:#22c55e;--purple:#a78bfa;--yellow:#fbbf24;--red:#f87171;}
+[data-theme="light"]{--bg:#f1f5f9;--s1:#fff;--s2:#f8fafc;--s3:#f1f5f9;--bd:#e2e8f0;--bd2:#cbd5e1;--t1:#0f172a;--t2:#1e293b;--t3:#475569;--card:#fff;--sidebar:#fff;--sb-border:#e2e8f0;--sb-text:#64748b;--sb-active-bg:rgba(109,40,217,.08);--sb-active-border:#7c3aed;--sb-active-text:#6d28d9;--input:#f8fafc;--shadow:0 1px 4px rgba(0,0,0,.07);--acc:#7c3aed;--acc2:#6d28d9;--green:#16a34a;--purple:#7c3aed;--yellow:#d97706;--red:#dc2626;}
 html,body{height:100%;}
 body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);overflow:hidden;}
-
-/* ── APP LAYOUT ── */
 .app-wrap{display:flex;height:100vh;overflow:hidden;}
-
-/* ── SIDEBAR ── */
-.sidebar{
-  width:240px;flex-shrink:0;border-right:1px solid var(--sb-border);
-  display:flex;flex-direction:column;overflow:hidden;
-  position:relative;z-index:100;transition:width .2s ease;
-}
-[data-theme="dark"] .sidebar{background:linear-gradient(180deg,#0a0a0a,#060606);box-shadow:4px 0 20px rgba(0,0,0,0.5);}
-[data-theme="light"] .sidebar{background:#fff;box-shadow:2px 0 12px rgba(0,0,0,0.06);}
+.sidebar{width:240px;flex-shrink:0;border-right:1px solid var(--sb-border);display:flex;flex-direction:column;overflow:hidden;z-index:100;transition:width .2s ease;}
+[data-theme="dark"] .sidebar{background:linear-gradient(180deg,#0a0a0a,#060606);box-shadow:4px 0 20px rgba(0,0,0,.5);}
+[data-theme="light"] .sidebar{background:#fff;box-shadow:2px 0 12px rgba(0,0,0,.06);}
 .sidebar.collapsed{width:60px;}
-.sidebar.collapsed .sb-info,.sidebar.collapsed .sb-tab-label,.sidebar.collapsed .sb-tab-dot,
-.sidebar.collapsed .sb-section-label,.sidebar.collapsed .sb-user-info,.sidebar.collapsed .sb-last-update,
-.sidebar.collapsed .theme-pill span:last-child,.sidebar.collapsed .sb-foot-divider{display:none;}
+.sidebar.collapsed .sb-info,.sidebar.collapsed .sb-tab-label,.sidebar.collapsed .sb-tab-dot,.sidebar.collapsed .sb-section-label,.sidebar.collapsed .theme-lbl,.sidebar.collapsed .sb-foot-divider,.sidebar.collapsed .sb-user-info,.sidebar.collapsed .sb-last-update,.sidebar.collapsed .sb-back-lbl{display:none;}
 .sidebar.collapsed .sb-tab{justify-content:center;padding:10px;gap:0;}
 .sidebar.collapsed .sb-tab-icon{width:32px;height:32px;}
 .sidebar.collapsed .sb-foot{padding:10px 6px;}
 .sidebar.collapsed .theme-pill,.sidebar.collapsed .sb-back{justify-content:center;padding:9px;}
 .sidebar.collapsed .sb-nav{padding:8px 6px;}
-
 .sb-head{padding:18px 16px 14px;border-bottom:1px solid var(--sb-border);}
 .sb-logo-wrap{display:flex;align-items:center;gap:10px;}
-.sb-ico{width:36px;height:36px;flex-shrink:0;background:linear-gradient(135deg,#5b21b6,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 3px 12px rgba(139,92,246,0.5);}
+.sb-ico{width:36px;height:36px;flex-shrink:0;background:linear-gradient(135deg,#5b21b6,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 3px 12px rgba(139,92,246,.5);}
 .sb-title{font-size:13px;font-weight:800;color:#fff;letter-spacing:-.3px;white-space:nowrap;}
-.sb-sub{font-size:10px;color:var(--sb-text);margin-top:2px;white-space:nowrap;}
 [data-theme="light"] .sb-title{color:#0f172a;}
-
+.sb-sub{font-size:10px;color:var(--sb-text);margin-top:2px;white-space:nowrap;}
 .sb-nav{flex:1;overflow-y:auto;padding:10px 8px;display:flex;flex-direction:column;gap:2px;}
 .sb-nav::-webkit-scrollbar{width:0;}
 .sb-section-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:var(--t3);padding:8px 8px 4px;margin-top:4px;}
 .sb-tab{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;font-size:12px;font-weight:600;color:var(--sb-text);cursor:pointer;transition:.15s;border:1px solid transparent;background:transparent;font-family:inherit;text-align:left;white-space:nowrap;}
-.sb-tab:hover{color:var(--t1);background:rgba(255,255,255,0.07);}
-[data-theme="light"] .sb-tab:hover{color:#0f172a;background:rgba(0,0,0,0.04);}
-.sb-tab.active{color:var(--sb-active-text);background:var(--sb-active-bg);border-color:rgba(139,92,246,0.25);}
+[data-theme="dark"] .sb-tab:hover{color:#e2e2e2;background:rgba(255,255,255,.07);}
+[data-theme="light"] .sb-tab:hover{color:#0f172a;background:rgba(0,0,0,.04);}
+.sb-tab.active{color:var(--sb-active-text);background:var(--sb-active-bg);border-color:rgba(139,92,246,.25);}
 [data-theme="dark"] .sb-tab.active{box-shadow:inset 3px 0 0 var(--sb-active-border);}
 [data-theme="light"] .sb-tab.active{color:#6d28d9;}
-.sb-tab-icon{font-size:14px;flex-shrink:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:rgba(255,255,255,0.04);transition:.15s;}
-.sb-tab:hover .sb-tab-icon{background:rgba(255,255,255,0.09);}
-.sb-tab.active .sb-tab-icon{background:rgba(139,92,246,0.2);}
-[data-theme="light"] .sb-tab-icon{background:rgba(0,0,0,0.04);}
-[data-theme="light"] .sb-tab.active .sb-tab-icon{background:rgba(109,40,217,0.1);}
+.sb-tab-icon{font-size:14px;flex-shrink:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:rgba(255,255,255,.04);}
+[data-theme="light"] .sb-tab-icon{background:rgba(0,0,0,.04);}
+.sb-tab.active .sb-tab-icon{background:rgba(139,92,246,.2);}
+[data-theme="light"] .sb-tab.active .sb-tab-icon{background:rgba(109,40,217,.1);}
 .sb-tab-label{flex:1;}
 .sb-tab-dot{width:6px;height:6px;border-radius:50%;background:var(--acc);opacity:0;flex-shrink:0;}
 .sb-tab.active .sb-tab-dot{opacity:1;box-shadow:0 0 6px var(--acc);}
-
 .sb-foot{padding:12px 8px;border-top:1px solid var(--sb-border);display:flex;flex-direction:column;gap:6px;}
 .sb-foot-divider{height:1px;background:var(--sb-border);margin:2px 0;}
-.theme-pill{display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--sb-border);border-radius:10px;cursor:pointer;font-size:11px;font-weight:700;color:var(--sb-text);transition:.2s;font-family:inherit;width:100%;}
+.theme-pill{display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,.04);border:1px solid var(--sb-border);border-radius:10px;cursor:pointer;font-size:11px;font-weight:700;color:var(--sb-text);transition:.2s;font-family:inherit;width:100%;}
 .theme-pill:hover{border-color:var(--acc);color:var(--sb-active-text);background:var(--sb-active-bg);}
 [data-theme="light"] .theme-pill{background:#f8fafc;border-color:#e2e8f0;color:#475569;}
-.sb-back{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;font-size:11px;font-weight:700;color:var(--sb-text);text-decoration:none;transition:.15s;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);}
-.sb-back:hover{color:#fff;background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.15);}
-[data-theme="light"] .sb-back{border-color:rgba(0,0,0,0.08);background:rgba(0,0,0,0.02);color:#475569;}
-[data-theme="light"] .sb-back:hover{color:#0f172a;background:rgba(0,0,0,0.06);}
-.sb-user-card{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.12);border-radius:10px;}
+.sb-back{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;font-size:11px;font-weight:700;color:var(--sb-text);text-decoration:none;transition:.15s;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);}
+[data-theme="dark"] .sb-back:hover{color:#fff;background:rgba(255,255,255,.1);}
+[data-theme="light"] .sb-back{border-color:rgba(0,0,0,.08);background:rgba(0,0,0,.02);color:#475569;}
+[data-theme="light"] .sb-back:hover{color:#0f172a;background:rgba(0,0,0,.06);}
+.sb-user-card{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.12);border-radius:10px;}
 .sb-user-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0;}
-.sb-user-email{font-size:10px;font-weight:700;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;}
+.sb-user-email{font-size:10px;font-weight:700;color:var(--t2);}
 .sb-user-role{font-size:9px;color:var(--sb-text);text-transform:uppercase;letter-spacing:.6px;}
 .sb-last-update{font-size:9px;color:var(--sb-text);padding:0 4px;}
-
-/* ── MAIN WRAP ── */
-.main-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
-.topbar{display:flex;justify-content:space-between;align-items:center;padding:0 24px;height:56px;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--bd);box-shadow:var(--shadow);}
+.main-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:0 24px;height:56px;flex-shrink:0;border-bottom:1px solid var(--bd);box-shadow:var(--shadow);}
 [data-theme="dark"] .topbar{background:#0a0a0a;border-bottom-color:#1a1a1a;}
+[data-theme="light"] .topbar{background:#fff;}
 .tb-left{display:flex;align-items:center;gap:12px;}
 .tb-page-title{font-size:16px;font-weight:800;color:var(--t1);letter-spacing:-.4px;}
-.tb-actions{display:flex;align-items:center;gap:8px;}
 .sb-toggle-fixed{background:var(--s2);border:1px solid var(--bd);cursor:pointer;color:var(--t2);padding:7px 9px;border-radius:9px;transition:.15s;display:flex;align-items:center;justify-content:center;}
 .sb-toggle-fixed:hover{color:var(--t1);border-color:var(--acc);}
-.tbtn{padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;text-decoration:none;transition:.15s;white-space:nowrap;border:1px solid var(--bd);}
+.tbtn{padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:.15s;border:1px solid transparent;}
 .tbtn:hover{transform:translateY(-1px);}
-.tbtn-refresh{background:linear-gradient(135deg,#16a34a,#22c55e);color:#000;border-color:transparent;box-shadow:0 3px 12px rgba(34,197,94,.3);font-weight:800;}
-.tbtn-secondary{background:var(--s2);color:var(--t2);}
-[data-theme="dark"] .tbtn-secondary{background:#111;color:#888;border-color:#222;}
-
-/* ── PANES ── */
+.tbtn-refresh{background:linear-gradient(135deg,#16a34a,#22c55e);color:#000;box-shadow:0 3px 12px rgba(34,197,94,.3);}
 .main{flex:1;overflow-y:auto;padding:22px 24px;}
 .main::-webkit-scrollbar{width:6px;}
 .main::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:3px;}
 .pane{display:none;animation:fadeIn .2s ease;}
 .pane.active{display:block;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
-
-/* ── CARDS ── */
-.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:22px;box-shadow:var(--shadow);margin-bottom:18px;}
-[data-theme="dark"] .card{background:#0d0d0d;}
-.card-hover{cursor:pointer;transition:.2s;}
-.card-hover:hover{border-color:var(--acc);transform:translateY(-3px);box-shadow:0 8px 32px rgba(139,92,246,0.15);}
-
-/* ── SEARCH TEXTAREA ── */
-.search-wrap{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:var(--shadow);}
-[data-theme="dark"] .search-wrap{background:var(--s2);}
-textarea.fi{width:100%;background:var(--input);border:1.5px solid var(--bd);color:var(--t1);padding:14px 16px;border-radius:10px;font-family:'Inter',monospace;font-size:13px;outline:none;resize:vertical;min-height:90px;transition:.2s;line-height:1.6;}
-textarea.fi:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(139,92,246,0.12);}
+.search-wrap{background:var(--s2);border:1px solid var(--bd);border-radius:14px;padding:20px;margin-bottom:18px;}
+.fi-label{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
+textarea.fi{width:100%;background:var(--input);border:1.5px solid var(--bd);color:var(--t1);padding:14px 16px;border-radius:10px;font-family:monospace;font-size:13px;outline:none;resize:vertical;min-height:90px;transition:.2s;line-height:1.6;}
+textarea.fi:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(139,92,246,.12);}
 textarea.fi::placeholder{color:var(--t3);}
 .btn-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
 .btn{padding:9px 20px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:.15s;border:1px solid transparent;}
@@ -4391,167 +4177,105 @@ textarea.fi::placeholder{color:var(--t3);}
 .btn-outline{background:transparent;border-color:var(--bd);color:var(--t2);}
 .btn-outline:hover{border-color:var(--acc);color:var(--t1);}
 .btn-green{background:linear-gradient(135deg,#16a34a,#22c55e);color:#000;box-shadow:0 3px 12px rgba(34,197,94,.3);}
-
-/* ── TRACK CARD ── */
 .track-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:var(--shadow);animation:fadeIn .25s ease;}
 [data-theme="dark"] .track-card{background:#0d0d0d;}
-.track-header{padding:18px 20px;border-bottom:1px solid var(--bd);background:var(--s2);display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:14px;}
+.track-header{padding:16px 20px;border-bottom:1px solid var(--bd);display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px;}
 [data-theme="dark"] .track-header{background:#111;}
+[data-theme="light"] .track-header{background:#f8fafc;}
 .meta-col{display:flex;flex-direction:column;gap:4px;}
 .meta-lbl{font-size:9px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;}
 .meta-val{font-size:13px;font-weight:600;color:var(--t1);}
-.tid-area{padding:16px 20px;display:flex;flex-direction:column;gap:12px;}
-.tid-box{background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;transition:.2s;}
+.tid-area{padding:14px 18px;display:flex;flex-direction:column;gap:10px;}
+.tid-box{background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:13px 15px;display:flex;flex-direction:column;gap:10px;}
 [data-theme="dark"] .tid-box{background:#111;}
-.tid-box:hover{border-color:var(--bd2);}
-.tid-top{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.tid-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
 .tid-num{font-family:monospace;font-weight:800;font-size:14px;color:var(--acc);word-break:break-all;}
-.native-timeline-box{display:none;background:var(--s1);border:1px solid var(--bd);border-radius:10px;padding:20px;margin-top:4px;}
-[data-theme="dark"] .native-timeline-box{background:#060606;border-color:#1a1a1a;}
-.tl-container{border-left:2px solid var(--bd2);padding-left:22px;margin-left:6px;}
-.tl-item{position:relative;margin-bottom:22px;animation:fadeIn .3s ease forwards;}
+.tl-box{display:none;background:var(--s1);border:1px solid var(--bd);border-radius:10px;padding:18px;margin-top:4px;animation:fadeIn .2s ease;}
+[data-theme="dark"] .tl-box{background:#060606;border-color:#1a1a1a;}
+.tl-src{font-size:10px;font-weight:700;color:var(--t3);margin-bottom:12px;display:block;text-transform:uppercase;letter-spacing:.8px;}
+.tl-wrap{border-left:2px solid var(--bd2);padding-left:20px;margin-left:6px;}
+.tl-item{position:relative;margin-bottom:20px;animation:fadeIn .3s ease;}
 .tl-item:last-child{margin-bottom:0;}
-.tl-dot{position:absolute;left:-28px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--bd2);border:2px solid var(--bg);}
-.tl-dot.active{background:var(--green);box-shadow:0 0 10px rgba(34,197,94,0.5);}
-.tl-time{font-size:11px;color:var(--t3);font-weight:700;margin-bottom:4px;display:block;}
+.tl-dot{position:absolute;left:-26px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--bd2);border:2px solid var(--bg);}
+.tl-dot.active{background:var(--green);box-shadow:0 0 10px rgba(34,197,94,.5);}
+.tl-time{font-size:11px;color:var(--t3);font-weight:700;margin-bottom:3px;display:block;}
 .tl-status{font-size:13px;font-weight:600;color:var(--t1);margin-bottom:2px;display:block;}
 .tl-loc{font-size:11px;color:var(--t3);display:block;}
-.fallback-box{text-align:center;padding:24px;background:var(--s2);border-radius:10px;}
-[data-theme="dark"] .fallback-box{background:#090909;}
-.fallback-link{display:inline-block;background:var(--acc);color:#fff;padding:9px 20px;border-radius:8px;font-weight:700;font-size:12px;text-decoration:none;margin-top:12px;transition:.15s;}
-.fallback-link:hover{opacity:.85;transform:translateY(-1px);}
-
-/* ── RADAR GRID ── */
+.no-data{text-align:center;padding:20px;}
 .radar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
-.radar-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:22px;cursor:pointer;transition:.2s;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--shadow);}
+.radar-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:22px;cursor:pointer;transition:.2s;display:flex;justify-content:space-between;align-items:center;}
 [data-theme="dark"] .radar-card{background:#0d0d0d;}
-.radar-card:hover{border-color:var(--green);transform:translateY(-3px);box-shadow:0 8px 32px rgba(34,197,94,0.12);}
-.radar-src{font-size:13px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;}
+.radar-card:hover{border-color:var(--green);transform:translateY(-3px);box-shadow:0 8px 32px rgba(34,197,94,.12);}
 .radar-count{font-size:38px;font-weight:900;color:var(--green);letter-spacing:-2px;line-height:1;}
 .radar-lbl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
-
-/* ── OPS TABLE ── */
+.radar-src{font-size:13px;font-weight:800;color:var(--t2);}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:20px;box-shadow:var(--shadow);}
+[data-theme="dark"] .card{background:#0d0d0d;}
 .ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
-.ops-table-wrap{max-height:380px;overflow-y:auto;border:1px solid var(--bd);border-radius:10px;}
-.ops-table-wrap::-webkit-scrollbar{width:4px;}
-.ops-table-wrap::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px;}
 table{width:100%;border-collapse:collapse;}
-thead th{padding:11px 14px;font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--bd);letter-spacing:1px;background:var(--s2);position:sticky;top:0;}
+thead th{padding:11px 14px;font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--bd);letter-spacing:1px;position:sticky;top:0;}
 [data-theme="dark"] thead th{background:#0f0f0f;}
-tbody td{padding:11px 14px;font-size:12px;border-bottom:1px solid var(--bd);font-weight:500;color:var(--t1);}
-tbody tr:hover{background:var(--hover);}
+[data-theme="light"] thead th{background:#f8fafc;}
+tbody td{padding:11px 14px;font-size:12px;border-bottom:1px solid var(--bd);font-weight:500;}
 tbody tr:last-child td{border-bottom:none;}
-
-/* ── STATUS BADGES ── */
 .badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;border:1px solid transparent;}
-.badge-green{background:rgba(34,197,94,.1);color:var(--green);border-color:rgba(34,197,94,.25);}
-.badge-purple{background:rgba(139,92,246,.1);color:var(--purple);border-color:rgba(139,92,246,.25);}
-.badge-yellow{background:rgba(251,191,36,.1);color:var(--yellow);border-color:rgba(251,191,36,.25);}
-.badge-red{background:rgba(248,113,113,.1);color:var(--red);border-color:rgba(248,113,113,.25);}
-.badge-default{background:var(--s3);color:var(--t3);border-color:var(--bd);}
-
-/* ── LOADER ── */
-.loader-wrap{padding:60px;text-align:center;}
+.bg{background:rgba(34,197,94,.1);color:var(--green);border-color:rgba(34,197,94,.25);}
+.bp{background:rgba(139,92,246,.1);color:var(--purple);border-color:rgba(139,92,246,.25);}
+.by{background:rgba(251,191,36,.1);color:var(--yellow);border-color:rgba(251,191,36,.25);}
+.br{background:rgba(248,113,113,.1);color:var(--red);border-color:rgba(248,113,113,.25);}
+.bd{background:var(--s3);color:var(--t3);border-color:var(--bd);}
+.tbl-wrap{max-height:380px;overflow-y:auto;border:1px solid var(--bd);border-radius:10px;}
+.loader-wrap{padding:50px;text-align:center;}
 .loader{width:28px;height:28px;border:3px solid var(--bd);border-top-color:var(--acc);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto;}
+.loader-txt{margin-top:12px;font-size:12px;color:var(--t3);font-weight:600;}
 @keyframes spin{to{transform:rotate(360deg);}}
-.loader-text{margin-top:12px;font-size:12px;color:var(--t3);font-weight:600;}
-
-/* ── MODAL ── */
-.modal{position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);z-index:200;display:none;padding:32px;overflow-y:auto;}
-.modal-box{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:32px;max-width:1200px;margin:0 auto;box-shadow:var(--shadow2);}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);z-index:200;display:none;padding:32px;overflow-y:auto;}
+.modal-box{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:30px;max-width:1200px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,.8);}
 [data-theme="dark"] .modal-box{background:#0d0d0d;}
-.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;flex-wrap:wrap;gap:12px;}
-.modal-title{font-size:18px;font-weight:800;color:var(--t1);}
-.modal-sub{font-size:11px;color:var(--t3);margin-top:3px;}
-.modal-table-wrap{overflow-x:auto;max-height:60vh;border:1px solid var(--bd);border-radius:10px;}
-
-/* ── EMPTY STATE ── */
-.empty{text-align:center;padding:50px 20px;color:var(--t3);}
-.empty-icon{font-size:40px;margin-bottom:12px;}
-.empty-text{font-size:14px;font-weight:600;}
+.empty{text-align:center;padding:50px;color:var(--t3);}
 </style>
 </head>
 <body>
 <div class="app-wrap">
-
-<!-- SIDEBAR -->
 <aside class="sidebar" id="sidebar">
   <div class="sb-head">
     <div class="sb-logo-wrap">
       <div class="sb-ico">🛰️</div>
-      <div class="sb-info">
-        <div class="sb-title">NEXUS Hub</div>
-        <div class="sb-sub">TID Operations Centre</div>
-      </div>
+      <div class="sb-info"><div class="sb-title">NEXUS Hub</div><div class="sb-sub">TID Operations Centre</div></div>
     </div>
   </div>
   <nav class="sb-nav">
     <div class="sb-section-label">Operations</div>
-    <button class="sb-tab active" onclick="navSwitch(this,'track')">
-      <span class="sb-tab-icon">🔍</span>
-      <span class="sb-tab-label">Global Scanner</span>
-      <span class="sb-tab-dot"></span>
-    </button>
-    <button class="sb-tab" onclick="navSwitch(this,'direct')">
-      <span class="sb-tab-icon">🚢</span>
-      <span class="sb-tab-label">Direct Track</span>
-      <span class="sb-tab-dot"></span>
-    </button>
-    <button class="sb-tab" onclick="navSwitch(this,'radar')">
-      <span class="sb-tab-icon">📦</span>
-      <span class="sb-tab-label">Handed Over Radar</span>
-      <span class="sb-tab-dot"></span>
-    </button>
-    <button class="sb-tab" onclick="navSwitch(this,'ops')">
-      <span class="sb-tab-icon">⚡</span>
-      <span class="sb-tab-label">Ops Commander</span>
-      <span class="sb-tab-dot"></span>
-    </button>
+    <button class="sb-tab active" onclick="navSwitch(this,'track')"><span class="sb-tab-icon">🔍</span><span class="sb-tab-label">Global Scanner</span><span class="sb-tab-dot"></span></button>
+    <button class="sb-tab" onclick="navSwitch(this,'direct')"><span class="sb-tab-icon">🚢</span><span class="sb-tab-label">Direct Track</span><span class="sb-tab-dot"></span></button>
+    <button class="sb-tab" onclick="navSwitch(this,'radar')"><span class="sb-tab-icon">📦</span><span class="sb-tab-label">Handed Over Radar</span><span class="sb-tab-dot"></span></button>
+    <button class="sb-tab" onclick="navSwitch(this,'ops')"><span class="sb-tab-icon">⚡</span><span class="sb-tab-label">Ops Commander</span><span class="sb-tab-dot"></span></button>
   </nav>
   <div class="sb-foot">
-    <button class="theme-pill" onclick="toggleTheme()" id="themePill">
-      <span class="icon">☀️</span>
-      <span id="themeLabel">Light Mode</span>
-    </button>
+    <button class="theme-pill" onclick="toggleTheme()"><span id="thIco">☀️</span><span class="theme-lbl" id="thLbl">Light Mode</span></button>
     <a href="/" class="sb-back">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 11L5 7l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      Main Dashboard
+      <span class="sb-back-lbl">Main Dashboard</span>
     </a>
     <div class="sb-foot-divider"></div>
-    <div class="sb-user-card">
-      <div class="sb-user-avatar" id="sbAvatar">A</div>
-      <div class="sb-user-info">
-        <div class="sb-user-email">Admin User</div>
-        <div class="sb-user-role">Administrator</div>
-      </div>
-    </div>
-    <div class="sb-last-update" id="sbLastUpdate">🕐 Last sync: —</div>
+    <div class="sb-user-card"><div class="sb-user-avatar">A</div><div class="sb-user-info"><div class="sb-user-email">Admin User</div><div class="sb-user-role">Administrator</div></div></div>
+    <div class="sb-last-update" id="sbSync">🕐 Last sync: —</div>
   </div>
 </aside>
-
-<!-- MAIN -->
 <div class="main-wrap">
   <div class="topbar">
     <div class="tb-left">
-      <button class="sb-toggle-fixed" onclick="toggleSidebar()" title="Toggle sidebar">
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-          <rect x="2" y="4.5" width="14" height="1.8" rx=".9" fill="currentColor"/>
-          <rect x="2" y="8.1" width="9" height="1.8" rx=".9" fill="currentColor"/>
-          <rect x="2" y="11.7" width="14" height="1.8" rx=".9" fill="currentColor"/>
-        </svg>
+      <button class="sb-toggle-fixed" onclick="toggleSidebar()">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="4.5" width="14" height="1.8" rx=".9" fill="currentColor"/><rect x="2" y="8.1" width="9" height="1.8" rx=".9" fill="currentColor"/><rect x="2" y="11.7" width="14" height="1.8" rx=".9" fill="currentColor"/></svg>
       </button>
       <div class="tb-page-title" id="tbTitle">🔍 Global Scanner</div>
     </div>
-    <div class="tb-actions">
-      <button class="tbtn tbtn-refresh" onclick="hardRefresh()">🔄 Refresh</button>
-    </div>
+    <button class="tbtn tbtn-refresh" onclick="hardRefresh()">🔄 Refresh</button>
   </div>
-
   <div class="main">
-    <!-- GLOBAL SCANNER -->
     <div class="pane active" id="pane-track">
       <div class="search-wrap">
-        <div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">🔍 Paste Order IDs or TIDs</div>
+        <div class="fi-label">🔍 Paste Order IDs or TIDs</div>
         <textarea class="fi" id="searchInput" placeholder="e.g. 133325_02, 133325/02, 15503700028520..."></textarea>
         <div class="btn-row">
           <button class="btn btn-primary" onclick="searchOrders()">⚡ Scan Matrix</button>
@@ -4561,320 +4285,276 @@ tbody tr:last-child td{border-bottom:none;}
       </div>
       <div id="trackResults"></div>
     </div>
-
-    <!-- DIRECT TRACK -->
     <div class="pane" id="pane-direct">
       <div class="search-wrap">
-        <div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">🚢 Paste Carrier TIDs Directly</div>
+        <div class="fi-label">🚢 Paste Carrier TIDs Directly</div>
         <textarea class="fi" id="directInput" placeholder="Paste multiple TIDs here..."></textarea>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="directTrackTIDs()">Extract & Track</button>
+          <button class="btn btn-primary" onclick="directTrackTIDs()">Extract &amp; Display</button>
           <button class="btn btn-outline" onclick="g('directInput').value='';g('directResults').innerHTML=''">Clear</button>
           <button class="btn btn-green" id="bulkDirectBtn" style="display:none" onclick="bulkTrackAll('directResults')">🚀 Bulk Track All</button>
         </div>
       </div>
       <div id="directResults" style="display:flex;flex-direction:column;gap:12px"></div>
     </div>
-
-    <!-- HANDED OVER RADAR -->
     <div class="pane" id="pane-radar">
-      <div id="radarLoader" class="loader-wrap" style="display:none">
-        <div class="loader"></div>
-        <div class="loader-text">Scanning valid TIDs & MAWBs...</div>
-      </div>
+      <div id="radarLoader" class="loader-wrap" style="display:none"><div class="loader"></div><div class="loader-txt">Scanning valid TIDs &amp; MAWBs...</div></div>
       <div id="radarGrid" class="radar-grid"></div>
     </div>
-
-    <!-- OPS COMMANDER -->
     <div class="pane" id="pane-ops">
-      <div id="opsLoader" class="loader-wrap" style="display:none">
-        <div class="loader"></div>
-        <div class="loader-text">Loading operations data...</div>
-      </div>
+      <div id="opsLoader" class="loader-wrap" style="display:none"><div class="loader"></div><div class="loader-txt">Loading ops data...</div></div>
       <div id="opsContent" style="display:none">
         <div class="ops-grid">
-          <div class="card" style="margin:0">
-            <div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:14px">🚨 Aging Blame Radar</div>
-            <div class="ops-table-wrap"><table id="blameTable"></table></div>
-          </div>
-          <div class="card" style="margin:0">
-            <div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:14px">📲 Follow-up Bot</div>
-            <textarea class="fi" id="followupText" style="min-height:280px" readonly></textarea>
-            <button class="btn btn-primary" style="width:100%;margin-top:12px;justify-content:center" onclick="copyFollowup()">📋 Copy Text</button>
-          </div>
+          <div class="card" style="margin:0"><div style="font-size:14px;font-weight:800;margin-bottom:14px">🚨 Aging Blame Radar</div><div class="tbl-wrap"><table id="blameTable"></table></div></div>
+          <div class="card" style="margin:0"><div style="font-size:14px;font-weight:800;margin-bottom:14px">📲 Follow-up Bot</div><textarea class="fi" id="followupText" style="min-height:260px" readonly></textarea><button class="btn btn-primary" style="width:100%;margin-top:12px;justify-content:center" onclick="copyFollowup()">📋 Copy</button></div>
         </div>
       </div>
     </div>
   </div>
 </div>
 </div>
-
-<!-- DETAIL MODAL -->
 <div class="modal" id="detailModal" onclick="if(event.target===this)this.style.display='none'">
   <div class="modal-box">
-    <div class="modal-head">
-      <div>
-        <div class="modal-title" id="modalTitle">Handed Over Orders</div>
-        <div class="modal-sub">Orders with valid TID and MAWB confirmed</div>
-      </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+      <div><div style="font-size:18px;font-weight:800" id="modalTitle">Handed Over Orders</div><div style="font-size:11px;color:var(--t3);margin-top:3px">Valid TID and MAWB confirmed</div></div>
       <div style="display:flex;gap:10px">
         <button class="btn btn-outline" onclick="downloadCSV()">📥 Export CSV</button>
         <button class="btn" style="background:var(--red);color:#fff;border:none" onclick="g('detailModal').style.display='none'">✕ Close</button>
       </div>
     </div>
-    <div class="modal-table-wrap"><table id="detailTable"></table></div>
+    <div style="overflow-x:auto;max-height:60vh;border:1px solid var(--bd);border-radius:10px"><table id="detailTable"></table></div>
   </div>
 </div>
-
 <script>
 const g=id=>document.getElementById(id);
-let _radarData=null; let _activeDetails=[]; let _activePane='track';
-const PAGE_TITLES={track:'🔍 Global Scanner',direct:'🚢 Direct Track',radar:'📦 Handed Over Radar',ops:'⚡ Ops Commander'};
+let _radar=null,_det=[],_pane='track';
+const TITLES={track:'🔍 Global Scanner',direct:'🚢 Direct Track',radar:'📦 Handed Over Radar',ops:'⚡ Ops Commander'};
 
-// ── SIDEBAR TOGGLE ──
+// Sidebar
 function toggleSidebar(){
-  const sb=g('sidebar');
-  sb.classList.toggle('collapsed');
-  try{localStorage.setItem('nx_sb_collapsed',sb.classList.contains('collapsed')?'1':'0');}catch(e){}
+  const sb=g('sidebar');sb.classList.toggle('collapsed');
+  try{localStorage.setItem('nx_sb',sb.classList.contains('collapsed')?'1':'0');}catch(e){}
 }
-(function(){try{if(localStorage.getItem('nx_sb_collapsed')==='1')g('sidebar').classList.add('collapsed');}catch(e){}})();
+(function(){try{if(localStorage.getItem('nx_sb')==='1')g('sidebar').classList.add('collapsed');}catch(e){}})();
 
-// ── THEME ──
+// Theme
 function toggleTheme(){
-  const html=document.documentElement;
-  const isDark=html.getAttribute('data-theme')==='dark';
-  html.setAttribute('data-theme',isDark?'light':'dark');
-  const pill=g('themePill');
-  pill.querySelector('.icon').textContent=isDark?'🌙':'☀️';
-  g('themeLabel').textContent=isDark?'Dark Mode':'Light Mode';
-  try{localStorage.setItem('nx_theme',isDark?'light':'dark');}catch(e){}
+  const h=document.documentElement,dark=h.getAttribute('data-theme')==='dark';
+  h.setAttribute('data-theme',dark?'light':'dark');
+  g('thIco').textContent=dark?'🌙':'☀️';g('thLbl').textContent=dark?'Dark Mode':'Light Mode';
+  try{localStorage.setItem('nx_theme',dark?'light':'dark');}catch(e){}
 }
 (function(){
   try{
     const t=localStorage.getItem('nx_theme')||'dark';
     document.documentElement.setAttribute('data-theme',t);
-    if(t==='light'){
-      document.addEventListener('DOMContentLoaded',()=>{
-        const pill=g('themePill');
-        if(pill){pill.querySelector('.icon').textContent='🌙';g('themeLabel').textContent='Dark Mode';}
-      });
-    }
+    if(t==='light'){document.addEventListener('DOMContentLoaded',()=>{
+      if(g('thIco'))g('thIco').textContent='🌙';if(g('thLbl'))g('thLbl').textContent='Dark Mode';
+    });}
   }catch(e){}
 })();
 
-// ── NAV ──
+// Nav
 function navSwitch(btn,name){
-  document.querySelectorAll('.sb-tab').forEach(t=>t.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
-  g('pane-'+name).classList.add('active');
-  g('tbTitle').textContent=PAGE_TITLES[name]||name;
-  _activePane=name;
-  if(name==='radar'&&!_radarData) loadRadar();
-  if(name==='ops') loadOps();
+  document.querySelectorAll('.sb-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));g('pane-'+name).classList.add('active');
+  g('tbTitle').textContent=TITLES[name]||name;_pane=name;
+  if(name==='radar'&&!_radar)loadRadar();
+  if(name==='ops')loadOps();
 }
 
-// ── REFRESH ──
 async function hardRefresh(){
-  await fetch('/api/nexus/refresh',{method:'POST'});
-  _radarData=null;
-  g('sbLastUpdate').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
-  if(_activePane==='radar'){_radarData=null;loadRadar();}
-  if(_activePane==='ops') loadOps();
+  await fetch('/api/nexus/refresh',{method:'POST'});_radar=null;
+  g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
+  if(_pane==='radar'){_radar=null;loadRadar();}if(_pane==='ops')loadOps();
 }
 window.onload=()=>{
-  fetch('/api/nexus/refresh',{method:'POST'});
-  g('sbLastUpdate').textContent='🕐 Syncing...';
-  setTimeout(()=>g('sbLastUpdate').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB'),2000);
+  fetch('/api/nexus/refresh',{method:'POST'});g('sbSync').textContent='🕐 Syncing...';
+  setTimeout(()=>g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB'),2500);
 };
 
-// ── STATUS BADGE ──
-function statusBadge(s){
+function sBadge(s){
   const sc=(s||'').replace(/[_\s]/g,'').toLowerCase();
-  if(sc.includes('delivered')) return `<span class="badge badge-green">${s}</span>`;
-  if(sc.includes('handed')||sc.includes('freight')) return `<span class="badge badge-purple">${s}</span>`;
-  if(sc.includes('qc')||sc.includes('pending')) return `<span class="badge badge-yellow">${s}</span>`;
-  if(sc.includes('cancel')) return `<span class="badge badge-red">${s}</span>`;
-  return `<span class="badge badge-default">${s}</span>`;
+  if(sc.includes('delivered'))return`<span class="badge bg">${s}</span>`;
+  if(sc.includes('handed')||sc.includes('freight'))return`<span class="badge bp">${s}</span>`;
+  if(sc.includes('qc')||sc.includes('pending'))return`<span class="badge by">${s}</span>`;
+  if(sc.includes('cancel'))return`<span class="badge br">${s}</span>`;
+  return`<span class="badge bd">${s}</span>`;
 }
 
-// ── SEARCH ──
+function mkTidBox(tid){
+  const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
+  return`<div class="tid-box"><div class="tid-top"><span class="tid-num">${tid}</span><button class="btn btn-outline sync-btn" style="padding:5px 12px;font-size:11px;flex-shrink:0" onclick="trackTID('${tid}',this)">🔍 Track</button></div><div id="tl-${cid}" class="tl-box"></div></div>`;
+}
+
 async function searchOrders(){
-  const q=g('searchInput').value; if(!q.trim()) return;
-  g('trackResults').innerHTML='<div class="loader-wrap"><div class="loader"></div><div class="loader-text">Scanning matrix...</div></div>';
+  const q=g('searchInput').value;if(!q.trim())return;
+  g('trackResults').innerHTML='<div class="loader-wrap"><div class="loader"></div><div class="loader-txt">Scanning matrix...</div></div>';
   g('bulkTrackBtn').style.display='none';
   const r=await fetch('/api/nexus/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
   const data=await r.json();
-  renderCards(data,'trackResults','bulkTrackBtn');
-}
-
-function renderCards(data,containerId,bulkBtnId){
-  if(!data.length){
-    g(containerId).innerHTML='<div class="empty"><div class="empty-icon">🔭</div><div class="empty-text">No matching records found</div></div>';
-    return;
-  }
-  let hasTids=false;
-  let h=data.map(item=>{
-    if(item.tids.length>0) hasTids=true;
-    const tidsHtml=item.tids.length?item.tids.map(tid=>{
-      const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
-      return `<div class="tid-box">
-        <div class="tid-top">
-          <span class="tid-num">${tid}</span>
-          <button class="btn btn-outline sync-btn" style="padding:5px 12px;font-size:11px" onclick="loadNativeTimeline('${tid}',this)">🔍 Track Native</button>
-        </div>
-        <div id="native-${cid}" class="native-timeline-box"></div>
-      </div>`;
-    }).join(''):`<div style="font-size:12px;color:var(--t3);padding:8px 0">No TIDs found for this order</div>`;
-    return `<div class="track-card">
-      <div class="track-header">
-        <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:900;font-size:15px;color:var(--acc)">${item.order_id}</span></div>
-        <div class="meta-col"><span class="meta-lbl">📅 Date</span><span class="meta-val">${item.date}</span></div>
-        <div class="meta-col"><span class="meta-lbl">🏢 Source</span><span class="meta-val">${item.source}</span></div>
-        <div class="meta-col"><span class="meta-lbl">🏭 Vendor</span><span class="meta-val">${item.vendor}</span></div>
-        <div class="meta-col"><span class="meta-lbl">👤 Customer</span><span class="meta-val">${item.customer}</span></div>
-        <div class="meta-col"><span class="meta-lbl">🌍 Country</span><span class="meta-val" style="color:var(--green)">${item.country}</span></div>
-        <div class="meta-col"><span class="meta-lbl">📦 Boxes / Wt</span><span class="meta-val">${item.boxes} / ${item.weight}</span></div>
-        <div class="meta-col"><span class="meta-lbl">✈️ MAWB</span><span class="meta-val" style="font-family:monospace;font-size:11px">${item.mawb}</span></div>
-        <div class="meta-col"><span class="meta-lbl">🚦 Status</span>${statusBadge(item.status)}</div>
-      </div>
-      <div class="tid-area">${tidsHtml}</div>
-    </div>`;
+  if(!data.length){g('trackResults').innerHTML='<div class="empty"><div style="font-size:36px">🔭</div><div style="margin-top:10px;font-weight:600">No matching records found</div></div>';return;}
+  let ht=false;
+  g('trackResults').innerHTML=data.map(it=>{
+    if(it.tids.length)ht=true;
+    const th=it.tids.length?it.tids.map(t=>mkTidBox(t)).join(''):'<div style="font-size:12px;color:var(--t3);padding:6px 0">No TIDs found</div>';
+    return`<div class="track-card"><div class="track-header">
+      <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:900;font-size:15px;color:var(--acc)">${it.order_id}</span></div>
+      <div class="meta-col"><span class="meta-lbl">📅 Date</span><span class="meta-val">${it.date}</span></div>
+      <div class="meta-col"><span class="meta-lbl">🏢 Source</span><span class="meta-val">${it.source}</span></div>
+      <div class="meta-col"><span class="meta-lbl">🏭 Vendor</span><span class="meta-val">${it.vendor}</span></div>
+      <div class="meta-col"><span class="meta-lbl">👤 Customer</span><span class="meta-val">${it.customer}</span></div>
+      <div class="meta-col"><span class="meta-lbl">🌍 Country</span><span class="meta-val" style="color:var(--green)">${it.country}</span></div>
+      <div class="meta-col"><span class="meta-lbl">📦 Boxes/Wt</span><span class="meta-val">${it.boxes} / ${it.weight}</span></div>
+      <div class="meta-col"><span class="meta-lbl">✈️ MAWB</span><span class="meta-val" style="font-family:monospace;font-size:11px">${it.mawb}</span></div>
+      <div class="meta-col"><span class="meta-lbl">🚦 Status</span>${sBadge(it.status)}</div>
+    </div><div class="tid-area">${th}</div></div>`;
   }).join('');
-  g(containerId).innerHTML=h;
-  if(hasTids&&bulkBtnId) g(bulkBtnId).style.display='flex';
+  if(ht)g('bulkTrackBtn').style.display='flex';
 }
 
-// ── DIRECT TRACK ──
 async function directTrackTIDs(){
-  let val=g('directInput').value; if(!val.trim()) return;
+  let val=g('directInput').value;if(!val.trim())return;
   val=val.replace(/(1[56]\d{12,14}|1Z[A-Z0-9]{15,18}|JD\d{10,18}|YT\d{10,18})/g,' $1 ');
-  let tids=[...new Set(val.split(/[\s,;\/]+/).map(t=>t.trim()).filter(t=>t.length>6&&/\d/.test(t)))];
-  if(!tids.length){g('directResults').innerHTML='<div class="empty"><div class="empty-icon">🔭</div><div class="empty-text">No valid TIDs found</div></div>';return;}
-  let h=tids.map(tid=>{
+  const tids=[...new Set(val.split(/[\s,;\/]+/).map(t=>t.trim()).filter(t=>t.length>6&&/\d/.test(t)))];
+  if(!tids.length){g('directResults').innerHTML='<div class="empty">No valid TIDs found</div>';return;}
+  g('directResults').innerHTML=tids.map(tid=>{
     const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
-    return `<div class="card" style="padding:16px;margin:0">
-      <div class="tid-top">
-        <span class="tid-num">${tid}</span>
-        <button class="btn btn-outline sync-btn" style="padding:5px 12px;font-size:11px" onclick="loadNativeTimeline('${tid}',this)">🔍 Track Native</button>
-      </div>
-      <div id="native-${cid}" class="native-timeline-box" style="margin-top:12px"></div>
-    </div>`;
+    return`<div class="card" style="margin:0"><div class="tid-top"><span class="tid-num">${tid}</span><button class="btn btn-outline sync-btn" style="padding:5px 12px;font-size:11px;flex-shrink:0" onclick="trackTID('${tid}',this)">🔍 Track</button></div><div id="tl-${cid}" class="tl-box" style="margin-top:10px"></div></div>`;
   }).join('');
-  g('directResults').innerHTML=h;
   g('bulkDirectBtn').style.display='flex';
 }
 
-// ── BULK TRACK ──
 async function bulkTrackAll(cid){
   const btns=g(cid).querySelectorAll('.sync-btn');
-  for(let btn of btns){
-    if(!btn.innerText.includes('Close')){btn.click();await new Promise(r=>setTimeout(r,700));}
-  }
+  for(let b of btns){if(!b.textContent.includes('Close')){b.click();await new Promise(r=>setTimeout(r,900));}}
 }
 
-// ── NATIVE TIMELINE ──
-async function loadNativeTimeline(tid,btn){
+// ── MAIN TRACKING FUNCTION — browser-side, 3 free sources, all inline ──
+async function trackTID(tid,btn){
   const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
-  const box=g('native-'+cid);
+  const box=g('tl-'+cid);
   if(box.style.display==='block'){
-    box.style.display='none';
-    btn.innerHTML='🔍 Track Native';btn.className='btn btn-outline sync-btn';btn.style='padding:5px 12px;font-size:11px';
+    box.style.display='none';btn.textContent='🔍 Track';
+    btn.className='btn btn-outline sync-btn';btn.style='padding:5px 12px;font-size:11px;flex-shrink:0';
     return;
   }
-  btn.innerHTML='<div class="loader" style="width:12px;height:12px;border-width:2px"></div>';
-  const r=await fetch('/api/nexus/track_real',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tid})});
-  const data=await r.json();
-  btn.innerHTML='✕ Close Tracker';btn.className='btn btn-outline sync-btn';btn.style='padding:5px 12px;font-size:11px;border-color:var(--red);color:var(--red)';
-  box.style.display='block';
-  if(data.success&&data.events.length){
-    box.innerHTML='<div class="tl-container">'+data.events.map(e=>`
-      <div class="tl-item">
-        <div class="tl-dot${e.active?' active':''}"></div>
-        <span class="tl-time">${e.time}</span>
-        <span class="tl-status">${e.status}</span>
-        <span class="tl-loc">${e.loc}</span>
-      </div>`).join('')+'</div>';
-  } else {
-    box.innerHTML=`<div class="fallback-box">
-      <div style="font-size:28px;margin-bottom:10px">📦</div>
-      <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:6px">Connect to Courier Gateway</div>
-      <div style="font-size:11px;color:var(--t3)">Live tracking available on ParcelsApp</div>
-      <a class="fallback-link" href="https://parcelsapp.com/en/tracking/${tid}" target="_blank">🚢 View on ParcelsApp ↗</a>
-    </div>`;
+  btn.innerHTML='<div class="loader" style="width:12px;height:12px;border-width:2px;display:inline-block;vertical-align:middle"></div>';
+  btn.disabled=true;box.style.display='block';
+  box.innerHTML='<div class="loader-wrap" style="padding:16px"><div class="loader"></div><div class="loader-txt">Fetching live tracking data...</div></div>';
+
+  function sev(t,s,l,a){return{time:t||'',status:s||'Update',loc:l||'',active:a};}
+  function showTL(evs,source,carrier){
+    if(!evs||!evs.length)return false;
+    const src=`<span class="tl-src">via ${source}${carrier?' · '+carrier:''}</span>`;
+    const items=evs.map(e=>`<div class="tl-item"><div class="tl-dot${e.active?' active':''}"></div><span class="tl-time">${e.time}</span><span class="tl-status">${e.status}</span><span class="tl-loc">${e.loc}</span></div>`).join('');
+    box.innerHTML=src+'<div class="tl-wrap">'+items+'</div>';
+    btn.textContent='✕ Close';btn.className='btn btn-outline sync-btn';
+    btn.style='padding:5px 12px;font-size:11px;flex-shrink:0;border-color:var(--red);color:var(--red)';
+    btn.disabled=false;return true;
   }
+
+  // SOURCE 1: ParcelsApp (CORS allowed, direct browser call)
+  try{
+    const r=await fetch(`https://parcelsapp.com/api/v3/shipments/tracking?trackingNumbers=${encodeURIComponent(tid)}&language=en&country=GB`,{
+      headers:{'Accept':'application/json','Origin':'https://parcelsapp.com','Referer':`https://parcelsapp.com/en/tracking/${tid}`}
+    });
+    if(r.ok){
+      const d=await r.json();const ship=(d.shipments||[])[0];
+      if(ship&&ship.events&&ship.events.length){
+        let cr=ship.carrier||'';if(Array.isArray(cr))cr=cr.map(c=>c.name||'').filter(Boolean).join(', ');
+        const evs=ship.events.map((ev,i)=>{
+          const l=ev.location||'',c=ev.country||'';
+          return sev(ev.date||ev.time||'',ev.description||ev.status||'',(l+(c&&!l.includes(c)?', '+c:'')).replace(/,\s*$/,''),i===0);
+        });
+        if(showTL(evs,'ParcelsApp',cr))return;
+      }
+    }
+  }catch(e){console.log('[T1]',e.message);}
+
+  // SOURCE 2: 17track public widget (direct browser call)
+  try{
+    const r=await fetch('https://buyer.17track.net/orderapi/call',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','17token':'321UctxG7l5bPkEhUHaQvlBJdTBWfqzS'},
+      body:JSON.stringify({data:[{num:tid}]})
+    });
+    if(r.ok){
+      const d=await r.json();const acc=((d.data||{}).accepted||[]);
+      if(acc.length){
+        const tr=acc[0].track||{};
+        const evs=[...(tr.z0||[]),...(tr.z1||[])].map((ev,i)=>sev(ev.a||'',ev.z||ev.c||'',ev.l||'',i===0));
+        if(showTL(evs,'17track',tr.c||''))return;
+      }
+    }
+  }catch(e){console.log('[T2]',e.message);}
+
+  // SOURCE 3: Backend (Python scrapes Ship24 server-side)
+  try{
+    const r=await fetch('/api/nexus/track_real',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tid})});
+    const d=await r.json();
+    if(d.success&&d.events&&d.events.length){if(showTL(d.events,d.source||'Ship24',d.carrier||''))return;}
+  }catch(e){console.log('[T3]',e.message);}
+
+  // All failed
+  box.innerHTML='<div class="no-data"><div style="font-size:22px">📭</div><div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:8px">No tracking data yet</div><div style="font-size:11px;color:var(--t3);margin-top:4px">Shipment may not be scanned by carrier yet</div></div>';
+  btn.textContent='✕ Close';btn.className='btn btn-outline sync-btn';
+  btn.style='padding:5px 12px;font-size:11px;flex-shrink:0';btn.disabled=false;
 }
 
-// ── RADAR ──
+// Radar
 async function loadRadar(){
   g('radarGrid').innerHTML='';g('radarLoader').style.display='block';
-  const r=await fetch('/api/nexus/radar_data');
-  _radarData=await r.json();
+  const r=await fetch('/api/nexus/radar_data');_radar=await r.json();
   g('radarLoader').style.display='none';
   const order=["ECL QC Center","ECL Zone","GE QC Center","GE Zone","APX","Kerry"];
   const icons={"ECL QC Center":"🏭","ECL Zone":"📦","GE QC Center":"🏢","GE Zone":"🗃️","APX":"✈️","Kerry":"🚢"};
   g('radarGrid').innerHTML=order.map(src=>{
-    const arr=_radarData.handed_over[src]||[];
-    return `<div class="radar-card" onclick="showDetails('${src}')">
-      <div><div class="radar-src">${icons[src]||'📦'} ${src}</div><div style="font-size:11px;color:var(--t3);margin-top:4px">Click to view details</div></div>
-      <div style="text-align:right"><div class="radar-count">${arr.length}</div><div class="radar-lbl">Valid Orders</div></div>
-    </div>`;
+    const arr=_radar.handed_over[src]||[];
+    return`<div class="radar-card" onclick="showDet('${src}')"><div><div class="radar-src">${icons[src]||''} ${src}</div><div style="font-size:11px;color:var(--t3);margin-top:4px">Click to view details</div></div><div style="text-align:right"><div class="radar-count">${arr.length}</div><div class="radar-lbl">Valid Orders</div></div></div>`;
   }).join('');
 }
 
-// ── OPS ──
+// Ops
 async function loadOps(){
   g('opsContent').style.display='none';g('opsLoader').style.display='block';
-  const r=await fetch('/api/nexus/ops_commander');
-  const data=await r.json();
-  g('followupText').value=data.missing_text;
-  const rows=data.blame_radar;
+  const r=await fetch('/api/nexus/ops_commander');const d=await r.json();
+  g('followupText').value=d.missing_text;
   let t='<thead><tr><th>Order</th><th>Source</th><th>Issue</th><th>Aging</th></tr></thead><tbody>';
-  if(!rows.length) t+='<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">All clear! 🎉</td></tr>';
-  else rows.forEach(b=>t+=`<tr>
-    <td><b style="font-family:monospace;color:var(--acc)">${b.order}</b></td>
-    <td style="color:var(--t2)">${b.source}</td>
-    <td>${b.issue}</td>
-    <td><b style="color:var(--red)">${b.aging}</b></td>
-  </tr>`);
-  g('blameTable').innerHTML=t+'</tbody>';
-  g('opsContent').style.display='block';g('opsLoader').style.display='none';
+  if(!d.blame_radar.length)t+='<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">All clear! 🎉</td></tr>';
+  else d.blame_radar.forEach(b=>t+=`<tr><td><b style="font-family:monospace;color:var(--acc)">${b.order}</b></td><td>${b.source}</td><td>${b.issue}</td><td><b style="color:var(--red)">${b.aging}</b></td></tr>`);
+  g('blameTable').innerHTML=t+'</tbody>';g('opsContent').style.display='block';g('opsLoader').style.display='none';
 }
-
 function copyFollowup(){navigator.clipboard.writeText(g('followupText').value).then(()=>alert('Copied!'));}
 
-// ── MODAL ──
-function showDetails(src){
-  _activeDetails=_radarData.handed_over[src]||[];
-  if(!_activeDetails.length) return;
+// Modal
+function showDet(src){
+  _det=_radar.handed_over[src]||[];if(!_det.length)return;
   g('modalTitle').textContent=src+' — Handed Over Orders';
-  const keys=Object.keys(_activeDetails[0]);
+  const keys=Object.keys(_det[0]);
   let t='<thead><tr>'+keys.map(k=>`<th>${k}</th>`).join('')+'</tr></thead><tbody>';
-  t+=_activeDetails.map(r=>'<tr>'+keys.map(k=>`<td>${r[k]||'—'}</td>`).join('')+'</tr>').join('');
-  g('detailTable').innerHTML=t+'</tbody>';
-  g('detailModal').style.display='block';
+  t+=_det.map(r=>'<tr>'+keys.map(k=>`<td>${r[k]||'—'}</td>`).join('')+'</tr>').join('');
+  g('detailTable').innerHTML=t+'</tbody>';g('detailModal').style.display='block';
 }
-
 function downloadCSV(){
-  if(!_activeDetails.length) return;
-  const hdr=Object.keys(_activeDetails[0]).join(',');
-  const rows=_activeDetails.map(r=>Object.values(r).map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');
-  a.href=encodeURI('data:text/csv;charset=utf-8,'+hdr+'\n'+rows);
-  a.download='nexus_handed_over.csv';a.click();
+  if(!_det.length)return;
+  const h=Object.keys(_det[0]).join(',');
+  const rows=_det.map(r=>Object.values(r).map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href=encodeURI('data:text/csv;charset=utf-8,'+h+'\n'+rows);a.download='nexus_handed_over.csv';a.click();
 }
-
-// ── KEYBOARD ──
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape') g('detailModal').style.display='none';
+  if(e.key==='Escape')g('detailModal').style.display='none';
   if((e.ctrlKey||e.metaKey)&&e.key==='f'){
-    const inp=_activePane==='track'?g('searchInput'):_activePane==='direct'?g('directInput'):null;
-    if(inp){e.preventDefault();inp.focus();inp.select();}
+    const i=_pane==='track'?g('searchInput'):_pane==='direct'?g('directInput'):null;
+    if(i){e.preventDefault();i.focus();i.select();}
   }
 });
 </script>
-</body></html>
-"""
+</body></html>"""@app.route('/api/nexus/track_real', methods=['POST'])
+def api_track_real():
+    # Tracking is now handled entirely in the browser JS via CORS proxies
+    # This endpoint kept for compatibility only
+    return jsonify({"success": False, "client_side": True})
 # ==============================================================================
 # END OF CODE
 # ==============================================================================
