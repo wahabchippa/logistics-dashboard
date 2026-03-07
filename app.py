@@ -3851,7 +3851,7 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - STRICT 150 ZERO + RADAR + SECURE NATIVE
+# 🛰️ TID OPERATIONS HUB (NEXUS)
 # ==============================================================================
 import urllib.request
 import urllib.parse
@@ -3864,7 +3864,6 @@ from datetime import datetime
 import ssl
 from flask import jsonify, request, session, render_template_string
 
-# 🛠️ ANTI-DROP FIX FOR LOCAL VS CODE
 try:
     _create_unverified_https_context = ssl._create_unverified_context
 except AttributeError:
@@ -3872,9 +3871,6 @@ except AttributeError:
 else:
     ssl._create_default_https_context = _create_unverified_https_context
 
-# ------------------------------------------------------------------------------
-# 1. CORE DATA SOURCES
-# ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
     "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
@@ -3885,9 +3881,6 @@ NEXUS_SOURCES = {
 }
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 
-# ------------------------------------------------------------------------------
-# 2. EXACT COLUMNS MAP & DATA ENGINE
-# ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
 
@@ -3905,15 +3898,13 @@ def nexus_fetch_sheet_data(url, name):
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
         with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
-            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
-            data = list(csv.reader(raw_data))
+            data = list(csv.reader(res.read().decode('utf-8', errors='ignore').splitlines()))
             col = NEXUS_SHEET_MAP.get(name)
             if not col or not data: return []
-
             processed = []
             for row in data:
                 if not row: continue
-                p = row + [''] * 60 
+                p = row + [''] * 60
                 o_val = str(p[col['o'] - 1]).strip()
                 if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
                 def get_v(col_num):
@@ -3928,72 +3919,54 @@ def nexus_fetch_sheet_data(url, name):
     except: return []
 
 def nexus_clean_tids(raw):
-    """
-    🚨 AI SMART SPLITTER & STRICT 150 ZERO RESTORER 🚨
-    Ensures text like "Pending" is ignored, adds missing zeros STRICTLY to 150, and splits concatenated TIDs.
-    """
     raw = str(raw).strip()
-    if not raw or raw.lower() in ['pending', 'none', 'n/a', '-', 'tbd', 'tba', 'update soon']: return []
-    
-    # Pre-process: insert spaces around known tracking patterns to break them apart safely
-    raw = re.sub(r'(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})', r' \1 ', raw)
-    
-    # Split by spaces, commas, slashes, semicolons
-    parts = [t.strip() for t in re.split(r'[,\/\s;]+', raw) if t.strip()]
-
-    cleaned = []
-    for t in parts:
-        t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
-        
-        # Validation: Must be >6 chars AND contain digits AND not be a common text word
-        if len(t) > 6 and re.search(r'\d', t) and t.lower() not in ['tracking', 'number', 'pending', 'orderno']:
-            # 🚨 STRICT ZERO RESTORER (ONLY FOR 150) 🚨
-            if t.startswith('150') and len(t) >= 12 and not t.startswith('0'):
-                cleaned.append('0' + t)
-            else:
-                cleaned.append(t) # 155 aur baqi sab waise hi jayenge
-                
-    return list(dict.fromkeys(cleaned))
+    if not raw or raw.startswith('='): return []
+    if raw.lower() in ['pending','none','n/a','-','tbd','tba','update soon','#n/a','#ref!','#value!']: return []
+    PATTERNS = [
+        r'\b(1[56]\d{12,14})\b',
+        r'\b(0?15[05]\d{10,13})\b',
+        r'\b(1Z[A-Z0-9]{15,18})\b',
+        r'\b(JD\d{10,18})\b',
+        r'\b(YT\d{10,18})\b',
+        r'\b(TT\d{10,18})\b',
+    ]
+    out = []
+    for pat in PATTERNS:
+        for m in re.finditer(pat, raw, re.IGNORECASE):
+            t = m.group(1).strip()
+            if t not in out: out.append(t)
+    return out
 
 def nexus_fetch_kerry_status(url):
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
-            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
-            data = list(csv.reader(raw_data))
-            if not data: return {}
-            
-            o_idx, s_idx, h_idx = -1, -1, -1
-            
-            # Exact Header Matching for strict accuracy
-            for i, row in enumerate(data[:20]):
-                c = [str(x).lower().replace(' ', '').replace('_', '') for x in row]
-                for j, col_name in enumerate(c):
-                    if col_name in ['order', 'orderid', 'fleekid', 'shipmentid', 'orderno']: o_idx = j; break
-                for j, col_name in enumerate(c):
-                    if col_name in ['lateststatus', 'status', 'currentstatus', 'trackingstatus', 'orderstatus']: s_idx = j; break
-                if o_idx != -1 and s_idx != -1: h_idx = i; break
-                
-            s_map = {}
-            if h_idx != -1 and o_idx != -1 and s_idx != -1:
-                for row in data[h_idx+1:]:
-                    p = row + [''] * 40
-                    o = str(p[o_idx]).strip().lower()
-                    if o: 
-                        stat_val = str(p[s_idx]).strip().upper()
-                        if not stat_val: stat_val = "PENDING"
-                        s_map[o] = stat_val
-                        s_map[o.replace('_', '/')] = stat_val
-                        s_map[o.replace('/', '_')] = stat_val
-                        if o.startswith('0'):
-                            s_map[o[1:]] = stat_val
-            return s_map
+            data = list(csv.reader(res.read().decode('utf-8', errors='ignore').splitlines()))
+        if not data: return {}
+        o_idx = s_idx = h_idx = -1
+        for i, row in enumerate(data[:20]):
+            c = [str(x).lower().replace(' ','').replace('_','') for x in row]
+            for j, cn in enumerate(c):
+                if cn in ['order','orderid','fleekid','shipmentid','orderno']: o_idx = j; break
+            for j, cn in enumerate(c):
+                if cn in ['lateststatus','status','currentstatus','trackingstatus','orderstatus']: s_idx = j; break
+            if o_idx != -1 and s_idx != -1: h_idx = i; break
+        s_map = {}
+        if h_idx != -1:
+            for row in data[h_idx+1:]:
+                p = row + [''] * 40
+                o = str(p[o_idx]).strip().lower()
+                if o:
+                    sv = str(p[s_idx]).strip().upper() or "PENDING"
+                    s_map[o] = sv; s_map[o.replace('_','/')] = sv; s_map[o.replace('/','_')] = sv
+                    if o.startswith('0'): s_map[o[1:]] = sv
+        return s_map
     except: return {}
 
 def nexus_parse_date(date_str):
     try:
-        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%Y/%m/%d'):
+        for fmt in ('%Y-%m-%d','%d/%m/%Y','%m/%d/%Y','%d-%b-%y','%Y/%m/%d'):
             try: return datetime.strptime(date_str.split(' ')[0], fmt)
             except: continue
     except: pass
@@ -4004,7 +3977,6 @@ def nexus_sync_db(force=False):
     now = time.time()
     if not force and now - NEXUS_GLOBAL_CACHE['time'] < 300 and NEXUS_GLOBAL_CACHE['sheets']:
         return NEXUS_GLOBAL_CACHE['sheets'], NEXUS_GLOBAL_CACHE['kerry']
-
     res = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
         f_sheets = {exe.submit(nexus_fetch_sheet_data, url, name): name for name, url in NEXUS_SOURCES.items()}
@@ -4013,19 +3985,8 @@ def nexus_sync_db(force=False):
             res[f_sheets[f]] = f.result()
         try: k_map = f_kerry.result()
         except: k_map = {}
-        
-    NEXUS_GLOBAL_CACHE['time'] = now
-    NEXUS_GLOBAL_CACHE['sheets'] = res
-    NEXUS_GLOBAL_CACHE['kerry'] = k_map
+    NEXUS_GLOBAL_CACHE.update({'time': now, 'sheets': res, 'kerry': k_map})
     return res, k_map
-
-
-
-
-
-# ------------------------------------------------------------------------------
-# 3. BACKEND API ROUTES
-# ------------------------------------------------------------------------------
 
 @app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
@@ -4034,43 +3995,35 @@ def api_nexus_refresh():
 
 @app.route('/api/nexus/search', methods=['POST'])
 def api_nexus_search():
-    order_ids = [x.strip().lower() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
+    order_ids = [x.strip().lower() for x in re.split(r'[\n,\t\s]+', request.json.get('query','')) if x.strip()]
     results = []
     sheets_data, kerry_data = nexus_sync_db()
-    
     for q in order_ids:
-        q_slash = q.replace('_', '/')
-        q_under = q.replace('/', '_')
-        # Smart search match exclusively for 150
-        q_with_zero = '0' + q if q.startswith('150') else q
+        q_slash = q.replace('_','/'); q_under = q.replace('/','_')
+        q_with_zero = '0'+q if q.startswith('150') else q
         q_no_zero = q[1:] if q.startswith('0150') else q
-        
         found = False
         for src, rows in sheets_data.items():
             for r in rows:
                 oid, tid_raw = r['order'].lower(), r['tid'].lower()
-                if (q in oid or q_slash in oid or q_under in oid or 
+                if (q in oid or q_slash in oid or q_under in oid or
                     q in tid_raw or q_with_zero in tid_raw or q_no_zero in tid_raw):
                     k_stat = kerry_data.get(oid, "N/A")
-                    results.append({
-                        "order_id": r['order'].upper(), "source": src, "status": k_stat, 
-                        "date": r['date'], "boxes": r['boxes'], "weight": r['weight'], 
-                        "vendor": r['vendor'], "customer": r['customer'], "country": r['country'], 
-                        "tids": nexus_clean_tids(r['tid']), "mawb": r['mawb']
-                    })
+                    results.append({"order_id": r['order'].upper(), "source": src, "status": k_stat,
+                        "date": r['date'], "boxes": r['boxes'], "weight": r['weight'],
+                        "vendor": r['vendor'], "customer": r['customer'], "country": r['country'],
+                        "tids": nexus_clean_tids(r['tid']), "mawb": r['mawb']})
                     found = True; break
             if found: break
     return jsonify(results)
 
 @app.route('/api/nexus/track_real', methods=['POST'])
 def api_track_real():
-    tid = request.json.get('tid', '')
+    tid = request.json.get('tid','')
     if not tid: return jsonify({"success": False})
-
-    api_key = "8cbba2461aa13856fbaa27f4c26be113" 
+    api_key = "8cbba2461aa13856fbaa27f4c26be113"
     target_url = f"https://www.ordertracker.com/track/{tid}"
     scraper_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}"
-
     try:
         req = urllib.request.Request(scraper_url, headers={'User-Agent': 'Mozilla/5.0'})
         html = urllib.request.urlopen(req, timeout=25).read().decode('utf-8')
@@ -4090,61 +4043,32 @@ def api_track_real():
                         found = find_events(item)
                         if found: return found
                 return None
-            
             raw_events = find_events(data)
             if raw_events:
-                events = []
-                for i, ev in enumerate(raw_events):
-                    events.append({
-                        "time": ev.get("date", "Unknown Time"),
-                        "status": ev.get("description", ev.get("status", "Update")),
-                        "loc": ev.get("location", ""),
-                        "active": i == 0 
-                    })
+                events = [{"time": ev.get("date","Unknown"), "status": ev.get("description", ev.get("status","Update")),
+                           "loc": ev.get("location",""), "active": i==0} for i, ev in enumerate(raw_events)]
                 return jsonify({"success": True, "events": events})
-    except Exception as e: pass
+    except: pass
     return jsonify({"success": False, "tid": tid})
 
-# 🚨 THE ULTIMATE HANDED OVER RADAR ENGINE 🚨
 @app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
     sheets_data, kerry_data = nexus_sync_db()
-    buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES} }
-    
+    buckets = {"handed_over": {s: [] for s in NEXUS_SOURCES}}
     for src, rows in sheets_data.items():
         for r in rows:
-            oid = str(r.get('order', '')).strip()
-            if not oid or oid.lower() in ['n/a', 'nan']: continue
-            
-            k_stat = str(kerry_data.get(oid.lower(), "PENDING")).upper()
-            
-            # CONDITION 1: Kerry Status must contain HANDED OVER (Flexible spacing checker)
-            k_stat_clean = k_stat.replace(" ", "").replace("_", "")
-            if "HANDEDOVER" not in k_stat_clean:
-                continue
-                
-            # CONDITION 2: Must have a Real Valid TID (Not "Pending")
-            tids = nexus_clean_tids(r.get('tid', ''))
-            if len(tids) == 0:
-                continue
-                
-            # CONDITION 3: Must have MAWB updated
-            mawb = str(r.get('mawb', '')).strip()
-            if not mawb or mawb.lower() in ['n/a', 'nan', 'none', 'pending', '-']:
-                continue
-            
-            # Success: All 3 Conditions Met! Add to dashboard.
-            buckets["handed_over"][src].append({ 
-                "Order": oid.upper(), 
-                "Date": r.get('date', 'N/A'), 
-                "Vendor": r.get('vendor', 'N/A'), 
-                "Customer": r.get('customer', 'N/A'), 
-                "Boxes": r.get('boxes', 'N/A'), 
-                "TID": ", ".join(tids), 
-                "MAWB": mawb, 
-                "Status": k_stat 
-            })
-            
+            oid = str(r.get('order','')).strip()
+            if not oid or oid.lower() in ['n/a','nan']: continue
+            k_stat = str(kerry_data.get(oid.lower(),"PENDING")).upper()
+            if "HANDEDOVER" not in k_stat.replace(" ","").replace("_",""): continue
+            tids = nexus_clean_tids(r.get('tid',''))
+            if not tids: continue
+            mawb = str(r.get('mawb','')).strip()
+            if not mawb or mawb.lower() in ['n/a','nan','none','pending','-']: continue
+            buckets["handed_over"][src].append({
+                "Order": oid.upper(), "Date": r.get('date','N/A'), "Vendor": r.get('vendor','N/A'),
+                "Customer": r.get('customer','N/A'), "Boxes": r.get('boxes','N/A'),
+                "TID": ", ".join(tids), "MAWB": mawb, "Status": k_stat})
     return jsonify(buckets)
 
 @app.route('/api/nexus/ops_commander', methods=['GET'])
@@ -4158,427 +4082,655 @@ def api_nexus_ops_commander():
             dt_obj = nexus_parse_date(r['date'])
             if not dt_obj or dt_obj < NEXUS_FILTER_DATE: continue
             oid = r['order']
-            k_stat = str(kerry_data.get(oid.lower(), "PENDING")).upper()
-            k_stat_clean = k_stat.replace(" ", "").replace("_", "")
-            
+            k_stat = str(kerry_data.get(oid.lower(),"PENDING")).upper()
+            k_stat_clean = k_stat.replace(" ","").replace("_","")
             has_tid = len(nexus_clean_tids(r['tid'])) > 0
             days = (datetime.now() - dt_obj).days if dt_obj else 0
-            
             if "HANDEDOVER" in k_stat_clean and not has_tid and days > 1:
                 blame_radar.append({"order": oid.upper(), "source": src, "issue": "Missing TID", "aging": f"{days} Days", "blame": "Kerry Logistics"})
                 missing_text += f"{count}. Order: {oid.upper()} | Date: {r['date']} | Source: {src}\n"
                 count += 1
-            elif k_stat_clean in ["QCPENDING", "CREATED", "ACCEPTED"] and days > 2:
+            elif k_stat_clean in ["QCPENDING","CREATED","ACCEPTED"] and days > 2:
                 blame_radar.append({"order": oid.upper(), "source": src, "issue": "Stuck in QC", "aging": f"{days} Days", "blame": f"{src} Operations"})
     if count == 1: missing_text = "All good! No missing TIDs currently."
     return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
-
-# ------------------------------------------------------------------------------
-# 4. FRONTEND UI
-# ------------------------------------------------------------------------------
 
 @app.route('/nexus')
 def nexus_dashboard():
     user_val = session.get('username') or session.get('user') or session.get('role')
     if not user_val or str(user_val).lower() != 'admin':
-        return "<div style='text-align:center; padding:100px; font-family:sans-serif; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2><p>Only Admin users can access the TID Operations Hub.</p><a href='/' style='color:#10B981;'>Go Back</a></div>", 403
+        return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh;font-family:sans-serif'><h2>⛔ Access Denied</h2><p>Only Admin users can access the TID Operations Hub.</p><a href='/' style='color:#8b5cf6'>Go Back</a></div>", 403
+    return render_template_string(NEXUS_HTML)
 
-    return render_template_string('''
-    <!DOCTYPE html><html lang="en" data-theme="dark">
-    <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        
-        :root { 
-            --bg: #000000; --card: #0A0A0A; --border: #1A1A1A; --text: #FAFAFA; --muted: #71717A; 
-            --accent: #FFFFFF; --btn-bg: #FFFFFF; --btn-text: #000000;
-            --shadow: 0 10px 30px -10px rgba(0,0,0,0.8); --badge-bg: #1A1A1A; --badge-text: #FAFAFA; --input-bg: #050505;
-        }
-        [data-theme="light"] { 
-            --bg: #F8F9FB; --card: #FFFFFF; --border: #E5E7EB; --text: #111827; --muted: #6B7280; 
-            --accent: #111827; --btn-bg: #111827; --btn-text: #FFFFFF;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); --badge-bg: #F3F4F6; --badge-text: #111827; --input-bg: #FFFFFF;
-        }
+NEXUS_HTML = r"""<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🛰️ NEXUS — TID Operations Hub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111827'/%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%231e1b4b'/%3E%3Ctext x='16' y='14' font-family='Arial' font-size='7' font-weight='900' fill='%23a78bfa' text-anchor='middle'%3ENX%3C/text%3E%3Ctext x='16' y='24' font-family='Arial' font-size='6' font-weight='700' fill='%2360a5fa' text-anchor='middle'%3EHUB%3C/text%3E%3C/svg%3E">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
 
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; overflow: hidden;}
-        * { box-sizing: border-box; }
-        
-        .app-container { display: flex; height: 100vh; width: 100vw; flex-direction: column; }
-        .topbar { height: 64px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; z-index: 10;}
-        .brand { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px;}
-        .theme-toggle { background: var(--input-bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.2s;}
-        
-        .main-wrapper { display: flex; flex: 1; overflow: hidden; }
-        .sidebar { width: 260px; background: var(--bg); border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; gap: 8px;}
-        .nav-item { padding: 14px 18px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; border: none; background: transparent; text-align: left; transition: 0.2s; display: flex; align-items: center;}
-        .nav-item:hover { color: var(--text); background: var(--card); }
-        .nav-item.active { background: var(--card); color: var(--accent); border: 1px solid var(--border); }
-        
-        .viewport { flex: 1; padding: 40px 50px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: var(--shadow); }
-        .card.hoverable { cursor: pointer; transition: 0.2s; }
-        .card.hoverable:hover { transform: translateY(-4px); border-color: #10B981; box-shadow: 0 10px 40px -10px rgba(16,185,129,0.2); }
-        
-        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; transition: 0.2s;}
-        .btn:hover { opacity: 0.8; transform: translateY(-1px);}
-        .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-        .btn.outline:hover { background: var(--border); }
-        
-        textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--text); font-family: monospace; font-size: 15px; outline: none; resize: vertical; min-height: 100px; transition: 0.2s;}
-        textarea:focus { border-color: #444; }
-        
-        .badge { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--badge-bg); color: var(--badge-text); text-transform: uppercase; letter-spacing: 0.5px;}
-        .badge.success { background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3);}
-        
-        .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;}
-        .stat-value { font-size: 40px; font-weight: 800; color: #10B981; margin-bottom: 4px; letter-spacing: -1px;}
-        .stat-label { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 1px;}
-        
-        .track-card { border-radius: 16px; overflow: hidden; margin-bottom: 24px; padding: 0; border: 1px solid var(--border);}
-        .track-header { padding: 24px 30px; border-bottom: 1px solid var(--border); background: var(--input-bg); display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 20px;}
-        .meta-col { display: flex; flex-direction: column; gap: 6px; }
-        .meta-lbl { font-size: 11px; color: var(--muted); font-weight: 700; display:flex; align-items:center; gap: 6px; text-transform:uppercase;}
-        .meta-val { font-size: 14px; font-weight: 600;}
-        
-        .tid-area { padding: 30px; background: var(--card);}
-        .tid-strip { display: flex; flex-direction: column; gap: 20px; padding-bottom: 8px;}
-        .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; transition: 0.3s;}
-        
-        .native-timeline-box { display: none; background: #050505; border: 1px solid #222; border-radius: 12px; padding: 30px; margin-top: 10px; }
-        .tl-container { border-left: 2px solid #222; padding-left: 25px; margin-left: 10px; }
-        .tl-item { position: relative; margin-bottom: 30px; animation: fadeIn 0.4s ease forwards; }
-        .tl-item:last-child { margin-bottom: 0; }
-        .tl-dot { position: absolute; left: -32px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: #222; border: 3px solid #000; }
-        .tl-dot.active { background: #10B981; box-shadow: 0 0 10px rgba(16,185,129,0.5); border-color: #050505; }
-        .tl-time { font-size: 12px; color: #888; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.5px; display:block;}
-        .tl-status { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; display:block;}
-        .tl-loc { font-size: 12px; color: #555; display:block;}
-        
-        .fallback-container { text-align: center; padding: 30px; background: #080808; border-radius: 12px; border: 1px dashed #222; }
-        .fallback-btn { display: inline-block; background: #fff; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none; margin-top: 15px; transition: 0.2s; }
-        .fallback-btn:hover { opacity: 0.8; transform: translateY(-2px); }
+[data-theme="dark"]{
+  --bg:#000000;--s1:#0c0c0c;--s2:#111111;--s3:#161616;
+  --bd:#1e1e1e;--bd2:#282828;
+  --t1:#f0f0f0;--t2:#b8b8b8;--t3:#555555;--t4:#2e2e2e;
+  --card:#0c0c0c;--sidebar:#070707;
+  --sb-border:#1a1a1a;--sb-text:#888888;
+  --sb-active-bg:rgba(138,43,226,0.16);--sb-active-border:#7c3aed;--sb-active-text:#c4b5fd;
+  --input:#050505;--hover:rgba(255,255,255,0.03);
+  --shadow:0 2px 12px rgba(0,0,0,0.9);--shadow2:0 8px 40px rgba(0,0,0,0.95);
+  --acc:#8b5cf6;--acc2:#7c3aed;--green:#22c55e;--green2:#16a34a;
+  --blue:#60a5fa;--blue2:#3b82f6;--purple:#a78bfa;
+  --orange:#fb923c;--yellow:#fbbf24;--red:#f87171;--cyan:#22d3ee;
+  --glow-acc:0 0 20px rgba(139,92,246,0.3);
+}
+[data-theme="light"]{
+  --bg:#f1f5f9;--s1:#ffffff;--s2:#f8fafc;--s3:#f1f5f9;
+  --bd:#e2e8f0;--bd2:#cbd5e1;
+  --t1:#0f172a;--t2:#1e293b;--t3:#475569;--t4:#94a3b8;
+  --card:#ffffff;--sidebar:#ffffff;
+  --sb-border:#e2e8f0;--sb-text:#64748b;
+  --sb-active-bg:rgba(109,40,217,0.08);--sb-active-border:#7c3aed;--sb-active-text:#6d28d9;
+  --input:#f8fafc;--hover:rgba(0,0,0,0.025);
+  --shadow:0 1px 4px rgba(0,0,0,0.07),0 4px 16px rgba(0,0,0,0.05);--shadow2:0 4px 24px rgba(0,0,0,0.1);
+  --acc:#7c3aed;--acc2:#6d28d9;--green:#16a34a;--green2:#15803d;
+  --blue:#2563eb;--blue2:#1d4ed8;--purple:#7c3aed;
+  --orange:#ea580c;--yellow:#d97706;--red:#dc2626;--cyan:#0891b2;
+  --glow-acc:none;
+}
 
-        .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
-        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.8);}
-        table { width: 100%; border-collapse: collapse; text-align: left; }
-        th { padding: 16px 20px; font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 800; border-bottom: 1px solid var(--border); letter-spacing: 1px;}
-        td { padding: 16px 20px; font-size: 14px; border-bottom: 1px solid var(--border); font-weight: 500;}
-        tr:hover { background: #111; }
-        
-        .loader { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: auto;}
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    </style></head>
-    <body>
-    <div class="app-container">
-        <header class="topbar">
-            <div class="brand">🛰️ NEXUS HUB</div>
-            <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
-        </header>
-        <div class="main-wrapper">
-            <aside class="sidebar">
-                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Operations</div>
-                <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
-                <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct Track</button>
-                <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over Radar</button>
-                <button class="nav-item" onclick="navSwitch(this, 'view-ops')">⚡ Ops Commander</button>
-                <div style="flex:1"></div>
-                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
-            </aside>
-            <main class="viewport">
-                <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Global Tracking Matrix</h1>
-                
-                <div id="view-track" class="view-pane active">
-                    <div class="card" style="margin-bottom: 30px;">
-                        <textarea id="searchInput" placeholder="Paste Order IDs (e.g., 1234_12 or 1234/12) or TIDs..."></textarea>
-                        <div style="margin-top: 20px; display: flex; gap: 16px;">
-                            <button class="btn" onclick="searchOrders()">Scan Matrix</button>
-                            <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
-                            <button class="btn" id="bulkTrackBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('tracking-results')">⚡ Bulk Track All</button>
-                        </div>
-                    </div>
-                    <div id="tracking-results"></div>
-                </div>
+html,body{height:100%;}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);overflow:hidden;}
 
-                <div id="view-direct" class="view-pane" style="display:none;">
-                    <div class="card" style="margin-bottom: 30px;">
-                        <textarea id="directInput" placeholder="Paste multiple Carrier TIDs here directly..."></textarea>
-                        <div style="margin-top: 20px; display: flex; gap: 16px;">
-                            <button class="btn" onclick="directTrackTIDs()">Extract TIDs</button>
-                            <button class="btn outline" onclick="document.getElementById('directInput').value=''; document.getElementById('direct-results').innerHTML=''; document.getElementById('bulkDirectBtn').style.display='none';">Clear</button>
-                            <button class="btn" id="bulkDirectBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('direct-results')">⚡ Bulk Track All</button>
-                        </div>
-                    </div>
-                    <div id="direct-results" style="display:flex; flex-direction:column; gap:16px;"></div>
-                </div>
-                
-                <div id="view-radar" class="view-pane" style="display:none;">
-                    <div id="loader" style="display:none; padding:60px; text-align:center;"><div class="loader"></div><div style="margin-top:15px; color:var(--muted); font-weight:600;">Scanning Valid TIDs & MAWBs...</div></div>
-                    <div id="radar-container" class="radar-grid"></div>
-                </div>
+/* ── APP LAYOUT ── */
+.app-wrap{display:flex;height:100vh;overflow:hidden;}
 
-                <div id="view-ops" class="view-pane" style="display:none;">
-                    <div id="ops-loader" style="display:none; padding:60px; text-align:center;"><div class="loader"></div></div>
-                    <div id="ops-content" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; display:none;">
-                        <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">🚨 Aging Blame</h3><div style="max-height:400px; overflow-y:auto"><table id="blameTable"></table></div></div>
-                        <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">📲 Follow-up Bot</h3><textarea id="followupText" style="min-height:300px; border:none; background:var(--bg);" readonly></textarea><button class="btn" style="width:100%; margin-top:16px;" onclick="copyFollowup()">Copy Text</button></div>
-                    </div>
-                </div>
-            </main>
+/* ── SIDEBAR ── */
+.sidebar{
+  width:240px;flex-shrink:0;border-right:1px solid var(--sb-border);
+  display:flex;flex-direction:column;overflow:hidden;
+  position:relative;z-index:100;transition:width .2s ease;
+}
+[data-theme="dark"] .sidebar{background:linear-gradient(180deg,#0a0a0a,#060606);box-shadow:4px 0 20px rgba(0,0,0,0.5);}
+[data-theme="light"] .sidebar{background:#fff;box-shadow:2px 0 12px rgba(0,0,0,0.06);}
+.sidebar.collapsed{width:60px;}
+.sidebar.collapsed .sb-info,.sidebar.collapsed .sb-tab-label,.sidebar.collapsed .sb-tab-dot,
+.sidebar.collapsed .sb-section-label,.sidebar.collapsed .sb-user-info,.sidebar.collapsed .sb-last-update,
+.sidebar.collapsed .theme-pill span:last-child,.sidebar.collapsed .sb-foot-divider{display:none;}
+.sidebar.collapsed .sb-tab{justify-content:center;padding:10px;gap:0;}
+.sidebar.collapsed .sb-tab-icon{width:32px;height:32px;}
+.sidebar.collapsed .sb-foot{padding:10px 6px;}
+.sidebar.collapsed .theme-pill,.sidebar.collapsed .sb-back{justify-content:center;padding:9px;}
+.sidebar.collapsed .sb-nav{padding:8px 6px;}
+
+.sb-head{padding:18px 16px 14px;border-bottom:1px solid var(--sb-border);}
+.sb-logo-wrap{display:flex;align-items:center;gap:10px;}
+.sb-ico{width:36px;height:36px;flex-shrink:0;background:linear-gradient(135deg,#5b21b6,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 3px 12px rgba(139,92,246,0.5);}
+.sb-title{font-size:13px;font-weight:800;color:#fff;letter-spacing:-.3px;white-space:nowrap;}
+.sb-sub{font-size:10px;color:var(--sb-text);margin-top:2px;white-space:nowrap;}
+[data-theme="light"] .sb-title{color:#0f172a;}
+
+.sb-nav{flex:1;overflow-y:auto;padding:10px 8px;display:flex;flex-direction:column;gap:2px;}
+.sb-nav::-webkit-scrollbar{width:0;}
+.sb-section-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:var(--t3);padding:8px 8px 4px;margin-top:4px;}
+.sb-tab{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;font-size:12px;font-weight:600;color:var(--sb-text);cursor:pointer;transition:.15s;border:1px solid transparent;background:transparent;font-family:inherit;text-align:left;white-space:nowrap;}
+.sb-tab:hover{color:var(--t1);background:rgba(255,255,255,0.07);}
+[data-theme="light"] .sb-tab:hover{color:#0f172a;background:rgba(0,0,0,0.04);}
+.sb-tab.active{color:var(--sb-active-text);background:var(--sb-active-bg);border-color:rgba(139,92,246,0.25);}
+[data-theme="dark"] .sb-tab.active{box-shadow:inset 3px 0 0 var(--sb-active-border);}
+[data-theme="light"] .sb-tab.active{color:#6d28d9;}
+.sb-tab-icon{font-size:14px;flex-shrink:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:rgba(255,255,255,0.04);transition:.15s;}
+.sb-tab:hover .sb-tab-icon{background:rgba(255,255,255,0.09);}
+.sb-tab.active .sb-tab-icon{background:rgba(139,92,246,0.2);}
+[data-theme="light"] .sb-tab-icon{background:rgba(0,0,0,0.04);}
+[data-theme="light"] .sb-tab.active .sb-tab-icon{background:rgba(109,40,217,0.1);}
+.sb-tab-label{flex:1;}
+.sb-tab-dot{width:6px;height:6px;border-radius:50%;background:var(--acc);opacity:0;flex-shrink:0;}
+.sb-tab.active .sb-tab-dot{opacity:1;box-shadow:0 0 6px var(--acc);}
+
+.sb-foot{padding:12px 8px;border-top:1px solid var(--sb-border);display:flex;flex-direction:column;gap:6px;}
+.sb-foot-divider{height:1px;background:var(--sb-border);margin:2px 0;}
+.theme-pill{display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid var(--sb-border);border-radius:10px;cursor:pointer;font-size:11px;font-weight:700;color:var(--sb-text);transition:.2s;font-family:inherit;width:100%;}
+.theme-pill:hover{border-color:var(--acc);color:var(--sb-active-text);background:var(--sb-active-bg);}
+[data-theme="light"] .theme-pill{background:#f8fafc;border-color:#e2e8f0;color:#475569;}
+.sb-back{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;font-size:11px;font-weight:700;color:var(--sb-text);text-decoration:none;transition:.15s;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);}
+.sb-back:hover{color:#fff;background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.15);}
+[data-theme="light"] .sb-back{border-color:rgba(0,0,0,0.08);background:rgba(0,0,0,0.02);color:#475569;}
+[data-theme="light"] .sb-back:hover{color:#0f172a;background:rgba(0,0,0,0.06);}
+.sb-user-card{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.12);border-radius:10px;}
+.sb-user-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0;}
+.sb-user-email{font-size:10px;font-weight:700;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;}
+.sb-user-role{font-size:9px;color:var(--sb-text);text-transform:uppercase;letter-spacing:.6px;}
+.sb-last-update{font-size:9px;color:var(--sb-text);padding:0 4px;}
+
+/* ── MAIN WRAP ── */
+.main-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:0 24px;height:56px;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--bd);box-shadow:var(--shadow);}
+[data-theme="dark"] .topbar{background:#0a0a0a;border-bottom-color:#1a1a1a;}
+.tb-left{display:flex;align-items:center;gap:12px;}
+.tb-page-title{font-size:16px;font-weight:800;color:var(--t1);letter-spacing:-.4px;}
+.tb-actions{display:flex;align-items:center;gap:8px;}
+.sb-toggle-fixed{background:var(--s2);border:1px solid var(--bd);cursor:pointer;color:var(--t2);padding:7px 9px;border-radius:9px;transition:.15s;display:flex;align-items:center;justify-content:center;}
+.sb-toggle-fixed:hover{color:var(--t1);border-color:var(--acc);}
+.tbtn{padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;text-decoration:none;transition:.15s;white-space:nowrap;border:1px solid var(--bd);}
+.tbtn:hover{transform:translateY(-1px);}
+.tbtn-refresh{background:linear-gradient(135deg,#16a34a,#22c55e);color:#000;border-color:transparent;box-shadow:0 3px 12px rgba(34,197,94,.3);font-weight:800;}
+.tbtn-secondary{background:var(--s2);color:var(--t2);}
+[data-theme="dark"] .tbtn-secondary{background:#111;color:#888;border-color:#222;}
+
+/* ── PANES ── */
+.main{flex:1;overflow-y:auto;padding:22px 24px;}
+.main::-webkit-scrollbar{width:6px;}
+.main::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:3px;}
+.pane{display:none;animation:fadeIn .2s ease;}
+.pane.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+/* ── CARDS ── */
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:22px;box-shadow:var(--shadow);margin-bottom:18px;}
+[data-theme="dark"] .card{background:#0d0d0d;}
+.card-hover{cursor:pointer;transition:.2s;}
+.card-hover:hover{border-color:var(--acc);transform:translateY(-3px);box-shadow:0 8px 32px rgba(139,92,246,0.15);}
+
+/* ── SEARCH TEXTAREA ── */
+.search-wrap{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:var(--shadow);}
+[data-theme="dark"] .search-wrap{background:var(--s2);}
+textarea.fi{width:100%;background:var(--input);border:1.5px solid var(--bd);color:var(--t1);padding:14px 16px;border-radius:10px;font-family:'Inter',monospace;font-size:13px;outline:none;resize:vertical;min-height:90px;transition:.2s;line-height:1.6;}
+textarea.fi:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(139,92,246,0.12);}
+textarea.fi::placeholder{color:var(--t3);}
+.btn-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+.btn{padding:9px 20px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:.15s;border:1px solid transparent;}
+.btn:hover{transform:translateY(-1px);}
+.btn-primary{background:linear-gradient(135deg,var(--acc2),var(--acc));color:#fff;box-shadow:0 3px 12px rgba(139,92,246,.3);}
+.btn-outline{background:transparent;border-color:var(--bd);color:var(--t2);}
+.btn-outline:hover{border-color:var(--acc);color:var(--t1);}
+.btn-green{background:linear-gradient(135deg,#16a34a,#22c55e);color:#000;box-shadow:0 3px 12px rgba(34,197,94,.3);}
+
+/* ── TRACK CARD ── */
+.track-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:var(--shadow);animation:fadeIn .25s ease;}
+[data-theme="dark"] .track-card{background:#0d0d0d;}
+.track-header{padding:18px 20px;border-bottom:1px solid var(--bd);background:var(--s2);display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:14px;}
+[data-theme="dark"] .track-header{background:#111;}
+.meta-col{display:flex;flex-direction:column;gap:4px;}
+.meta-lbl{font-size:9px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+.meta-val{font-size:13px;font-weight:600;color:var(--t1);}
+.tid-area{padding:16px 20px;display:flex;flex-direction:column;gap:12px;}
+.tid-box{background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:12px;transition:.2s;}
+[data-theme="dark"] .tid-box{background:#111;}
+.tid-box:hover{border-color:var(--bd2);}
+.tid-top{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.tid-num{font-family:monospace;font-weight:800;font-size:14px;color:var(--acc);word-break:break-all;}
+.native-timeline-box{display:none;background:var(--s1);border:1px solid var(--bd);border-radius:10px;padding:20px;margin-top:4px;}
+[data-theme="dark"] .native-timeline-box{background:#060606;border-color:#1a1a1a;}
+.tl-container{border-left:2px solid var(--bd2);padding-left:22px;margin-left:6px;}
+.tl-item{position:relative;margin-bottom:22px;animation:fadeIn .3s ease forwards;}
+.tl-item:last-child{margin-bottom:0;}
+.tl-dot{position:absolute;left:-28px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--bd2);border:2px solid var(--bg);}
+.tl-dot.active{background:var(--green);box-shadow:0 0 10px rgba(34,197,94,0.5);}
+.tl-time{font-size:11px;color:var(--t3);font-weight:700;margin-bottom:4px;display:block;}
+.tl-status{font-size:13px;font-weight:600;color:var(--t1);margin-bottom:2px;display:block;}
+.tl-loc{font-size:11px;color:var(--t3);display:block;}
+.fallback-box{text-align:center;padding:24px;background:var(--s2);border-radius:10px;}
+[data-theme="dark"] .fallback-box{background:#090909;}
+.fallback-link{display:inline-block;background:var(--acc);color:#fff;padding:9px 20px;border-radius:8px;font-weight:700;font-size:12px;text-decoration:none;margin-top:12px;transition:.15s;}
+.fallback-link:hover{opacity:.85;transform:translateY(-1px);}
+
+/* ── RADAR GRID ── */
+.radar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
+.radar-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:22px;cursor:pointer;transition:.2s;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--shadow);}
+[data-theme="dark"] .radar-card{background:#0d0d0d;}
+.radar-card:hover{border-color:var(--green);transform:translateY(-3px);box-shadow:0 8px 32px rgba(34,197,94,0.12);}
+.radar-src{font-size:13px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;}
+.radar-count{font-size:38px;font-weight:900;color:var(--green);letter-spacing:-2px;line-height:1;}
+.radar-lbl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
+
+/* ── OPS TABLE ── */
+.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+.ops-table-wrap{max-height:380px;overflow-y:auto;border:1px solid var(--bd);border-radius:10px;}
+.ops-table-wrap::-webkit-scrollbar{width:4px;}
+.ops-table-wrap::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px;}
+table{width:100%;border-collapse:collapse;}
+thead th{padding:11px 14px;font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--bd);letter-spacing:1px;background:var(--s2);position:sticky;top:0;}
+[data-theme="dark"] thead th{background:#0f0f0f;}
+tbody td{padding:11px 14px;font-size:12px;border-bottom:1px solid var(--bd);font-weight:500;color:var(--t1);}
+tbody tr:hover{background:var(--hover);}
+tbody tr:last-child td{border-bottom:none;}
+
+/* ── STATUS BADGES ── */
+.badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;border:1px solid transparent;}
+.badge-green{background:rgba(34,197,94,.1);color:var(--green);border-color:rgba(34,197,94,.25);}
+.badge-purple{background:rgba(139,92,246,.1);color:var(--purple);border-color:rgba(139,92,246,.25);}
+.badge-yellow{background:rgba(251,191,36,.1);color:var(--yellow);border-color:rgba(251,191,36,.25);}
+.badge-red{background:rgba(248,113,113,.1);color:var(--red);border-color:rgba(248,113,113,.25);}
+.badge-default{background:var(--s3);color:var(--t3);border-color:var(--bd);}
+
+/* ── LOADER ── */
+.loader-wrap{padding:60px;text-align:center;}
+.loader{width:28px;height:28px;border:3px solid var(--bd);border-top-color:var(--acc);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loader-text{margin-top:12px;font-size:12px;color:var(--t3);font-weight:600;}
+
+/* ── MODAL ── */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);z-index:200;display:none;padding:32px;overflow-y:auto;}
+.modal-box{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:32px;max-width:1200px;margin:0 auto;box-shadow:var(--shadow2);}
+[data-theme="dark"] .modal-box{background:#0d0d0d;}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;flex-wrap:wrap;gap:12px;}
+.modal-title{font-size:18px;font-weight:800;color:var(--t1);}
+.modal-sub{font-size:11px;color:var(--t3);margin-top:3px;}
+.modal-table-wrap{overflow-x:auto;max-height:60vh;border:1px solid var(--bd);border-radius:10px;}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:50px 20px;color:var(--t3);}
+.empty-icon{font-size:40px;margin-bottom:12px;}
+.empty-text{font-size:14px;font-weight:600;}
+</style>
+</head>
+<body>
+<div class="app-wrap">
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-head">
+    <div class="sb-logo-wrap">
+      <div class="sb-ico">🛰️</div>
+      <div class="sb-info">
+        <div class="sb-title">NEXUS Hub</div>
+        <div class="sb-sub">TID Operations Centre</div>
+      </div>
+    </div>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-section-label">Operations</div>
+    <button class="sb-tab active" onclick="navSwitch(this,'track')">
+      <span class="sb-tab-icon">🔍</span>
+      <span class="sb-tab-label">Global Scanner</span>
+      <span class="sb-tab-dot"></span>
+    </button>
+    <button class="sb-tab" onclick="navSwitch(this,'direct')">
+      <span class="sb-tab-icon">🚢</span>
+      <span class="sb-tab-label">Direct Track</span>
+      <span class="sb-tab-dot"></span>
+    </button>
+    <button class="sb-tab" onclick="navSwitch(this,'radar')">
+      <span class="sb-tab-icon">📦</span>
+      <span class="sb-tab-label">Handed Over Radar</span>
+      <span class="sb-tab-dot"></span>
+    </button>
+    <button class="sb-tab" onclick="navSwitch(this,'ops')">
+      <span class="sb-tab-icon">⚡</span>
+      <span class="sb-tab-label">Ops Commander</span>
+      <span class="sb-tab-dot"></span>
+    </button>
+  </nav>
+  <div class="sb-foot">
+    <button class="theme-pill" onclick="toggleTheme()" id="themePill">
+      <span class="icon">☀️</span>
+      <span id="themeLabel">Light Mode</span>
+    </button>
+    <a href="/" class="sb-back">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 11L5 7l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Main Dashboard
+    </a>
+    <div class="sb-foot-divider"></div>
+    <div class="sb-user-card">
+      <div class="sb-user-avatar" id="sbAvatar">A</div>
+      <div class="sb-user-info">
+        <div class="sb-user-email">Admin User</div>
+        <div class="sb-user-role">Administrator</div>
+      </div>
+    </div>
+    <div class="sb-last-update" id="sbLastUpdate">🕐 Last sync: —</div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main-wrap">
+  <div class="topbar">
+    <div class="tb-left">
+      <button class="sb-toggle-fixed" onclick="toggleSidebar()" title="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <rect x="2" y="4.5" width="14" height="1.8" rx=".9" fill="currentColor"/>
+          <rect x="2" y="8.1" width="9" height="1.8" rx=".9" fill="currentColor"/>
+          <rect x="2" y="11.7" width="14" height="1.8" rx=".9" fill="currentColor"/>
+        </svg>
+      </button>
+      <div class="tb-page-title" id="tbTitle">🔍 Global Scanner</div>
+    </div>
+    <div class="tb-actions">
+      <button class="tbtn tbtn-refresh" onclick="hardRefresh()">🔄 Refresh</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- GLOBAL SCANNER -->
+    <div class="pane active" id="pane-track">
+      <div class="search-wrap">
+        <div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">🔍 Paste Order IDs or TIDs</div>
+        <textarea class="fi" id="searchInput" placeholder="e.g. 133325_02, 133325/02, 15503700028520..."></textarea>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="searchOrders()">⚡ Scan Matrix</button>
+          <button class="btn btn-outline" onclick="g('searchInput').value='';g('trackResults').innerHTML=''">Clear</button>
+          <button class="btn btn-green" id="bulkTrackBtn" style="display:none" onclick="bulkTrackAll('trackResults')">🚀 Bulk Track All</button>
         </div>
+      </div>
+      <div id="trackResults"></div>
     </div>
 
-    <div id="detailPanel" class="modal" onclick="if(event.target==this)this.style.display='none'">
-        <div class="modal-content">
-            <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:30px">
-                <div>
-                    <h2 id="modalTitle" style="margin:0; font-size:24px; font-weight: 800;">Handed Over Orders</h2>
-                    <p style="color:var(--muted); margin:5px 0 0 0; font-size:13px;">Showing orders with valid TID and MAWB</p>
-                </div>
-                <div style="display:flex; gap:16px;">
-                    <button class="btn outline" onclick="downloadCSV()">Export CSV</button>
-                    <button class="btn" style="background:#EF4444; border:none; color:white;" onclick="document.getElementById('detailPanel').style.display='none'">✖ Close View</button>
-                </div>
-            </div>
-            <div style="overflow-x:auto; max-height: 65vh; border: 1px solid var(--border); border-radius: 12px;"><table id="detailTable"></table></div>
+    <!-- DIRECT TRACK -->
+    <div class="pane" id="pane-direct">
+      <div class="search-wrap">
+        <div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">🚢 Paste Carrier TIDs Directly</div>
+        <textarea class="fi" id="directInput" placeholder="Paste multiple TIDs here..."></textarea>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="directTrackTIDs()">Extract & Track</button>
+          <button class="btn btn-outline" onclick="g('directInput').value='';g('directResults').innerHTML=''">Clear</button>
+          <button class="btn btn-green" id="bulkDirectBtn" style="display:none" onclick="bulkTrackAll('directResults')">🚀 Bulk Track All</button>
         </div>
+      </div>
+      <div id="directResults" style="display:flex;flex-direction:column;gap:12px"></div>
     </div>
 
-    <script>
-        function toggleTheme() {
-            const root = document.documentElement;
-            const isDark = root.getAttribute('data-theme') === 'dark';
-            const target = isDark ? 'light' : 'dark';
-            root.setAttribute('data-theme', target);
-            localStorage.setItem('nexus_theme', target);
-            document.getElementById('themeBtn').innerText = isDark ? '🌙 Dark Mode' : '☀️ Light Mode';
-        }
-        const savedTheme = localStorage.getItem('nexus_theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+    <!-- HANDED OVER RADAR -->
+    <div class="pane" id="pane-radar">
+      <div id="radarLoader" class="loader-wrap" style="display:none">
+        <div class="loader"></div>
+        <div class="loader-text">Scanning valid TIDs & MAWBs...</div>
+      </div>
+      <div id="radarGrid" class="radar-grid"></div>
+    </div>
 
-        window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
+    <!-- OPS COMMANDER -->
+    <div class="pane" id="pane-ops">
+      <div id="opsLoader" class="loader-wrap" style="display:none">
+        <div class="loader"></div>
+        <div class="loader-text">Loading operations data...</div>
+      </div>
+      <div id="opsContent" style="display:none">
+        <div class="ops-grid">
+          <div class="card" style="margin:0">
+            <div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:14px">🚨 Aging Blame Radar</div>
+            <div class="ops-table-wrap"><table id="blameTable"></table></div>
+          </div>
+          <div class="card" style="margin:0">
+            <div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:14px">📲 Follow-up Bot</div>
+            <textarea class="fi" id="followupText" style="min-height:280px" readonly></textarea>
+            <button class="btn btn-primary" style="width:100%;margin-top:12px;justify-content:center" onclick="copyFollowup()">📋 Copy Text</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
 
-        let activeBucket = ''; let activeDetails = []; let radarData = null;
+<!-- DETAIL MODAL -->
+<div class="modal" id="detailModal" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="modalTitle">Handed Over Orders</div>
+        <div class="modal-sub">Orders with valid TID and MAWB confirmed</div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" onclick="downloadCSV()">📥 Export CSV</button>
+        <button class="btn" style="background:var(--red);color:#fff;border:none" onclick="g('detailModal').style.display='none'">✕ Close</button>
+      </div>
+    </div>
+    <div class="modal-table-wrap"><table id="detailTable"></table></div>
+  </div>
+</div>
 
-        function navSwitch(btn, viewType) {
-            document.querySelectorAll('.nav-item').forEach(l=>l.classList.remove('active'));
-            btn.classList.add('active');
-            document.querySelectorAll('.view-pane').forEach(v=>v.style.display='none');
-            
-            if(viewType === 'view-track') {
-                document.getElementById('view-track').style.display = 'block';
-                document.getElementById('view-title').innerText = "Global Tracking Matrix";
-            } else if(viewType === 'view-direct') {
-                document.getElementById('view-direct').style.display = 'block';
-                document.getElementById('view-title').innerText = "Direct TID Tracker";
-            } else if(viewType === 'view-ops') {
-                document.getElementById('view-ops').style.display = 'block';
-                document.getElementById('view-title').innerText = "Ops Commander";
-                loadOps();
-            } else {
-                document.getElementById('view-radar').style.display = 'block';
-                document.getElementById('view-title').innerText = btn.innerText.replace('📦 ', '');
-                activeBucket = viewType; loadRadar();
-            }
-        }
+<script>
+const g=id=>document.getElementById(id);
+let _radarData=null; let _activeDetails=[]; let _activePane='track';
+const PAGE_TITLES={track:'🔍 Global Scanner',direct:'🚢 Direct Track',radar:'📦 Handed Over Radar',ops:'⚡ Ops Commander'};
 
-        async function searchOrders() {
-            const q = document.getElementById('searchInput').value; if(!q) return;
-            document.getElementById('tracking-results').innerHTML = '<div style="padding:60px;text-align:center"><div class="loader"></div></div>';
-            document.getElementById('bulkTrackBtn').style.display = 'none';
-            const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
-            const data = await r.json(); renderCards(data);
-        }
+// ── SIDEBAR TOGGLE ──
+function toggleSidebar(){
+  const sb=g('sidebar');
+  sb.classList.toggle('collapsed');
+  try{localStorage.setItem('nx_sb_collapsed',sb.classList.contains('collapsed')?'1':'0');}catch(e){}
+}
+(function(){try{if(localStorage.getItem('nx_sb_collapsed')==='1')g('sidebar').classList.add('collapsed');}catch(e){}})();
 
-        function renderCards(data) {
-            let h = '';
-            let hasTids = false;
-            data.forEach(item => {
-                const isDelivered = item.status.toLowerCase().includes('delivered');
-                if(item.tids.length > 0) hasTids = true;
-                h += `<div class="card track-card">
-                    <div class="track-header">
-                        <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:800; font-size: 16px; color: var(--accent);">${item.order_id}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">📅 Date</span><span class="meta-val">${item.date}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">🏢 Source</span><span class="meta-val">${item.source}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">🏭 Vendor</span><span class="meta-val">${item.vendor}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">👤 Customer</span><span class="meta-val">${item.customer}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">🌍 Country</span><span class="meta-val">${item.country}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">📦 Boxes/Wgt</span><span class="meta-val">${item.boxes} / ${item.weight}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">✈️ MAWB</span><span class="meta-val" style="font-family:monospace;">${item.mawb}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">🚦 Status</span><span class="badge ${isDelivered?'success':''}">${item.status}</span></div>
-                    </div>
-                    <div class="tid-area">
-                        <div class="tid-strip">
-                            ${item.tids.map(tid => {
-                                const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
-                                return `
-                                <div class="tid-box">
-                                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                                        <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
-                                    </div>
-                                    <div id="native-${cleanId}" class="native-timeline-box"></div>
-                                </div>
-                            `}).join('')}
-                        </div>
-                    </div>
-                </div>`;
-            });
-            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted); font-weight:600; padding: 40px; border: 1px dashed var(--border); border-radius: 12px;">No matching records found.</div>';
-            if(hasTids) document.getElementById('bulkTrackBtn').style.display = 'block';
-        }
+// ── THEME ──
+function toggleTheme(){
+  const html=document.documentElement;
+  const isDark=html.getAttribute('data-theme')==='dark';
+  html.setAttribute('data-theme',isDark?'light':'dark');
+  const pill=g('themePill');
+  pill.querySelector('.icon').textContent=isDark?'🌙':'☀️';
+  g('themeLabel').textContent=isDark?'Dark Mode':'Light Mode';
+  try{localStorage.setItem('nx_theme',isDark?'light':'dark');}catch(e){}
+}
+(function(){
+  try{
+    const t=localStorage.getItem('nx_theme')||'dark';
+    document.documentElement.setAttribute('data-theme',t);
+    if(t==='light'){
+      document.addEventListener('DOMContentLoaded',()=>{
+        const pill=g('themePill');
+        if(pill){pill.querySelector('.icon').textContent='🌙';g('themeLabel').textContent='Dark Mode';}
+      });
+    }
+  }catch(e){}
+})();
 
-        async function directTrackTIDs() {
-            let val = document.getElementById('directInput').value; if(!val) return;
-            
-            // Replicate the robust cleaning for direct input
-            val = val.replace(/[^a-zA-Z0-9,\/\s;]/g, '');
-            val = val.replace(/(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})/g, ' $1 ');
-            let tids = val.split(/[,\/\s;]+/).map(t => t.trim()).filter(Boolean);
-            
-            let finalTids = [];
-            tids.forEach(t => {
-                if (t.length > 6 && !['tracking', 'number', 'pending', 'orderno'].includes(t.toLowerCase())) {
-                    if (t.startsWith('150') && t.length >= 12 && !t.startsWith('0')) {
-                        finalTids.push('0' + t);
-                    } else {
-                        finalTids.push(t);
-                    }
-                }
-            });
-            
-            let h = '';
-            [...new Set(finalTids)].forEach(tid => {
-                const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
-                h += `<div class="tid-box card" style="width:100%; border: 1px solid var(--border);">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
-                        </div>
-                        <div id="native-${cleanId}" class="native-timeline-box"></div>
-                      </div>`;
-            });
-            document.getElementById('direct-results').innerHTML = h;
-            if(finalTids.length > 0) document.getElementById('bulkDirectBtn').style.display = 'block';
-        }
+// ── NAV ──
+function navSwitch(btn,name){
+  document.querySelectorAll('.sb-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
+  g('pane-'+name).classList.add('active');
+  g('tbTitle').textContent=PAGE_TITLES[name]||name;
+  _activePane=name;
+  if(name==='radar'&&!_radarData) loadRadar();
+  if(name==='ops') loadOps();
+}
 
-        async function bulkTrackAll(containerId) {
-            const container = document.getElementById(containerId);
-            const btns = container.querySelectorAll('.sync-btn');
-            for(let btn of btns) {
-                if(btn.innerText !== '✖ Close Tracker') {
-                    btn.click();
-                    await new Promise(r => setTimeout(r, 600)); 
-                }
-            }
-        }
+// ── REFRESH ──
+async function hardRefresh(){
+  await fetch('/api/nexus/refresh',{method:'POST'});
+  _radarData=null;
+  g('sbLastUpdate').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
+  if(_activePane==='radar'){_radarData=null;loadRadar();}
+  if(_activePane==='ops') loadOps();
+}
+window.onload=()=>{
+  fetch('/api/nexus/refresh',{method:'POST'});
+  g('sbLastUpdate').textContent='🕐 Syncing...';
+  setTimeout(()=>g('sbLastUpdate').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB'),2000);
+};
 
-        async function loadNativeTimeline(tid, btn) {
-            const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
-            const box = document.getElementById('native-' + cleanId);
+// ── STATUS BADGE ──
+function statusBadge(s){
+  const sc=(s||'').replace(/[_\s]/g,'').toLowerCase();
+  if(sc.includes('delivered')) return `<span class="badge badge-green">${s}</span>`;
+  if(sc.includes('handed')||sc.includes('freight')) return `<span class="badge badge-purple">${s}</span>`;
+  if(sc.includes('qc')||sc.includes('pending')) return `<span class="badge badge-yellow">${s}</span>`;
+  if(sc.includes('cancel')) return `<span class="badge badge-red">${s}</span>`;
+  return `<span class="badge badge-default">${s}</span>`;
+}
 
-            if(box.style.display === 'block') {
-                box.style.display = 'none';
-                btn.innerHTML = '🔍 Track Native';
-                btn.style.background = 'transparent';
-                btn.style.color = 'var(--text)';
-                btn.style.border = '1px solid var(--border)';
-                return;
-            }
+// ── SEARCH ──
+async function searchOrders(){
+  const q=g('searchInput').value; if(!q.trim()) return;
+  g('trackResults').innerHTML='<div class="loader-wrap"><div class="loader"></div><div class="loader-text">Scanning matrix...</div></div>';
+  g('bulkTrackBtn').style.display='none';
+  const r=await fetch('/api/nexus/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
+  const data=await r.json();
+  renderCards(data,'trackResults','bulkTrackBtn');
+}
 
-            btn.innerHTML = '<div class="loader" style="width:14px; height:14px; border-width:2px;"></div>';
-            
-            const r = await fetch('/api/nexus/track_real', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tid:tid})});
-            const data = await r.json();
-            
-            btn.innerHTML = '✖ Close Tracker';
-            btn.style.background = '#1A1A1A';
-            btn.style.color = '#fff';
-            btn.style.border = '1px solid #333';
-            box.style.display = 'block';
+function renderCards(data,containerId,bulkBtnId){
+  if(!data.length){
+    g(containerId).innerHTML='<div class="empty"><div class="empty-icon">🔭</div><div class="empty-text">No matching records found</div></div>';
+    return;
+  }
+  let hasTids=false;
+  let h=data.map(item=>{
+    if(item.tids.length>0) hasTids=true;
+    const tidsHtml=item.tids.length?item.tids.map(tid=>{
+      const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
+      return `<div class="tid-box">
+        <div class="tid-top">
+          <span class="tid-num">${tid}</span>
+          <button class="btn btn-outline sync-btn" style="padding:5px 12px;font-size:11px" onclick="loadNativeTimeline('${tid}',this)">🔍 Track Native</button>
+        </div>
+        <div id="native-${cid}" class="native-timeline-box"></div>
+      </div>`;
+    }).join(''):`<div style="font-size:12px;color:var(--t3);padding:8px 0">No TIDs found for this order</div>`;
+    return `<div class="track-card">
+      <div class="track-header">
+        <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:900;font-size:15px;color:var(--acc)">${item.order_id}</span></div>
+        <div class="meta-col"><span class="meta-lbl">📅 Date</span><span class="meta-val">${item.date}</span></div>
+        <div class="meta-col"><span class="meta-lbl">🏢 Source</span><span class="meta-val">${item.source}</span></div>
+        <div class="meta-col"><span class="meta-lbl">🏭 Vendor</span><span class="meta-val">${item.vendor}</span></div>
+        <div class="meta-col"><span class="meta-lbl">👤 Customer</span><span class="meta-val">${item.customer}</span></div>
+        <div class="meta-col"><span class="meta-lbl">🌍 Country</span><span class="meta-val" style="color:var(--green)">${item.country}</span></div>
+        <div class="meta-col"><span class="meta-lbl">📦 Boxes / Wt</span><span class="meta-val">${item.boxes} / ${item.weight}</span></div>
+        <div class="meta-col"><span class="meta-lbl">✈️ MAWB</span><span class="meta-val" style="font-family:monospace;font-size:11px">${item.mawb}</span></div>
+        <div class="meta-col"><span class="meta-lbl">🚦 Status</span>${statusBadge(item.status)}</div>
+      </div>
+      <div class="tid-area">${tidsHtml}</div>
+    </div>`;
+  }).join('');
+  g(containerId).innerHTML=h;
+  if(hasTids&&bulkBtnId) g(bulkBtnId).style.display='flex';
+}
 
-            if(data.success && data.events.length > 0) {
-                let timelineHtml = '<div class="tl-container">';
-                data.events.forEach(e => {
-                    timelineHtml += `
-                        <div class="tl-item">
-                            <div class="tl-dot ${e.active ? 'active' : ''}"></div>
-                            <span class="tl-time">${e.time}</span>
-                            <span class="tl-status">${e.status}</span>
-                            <span class="tl-loc">${e.loc}</span>
-                        </div>
-                    `;
-                });
-                timelineHtml += '</div>';
-                box.innerHTML = timelineHtml;
-            } else {
-                box.innerHTML = `
-                    <div class="fallback-container">
-                        <div style="font-size: 30px; margin-bottom: 10px;">📦</div>
-                        <h3 style="margin: 0 0 5px 0; color: #fff;">Connect to Courier Gateway</h3>
-                        <p style="color: #666; font-size: 13px; margin: 0 0 15px 0;">To view live detailed data, open the secure tracking portal.</p>
-                        <button class="fallback-btn" onclick="window.open('https://parcelsapp.com/en/tracking/${tid}', '_blank', 'width=500,height=750,top=100,left=100,scrollbars=yes');">🚢 View on ParcelsApp ↗</button>
-                    </div>
-                `;
-            }
-        }
+// ── DIRECT TRACK ──
+async function directTrackTIDs(){
+  let val=g('directInput').value; if(!val.trim()) return;
+  val=val.replace(/(1[56]\d{12,14}|1Z[A-Z0-9]{15,18}|JD\d{10,18}|YT\d{10,18})/g,' $1 ');
+  let tids=[...new Set(val.split(/[\s,;\/]+/).map(t=>t.trim()).filter(t=>t.length>6&&/\d/.test(t)))];
+  if(!tids.length){g('directResults').innerHTML='<div class="empty"><div class="empty-icon">🔭</div><div class="empty-text">No valid TIDs found</div></div>';return;}
+  let h=tids.map(tid=>{
+    const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
+    return `<div class="card" style="padding:16px;margin:0">
+      <div class="tid-top">
+        <span class="tid-num">${tid}</span>
+        <button class="btn btn-outline sync-btn" style="padding:5px 12px;font-size:11px" onclick="loadNativeTimeline('${tid}',this)">🔍 Track Native</button>
+      </div>
+      <div id="native-${cid}" class="native-timeline-box" style="margin-top:12px"></div>
+    </div>`;
+  }).join('');
+  g('directResults').innerHTML=h;
+  g('bulkDirectBtn').style.display='flex';
+}
 
-        // 🚨 HANDED OVER DASHBOARD LOGIC 🚨
-        async function loadRadar() {
-            const container = document.getElementById('radar-container'); container.innerHTML = ''; 
-            document.getElementById('loader').style.display = 'block';
-            const r = await fetch('/api/nexus/radar_data'); radarData = await r.json();
-            document.getElementById('loader').style.display = 'none';
-            const order = ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"];
-            order.forEach(src => {
-                const arr = radarData['handed_over'][src] || [];
-                container.innerHTML += `
-                    <div class="card hoverable" onclick="showDetails('${src}')" style="display:flex; justify-content:space-between; align-items:center;">
-                        <div style="font-weight:800; font-size:16px; text-transform:uppercase;">${src}</div>
-                        <div style="text-align:right;"><div class="stat-value">${arr.length}</div><div class="stat-label">Valid Orders</div></div>
-                    </div>
-                `;
-            });
-        }
+// ── BULK TRACK ──
+async function bulkTrackAll(cid){
+  const btns=g(cid).querySelectorAll('.sync-btn');
+  for(let btn of btns){
+    if(!btn.innerText.includes('Close')){btn.click();await new Promise(r=>setTimeout(r,700));}
+  }
+}
 
-        async function loadOps() {
-            document.getElementById('ops-content').style.display = 'none';
-            document.getElementById('ops-loader').style.display = 'block';
-            const r = await fetch('/api/nexus/ops_commander'); const data = await r.json();
-            document.getElementById('followupText').value = data.missing_text;
-            let t = '<thead><tr><th>Order</th><th>Source</th><th>Issue</th><th>Aging</th></tr></thead><tbody>';
-            if(!data.blame_radar.length) t += '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--muted)">All Good! 🎉</td></tr>';
-            else data.blame_radar.forEach(b => t += `<tr><td><b>${b.order}</b></td><td>${b.source}</td><td>${b.issue}</td><td style="color:#ef4444; font-weight:700">${b.aging}</td></tr>`);
-            document.getElementById('blameTable').innerHTML = t + '</tbody>';
-            document.getElementById('ops-content').style.display = 'grid';
-            document.getElementById('ops-loader').style.display = 'none';
-        }
-        
-        function copyFollowup() { navigator.clipboard.writeText(document.getElementById('followupText').value); alert("Copied to clipboard!"); }
+// ── NATIVE TIMELINE ──
+async function loadNativeTimeline(tid,btn){
+  const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
+  const box=g('native-'+cid);
+  if(box.style.display==='block'){
+    box.style.display='none';
+    btn.innerHTML='🔍 Track Native';btn.className='btn btn-outline sync-btn';btn.style='padding:5px 12px;font-size:11px';
+    return;
+  }
+  btn.innerHTML='<div class="loader" style="width:12px;height:12px;border-width:2px"></div>';
+  const r=await fetch('/api/nexus/track_real',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tid})});
+  const data=await r.json();
+  btn.innerHTML='✕ Close Tracker';btn.className='btn btn-outline sync-btn';btn.style='padding:5px 12px;font-size:11px;border-color:var(--red);color:var(--red)';
+  box.style.display='block';
+  if(data.success&&data.events.length){
+    box.innerHTML='<div class="tl-container">'+data.events.map(e=>`
+      <div class="tl-item">
+        <div class="tl-dot${e.active?' active':''}"></div>
+        <span class="tl-time">${e.time}</span>
+        <span class="tl-status">${e.status}</span>
+        <span class="tl-loc">${e.loc}</span>
+      </div>`).join('')+'</div>';
+  } else {
+    box.innerHTML=`<div class="fallback-box">
+      <div style="font-size:28px;margin-bottom:10px">📦</div>
+      <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:6px">Connect to Courier Gateway</div>
+      <div style="font-size:11px;color:var(--t3)">Live tracking available on ParcelsApp</div>
+      <a class="fallback-link" href="https://parcelsapp.com/en/tracking/${tid}" target="_blank">🚢 View on ParcelsApp ↗</a>
+    </div>`;
+  }
+}
 
-        function showDetails(src) {
-            activeDetails = radarData['handed_over'][src]; 
-            if(!activeDetails || activeDetails.length === 0) return;
-            document.getElementById('modalTitle').innerText = src + " - Handed Over";
-            let thead = '<thead><tr>' + Object.keys(activeDetails[0]).map(k=>`<th>${k}</th>`).join('') + '</tr></thead>';
-            let tbody = '<tbody>' + activeDetails.map(r=>'<tr>' + Object.values(r).map(v=>`<td>${v}</td>`).join('') + '</tr>').join('') + '</tbody>';
-            document.getElementById('detailTable').innerHTML = thead + tbody;
-            document.getElementById('detailPanel').style.display = 'block';
-        }
+// ── RADAR ──
+async function loadRadar(){
+  g('radarGrid').innerHTML='';g('radarLoader').style.display='block';
+  const r=await fetch('/api/nexus/radar_data');
+  _radarData=await r.json();
+  g('radarLoader').style.display='none';
+  const order=["ECL QC Center","ECL Zone","GE QC Center","GE Zone","APX","Kerry"];
+  const icons={"ECL QC Center":"🏭","ECL Zone":"📦","GE QC Center":"🏢","GE Zone":"🗃️","APX":"✈️","Kerry":"🚢"};
+  g('radarGrid').innerHTML=order.map(src=>{
+    const arr=_radarData.handed_over[src]||[];
+    return `<div class="radar-card" onclick="showDetails('${src}')">
+      <div><div class="radar-src">${icons[src]||'📦'} ${src}</div><div style="font-size:11px;color:var(--t3);margin-top:4px">Click to view details</div></div>
+      <div style="text-align:right"><div class="radar-count">${arr.length}</div><div class="radar-lbl">Valid Orders</div></div>
+    </div>`;
+  }).join('');
+}
 
-        function downloadCSV() {
-            if(!activeDetails.length) return;
-            const headers = Object.keys(activeDetails[0]).join(',');
-            const rows = activeDetails.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\\n');
-            const link = document.createElement("a");
-            link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + headers + "\\n" + rows));
-            link.setAttribute("download", `nexus_handed_over_export.csv`); link.click();
-        }
-    </script>
-    </body></html>
-    ''')
+// ── OPS ──
+async function loadOps(){
+  g('opsContent').style.display='none';g('opsLoader').style.display='block';
+  const r=await fetch('/api/nexus/ops_commander');
+  const data=await r.json();
+  g('followupText').value=data.missing_text;
+  const rows=data.blame_radar;
+  let t='<thead><tr><th>Order</th><th>Source</th><th>Issue</th><th>Aging</th></tr></thead><tbody>';
+  if(!rows.length) t+='<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">All clear! 🎉</td></tr>';
+  else rows.forEach(b=>t+=`<tr>
+    <td><b style="font-family:monospace;color:var(--acc)">${b.order}</b></td>
+    <td style="color:var(--t2)">${b.source}</td>
+    <td>${b.issue}</td>
+    <td><b style="color:var(--red)">${b.aging}</b></td>
+  </tr>`);
+  g('blameTable').innerHTML=t+'</tbody>';
+  g('opsContent').style.display='block';g('opsLoader').style.display='none';
+}
+
+function copyFollowup(){navigator.clipboard.writeText(g('followupText').value).then(()=>alert('Copied!'));}
+
+// ── MODAL ──
+function showDetails(src){
+  _activeDetails=_radarData.handed_over[src]||[];
+  if(!_activeDetails.length) return;
+  g('modalTitle').textContent=src+' — Handed Over Orders';
+  const keys=Object.keys(_activeDetails[0]);
+  let t='<thead><tr>'+keys.map(k=>`<th>${k}</th>`).join('')+'</tr></thead><tbody>';
+  t+=_activeDetails.map(r=>'<tr>'+keys.map(k=>`<td>${r[k]||'—'}</td>`).join('')+'</tr>').join('');
+  g('detailTable').innerHTML=t+'</tbody>';
+  g('detailModal').style.display='block';
+}
+
+function downloadCSV(){
+  if(!_activeDetails.length) return;
+  const hdr=Object.keys(_activeDetails[0]).join(',');
+  const rows=_activeDetails.map(r=>Object.values(r).map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=encodeURI('data:text/csv;charset=utf-8,'+hdr+'\n'+rows);
+  a.download='nexus_handed_over.csv';a.click();
+}
+
+// ── KEYBOARD ──
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape') g('detailModal').style.display='none';
+  if((e.ctrlKey||e.metaKey)&&e.key==='f'){
+    const inp=_activePane==='track'?g('searchInput'):_activePane==='direct'?g('directInput'):null;
+    if(inp){e.preventDefault();inp.focus();inp.select();}
+  }
+});
+</script>
+</body></html>
+"""
 # ==============================================================================
 # END OF CODE
 # ==============================================================================
@@ -5266,14 +5418,14 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 [data-theme="light"] .sb-back:hover{color:#0f172a;background:rgba(0,0,0,0.06);border-color:rgba(0,0,0,0.12);}
 
 /* SIDEBAR TOGGLE */
-.sb-toggle{
-  background:transparent;border:none;cursor:pointer;
-  color:var(--sb-text);padding:4px;border-radius:6px;
-  transition:.15s;margin-left:auto;flex-shrink:0;
+.sb-toggle-fixed{
+  background:var(--s2);border:1px solid var(--bd);
+  cursor:pointer;color:var(--t2);
+  padding:7px 9px;border-radius:9px;
+  transition:.15s;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
 }
-.sb-toggle:hover{color:var(--t1);background:rgba(255,255,255,0.08);}
-[data-theme="light"] .sb-toggle:hover{background:rgba(0,0,0,0.06);}
+.sb-toggle-fixed:hover{color:var(--t1);border-color:var(--acc);background:var(--s3);}
 .sidebar.collapsed{width:60px;}
 .sidebar.collapsed .sb-info,
 .sidebar.collapsed .sb-tab-label,
@@ -5291,7 +5443,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 .sidebar.collapsed .sb-back{justify-content:center;padding:8px;}
 .sidebar.collapsed .sb-nav{padding:8px 6px;}
 .sidebar.collapsed .sb-user-card{justify-content:center;padding:8px;}
-.sidebar.collapsed .sb-toggle svg{transform:rotate(180deg);}
+
 .sb-foot-divider{height:1px;background:var(--sb-border);margin:4px 0;}
 
 /* MAIN CONTENT AREA */
@@ -5954,13 +6106,7 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
         <div class="sb-title">Bundling Hub</div>
         <div class="sb-sub">Intelligence · Analytics</div>
       </div>
-      <button class="sb-toggle" id="sbToggle" onclick="toggleSidebar()" title="Toggle sidebar">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <rect x="2" y="4" width="12" height="1.5" rx=".75" fill="currentColor"/>
-          <rect x="2" y="7.25" width="8" height="1.5" rx=".75" fill="currentColor"/>
-          <rect x="2" y="10.5" width="12" height="1.5" rx=".75" fill="currentColor"/>
-        </svg>
-      </button>
+
     </div>
   </div>
   <nav class="sb-nav">
@@ -6055,7 +6201,16 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
 <!-- MAIN CONTENT -->
 <div class="main-wrap">
   <div class="topbar">
-    <div class="tb-page-title" id="tbTitle">📦 Bundle Intelligence</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button class="sb-toggle-fixed" onclick="toggleSidebar()" title="Toggle sidebar" id="sbToggle">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <rect x="2" y="4.5" width="14" height="1.8" rx=".9" fill="currentColor"/>
+          <rect x="2" y="8.1" width="9" height="1.8" rx=".9" fill="currentColor"/>
+          <rect x="2" y="11.7" width="14" height="1.8" rx=".9" fill="currentColor"/>
+        </svg>
+      </button>
+      <div class="tb-page-title" id="tbTitle">📦 Bundle Intelligence</div>
+    </div>
     <div class="tb-actions">
       <button class="tbtn tbtn-refresh" onclick="hardRefresh()">🔄 Refresh</button>
       <button class="tbtn tbtn-theme-inline" id="themeInlineBtn" onclick="toggleTheme()" title="Toggle theme" style="display:none">☀️</button>
