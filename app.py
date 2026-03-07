@@ -1276,7 +1276,6 @@ USERS = {
     "albash@joinfleek.com":       "Albash123",
     "waris@joinfleek.com":        "waris123",
     "moiz@joinfleek.com":         "moiz1234",
-    "areeb@joinfleek.com":        "areeb123",
 }
 
 # Guest login ke liye ek simple password (optional, agar seedha guest button chahiye)
@@ -1514,16 +1513,19 @@ LOGIN_HTML = '''
       Sign In
     </button>
 
-    <div class="divider">
-      <div class="divider-line"></div>
-      <span class="divider-text">OR</span>
-      <div class="divider-line"></div>
-    </div>
+  </form>
 
-    <button type="submit" name="action" value="guest" class="btn-guest">
+  <div class="divider">
+    <div class="divider-line"></div>
+    <span class="divider-text">OR</span>
+    <div class="divider-line"></div>
+  </div>
+
+  <form method="POST" style="margin:0;padding:0">
+    <input type="hidden" name="action" value="guest">
+    <button type="submit" class="btn-guest">
       👀 Continue as Guest (View Only)
     </button>
-
   </form>
 
   <p class="footer-note">Authorized Fleek Operations Personnel Only</p>
@@ -1540,7 +1542,6 @@ function togglePwd(){
 </body>
 </html>
 '''
-
 
 # ==============================================================================
 # LOGOUT ROUTE — yeh waise hi rahega, koi change nahi
