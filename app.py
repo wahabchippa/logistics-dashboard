@@ -4674,20 +4674,95 @@ def grg(country):
 def ctx():
     c=ssl.create_default_context(); c.check_hostname=False; c.verify_mode=ssl.CERT_NONE; return c
 
+def parse_weight_bracket(s):
+    """Parse '7-8 kg' -> (7,8), '30+ kg' -> (30,9999), '0-1 kg' -> (0,1)"""
+    s=str(s).strip().lower().replace("kg","").strip()
+    if "+" in s:
+        try: return (float(re.sub(r"[^0-9.]","",s.replace("+",""))),9999.0)
+        except: return None
+    if "-" in s:
+        parts=s.split("-")
+        try: return (float(re.sub(r"[^0-9.]","",parts[0])),float(re.sub(r"[^0-9.]","",parts[1])))
+        except: return None
+    return None
+
+def lookup_rate(rm_brackets, country, billed_kg, default=4.50):
+    """
+    rm_brackets: { country_lower: [(min,max,rate), ...] }
+    billed_kg: ceil(actual_weight) — the charged kg
+    Returns the matching per-kg rate.
+    """
+    ctry=str(country).strip().lower()
+    # Try exact country match, then aliases
+    ALIASES={
+        "united kingdom":["uk","gb","england","britain","u.k","u.k."],
+        "united states":["usa","us","america","u.s","u.s.a"],
+        "united arab emirates":["uae","dubai","u.a.e"],
+        "saudi arabia":["saudia arabia","ksa","saudi"],
+        "south korea":["korea"],
+        "new zealand":["nz"],
+        "netherlands":["holland"],
+    }
+    candidates=[]
+    if ctry in rm_brackets:
+        candidates=rm_brackets[ctry]
+    else:
+        for canon,alts in ALIASES.items():
+            if ctry in alts or ctry==canon:
+                key=canon if canon in rm_brackets else next((a for a in alts if a in rm_brackets),None)
+                if key: candidates=rm_brackets[key]; break
+        if not candidates:
+            # partial match
+            for k,v in rm_brackets.items():
+                if k in ctry or ctry in k:
+                    candidates=v; break
+    if not candidates:
+        return default
+    # Find bracket where billed_kg falls: min < billed <= max
+    for (mn,mx,rate) in sorted(candidates,key=lambda x:x[0]):
+        if mn < billed_kg <= mx:
+            return rate
+    # Fallback: nearest bracket (for edge cases like billed=0)
+    if billed_kg<=candidates[0][1]: return candidates[0][2]
+    return candidates[-1][2]  # heaviest bracket
+
 def fetch_rates(cx):
     try:
         url="https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
         req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
         with urllib.request.urlopen(req,timeout=20,context=cx) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
-        rm={}
+        # Col H=7: country, Col J=9: weight bracket, Col M=12: per kg rate
+        COUNTRY_COL=7; BRACKET_COL=9; RATE_COL=12
+        rm_brackets={}   # country_lower -> [(min,max,rate), ...]
+        rm_flat={}       # country_lower -> default rate (heaviest bracket as fallback)
         for row in data[1:]:
-            p=row+[""]*20; c2=str(p[7]).strip().lower(); rs=str(p[12]).strip()
-            if c2 and rs:
-                try: rm[c2]=float(re.sub(r"[^0-9.]","",rs))
-                except: pass
-        return "RATES",rm
-    except: return "RATES",{}
+            p=row+[""]*20
+            ctry=str(p[COUNTRY_COL]).strip().lower()
+            bracket_raw=str(p[BRACKET_COL]).strip()
+            rate_raw=str(p[RATE_COL]).strip()
+            if not ctry or ctry in ["country","shipping_address_country","","nan","#n/a"]: continue
+            if not rate_raw: continue
+            try:
+                rate_val=float(re.sub(r"[^0-9.]","",rate_raw))
+                if not (0.01<rate_val<500): continue
+            except: continue
+            bracket=parse_weight_bracket(bracket_raw)
+            if ctry not in rm_brackets: rm_brackets[ctry]=[]
+            if bracket:
+                rm_brackets[ctry].append((bracket[0],bracket[1],rate_val))
+            # Also keep a simple flat rate (average of all brackets)
+            if ctry not in rm_flat: rm_flat[ctry]=[]
+            rm_flat[ctry].append(rate_val)
+        # Compute flat average per country as fallback
+        rm_avg={k:round(sum(v)/len(v),4) for k,v in rm_flat.items() if v}
+        countries=len(rm_brackets)
+        sample={k:[f"{mn}-{mx}kg=£{r}" for mn,mx,r in v[:2]] for k,v in list(rm_brackets.items())[:3]}
+        print(f"[RATES] Loaded {countries} countries with weight-bracket rates. Sample: {sample}")
+        return "RATES",(rm_brackets,rm_avg)
+    except Exception as e:
+        print(f"[RATES] ERROR: {e}")
+        return "RATES",({},{})
 
 def fetch_status():
     global _sc
@@ -4754,9 +4829,11 @@ def fetch_sheet(name,url,col,start,cx):
                 if cnv: lcn=cnv
                 if tv: lt=tv
                 bxv=str(p[col["b"]]).strip()
-                # For QC Center also check col b-1 in case column shifted
+                # For QC Center also check alternate box col
                 if not bxv and col.get("b2") is not None:
-                    bxv=str(p[col["b2"]]).strip()
+                    bxv2=str(p[col["b2"]]).strip()
+                    # Only use b2 if it looks like a box number (numeric)
+                    if bxv2 and re.match(r"^[0-9]+$",bxv2): bxv=bxv2
                 rows.append({"order":co,"date":dv or ld,"date_std":sd(dv or ld),
                     "boxes":bxv,"weight":rw,
                     "vendor":vv or lv,"title":rti or "N/A","item_count":str(p[col["ic"]]).strip() or "0",
@@ -4791,12 +4868,30 @@ def fetch_all():
         except concurrent.futures.TimeoutError:
             for f in futs:
                 if not f.done(): f.cancel(); res[futs[f]]=[] if futs[f]!="RATES" else {}
+    # Ensure RATES is always (brackets_dict, avg_dict)
+    if "RATES" in res and not isinstance(res["RATES"],tuple):
+        res["RATES"]=({},{})
     _bc["data"]=res; _bc["time"]=now; return res
 
 # --- API ---
+@app.route("/api/nexus/debug_rates")
+def api_debug_rates():
+    mode=user_mode()
+    if not mode: return jsonify({"error":"Access denied"}),403
+    sheets=fetch_all()
+    rates_data=sheets.get("RATES",({},{}))
+    rm_brackets,rm_avg=rates_data if isinstance(rates_data,tuple) else ({},{})
+    # Convert for JSON: {country: [(min,max,rate),...]}
+    out={k:[{"min":mn,"max":mx,"rate":r} for mn,mx,r in v] for k,v in rm_brackets.items()}
+    return jsonify({"countries":len(rm_brackets),"brackets":out,"averages":rm_avg})
+
 @app.route("/api/nexus/app_data")
 def api_app_data():
-    sheets=fetch_all(); sm=fetch_status(); rm=sheets.get("RATES",{}); DR=4.50
+    sheets=fetch_all(); sm=fetch_status()
+    rates_data=sheets.get("RATES",({},{}))
+    if isinstance(rates_data,tuple): rm_brackets,rm_avg=rates_data
+    else: rm_brackets,rm_avg={},{}
+    DR=4.50
     bundles=[]; tb=to2=0; tsav=0.0
     ss={"ECL QC Center":{"orders":0,"boxes":0},"PK Zone":{"orders":0,"boxes":0}}
     NA_VALS={"n/a","#n/a","not applicable","na","none","null","-","nan",""}
@@ -4832,7 +4927,8 @@ def api_app_data():
             ss[pk]["orders"]+=len(cb["orders"]); ss[pk]["boxes"]+=1
     for b in bundles:
         tq=0; bw=0.0; isc=0.0
-        pr=rm.get(str(b.get("country","")).strip().lower(),DR)
+        raw_ctry=str(b.get("country","")).strip()
+        # rate set per-order and per-bundle using weight brackets below
         for o in b["orders"]:
             try: ic_raw=int(float(re.sub(r"[^0-9.]","",str(o["item_count"])) or 1)); tq+=ic_raw
             except: ic_raw=1
@@ -4844,9 +4940,13 @@ def api_app_data():
                 indiv_wt=wt
             else:
                 indiv_wt=estimate_item_weight(o["title"], ic_raw)
-            isc+=max(math.ceil(indiv_wt),1)*pr
+            indiv_billed=max(math.ceil(indiv_wt),1)
+            o_rate=lookup_rate(rm_brackets, raw_ctry, indiv_billed, DR)
+            isc+=indiv_billed*o_rate
         b["total_items"]=tq; b["weight_kg"]=round(bw,2)
-        bc=max(math.ceil(bw),1)*pr
+        bundle_billed=max(math.ceil(bw),1)
+        pr=lookup_rate(rm_brackets, raw_ctry, bundle_billed, DR)
+        bc=bundle_billed*pr
         sv=isc-bc; b["savings_gbp"]=round(sv if sv>0 else 0,2)
         b["rate_gbp"]=round(pr,2); b["indiv_cost"]=round(isc,2); b["bundle_cost"]=round(bc,2)
         tsav+=b["savings_gbp"]
@@ -4886,8 +4986,10 @@ def bundling_spa():
     email=(session.get("email") or session.get("user_email") or session.get("username") or "").lower().strip()
     # inject rates for client-side savings calc
     import json as _json
-    sheets=fetch_all(); rm=sheets.get("RATES",{})
-    rm_js="const RATES_MAP="+_json.dumps(rm)+";"
+    sheets=fetch_all()
+    rates_data=sheets.get("RATES",({},{}))
+    rm_brackets,rm_avg=rates_data if isinstance(rates_data,tuple) else ({},{})
+    rm_js="const RATES_MAP="+_json.dumps(rm_avg)+";"
     html=BUNDLING_HTML.replace("window.onload=init;","const GUEST="+gflag+";\nconst USER_EMAIL='"+email+"';\n"+rm_js+"\nwindow.onload=init;")
     return render_template_string(html)
 
