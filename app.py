@@ -4109,7 +4109,7 @@ def api_track_real():
                         print(f"[TRACK] Ship24 web OK {tid} — {len(events)} events via {ship24_url}")
                         return jsonify({"success":True,"events":events,"carrier":carrier,"source":"Ship24"})
             # Also try JSON API route that Next.js might expose
-            m2 = re.search(r'"trackingNumber"\s*:\s*"[^"]*".*?"events"\s*:\s*(\[.*?\])', html, re.DOTALL)
+            m2 = re.search('"events"\\s*:\\s*(\\[\\{[^\\]]{20,}\\}\\])', html, re.DOTALL)
             if m2:
                 raw_evs = json.loads(m2.group(1))
                 if raw_evs:
