@@ -3885,7 +3885,7 @@ def nexus_fetch_sheet_data(url, name):
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
         req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0","Cache-Control":"no-cache"})
-        with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as res:
             data = list(csv.reader(res.read().decode("utf-8",errors="ignore").splitlines()))
         col = NEXUS_SHEET_MAP.get(name)
         if not col or not data: return []
@@ -3914,6 +3914,9 @@ def nexus_clean_tids(raw):
     for p in PATS:
         for m in re.finditer(p, raw, re.IGNORECASE):
             t = m.group(1).strip()
+            # 150 TIDs: always add leading 0 (carrier needs 0150...)
+            if re.match(r"^150", t) and not t.startswith("0"):
+                t = "0" + t
             if t not in out: out.append(t)
     return out
 
@@ -3921,7 +3924,7 @@ def nexus_fetch_kerry_status(url):
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
         req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
+        with urllib.request.urlopen(req, timeout=6, context=ctx) as res:
             data = list(csv.reader(res.read().decode("utf-8",errors="ignore").splitlines()))
         if not data: return {}
         oi=si=hi=-1
@@ -3991,57 +3994,61 @@ def api_nexus_search():
 
 @app.route("/api/nexus/track_real", methods=["POST"])
 def api_track_real():
-    # Backend: Ship24 website scrape as server-side fallback
+    # Server-side fallback: ParcelsApp JSON API + 17track
+    # (used when browser-side sources fail due to CORS)
     tid=(request.json or {}).get("tid","").strip()
     if not tid: return jsonify({"success":False})
     ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-    HDR={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
-         "Accept":"text/html,*/*;q=0.8","Accept-Language":"en-GB,en;q=0.9",
-         "Accept-Encoding":"gzip, deflate, br","Connection":"keep-alive"}
-    def sev(t,s,l,a): return {"time":t or "","status":s or "Update","loc":l or "","active":a}
-    def find_evs(node, d=0):
-        if d>12: return None
-        if isinstance(node,dict):
-            if "events" in node and isinstance(node["events"],list) and len(node["events"])>0:
-                e0=node["events"][0]
-                if isinstance(e0,dict) and any(k in e0 for k in ["statusCode","status","datetime","date","description"]):
-                    return node["events"]
-            for v in node.values():
-                r=find_evs(v,d+1)
-                if r: return r
-        elif isinstance(node,list):
-            for item in node:
-                r=find_evs(item,d+1)
-                if r: return r
-        return None
-    for url in [f"https://ship24.com/tracking?p={tid}",f"https://www.ship24.com/tracking?p={tid}"]:
-        try:
-            import gzip as gz
-            req=urllib.request.Request(url,headers={**HDR,"Referer":"https://ship24.com/"})
-            with urllib.request.urlopen(req,timeout=20,context=ctx) as res:
-                raw=res.read()
-            try: html=gz.decompress(raw).decode("utf-8",errors="ignore")
-            except: html=raw.decode("utf-8",errors="ignore")
-            m=re.search('<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',html,re.DOTALL)
-            if m:
-                nd=json.loads(m.group(1)); re_evs=find_evs(nd)
-                if re_evs:
-                    events=[]
-                    for i,ev in enumerate(re_evs):
-                        lo=ev.get("location","")
-                        if isinstance(lo,dict): lo=lo.get("name","") or lo.get("city","")
-                        co=ev.get("courier","")
-                        if isinstance(co,dict): co=co.get("name","")
-                        elif not isinstance(co,str): co=""
-                        fl=(str(lo or "")+" — "+co if co and co not in str(lo or "") else str(lo or "")).strip(" —")
-                        events.append(sev(ev.get("datetime","") or ev.get("date",""),
-                            ev.get("statusCode","") or ev.get("status","") or ev.get("description",""),fl,i==0))
-                    if events:
-                        print(f"[TRACK] Ship24 OK {tid} {len(events)} events")
-                        return jsonify({"success":True,"events":events,"source":"Ship24"})
-        except Exception as e:
-            print(f"[TRACK] Ship24 fail: {e}")
+    def sev(t,s,l,a): return {"time":str(t) or "","status":str(s) or "Update","loc":str(l) or "","active":a}
+
+    # SERVER SOURCE 1: ParcelsApp API
+    try:
+        url=f"https://parcelsapp.com/api/v3/shipments/tracking?trackingNumbers={urllib.parse.quote(tid)}&language=en&country=GB"
+        req=urllib.request.Request(url,headers={
+            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept":"application/json",
+            "Referer":f"https://parcelsapp.com/en/tracking/{tid}",
+            "Origin":"https://parcelsapp.com"
+        })
+        with urllib.request.urlopen(req,timeout=8,context=ctx) as res:
+            data=json.loads(res.read().decode("utf-8"))
+        ships=data.get("shipments") or []
+        if ships:
+            ship=ships[0]; evs=ship.get("events") or []
+            carrier=ship.get("carrier","")
+            if isinstance(carrier,list): carrier=", ".join(c.get("name","") for c in carrier if c.get("name"))
+            events=[]
+            for i,ev in enumerate(evs):
+                l=str(ev.get("location","") or ""); cy=str(ev.get("country","") or "")
+                fl=(l+(", "+cy if cy and cy not in l else "")).strip(", ")
+                events.append(sev(ev.get("date","") or ev.get("time",""),
+                                  ev.get("description","") or ev.get("status",""), fl, i==0))
+            if events:
+                return jsonify({"success":True,"events":events,"carrier":carrier,"source":"ParcelsApp"})
+    except Exception as e:
+        print(f"[TRACK-SRV] ParcelsApp: {e}")
+
+    # SERVER SOURCE 2: 17track widget
+    try:
+        payload=json.dumps({"data":[{"num":tid}]}).encode("utf-8")
+        req=urllib.request.Request("https://buyer.17track.net/orderapi/call",data=payload,headers={
+            "User-Agent":"Mozilla/5.0","Content-Type":"application/json",
+            "Accept":"application/json","17token":"321UctxG7l5bPkEhUHaQvlBJdTBWfqzS"
+        })
+        with urllib.request.urlopen(req,timeout=8,context=ctx) as res:
+            data=json.loads(res.read().decode("utf-8"))
+        acc=((data.get("data") or {}).get("accepted") or [])
+        if acc:
+            track=acc[0].get("track") or {}
+            all_evs=(track.get("z0") or [])+(track.get("z1") or [])
+            events=[sev(ev.get("a",""),ev.get("z","") or ev.get("c",""),ev.get("l",""),i==0) for i,ev in enumerate(all_evs)]
+            if events:
+                return jsonify({"success":True,"events":events,"carrier":track.get("c",""),"source":"17track"})
+    except Exception as e:
+        print(f"[TRACK-SRV] 17track: {e}")
+
     return jsonify({"success":False,"tid":tid})
+
 
 @app.route("/api/nexus/radar_data", methods=["GET"])
 def api_nexus_radar_data():
@@ -4430,7 +4437,16 @@ async function bulkTrackAll(cid){
   for(let b of btns){if(!b.textContent.includes('Close')){b.click();await new Promise(r=>setTimeout(r,900));}}
 }
 
-// ── MAIN TRACKING FUNCTION — browser-side, 3 free sources, all inline ──
+// ── MAIN TRACKING FUNCTION — browser-side with timeouts, server fallback ──
+
+  // Helper: fetch with AbortController timeout
+  async function ftch(url, opts, ms=8000){
+    const ctrl=new AbortController();
+    const timer=setTimeout(()=>ctrl.abort(),ms);
+    try{ const r=await fetch(url,{...opts,signal:ctrl.signal}); clearTimeout(timer); return r; }
+    catch(e){ clearTimeout(timer); throw e; }
+  }
+
 async function trackTID(tid,btn){
   const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
   const box=g('tl-'+cid);
@@ -4440,66 +4456,74 @@ async function trackTID(tid,btn){
     return;
   }
   btn.innerHTML='<div class="loader" style="width:12px;height:12px;border-width:2px;display:inline-block;vertical-align:middle"></div>';
-  btn.disabled=true;box.style.display='block';
-  box.innerHTML='<div class="loader-wrap" style="padding:16px"><div class="loader"></div><div class="loader-txt">Fetching live tracking data...</div></div>';
+  btn.disabled=true; box.style.display='block';
+  box.innerHTML='<div class="loader-wrap" style="padding:16px"><div class="loader"></div><div class="loader-txt">Fetching live data...</div></div>';
 
   function sev(t,s,l,a){return{time:t||'',status:s||'Update',loc:l||'',active:a};}
   function showTL(evs,source,carrier){
     if(!evs||!evs.length)return false;
-    const src=`<span class="tl-src">via ${source}${carrier?' · '+carrier:''}</span>`;
+    const src=`<span class="tl-src">📡 ${source}${carrier?' · '+carrier:''}</span>`;
     const items=evs.map(e=>`<div class="tl-item"><div class="tl-dot${e.active?' active':''}"></div><span class="tl-time">${e.time}</span><span class="tl-status">${e.status}</span><span class="tl-loc">${e.loc}</span></div>`).join('');
     box.innerHTML=src+'<div class="tl-wrap">'+items+'</div>';
     btn.textContent='✕ Close';btn.className='btn btn-outline sync-btn';
     btn.style='padding:5px 12px;font-size:11px;flex-shrink:0;border-color:var(--red);color:var(--red)';
-    btn.disabled=false;return true;
+    btn.disabled=false; return true;
+  }
+  function noData(){
+    box.innerHTML='<div class="no-data"><div style="font-size:22px">📭</div><div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:8px">No tracking data yet</div><div style="font-size:11px;color:var(--t3);margin-top:4px">Shipment may not be scanned by carrier yet</div></div>';
+    btn.textContent='✕ Close';btn.className='btn btn-outline sync-btn';
+    btn.style='padding:5px 12px;font-size:11px;flex-shrink:0';btn.disabled=false;
   }
 
-  // SOURCE 1: ParcelsApp (CORS allowed, direct browser call)
+  // SOURCE 1: ParcelsApp — direct browser fetch (8s timeout)
   try{
-    const r=await fetch(`https://parcelsapp.com/api/v3/shipments/tracking?trackingNumbers=${encodeURIComponent(tid)}&language=en&country=GB`,{
-      headers:{'Accept':'application/json','Origin':'https://parcelsapp.com','Referer':`https://parcelsapp.com/en/tracking/${tid}`}
-    });
+    const r=await ftch(
+      `https://parcelsapp.com/api/v3/shipments/tracking?trackingNumbers=${encodeURIComponent(tid)}&language=en&country=GB`,
+      {headers:{'Accept':'application/json','Origin':'https://parcelsapp.com','Referer':`https://parcelsapp.com/en/tracking/${tid}`}},
+      8000
+    );
     if(r.ok){
-      const d=await r.json();const ship=(d.shipments||[])[0];
+      const d=await r.json(); const ship=(d.shipments||[])[0];
       if(ship&&ship.events&&ship.events.length){
-        let cr=ship.carrier||'';if(Array.isArray(cr))cr=cr.map(c=>c.name||'').filter(Boolean).join(', ');
+        let cr=ship.carrier||''; if(Array.isArray(cr))cr=cr.map(c=>c.name||'').filter(Boolean).join(', ');
         const evs=ship.events.map((ev,i)=>{
-          const l=ev.location||'',c=ev.country||'';
-          return sev(ev.date||ev.time||'',ev.description||ev.status||'',(l+(c&&!l.includes(c)?', '+c:'')).replace(/,\s*$/,''),i===0);
+          const l=ev.location||'',ct=ev.country||'';
+          return sev(ev.date||ev.time||'',ev.description||ev.status||'',(l+(ct&&!l.includes(ct)?', '+ct:'')).replace(/,\s*$/,''),i===0);
         });
         if(showTL(evs,'ParcelsApp',cr))return;
       }
     }
-  }catch(e){console.log('[T1]',e.message);}
+  }catch(e){console.log('[T1 ParcelsApp]',e.message);}
 
-  // SOURCE 2: 17track public widget (direct browser call)
+  // SOURCE 2: 17track — direct browser fetch (8s timeout)
   try{
-    const r=await fetch('https://buyer.17track.net/orderapi/call',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','17token':'321UctxG7l5bPkEhUHaQvlBJdTBWfqzS'},
-      body:JSON.stringify({data:[{num:tid}]})
-    });
+    const r=await ftch(
+      'https://buyer.17track.net/orderapi/call',
+      {method:'POST',headers:{'Content-Type':'application/json','17token':'321UctxG7l5bPkEhUHaQvlBJdTBWfqzS'},body:JSON.stringify({data:[{num:tid}]})},
+      8000
+    );
     if(r.ok){
-      const d=await r.json();const acc=((d.data||{}).accepted||[]);
+      const d=await r.json(); const acc=((d.data||{}).accepted||[]);
       if(acc.length){
         const tr=acc[0].track||{};
         const evs=[...(tr.z0||[]),...(tr.z1||[])].map((ev,i)=>sev(ev.a||'',ev.z||ev.c||'',ev.l||'',i===0));
         if(showTL(evs,'17track',tr.c||''))return;
       }
     }
-  }catch(e){console.log('[T2]',e.message);}
+  }catch(e){console.log('[T2 17track]',e.message);}
 
-  // SOURCE 3: Backend (Python scrapes Ship24 server-side)
+  // SOURCE 3: Backend server-side fetch (ParcelsApp+17track from Python, 12s timeout)
   try{
-    const r=await fetch('/api/nexus/track_real',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tid})});
+    const r=await ftch(
+      '/api/nexus/track_real',
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tid})},
+      12000
+    );
     const d=await r.json();
-    if(d.success&&d.events&&d.events.length){if(showTL(d.events,d.source||'Ship24',d.carrier||''))return;}
-  }catch(e){console.log('[T3]',e.message);}
+    if(d.success&&d.events&&d.events.length){if(showTL(d.events,d.source||'Server',d.carrier||''))return;}
+  }catch(e){console.log('[T3 backend]',e.message);}
 
-  // All failed
-  box.innerHTML='<div class="no-data"><div style="font-size:22px">📭</div><div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:8px">No tracking data yet</div><div style="font-size:11px;color:var(--t3);margin-top:4px">Shipment may not be scanned by carrier yet</div></div>';
-  btn.textContent='✕ Close';btn.className='btn btn-outline sync-btn';
-  btn.style='padding:5px 12px;font-size:11px;flex-shrink:0';btn.disabled=false;
+  noData();
 }
 
 // Radar
