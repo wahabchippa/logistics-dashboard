@@ -4019,37 +4019,181 @@ def api_nexus_search():
 
 @app.route('/api/nexus/track_real', methods=['POST'])
 def api_track_real():
-    tid = request.json.get('tid','')
-    if not tid: return jsonify({"success": False})
-    api_key = "8cbba2461aa13856fbaa27f4c26be113"
-    target_url = f"https://www.ordertracker.com/track/{tid}"
-    scraper_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}"
+    # FREE tracking — Ship24 website scrape + fallbacks, no API key
+    tid = (request.json or {}).get('tid','').strip()
+    if not tid: return jsonify({"success": False, "error": "no_tid"})
+    ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
+
+    BROWSER_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-GB,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Cache-Control": "max-age=0",
+    }
+
+    def sev(t, s, l, active):
+        return {"time": t or "—", "status": s or "Update", "loc": l or "", "active": active}
+
+    def find_events_in_json(node, depth=0):
+        if depth > 12: return None
+        if isinstance(node, dict):
+            # Ship24 stores events as array with statusCode/datetime/location fields
+            if 'events' in node and isinstance(node['events'], list) and len(node['events']) > 0:
+                ev0 = node['events'][0]
+                if isinstance(ev0, dict) and any(k in ev0 for k in ['statusCode','status','datetime','date','description']):
+                    return node['events']
+            for v in node.values():
+                r = find_events_in_json(v, depth+1)
+                if r: return r
+        elif isinstance(node, list):
+            for item in node:
+                r = find_events_in_json(item, depth+1)
+                if r: return r
+        return None
+
+    # ─────────────────────────────────────────────────────────────
+    # SOURCE 1: Ship24 website — __NEXT_DATA__ scrape (FREE)
+    # ship24.com renders tracking results in page JSON
+    # ─────────────────────────────────────────────────────────────
+    for ship24_url in [
+        f"https://ship24.com/tracking?p={tid}",
+        f"https://www.ship24.com/tracking?p={tid}",
+        f"https://ship24.com/en/tracking?p={tid}",
+    ]:
+        try:
+            hdrs = {**BROWSER_HEADERS, "Referer": "https://ship24.com/"}
+            req = urllib.request.Request(ship24_url, headers=hdrs)
+            with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
+                html = res.read()
+                # handle gzip
+                import gzip as _gz
+                try: html = _gz.decompress(html).decode('utf-8', errors='ignore')
+                except: html = html.decode('utf-8', errors='ignore')
+
+            # Extract __NEXT_DATA__
+            m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
+            if m:
+                ndata = json.loads(m.group(1))
+                raw_evs = find_events_in_json(ndata)
+                if raw_evs:
+                    events = []
+                    for i, ev in enumerate(raw_evs):
+                        # Ship24 event fields
+                        loc_obj = ev.get('location') or {}
+                        if isinstance(loc_obj, dict):
+                            loc = loc_obj.get('name','') or loc_obj.get('city','') or ''
+                        else:
+                            loc = str(loc_obj) if loc_obj else ''
+                        courier_obj = ev.get('courier') or ev.get('courierCode','')
+                        courier = ''
+                        if isinstance(courier_obj, dict): courier = courier_obj.get('name','')
+                        elif isinstance(courier_obj, str): courier = courier_obj
+                        full_loc = (loc + (' — '+courier if courier and courier not in loc else '')).strip(' —')
+                        events.append(sev(
+                            ev.get('datetime','') or ev.get('date','') or ev.get('time',''),
+                            ev.get('statusCode','') or ev.get('status','') or ev.get('description',''),
+                            full_loc, i==0
+                        ))
+                    if events:
+                        # Extract carrier name
+                        carrier = ''
+                        trackings = find_tracking_root(ndata)
+                        if trackings and isinstance(trackings, dict):
+                            carrier = trackings.get('courierCode','') or trackings.get('carrier','')
+                        print(f"[TRACK] Ship24 web OK {tid} — {len(events)} events via {ship24_url}")
+                        return jsonify({"success":True,"events":events,"carrier":carrier,"source":"Ship24"})
+            # Also try JSON API route that Next.js might expose
+            m2 = re.search(r'"trackingNumber"\s*:\s*"[^"]*".*?"events"\s*:\s*(\[.*?\])', html, re.DOTALL)
+            if m2:
+                raw_evs = json.loads(m2.group(1))
+                if raw_evs:
+                    events = [sev(ev.get('datetime',''),ev.get('statusCode','') or ev.get('status',''),
+                                  str(ev.get('location','')), i==0) for i,ev in enumerate(raw_evs)]
+                    if events:
+                        print(f"[TRACK] Ship24 regex OK {tid}")
+                        return jsonify({"success":True,"events":events,"carrier":"","source":"Ship24"})
+        except Exception as e:
+            print(f"[TRACK] Ship24 {ship24_url} fail: {e}")
+            continue
+
+    # ─────────────────────────────────────────────────────────────
+    # SOURCE 2: ParcelsApp internal API (multi-carrier, no key)
+    # ─────────────────────────────────────────────────────────────
     try:
-        req = urllib.request.Request(scraper_url, headers={'User-Agent': 'Mozilla/5.0'})
-        html = urllib.request.urlopen(req, timeout=25).read().decode('utf-8')
-        match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html)
-        if match:
-            data = json.loads(match.group(1))
-            def find_events(node):
-                if isinstance(node, dict):
-                    if 'events' in node and isinstance(node['events'], list) and len(node['events']) > 0:
-                        if 'description' in node['events'][0] or 'status' in node['events'][0]:
-                            return node['events']
-                    for k, v in node.items():
-                        found = find_events(v)
-                        if found: return found
-                elif isinstance(node, list):
-                    for item in node:
-                        found = find_events(item)
-                        if found: return found
-                return None
-            raw_events = find_events(data)
-            if raw_events:
-                events = [{"time": ev.get("date","Unknown"), "status": ev.get("description", ev.get("status","Update")),
-                           "loc": ev.get("location",""), "active": i==0} for i, ev in enumerate(raw_events)]
-                return jsonify({"success": True, "events": events})
-    except: pass
-    return jsonify({"success": False, "tid": tid})
+        url = f"https://parcelsapp.com/api/v3/shipments/tracking?trackingNumbers={tid}&language=en&country=GB"
+        req = urllib.request.Request(url, headers={
+            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept":"application/json",
+            "Referer":f"https://parcelsapp.com/en/tracking/{tid}",
+            "Origin":"https://parcelsapp.com"
+        })
+        with urllib.request.urlopen(req, timeout=18, context=ctx) as res:
+            data = json.loads(res.read().decode('utf-8'))
+        ships = data.get('shipments') or []
+        if ships:
+            ship = ships[0]
+            carrier = ship.get('carrier','')
+            if isinstance(carrier, list): carrier = ', '.join(c.get('name','') for c in carrier if c.get('name'))
+            evs = ship.get('events') or []
+            events = []
+            for i, ev in enumerate(evs):
+                loc = ev.get('location','') or ''; cty = ev.get('country','') or ''
+                fl = (loc + (', '+cty if cty and cty not in loc else '')).strip(', ')
+                events.append(sev(ev.get('date','') or ev.get('time',''),
+                                  ev.get('description','') or ev.get('status',''), fl, i==0))
+            if events:
+                print(f"[TRACK] ParcelsApp OK {tid} — {len(events)} events")
+                return jsonify({"success":True,"events":events,"carrier":carrier,
+                                "source":"ParcelsApp","status":ship.get('status','')})
+    except Exception as e:
+        print(f"[TRACK] ParcelsApp fail: {e}")
+
+    # ─────────────────────────────────────────────────────────────
+    # SOURCE 3: 17track public widget token (200+ carriers)
+    # ─────────────────────────────────────────────────────────────
+    try:
+        payload = json.dumps({"data":[{"num":tid}]}).encode('utf-8')
+        req = urllib.request.Request("https://buyer.17track.net/orderapi/call", data=payload, headers={
+            "User-Agent":"Mozilla/5.0","Content-Type":"application/json",
+            "Accept":"application/json","17token":"321UctxG7l5bPkEhUHaQvlBJdTBWfqzS"
+        })
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
+            data = json.loads(res.read().decode('utf-8'))
+        acc = ((data.get('data') or {}).get('accepted') or [])
+        if acc:
+            track = acc[0].get('track') or {}
+            all_evs = (track.get('z0') or []) + (track.get('z1') or [])
+            events = [sev(ev.get('a',''), ev.get('z','') or ev.get('c',''), ev.get('l',''), i==0)
+                      for i,ev in enumerate(all_evs)]
+            if events:
+                print(f"[TRACK] 17track OK {tid} — {len(events)} events")
+                return jsonify({"success":True,"events":events,"carrier":track.get('c',''),"source":"17track"})
+    except Exception as e:
+        print(f"[TRACK] 17track fail: {e}")
+
+    print(f"[TRACK] All sources failed: {tid}")
+    return jsonify({"success":False,"tid":tid})
+
+def find_tracking_root(node, depth=0):
+    if depth > 8: return None
+    if isinstance(node, dict):
+        if 'courierCode' in node or ('carrier' in node and 'events' in node):
+            return node
+        for v in node.values():
+            r = find_tracking_root(v, depth+1)
+            if r: return r
+    elif isinstance(node, list):
+        for item in node:
+            r = find_tracking_root(item, depth+1)
+            if r: return r
+    return None
+
 
 @app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
