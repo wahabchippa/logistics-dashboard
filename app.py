@@ -3890,28 +3890,42 @@ def nexus_fetch_sheet_data(url, name):
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
         req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0","Cache-Control":"no-cache"})
-        with urllib.request.urlopen(req, timeout=12, context=ctx) as res:
-            raw = res.read(5*1024*1024).decode("utf-8", errors="ignore")  # 5MB cap — prevents huge sheet hang
-            data = list(csv.reader(raw.splitlines()))
         col = NEXUS_SHEET_MAP.get(name)
-        if not col or not data: return []
-        out = []
-        for row in data:
-            if not row: continue
-            p = row + [""]*60
-            ov = str(p[col["o"]-1]).strip()
-            if not re.search(r"\d", ov) or ov.lower() in ["n/a","nan","order","orderid"]: continue
-            def gv(n):
-                v=str(p[n-1]).strip()
-                return v if v and v.lower() not in ["n/a","nan","-",""] else "N/A"
-            # Skip rows older than Jan 2026 (keeps memory low on huge sheets like GE Zone)
-            d_val = str(p[col["d"]-1]).strip()
-            d_dt = nexus_parse_date(d_val)
-            if d_dt and d_dt < NEXUS_FILTER_DATE: continue
-            out.append({"order":ov,"date":gv(col["d"]),"boxes":gv(col["b"]),"weight":gv(col["w"]),
-                "vendor":gv(col["v"]),"customer":gv(col["c"]),"country":gv(col["cn"]),"tid":gv(col["t"]),"mawb":gv(col["ma"])})
+        if not col: return []
+        out = []; buf = b""; header_skipped = False
+        with urllib.request.urlopen(req, timeout=12, context=ctx) as res:
+            # Stream in 64KB chunks — stop reading once we hit enough recent data
+            # This prevents GE Zone (14k rows) from timing out Vercel
+            while True:
+                chunk = res.read(65536)
+                if not chunk: break
+                buf += chunk
+                # Process complete lines only
+                lines = buf.split(b"\n")
+                buf = lines[-1]  # keep incomplete last line
+                for line_bytes in lines[:-1]:
+                    line = line_bytes.decode("utf-8", errors="ignore").strip()
+                    if not line: continue
+                    row = next(csv.reader([line]))
+                    if not row: continue
+                    p = row + [""]*60
+                    ov = str(p[col["o"]-1]).strip()
+                    if not re.search(r"\d", ov) or ov.lower() in ["n/a","nan","order","orderid","#n/a"]:
+                        continue
+                    def gv(n):
+                        v=str(p[n-1]).strip()
+                        return v if v and v.lower() not in ["n/a","nan","-","","#n/a","#ref!"] else "N/A"
+                    # Date filter — skip rows before Jan 2026
+                    d_val = str(p[col["d"]-1]).strip()
+                    d_dt = nexus_parse_date(d_val)
+                    if d_dt and d_dt < NEXUS_FILTER_DATE: continue
+                    out.append({"order":ov,"date":gv(col["d"]),"boxes":gv(col["b"]),"weight":gv(col["w"]),
+                        "vendor":gv(col["v"]),"customer":gv(col["c"]),"country":gv(col["cn"]),
+                        "tid":gv(col["t"]),"mawb":gv(col["ma"])})
         return out
-    except: return []
+    except Exception as e:
+        print(f"[NEXUS SHEET] {name}: {e}")
+        return []
 
 def nexus_clean_tids(raw):
     """Universal TID extractor — handles ALL carrier formats, splits on any separator."""
@@ -4089,6 +4103,79 @@ def api_track_real():
     ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
     def sev(t,s,l,a): return {"time":str(t),"status":str(s) or "Update","loc":str(l),"active":a}
 
+    def detect_carrier(t):
+        if re.match(r'^1[56]\d{11,13}$', t) or re.match(r'^0?150\d{10,13}$', t): return 'dhl'
+        if re.match(r'^3\d{9,14}$', t): return 'dpd'
+        if re.match(r'^JD\d', t, re.I): return 'evri'
+        if re.match(r'^1Z[A-Z0-9]{15}', t, re.I): return 'ups'
+        if re.match(r'^YT\d', t, re.I): return 'yodel'
+        return 'unknown'
+
+    def try_dhl_direct():
+        # DHL Parcel UK/EU direct — no API key
+        endpoints = [
+            f"https://www.dhl.com/gb-en/home/tracking/tracking-parcel.html?submit=1&tracking-id={tid}",
+            f"https://api-eu.dhl.com/track/shipments?trackingNumber={tid}",
+        ]
+        # DHL's website embeds tracking JSON in the page
+        req = urllib.request.Request(
+            f"https://www.dhl.com/gb-en/home/tracking/tracking-parcel.html?submit=1&tracking-id={tid}",
+            headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                     "Accept":"text/html","Accept-Language":"en-GB,en;q=0.9"})
+        with urllib.request.urlopen(req, timeout=7, context=ctx) as res:
+            html = res.read(1024*1024).decode("utf-8", errors="ignore")
+        # DHL embeds JSON in window.__DHL_TRACKING__ or similar
+        for pattern in [
+            r'"shipmentTrackingNumber"\s*:\s*"[^"]+".+?"events"\s*:\s*(\[.+?\])',
+            r'"events"\s*:\s*(\[.+?\])',
+            r'trackingData\s*=\s*(\{.+?\});',
+        ]:
+            m = re.search(pattern, html, re.DOTALL)
+            if m:
+                try:
+                    evs_raw = json.loads(m.group(1) if m.lastindex == 1 else m.group(0))
+                    if isinstance(evs_raw, list) and evs_raw:
+                        events = []
+                        for i, ev in enumerate(evs_raw[:20]):
+                            dt = str(ev.get('timestamp','') or ev.get('date','') or '')
+                            st = str(ev.get('description','') or ev.get('status','') or ev.get('message',''))
+                            lc = str(ev.get('location',{}).get('address',{}).get('addressLocality','') if isinstance(ev.get('location'),dict) else ev.get('location',''))
+                            if st: events.append(sev(dt,st,lc,i==0))
+                        if events: return {"success":True,"events":events,"carrier":"DHL","source":"DHL Direct"}
+                except: pass
+        return None
+
+    def try_dpd_direct():
+        # DPD UK public tracking JSON
+        req = urllib.request.Request(
+            f"https://www.dpd.co.uk/apps/tracking/response.do?method=getHierarchy&parcelNumber={tid}",
+            headers={"User-Agent":"Mozilla/5.0","Accept":"application/json",
+                     "Referer":f"https://www.dpd.co.uk/apps/tracking/?REF={tid}"})
+        with urllib.request.urlopen(req, timeout=7, context=ctx) as res:
+            data = json.loads(res.read().decode("utf-8"))
+        events = []
+        for d in (data if isinstance(data,list) else [data]):
+            scans = d.get('parcel',{}).get('parcelScanDetails',[]) or d.get('scans',[]) or []
+            for i,sc in enumerate(scans):
+                dt = str(sc.get('localScanDate','') or sc.get('date',''))
+                st = str(sc.get('scanDescription','') or sc.get('status',''))
+                lc = str(sc.get('localScanCity','') or sc.get('location',''))
+                if st: events.append(sev(dt,st,lc,i==0))
+        return {"success":True,"events":events,"carrier":"DPD","source":"DPD Direct"} if events else None
+
+    def try_evri_direct():
+        # Evri (Hermes) public tracking
+        req = urllib.request.Request(
+            f"https://www.evri.com/api/ship/shipment/{tid}/tracking",
+            headers={"User-Agent":"Mozilla/5.0","Accept":"application/json",
+                     "Referer":f"https://www.evri.com/track-a-parcel#/results?trackNum={tid}"})
+        with urllib.request.urlopen(req, timeout=7, context=ctx) as res:
+            data = json.loads(res.read().decode("utf-8"))
+        evs = data.get('events') or data.get('trackingEvents') or []
+        events = [sev(ev.get('eventDatetime',''),ev.get('eventDescription','') or ev.get('status',''),
+                      ev.get('depotName','') or ev.get('location',''),i==0) for i,ev in enumerate(evs)]
+        return {"success":True,"events":events,"carrier":"Evri","source":"Evri Direct"} if events else None
+
     def try_parcelsapp():
         url=f"https://parcelsapp.com/api/v3/shipments/tracking?trackingNumbers={urllib.parse.quote(tid)}&language=en&country=GB"
         req=urllib.request.Request(url,headers={
@@ -4157,15 +4244,22 @@ def api_track_real():
             if st: events.append(sev(dt, st, loc, i==0))
         return {"success":True,"events":events,"carrier":carrier,"source":"Ship24"} if events else None
 
-    # All 3 run at same time — first result wins
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as exe:
-        f1=exe.submit(try_parcelsapp)
-        f2=exe.submit(try_17track)
-        f3=exe.submit(try_ship24)
-        for f in concurrent.futures.as_completed([f1,f2,f3], timeout=8):
+    # Carrier-direct first (fastest + most accurate), then aggregators
+    carrier = detect_carrier(tid)
+    direct_fns = []
+    if carrier == 'dhl':   direct_fns.append(try_dhl_direct)
+    elif carrier == 'dpd': direct_fns.append(try_dpd_direct)
+    elif carrier == 'evri':direct_fns.append(try_evri_direct)
+
+    # Run carrier-direct + all aggregators in parallel — first result wins
+    all_fns = direct_fns + [try_parcelsapp, try_17track, try_ship24]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(all_fns)) as exe:
+        futures = [exe.submit(fn) for fn in all_fns]
+        for f in concurrent.futures.as_completed(futures, timeout=8):
             try:
-                result=f.result()
-                if result: return jsonify(result)
+                result = f.result()
+                if result and result.get('events'):
+                    return jsonify(result)
             except Exception as e:
                 print(f"[NEXUS TRACK] {e}")
 
