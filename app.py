@@ -3885,7 +3885,7 @@ def nexus_fetch_sheet_data(url, name):
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
         req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0","Cache-Control":"no-cache"})
-        with urllib.request.urlopen(req, timeout=8, context=ctx) as res:
+        with urllib.request.urlopen(req, timeout=6, context=ctx) as res:
             data = list(csv.reader(res.read().decode("utf-8",errors="ignore").splitlines()))
         col = NEXUS_SHEET_MAP.get(name)
         if not col or not data: return []
@@ -3963,23 +3963,23 @@ def nexus_parse_date(ds):
 def nexus_sync_db(force=False):
     global NEXUS_GLOBAL_CACHE
     now = time.time()
-    if not force and now-NEXUS_GLOBAL_CACHE["time"]<300 and NEXUS_GLOBAL_CACHE["sheets"]:
+    if not force and now-NEXUS_GLOBAL_CACHE["time"]<600 and NEXUS_GLOBAL_CACHE["sheets"]:
         return NEXUS_GLOBAL_CACHE["sheets"], NEXUS_GLOBAL_CACHE["kerry"]
-    res={}
+    res={name:[] for name in NEXUS_SOURCES}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
         fs={exe.submit(nexus_fetch_sheet_data,url,name):name for name,url in NEXUS_SOURCES.items()}
         fk=exe.submit(nexus_fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
         try:
-            for f in concurrent.futures.as_completed(fs, timeout=20):
-                try: res[fs[f]]=f.result()
-                except: res[fs[f]]=[]
+            for f in concurrent.futures.as_completed(fs, timeout=18):
+                name=fs[f]
+                try: res[name]=f.result() or []
+                except: res[name]=[]
         except concurrent.futures.TimeoutError:
             for f,name in fs.items():
-                if not f.done(): res[name]=[]
-                else:
-                    try: res[f]=f.result()
-                    except: res[name]=[]
-        try: km=fk.result(timeout=8)
+                if f.done():
+                    try: res[name]=f.result() or []
+                    except: pass
+        try: km=fk.result(timeout=7)
         except: km={}
     NEXUS_GLOBAL_CACHE.update({"time":now,"sheets":res,"kerry":km})
     return res, km
@@ -3987,6 +3987,11 @@ def nexus_sync_db(force=False):
 @app.route("/api/nexus/refresh", methods=["POST"])
 def api_nexus_refresh():
     nexus_sync_db(force=True); return jsonify({"success":True})
+
+@app.route("/api/nexus/warm", methods=["POST"])
+def api_nexus_warm():
+    # Non-forced: uses cache if fresh, only fetches if stale (>5min)
+    nexus_sync_db(force=False); return jsonify({"success":True})
 
 @app.route("/api/nexus/search", methods=["POST"])
 def api_nexus_search():
@@ -4423,13 +4428,22 @@ function navSwitch(btn,name){
 }
 
 async function hardRefresh(){
-  await fetch('/api/nexus/refresh',{method:'POST'});_radar=null;
-  g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
-  if(_pane==='radar'){_radar=null;loadRadar();}if(_pane==='ops')loadOps();
+  g('sbSync').textContent='🕐 Refreshing...';
+  try{
+    await fetch('/api/nexus/refresh',{method:'POST'});
+    _radar=null;
+    g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
+    if(_pane==='radar'){loadRadar();}
+    if(_pane==='ops')loadOps();
+  }catch(e){g('sbSync').textContent='🕐 Refresh failed';}
 }
 window.onload=()=>{
-  fetch('/api/nexus/refresh',{method:'POST'});g('sbSync').textContent='🕐 Syncing...';
-  setTimeout(()=>g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB'),2500);
+  // Don't force-refresh on load (Vercel 10s limit) — just warm up if stale
+  fetch('/api/nexus/warm',{method:'POST'})
+    .then(r=>r.json())
+    .then(d=>{
+      g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
+    }).catch(()=>{g('sbSync').textContent='🕐 Ready';});
 };
 
 function sBadge(s){
@@ -4522,7 +4536,15 @@ async function trackTID(tid,btn){
     btn.disabled=false; return true;
   }
   function noData(){
-    box.innerHTML='<div class="no-data"><div style="font-size:22px">📭</div><div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:8px">No tracking data yet</div><div style="font-size:11px;color:var(--t3);margin-top:4px">Shipment may not be scanned by carrier yet</div></div>';
+    box.innerHTML=`<div class="no-data">
+      <div style="font-size:22px">📭</div>
+      <div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:8px">No tracking data found</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:6px;margin-bottom:14px">All sources checked — shipment may not be scanned yet</div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <a href="https://parcelsapp.com/en/tracking/${tid}" target="_blank" style="background:var(--acc);color:#fff;padding:7px 16px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none">ParcelsApp ↗</a>
+        <a href="https://t.17track.net/en#nums=${tid}" target="_blank" style="background:var(--s3);color:var(--t1);border:1px solid var(--bd);padding:7px 16px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none">17track ↗</a>
+      </div>
+    </div>`;
     btn.textContent='✕ Close';btn.className='btn btn-outline sync-btn';
     btn.style='padding:5px 12px;font-size:11px;flex-shrink:0';btn.disabled=false;
   }
