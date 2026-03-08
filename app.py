@@ -3918,13 +3918,16 @@ def nexus_clean_tids(raw):
     if not raw or raw.startswith("="): return []
     if raw.lower() in ["pending","none","n/a","-","tbd","tba","#n/a","#ref!","#value!"]: return []
     PATS = [
-        r"(1[56]\d{12,14})",          # DHL eCommerce 155.../156...
-        r"(0?15[05]\d{10,13})",        # DHL 0150.../150...
-        r"(1Z[A-Z0-9]{15,18})",         # UPS 1Z...
-        r"(JD\d{10,18})",              # DPD/Evri JD...
-        r"(YT\d{10,18})",              # Yodel YT...
-        r"(TT\d{10,18})",              # Tracked TT...
-        r"([A-Z]{2}\d{9}[A-Z]{2})",   # Royal Mail AA123456789GB
+        r"(1[56]\d{12,14})",              # DHL eCommerce: 155.../156...
+        r"(0?15[05]\d{10,13})",            # DHL: 0150.../150...
+        r"(1Z[A-Z0-9]{15,18})",             # UPS: 1Z...
+        r"(12B[A-Z0-9]{14,18})",            # UPS variant: 12B...
+        r"(JD\d{10,18})",                  # Evri: JD...
+        r"(YT\d{10,18})",                  # Yodel: YT...
+        r"(TT\d{10,18})",                  # Tracked: TT...
+        r"\b(3[0-9]{9,14})\b",            # DPD: 3268...(10-15 digits)
+        r"\b([0-9]{10})\b",               # Yodel/generic 10-digit
+        r"([A-Z]{2}\d{9}[A-Z]{2})",        # Royal Mail: AA123456789GB
     ]
     out = []
     for p in PATS:
@@ -4093,11 +4096,43 @@ def api_track_real():
         events=[sev(ev.get("a",""),ev.get("z","") or ev.get("c",""),ev.get("l",""),i==0) for i,ev in enumerate(all_evs)]
         return {"success":True,"events":events,"carrier":track.get("c",""),"source":"17track"} if events else None
 
-    # Both run at same time — total wait = 7s max instead of 7+7=14s
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as exe:
+    def try_ship24():
+        # Ship24 free tracking page scrape — no API key needed
+        url=f"https://www.ship24.com/tracking?p={urllib.parse.quote(tid)}"
+        req=urllib.request.Request(url,headers={
+            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language":"en-GB,en;q=0.5",
+        })
+        with urllib.request.urlopen(req,timeout=7,context=ctx) as res:
+            html=res.read().decode("utf-8",errors="ignore")
+        # Extract JSON from __NEXT_DATA__ script tag
+        m=re.search(r'<script id="__NEXT_DATA__"[^>]*>(.+?)</script>',html,re.DOTALL)
+        if not m: return None
+        nd=json.loads(m.group(1))
+        # Navigate to tracking events in Next.js page props
+        props=nd.get("props",{}).get("pageProps",{})
+        trackers=props.get("trackers") or props.get("trackingResults") or []
+        if isinstance(trackers,dict): trackers=[trackers]
+        events=[]
+        carrier_name=""
+        for tracker in trackers:
+            shipment=tracker.get("shipment") or tracker
+            evs=shipment.get("events") or shipment.get("tracking",{}).get("events") or []
+            carrier_name=str(shipment.get("courier","") or shipment.get("carrierName","") or "")
+            for i,ev in enumerate(evs):
+                dt=str(ev.get("datetime","") or ev.get("date","") or "")
+                st=str(ev.get("status","") or ev.get("description","") or ev.get("message",""))
+                lc=str(ev.get("location","") or ev.get("city","") or "")
+                if st: events.append(sev(dt,st,lc,i==0))
+        return {"success":True,"events":events,"carrier":carrier_name,"source":"Ship24"} if events else None
+
+    # All 3 run at same time — first result wins
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as exe:
         f1=exe.submit(try_parcelsapp)
         f2=exe.submit(try_17track)
-        for f in concurrent.futures.as_completed([f1,f2], timeout=8):
+        f3=exe.submit(try_ship24)
+        for f in concurrent.futures.as_completed([f1,f2,f3], timeout=8):
             try:
                 result=f.result()
                 if result: return jsonify(result)
