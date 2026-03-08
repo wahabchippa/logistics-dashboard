@@ -3914,29 +3914,60 @@ def nexus_fetch_sheet_data(url, name):
     except: return []
 
 def nexus_clean_tids(raw):
+    """Universal TID extractor — handles ALL carrier formats, splits on any separator."""
     raw = str(raw).strip()
     if not raw or raw.startswith("="): return []
-    if raw.lower() in ["pending","none","n/a","-","tbd","tba","#n/a","#ref!","#value!"]: return []
-    PATS = [
-        r"(1[56]\d{12,14})",              # DHL eCommerce: 155.../156...
-        r"(0?15[05]\d{10,13})",            # DHL: 0150.../150...
-        r"(1Z[A-Z0-9]{15,18})",             # UPS: 1Z...
-        r"(12B[A-Z0-9]{14,18})",            # UPS variant: 12B...
-        r"(JD\d{10,18})",                  # Evri: JD...
-        r"(YT\d{10,18})",                  # Yodel: YT...
-        r"(TT\d{10,18})",                  # Tracked: TT...
-        r"\b(3[0-9]{9,14})\b",            # DPD: 3268...(10-15 digits)
-        r"\b([0-9]{10})\b",               # Yodel/generic 10-digit
-        r"([A-Z]{2}\d{9}[A-Z]{2})",        # Royal Mail: AA123456789GB
-    ]
+    SKIP = {"pending","none","n/a","-","tbd","tba","update soon","awaiting","tbc",
+            "#n/a","#ref!","#value!","nan","","update","no tid","notid","nil"}
+    if raw.lower() in SKIP: return []
+
+    # Step 1: Split on all common separators (comma, slash, space, newline, semicolon, pipe)
+    parts = re.split(r'[,;|\s/\n\r]+', raw)
     out = []
-    for p in PATS:
-        for m in re.finditer(p, raw, re.IGNORECASE):
-            t = m.group(1).strip()
-            # 150 TIDs: always add leading 0 (carrier needs 0150...)
-            if re.match(r"^150", t) and not t.startswith("0"):
-                t = "0" + t
-            if t not in out: out.append(t)
+
+    for part in parts:
+        t = part.strip().strip("()[]{}\"'.-_")
+        if not t or len(t) < 5: continue
+        if t.lower() in SKIP: continue
+
+        # Classify by carrier pattern — most specific first
+        if   re.match(r'^1Z[A-Z0-9]{15,18}$', t, re.I):       t = t.upper()       # UPS
+        elif re.match(r'^12B[A-Z0-9]{14,18}$', t, re.I):       t = t.upper()       # UPS alt
+        elif re.match(r'^JD\d{10,20}$', t, re.I):               t = t.upper()       # Evri
+        elif re.match(r'^YT\d{10,20}$', t, re.I):               t = t.upper()       # Yodel
+        elif re.match(r'^TT\d{10,20}$', t, re.I):               t = t.upper()       # Tracked
+        elif re.match(r'^[A-Z]{2}\d{9}[A-Z]{2}$', t, re.I):    t = t.upper()       # Royal Mail
+        elif re.match(r'^150\d{10,13}$', t):                    t = "0" + t         # DHL 150→0150
+        elif re.match(r'^0150\d{10,13}$', t):                   pass                # DHL 0150 ok
+        elif re.match(r'^1[56]\d{11,13}$', t):                  pass                # DHL 155/156
+        elif re.match(r'^3\d{9,14}$', t):                       pass                # DPD 3268...
+        elif re.match(r'^(\d{12}|\d{15}|\d{20})$', t):          pass                # FedEx
+        elif re.match(r'^\d{10}$', t):                          pass                # Generic 10-digit
+        elif re.match(r'^\d{8,22}$', t):                        pass                # Generic numeric
+        elif re.match(r'^[A-Z0-9]{8,30}$', t, re.I) and re.search(r'\d',t) and re.search(r'[A-Za-z]',t):
+            t = t.upper()   # Mixed alphanumeric — likely tracking number
+        else:
+            continue  # Not a TID
+
+        if t not in out: out.append(t)
+
+    # Step 2: Fallback — if nothing extracted, regex-scan the whole raw string
+    if not out:
+        FALLBACK = [
+            r'1Z[A-Z0-9]{15,18}', r'12B[A-Z0-9]{14,18}',
+            r'JD\d{10,20}', r'YT\d{10,20}', r'TT\d{10,20}',
+            r'[A-Z]{2}\d{9}[A-Z]{2}',
+            r'0150\d{10,13}', r'150\d{10,13}',
+            r'1[56]\d{11,13}', r'3\d{9,14}', r'\d{10,22}',
+        ]
+        for p in FALLBACK:
+            for m in re.finditer(p, raw, re.I):
+                t = m.group(0)
+                if re.match(r'^150\d', t): t = "0" + t
+                if re.search(r'[A-Za-z]', t): t = t.upper()
+                if t not in out: out.append(t)
+            if out: break  # Stop at first matching pattern
+
     return out
 
 def nexus_fetch_kerry_status(url):
@@ -4097,35 +4128,34 @@ def api_track_real():
         return {"success":True,"events":events,"carrier":track.get("c",""),"source":"17track"} if events else None
 
     def try_ship24():
-        # Ship24 free tracking page scrape — no API key needed
-        url=f"https://www.ship24.com/tracking?p={urllib.parse.quote(tid)}"
-        req=urllib.request.Request(url,headers={
-            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language":"en-GB,en;q=0.5",
+        # Ship24 public tracking API — free, no key needed
+        url = f"https://api.ship24.com/public/v1/tracking/search?trackingNumber={urllib.parse.quote(tid)}"
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+            "Origin": "https://www.ship24.com",
+            "Referer": f"https://www.ship24.com/tracking?p={urllib.parse.quote(tid)}",
         })
-        with urllib.request.urlopen(req,timeout=7,context=ctx) as res:
-            html=res.read().decode("utf-8",errors="ignore")
-        # Extract JSON from __NEXT_DATA__ script tag
-        m=re.search(r'<script id="__NEXT_DATA__"[^>]*>(.+?)</script>',html,re.DOTALL)
-        if not m: return None
-        nd=json.loads(m.group(1))
-        # Navigate to tracking events in Next.js page props
-        props=nd.get("props",{}).get("pageProps",{})
-        trackers=props.get("trackers") or props.get("trackingResults") or []
-        if isinstance(trackers,dict): trackers=[trackers]
-        events=[]
-        carrier_name=""
-        for tracker in trackers:
-            shipment=tracker.get("shipment") or tracker
-            evs=shipment.get("events") or shipment.get("tracking",{}).get("events") or []
-            carrier_name=str(shipment.get("courier","") or shipment.get("carrierName","") or "")
-            for i,ev in enumerate(evs):
-                dt=str(ev.get("datetime","") or ev.get("date","") or "")
-                st=str(ev.get("status","") or ev.get("description","") or ev.get("message",""))
-                lc=str(ev.get("location","") or ev.get("city","") or "")
-                if st: events.append(sev(dt,st,lc,i==0))
-        return {"success":True,"events":events,"carrier":carrier_name,"source":"Ship24"} if events else None
+        with urllib.request.urlopen(req, timeout=7, context=ctx) as res:
+            data = json.loads(res.read().decode("utf-8"))
+        # ship24 response: {"data":{"trackings":[{"tracker":{},"shipment":{},"events":[]}]}}
+        trackings = (data.get("data") or {}).get("trackings") or []
+        if not trackings: return None
+        tr = trackings[0]
+        evs = tr.get("events") or []
+        carrier = ""
+        trackers_info = tr.get("tracker") or {}
+        if isinstance(trackers_info, dict):
+            carrier = str(trackers_info.get("courierCode","") or trackers_info.get("name","") or "")
+        events = []
+        for i, ev in enumerate(evs):
+            dt  = str(ev.get("datetime","") or ev.get("occurrenceDatetime","") or "")
+            st  = str(ev.get("status","") or ev.get("statusMilestone","") or ev.get("message",""))
+            lc  = str(ev.get("location","") or ev.get("city","") or "")
+            ct  = str(ev.get("country","") or "")
+            loc = (lc + (", "+ct if ct and ct not in lc else "")).strip(", ")
+            if st: events.append(sev(dt, st, loc, i==0))
+        return {"success":True,"events":events,"carrier":carrier,"source":"Ship24"} if events else None
 
     # All 3 run at same time — first result wins
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as exe:
