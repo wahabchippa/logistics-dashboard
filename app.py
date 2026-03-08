@@ -3871,6 +3871,11 @@ NEXUS_SOURCES = {
 }
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
+# Per-sheet cache: each sheet cached independently so one timeout doesn't affect others
+NEXUS_SHEET_CACHE = {name: {'time': 0, 'data': []} for name in [
+    "ECL QC Center","ECL Zone","GE QC Center","GE Zone","APX","Kerry"]}
+NEXUS_KERRY_CACHE = {'time': 0, 'data': {}}
+NEXUS_CACHE_TTL   = 1800  # 30 minutes per sheet
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
 NEXUS_SHEET_MAP = {
     "Kerry":         {"o":1,"b":5,"d":2,"w":8,"v":15,"c":18,"cn":22,"ma":31,"t":32},
@@ -3965,28 +3970,53 @@ def nexus_parse_date(ds):
     except: pass
     return None
 
-def nexus_sync_db(force=False):
-    global NEXUS_GLOBAL_CACHE
+def nexus_get_sheet(name, force=False):
+    """Fetch ONE sheet — uses its own cache independently."""
+    global NEXUS_SHEET_CACHE
     now = time.time()
-    if not force and now-NEXUS_GLOBAL_CACHE["time"]<600 and NEXUS_GLOBAL_CACHE["sheets"]:
-        return NEXUS_GLOBAL_CACHE["sheets"], NEXUS_GLOBAL_CACHE["kerry"]
-    res={name:[] for name in NEXUS_SOURCES}
+    entry = NEXUS_SHEET_CACHE.get(name, {'time':0,'data':[]})
+    if not force and now - entry['time'] < NEXUS_CACHE_TTL and entry['data']:
+        return entry['data']
+    url = NEXUS_SOURCES.get(name,"")
+    if not url: return entry.get('data',[])
+    try:
+        fresh = nexus_fetch_sheet_data(url, name)
+        if fresh:  # only update cache if we got data
+            NEXUS_SHEET_CACHE[name] = {'time': now, 'data': fresh}
+            return fresh
+    except: pass
+    return entry.get('data', [])  # return stale on error
+
+def nexus_get_kerry_status(force=False):
+    global NEXUS_KERRY_CACHE
+    now = time.time()
+    if not force and now - NEXUS_KERRY_CACHE['time'] < NEXUS_CACHE_TTL and NEXUS_KERRY_CACHE['data']:
+        return NEXUS_KERRY_CACHE['data']
+    try:
+        fresh = nexus_fetch_kerry_status(NEXUS_KERRY_STATUS_URL)
+        if fresh:
+            NEXUS_KERRY_CACHE.update({'time': now, 'data': fresh})
+            return fresh
+    except: pass
+    return NEXUS_KERRY_CACHE.get('data', {})
+
+def nexus_sync_db(force=False):
+    """Fetch all sheets in parallel, each with its own cache."""
+    res = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
-        fs={exe.submit(nexus_fetch_sheet_data,url,name):name for name,url in NEXUS_SOURCES.items()}
-        fk=exe.submit(nexus_fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
+        fs = {exe.submit(nexus_get_sheet, name, force): name for name in NEXUS_SOURCES}
+        fk = exe.submit(nexus_get_kerry_status, force)
+        # Wait up to 9s — whatever completes is used, stale cache fills the rest
         try:
-            for f in concurrent.futures.as_completed(fs, timeout=18):
-                name=fs[f]
-                try: res[name]=f.result() or []
-                except: res[name]=[]
-        except concurrent.futures.TimeoutError:
-            for f,name in fs.items():
-                if f.done():
-                    try: res[name]=f.result() or []
-                    except: pass
-        try: km=fk.result(timeout=7)
-        except: km={}
-    NEXUS_GLOBAL_CACHE.update({"time":now,"sheets":res,"kerry":km})
+            for f in concurrent.futures.as_completed(fs, timeout=9):
+                res[fs[f]] = f.result() or []
+        except concurrent.futures.TimeoutError: pass
+        # Fill any that timed out with their stale cache
+        for name in NEXUS_SOURCES:
+            if name not in res:
+                res[name] = NEXUS_SHEET_CACHE.get(name, {}).get('data', [])
+        try: km = fk.result(timeout=2)
+        except: km = NEXUS_KERRY_CACHE.get('data', {})
     return res, km
 
 @app.route("/api/nexus/refresh", methods=["POST"])
@@ -4435,22 +4465,31 @@ function navSwitch(btn,name){
 }
 
 async function hardRefresh(){
-  g('sbSync').textContent='🕐 Refreshing...';
-  try{
-    await fetch('/api/nexus/refresh',{method:'POST'});
-    _radar=null;
-    g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
-    if(_pane==='radar'){loadRadar();}
-    if(_pane==='ops')loadOps();
-  }catch(e){g('sbSync').textContent='🕐 Refresh failed';}
+  g('sbSync').textContent='🕐 Refreshing sheets...';
+  _radar=null;
+  const sheets=["ECL QC Center","ECL Zone","GE QC Center","GE Zone","APX","Kerry"];
+  for(let s of sheets){
+    try{
+      await fetch('/api/nexus/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sheet:s})});
+    }catch(e){}
+  }
+  g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
+  if(_pane==='radar')loadRadar();
+  if(_pane==='ops')loadOps();
 }
 window.onload=()=>{
-  // Don't force-refresh on load (Vercel 10s limit) — just warm up if stale
-  fetch('/api/nexus/warm',{method:'POST'})
-    .then(r=>r.json())
-    .then(d=>{
-      g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
-    }).catch(()=>{g('sbSync').textContent='🕐 Ready';});
+  g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
+  // Warm each sheet one-by-one — avoids Vercel 10s timeout
+  const sheets=["ECL QC Center","ECL Zone","GE QC Center","GE Zone","APX","Kerry"];
+  let i=0;
+  function warmNext(){
+    if(i>=sheets.length)return;
+    const s=sheets[i++];
+    fetch('/api/nexus/refresh',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({sheet:s})})
+      .then(()=>warmNext()).catch(()=>warmNext());
+  }
+  warmNext();
 };
 
 function sBadge(s){
@@ -4543,76 +4582,28 @@ async function trackTID(tid,btn){
     btn.disabled=false; return true;
   }
   function noData(){
-    box.innerHTML=`<div class="no-data">
-      <div style="font-size:22px">📭</div>
-      <div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:8px">No tracking data found</div>
-      <div style="font-size:11px;color:var(--t3);margin-top:6px;margin-bottom:14px">All sources checked — shipment may not be scanned yet</div>
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <a href="https://parcelsapp.com/en/tracking/${tid}" target="_blank" style="background:var(--acc);color:#fff;padding:7px 16px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none">ParcelsApp ↗</a>
-        <a href="https://t.17track.net/en#nums=${tid}" target="_blank" style="background:var(--s3);color:var(--t1);border:1px solid var(--bd);padding:7px 16px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none">17track ↗</a>
-      </div>
-    </div>`;
+    box.innerHTML='<div class="no-data"><div style="font-size:28px">📭</div><div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:10px">No tracking data yet</div><div style="font-size:11px;color:var(--t3);margin-top:6px">Shipment may not be scanned by carrier yet</div></div>';
     btn.textContent='✕ Close';btn.className='btn btn-outline sync-btn';
     btn.style='padding:5px 12px;font-size:11px;flex-shrink:0';btn.disabled=false;
   }
 
-  // SOURCE 1: ParcelsApp — direct browser fetch (8s timeout)
-  try{
-    const r=await ftch(
-      `https://parcelsapp.com/api/v3/shipments/tracking?trackingNumbers=${encodeURIComponent(tid)}&language=en&country=GB`,
-      {headers:{'Accept':'application/json','Origin':'https://parcelsapp.com','Referer':`https://parcelsapp.com/en/tracking/${tid}`}},
-      8000
-    );
-    if(r.ok){
-      const d=await r.json(); const ship=(d.shipments||[])[0];
-      if(ship&&ship.events&&ship.events.length){
-        let cr=ship.carrier||''; if(Array.isArray(cr))cr=cr.map(c=>c.name||'').filter(Boolean).join(', ');
-        const evs=ship.events.map((ev,i)=>{
-          const l=ev.location||'',ct=ev.country||'';
-          return sev(ev.date||ev.time||'',ev.description||ev.status||'',(l+(ct&&!l.includes(ct)?', '+ct:'')).replace(/,\s*$/,''),i===0);
-        });
-        if(showTL(evs,'ParcelsApp',cr))return;
-      }
-    }
-  }catch(e){console.log('[T1 ParcelsApp]',e.message);}
-
-  // SOURCE 2: 17track — direct browser fetch (8s timeout)
-  try{
-    const r=await ftch(
-      'https://buyer.17track.net/orderapi/call',
-      {method:'POST',headers:{'Content-Type':'application/json','17token':'321UctxG7l5bPkEhUHaQvlBJdTBWfqzS'},body:JSON.stringify({data:[{num:tid}]})},
-      8000
-    );
-    if(r.ok){
-      const d=await r.json(); const acc=((d.data||{}).accepted||[]);
-      if(acc.length){
-        const tr=acc[0].track||{};
-        const evs=[...(tr.z0||[]),...(tr.z1||[])].map((ev,i)=>sev(ev.a||'',ev.z||ev.c||'',ev.l||'',i===0));
-        if(showTL(evs,'17track',tr.c||''))return;
-      }
-    }
-  }catch(e){console.log('[T2 17track]',e.message);}
-
-  // SOURCE 3: Backend server-side fetch (ParcelsApp+17track from Python, 12s timeout)
+  // Backend-only tracking (server-side = no CORS issues)
+  // ParcelsApp + 17track run in parallel on the server
   try{
     const r=await ftch(
       '/api/nexus/track_real',
       {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tid})},
-      12000
+      9000
     );
     const d=await r.json();
-    if(d.success&&d.events&&d.events.length){if(showTL(d.events,d.source||'Server',d.carrier||''))return;}
-  }catch(e){console.log('[T3 backend]',e.message);}
+    if(d.success&&d.events&&d.events.length){
+      if(showTL(d.events,d.source||'Live',d.carrier||''))return;
+    }
+  }catch(e){console.log('[TRACK]',e.message);}
 
   noData();
 }
 
-// ── EXTRA: Try UPS/Royal Mail tracking page via backend if 1Z or GB TID ──
-async function trackFallbackDirect(tid) {
-  // Just open in small popup as absolute last resort
-  // (only called manually, not auto)
-  window.open('https://parcelsapp.com/en/tracking/'+tid,'_blank','width=480,height=700');
-}
 
 // Radar
 async function loadRadar(){
