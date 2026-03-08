@@ -3907,9 +3907,15 @@ def nexus_clean_tids(raw):
     raw = str(raw).strip()
     if not raw or raw.startswith("="): return []
     if raw.lower() in ["pending","none","n/a","-","tbd","tba","#n/a","#ref!","#value!"]: return []
-    PATS = [r"\b(1[56]\d{12,14})\b", r"\b(0?15[05]\d{10,13})\b",
-            r"\b(1Z[A-Z0-9]{15,18})\b", r"\b(JD\d{10,18})\b",
-            r"\b(YT\d{10,18})\b", r"\b(TT\d{10,18})\b"]
+    PATS = [
+        r"(1[56]\d{12,14})",          # DHL eCommerce 155.../156...
+        r"(0?15[05]\d{10,13})",        # DHL 0150.../150...
+        r"(1Z[A-Z0-9]{15,18})",         # UPS 1Z...
+        r"(JD\d{10,18})",              # DPD/Evri JD...
+        r"(YT\d{10,18})",              # Yodel YT...
+        r"(TT\d{10,18})",              # Tracked TT...
+        r"([A-Z]{2}\d{9}[A-Z]{2})",   # Royal Mail AA123456789GB
+    ]
     out = []
     for p in PATS:
         for m in re.finditer(p, raw, re.IGNORECASE):
@@ -3963,8 +3969,17 @@ def nexus_sync_db(force=False):
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
         fs={exe.submit(nexus_fetch_sheet_data,url,name):name for name,url in NEXUS_SOURCES.items()}
         fk=exe.submit(nexus_fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
-        for f in concurrent.futures.as_completed(fs): res[fs[f]]=f.result()
-        try: km=fk.result()
+        try:
+            for f in concurrent.futures.as_completed(fs, timeout=20):
+                try: res[fs[f]]=f.result()
+                except: res[fs[f]]=[]
+        except concurrent.futures.TimeoutError:
+            for f,name in fs.items():
+                if not f.done(): res[name]=[]
+                else:
+                    try: res[f]=f.result()
+                    except: res[name]=[]
+        try: km=fk.result(timeout=8)
         except: km={}
     NEXUS_GLOBAL_CACHE.update({"time":now,"sheets":res,"kerry":km})
     return res, km
@@ -4087,6 +4102,43 @@ def api_nexus_ops_commander():
                 blame.append({"order":oid.upper(),"source":src,"issue":"Stuck in QC","aging":f"{days} Days","blame":f"{src} Operations"})
     if ct==1: txt="All good! No missing TIDs currently."
     return jsonify({"blame_radar":sorted(blame,key=lambda x:int(x["aging"].split()[0]),reverse=True),"missing_text":txt})
+
+
+@app.route("/api/nexus/debug_sheets")
+def api_nexus_debug_sheets():
+    """Debug: see raw first 3 rows from each sheet + TID extraction"""
+    uv=session.get("username") or session.get("user") or session.get("role")
+    if not uv or str(uv).lower()!="admin":
+        return jsonify({"error":"Access denied"}),403
+    ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
+    out={}
+    for name,url in NEXUS_SOURCES.items():
+        try:
+            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(req,timeout=10,context=ctx) as res:
+                data=list(csv.reader(res.read().decode("utf-8",errors="ignore").splitlines()))
+            col=NEXUS_SHEET_MAP.get(name,{})
+            header=data[0] if data else []
+            # Show key columns
+            key_cols={k:{"col_num":v,"header":header[v-1] if len(header)>=v else "OUT OF RANGE"} for k,v in col.items()}
+            # Show sample rows with TID column
+            samples=[]
+            for row in data[1:4]:
+                if not any(row): continue
+                p=row+[""]*60
+                tid_raw=str(p[col.get("t",1)-1]).strip() if "t" in col else ""
+                samples.append({
+                    "order": str(p[col.get("o",1)-1]).strip(),
+                    "date":  str(p[col.get("d",2)-1]).strip(),
+                    "tid_raw": tid_raw,
+                    "tid_col": col.get("t","?"),
+                    "tids_extracted": nexus_clean_tids(tid_raw),
+                    "total_cols_in_row": len(row)
+                })
+            out[name]={"total_rows":len(data),"mapped_cols":key_cols,"samples":samples}
+        except Exception as e:
+            out[name]={"error":str(e)}
+    return jsonify(out)
 
 @app.route("/nexus")
 def nexus_dashboard():
@@ -4524,6 +4576,13 @@ async function trackTID(tid,btn){
   }catch(e){console.log('[T3 backend]',e.message);}
 
   noData();
+}
+
+// ── EXTRA: Try UPS/Royal Mail tracking page via backend if 1Z or GB TID ──
+async function trackFallbackDirect(tid) {
+  // Just open in small popup as absolute last resort
+  // (only called manually, not auto)
+  window.open('https://parcelsapp.com/en/tracking/'+tid,'_blank','width=480,height=700');
 }
 
 // Radar
