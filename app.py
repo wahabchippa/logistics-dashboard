@@ -3885,8 +3885,9 @@ def nexus_fetch_sheet_data(url, name):
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
         req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0","Cache-Control":"no-cache"})
-        with urllib.request.urlopen(req, timeout=6, context=ctx) as res:
-            data = list(csv.reader(res.read().decode("utf-8",errors="ignore").splitlines()))
+        with urllib.request.urlopen(req, timeout=12, context=ctx) as res:
+            raw = res.read(5*1024*1024).decode("utf-8", errors="ignore")  # 5MB cap — prevents huge sheet hang
+            data = list(csv.reader(raw.splitlines()))
         col = NEXUS_SHEET_MAP.get(name)
         if not col or not data: return []
         out = []
@@ -3898,6 +3899,10 @@ def nexus_fetch_sheet_data(url, name):
             def gv(n):
                 v=str(p[n-1]).strip()
                 return v if v and v.lower() not in ["n/a","nan","-",""] else "N/A"
+            # Skip rows older than Jan 2026 (keeps memory low on huge sheets like GE Zone)
+            d_val = str(p[col["d"]-1]).strip()
+            d_dt = nexus_parse_date(d_val)
+            if d_dt and d_dt < NEXUS_FILTER_DATE: continue
             out.append({"order":ov,"date":gv(col["d"]),"boxes":gv(col["b"]),"weight":gv(col["w"]),
                 "vendor":gv(col["v"]),"customer":gv(col["c"]),"country":gv(col["cn"]),"tid":gv(col["t"]),"mawb":gv(col["ma"])})
         return out
@@ -3930,7 +3935,7 @@ def nexus_fetch_kerry_status(url):
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
         req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=6, context=ctx) as res:
+        with urllib.request.urlopen(req, timeout=12, context=ctx) as res:
             data = list(csv.reader(res.read().decode("utf-8",errors="ignore").splitlines()))
         if not data: return {}
         oi=si=hi=-1
@@ -4014,15 +4019,13 @@ def api_nexus_search():
 
 @app.route("/api/nexus/track_real", methods=["POST"])
 def api_track_real():
-    # Server-side fallback: ParcelsApp JSON API + 17track
-    # (used when browser-side sources fail due to CORS)
+    # Parallel server-side tracking — ParcelsApp + 17track at same time
     tid=(request.json or {}).get("tid","").strip()
     if not tid: return jsonify({"success":False})
     ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-    def sev(t,s,l,a): return {"time":str(t) or "","status":str(s) or "Update","loc":str(l) or "","active":a}
+    def sev(t,s,l,a): return {"time":str(t),"status":str(s) or "Update","loc":str(l),"active":a}
 
-    # SERVER SOURCE 1: ParcelsApp API
-    try:
+    def try_parcelsapp():
         url=f"https://parcelsapp.com/api/v3/shipments/tracking?trackingNumbers={urllib.parse.quote(tid)}&language=en&country=GB"
         req=urllib.request.Request(url,headers={
             "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -4030,42 +4033,46 @@ def api_track_real():
             "Referer":f"https://parcelsapp.com/en/tracking/{tid}",
             "Origin":"https://parcelsapp.com"
         })
-        with urllib.request.urlopen(req,timeout=8,context=ctx) as res:
+        with urllib.request.urlopen(req,timeout=7,context=ctx) as res:
             data=json.loads(res.read().decode("utf-8"))
         ships=data.get("shipments") or []
-        if ships:
-            ship=ships[0]; evs=ship.get("events") or []
-            carrier=ship.get("carrier","")
-            if isinstance(carrier,list): carrier=", ".join(c.get("name","") for c in carrier if c.get("name"))
-            events=[]
-            for i,ev in enumerate(evs):
-                l=str(ev.get("location","") or ""); cy=str(ev.get("country","") or "")
-                fl=(l+(", "+cy if cy and cy not in l else "")).strip(", ")
-                events.append(sev(ev.get("date","") or ev.get("time",""),
-                                  ev.get("description","") or ev.get("status",""), fl, i==0))
-            if events:
-                return jsonify({"success":True,"events":events,"carrier":carrier,"source":"ParcelsApp"})
-    except Exception as e:
-        print(f"[TRACK-SRV] ParcelsApp: {e}")
+        if not ships: return None
+        ship=ships[0]; evs=ship.get("events") or []
+        if not evs: return None
+        carrier=ship.get("carrier","")
+        if isinstance(carrier,list): carrier=", ".join(x.get("name","") for x in carrier if x.get("name"))
+        events=[]
+        for i,ev in enumerate(evs):
+            l=str(ev.get("location","") or ""); cy=str(ev.get("country","") or "")
+            fl=(l+(", "+cy if cy and cy not in l else "")).strip(", ")
+            events.append(sev(ev.get("date","") or ev.get("time",""),ev.get("description","") or ev.get("status",""),fl,i==0))
+        return {"success":True,"events":events,"carrier":carrier,"source":"ParcelsApp"} if events else None
 
-    # SERVER SOURCE 2: 17track widget
-    try:
+    def try_17track():
         payload=json.dumps({"data":[{"num":tid}]}).encode("utf-8")
         req=urllib.request.Request("https://buyer.17track.net/orderapi/call",data=payload,headers={
             "User-Agent":"Mozilla/5.0","Content-Type":"application/json",
             "Accept":"application/json","17token":"321UctxG7l5bPkEhUHaQvlBJdTBWfqzS"
         })
-        with urllib.request.urlopen(req,timeout=8,context=ctx) as res:
+        with urllib.request.urlopen(req,timeout=7,context=ctx) as res:
             data=json.loads(res.read().decode("utf-8"))
         acc=((data.get("data") or {}).get("accepted") or [])
-        if acc:
-            track=acc[0].get("track") or {}
-            all_evs=(track.get("z0") or [])+(track.get("z1") or [])
-            events=[sev(ev.get("a",""),ev.get("z","") or ev.get("c",""),ev.get("l",""),i==0) for i,ev in enumerate(all_evs)]
-            if events:
-                return jsonify({"success":True,"events":events,"carrier":track.get("c",""),"source":"17track"})
-    except Exception as e:
-        print(f"[TRACK-SRV] 17track: {e}")
+        if not acc: return None
+        track=acc[0].get("track") or {}
+        all_evs=(track.get("z0") or [])+(track.get("z1") or [])
+        events=[sev(ev.get("a",""),ev.get("z","") or ev.get("c",""),ev.get("l",""),i==0) for i,ev in enumerate(all_evs)]
+        return {"success":True,"events":events,"carrier":track.get("c",""),"source":"17track"} if events else None
+
+    # Both run at same time — total wait = 7s max instead of 7+7=14s
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as exe:
+        f1=exe.submit(try_parcelsapp)
+        f2=exe.submit(try_17track)
+        for f in concurrent.futures.as_completed([f1,f2], timeout=8):
+            try:
+                result=f.result()
+                if result: return jsonify(result)
+            except Exception as e:
+                print(f"[NEXUS TRACK] {e}")
 
     return jsonify({"success":False,"tid":tid})
 
