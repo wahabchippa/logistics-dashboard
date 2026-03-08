@@ -3870,12 +3870,41 @@ NEXUS_SOURCES = {
     "Kerry": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=0&single=true&output=csv"
 }
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
-NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
-# Per-sheet cache: each sheet cached independently so one timeout doesn't affect others
-NEXUS_SHEET_CACHE = {name: {'time': 0, 'data': []} for name in [
-    "ECL QC Center","ECL Zone","GE QC Center","GE Zone","APX","Kerry"]}
-NEXUS_KERRY_CACHE = {'time': 0, 'data': {}}
-NEXUS_CACHE_TTL   = 1800  # 30 minutes per sheet
+import os, pickle
+
+NEXUS_CACHE_TTL = 1800  # 30 min
+NEXUS_TMP_DIR   = "/tmp/nexus_cache"
+# In-memory fallback (same process reuse)
+_NX_MEM = {}
+
+def _nx_cache_path(key):
+    os.makedirs(NEXUS_TMP_DIR, exist_ok=True)
+    safe = key.replace(" ","_").replace("/","_")
+    return os.path.join(NEXUS_TMP_DIR, f"{safe}.pkl")
+
+def _nx_read(key):
+    """Read from memory first, then /tmp file."""
+    if key in _NX_MEM:
+        entry = _NX_MEM[key]
+        if time.time() - entry["time"] < NEXUS_CACHE_TTL:
+            return entry["data"]
+    try:
+        path = _nx_cache_path(key)
+        if os.path.exists(path):
+            mtime = os.path.getmtime(path)
+            if time.time() - mtime < NEXUS_CACHE_TTL:
+                with open(path,"rb") as f:
+                    return pickle.load(f)
+    except: pass
+    return None
+
+def _nx_write(key, data):
+    """Write to memory AND /tmp file."""
+    _NX_MEM[key] = {"time": time.time(), "data": data}
+    try:
+        with open(_nx_cache_path(key),"wb") as f:
+            pickle.dump(data, f)
+    except: pass
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
 NEXUS_SHEET_MAP = {
     "Kerry":         {"o":1,"b":5,"d":2,"w":8,"v":15,"c":18,"cn":22,"ma":31,"t":32},
@@ -4019,62 +4048,91 @@ def nexus_parse_date(ds):
     return None
 
 def nexus_get_sheet(name, force=False):
-    """Fetch ONE sheet — uses its own cache independently."""
-    global NEXUS_SHEET_CACHE
-    now = time.time()
-    entry = NEXUS_SHEET_CACHE.get(name, {'time':0,'data':[]})
-    if not force and now - entry['time'] < NEXUS_CACHE_TTL and entry['data']:
-        return entry['data']
-    url = NEXUS_SOURCES.get(name,"")
-    if not url: return entry.get('data',[])
+    """Fetch one sheet — /tmp file cache + memory cache."""
+    cache_key = f"sheet_{name}"
+    if not force:
+        cached = _nx_read(cache_key)
+        if cached is not None:
+            return cached
+    url = NEXUS_SOURCES.get(name, "")
+    if not url: return _nx_read(cache_key) or []
+    fresh = nexus_fetch_sheet_data(url, name)
+    if fresh:
+        _nx_write(cache_key, fresh)
+        return fresh
+    # Fetch failed — return stale if available
+    stale = _nx_read.__wrapped__(cache_key) if hasattr(_nx_read,'__wrapped__') else None
     try:
-        fresh = nexus_fetch_sheet_data(url, name)
-        if fresh:  # only update cache if we got data
-            NEXUS_SHEET_CACHE[name] = {'time': now, 'data': fresh}
-            return fresh
+        path = _nx_cache_path(cache_key)
+        if os.path.exists(path):
+            with open(path,"rb") as f: return pickle.load(f)
     except: pass
-    return entry.get('data', [])  # return stale on error
+    return []
 
 def nexus_get_kerry_status(force=False):
-    global NEXUS_KERRY_CACHE
-    now = time.time()
-    if not force and now - NEXUS_KERRY_CACHE['time'] < NEXUS_CACHE_TTL and NEXUS_KERRY_CACHE['data']:
-        return NEXUS_KERRY_CACHE['data']
+    cache_key = "kerry_status"
+    if not force:
+        cached = _nx_read(cache_key)
+        if cached is not None:
+            return cached
+    fresh = nexus_fetch_kerry_status(NEXUS_KERRY_STATUS_URL)
+    if fresh:
+        _nx_write(cache_key, fresh)
+        return fresh
     try:
-        fresh = nexus_fetch_kerry_status(NEXUS_KERRY_STATUS_URL)
-        if fresh:
-            NEXUS_KERRY_CACHE.update({'time': now, 'data': fresh})
-            return fresh
+        path = _nx_cache_path(cache_key)
+        if os.path.exists(path):
+            with open(path,"rb") as f: return pickle.load(f)
     except: pass
-    return NEXUS_KERRY_CACHE.get('data', {})
+    return {}
 
 def nexus_sync_db(force=False):
-    """Fetch all sheets in parallel, each with its own cache."""
+    """Return all sheets — from cache where possible, fetch missing ones in parallel."""
     res = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
-        fs = {exe.submit(nexus_get_sheet, name, force): name for name in NEXUS_SOURCES}
-        fk = exe.submit(nexus_get_kerry_status, force)
-        # Wait up to 9s — whatever completes is used, stale cache fills the rest
-        try:
-            for f in concurrent.futures.as_completed(fs, timeout=9):
-                res[fs[f]] = f.result() or []
-        except concurrent.futures.TimeoutError: pass
-        # Fill any that timed out with their stale cache
-        for name in NEXUS_SOURCES:
-            if name not in res:
-                res[name] = NEXUS_SHEET_CACHE.get(name, {}).get('data', [])
-        try: km = fk.result(timeout=2)
-        except: km = NEXUS_KERRY_CACHE.get('data', {})
+    to_fetch = []
+    for name in NEXUS_SOURCES:
+        cached = _nx_read(f"sheet_{name}")
+        if cached is not None and not force:
+            res[name] = cached
+        else:
+            to_fetch.append(name)
+
+    km = None if force else _nx_read("kerry_status")
+
+    # Only fetch what's missing/stale
+    if to_fetch or km is None:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
+            fs = {exe.submit(nexus_get_sheet, name, force): name for name in to_fetch}
+            fk = exe.submit(nexus_get_kerry_status, force) if km is None else None
+            try:
+                for f in concurrent.futures.as_completed(fs, timeout=9):
+                    name = fs[f]
+                    try: res[name] = f.result() or []
+                    except: res[name] = []
+            except concurrent.futures.TimeoutError:
+                for name in to_fetch:
+                    if name not in res: res[name] = []
+            if fk:
+                try: km = fk.result(timeout=2)
+                except: km = {}
+
+    # Fill any still missing with empty list
+    for name in NEXUS_SOURCES:
+        if name not in res: res[name] = []
+    if km is None: km = {}
     return res, km
 
 @app.route("/api/nexus/refresh", methods=["POST"])
 def api_nexus_refresh():
-    nexus_sync_db(force=True); return jsonify({"success":True})
-
-@app.route("/api/nexus/warm", methods=["POST"])
-def api_nexus_warm():
-    # Non-forced: uses cache if fresh, only fetches if stale (>5min)
-    nexus_sync_db(force=False); return jsonify({"success":True})
+    body = request.json or {}
+    sheet = body.get("sheet", None)
+    if sheet and sheet in NEXUS_SOURCES:
+        # Single sheet refresh — always within Vercel 10s
+        nexus_get_sheet(sheet, force=True)
+        return jsonify({"success": True, "sheet": sheet})
+    # Background warm — only fetches sheets not yet in /tmp cache
+    nexus_sync_db(force=False)
+    return jsonify({"success": True})
 
 @app.route("/api/nexus/search", methods=["POST"])
 def api_nexus_search():
@@ -4624,31 +4682,28 @@ function navSwitch(btn,name){
 }
 
 async function hardRefresh(){
-  g('sbSync').textContent='🕐 Refreshing sheets...';
-  _radar=null;
-  const sheets=["ECL QC Center","ECL Zone","GE QC Center","GE Zone","APX","Kerry"];
-  for(let s of sheets){
+  const btn=document.querySelector('.tbtn-refresh');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Refreshing...';}
+  g('sbSync').textContent='🕐 Refreshing...'; _radar=null;
+  // Refresh each sheet sequentially to avoid Vercel timeout
+  const sheets=["Kerry","APX","ECL QC Center","ECL Zone","GE QC Center","GE Zone"];
+  for(const s of sheets){
+    g('sbSync').textContent=`🕐 Refreshing ${s}...`;
     try{
-      await fetch('/api/nexus/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sheet:s})});
+      await fetch('/api/nexus/refresh',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({sheet:s,force:true})});
     }catch(e){}
   }
+  if(btn){btn.disabled=false;btn.innerHTML='🔄 Refresh';}
   g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
   if(_pane==='radar')loadRadar();
   if(_pane==='ops')loadOps();
 }
 window.onload=()=>{
   g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
-  // Warm each sheet one-by-one — avoids Vercel 10s timeout
-  const sheets=["ECL QC Center","ECL Zone","GE QC Center","GE Zone","APX","Kerry"];
-  let i=0;
-  function warmNext(){
-    if(i>=sheets.length)return;
-    const s=sheets[i++];
-    fetch('/api/nexus/refresh',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({sheet:s})})
-      .then(()=>warmNext()).catch(()=>warmNext());
-  }
-  warmNext();
+  // One background warm — uses /tmp cache, only fetches stale sheets
+  fetch('/api/nexus/refresh',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({})}).catch(()=>{});
 };
 
 function sBadge(s){
