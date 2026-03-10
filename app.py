@@ -7,91 +7,26 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 import time
 import os
-import calendar
+import random
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Rocket2024')
 
+
+# ========== CACHE ==========
 CACHE = {}
-CACHE_DURATION = 300
-
+CACHE_DURATION = 900  # 15 منٹ
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
+# ========== PROVIDERS ==========
 PROVIDERS = [
-    {
-        'name': 'GLOBAL EXPRESS (QC)',
-        'short': 'GE QC',
-        'sheet': 'GE QC Center & Zone',
-        'date_col': 1,
-        'box_col': 2,
-        'weight_col': 5,
-        'region_col': 7,
-        'start_row': 2,
-        'color': '#3B82F6',
-        'group': 'GE'
-    },
-    {
-        'name': 'GLOBAL EXPRESS (ZONE)',
-        'short': 'GE ZONE',
-        'sheet': 'GE QC Center & Zone',
-        'date_col': 10,
-        'box_col': 11,
-        'weight_col': 14,
-        'region_col': 16,
-        'start_row': 2,
-        'color': '#8B5CF6',
-        'group': 'GE'
-    },
-    {
-        'name': 'ECL LOGISTICS (QC)',
-        'short': 'ECL QC',
-        'sheet': 'ECL QC Center & Zone',
-        'date_col': 1,
-        'box_col': 2,
-        'weight_col': 5,
-        'region_col': 7,
-        'start_row': 3,
-        'color': '#10B981',
-        'group': 'ECL'
-    },
-    {
-        'name': 'ECL LOGISTICS (ZONE)',
-        'short': 'ECL ZONE',
-        'sheet': 'ECL QC Center & Zone',
-        'date_col': 10,
-        'box_col': 11,
-        'weight_col': 14,
-        'region_col': 16,
-        'start_row': 3,
-        'color': '#F59E0B',
-        'group': 'ECL'
-    },
-    {
-        'name': 'KERRY',
-        'short': 'KERRY',
-        'sheet': 'Kerry',
-        'date_col': 1,
-        'box_col': 2,
-        'weight_col': 5,
-        'region_col': 7,
-        'start_row': 2,
-        'color': '#EF4444',
-        'group': 'OTHER'
-    },
-    {
-        'name': 'APX',
-        'short': 'APX',
-        'sheet': 'APX',
-        'date_col': 1,
-        'box_col': 2,
-        'weight_col': 5,
-        'region_col': 7,
-        'start_row': 2,
-        'color': '#EC4899',
-        'group': 'OTHER'
-    }
+    {'name': 'GLOBAL EXPRESS (QC)', 'short': 'GE QC', 'sheet': 'GE QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#3B82F6', 'group': 'GE'},
+    {'name': 'GLOBAL EXPRESS (ZONE)', 'short': 'GE ZONE', 'sheet': 'GE QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 15, 'region_col': 16, 'order_col': 9, 'start_row': 2, 'color': '#8B5CF6', 'group': 'GE'},
+    {'name': 'ECL LOGISTICS (QC)', 'short': 'ECL QC', 'sheet': 'ECL QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 3, 'color': '#10B981', 'group': 'ECL'},
+    {'name': 'ECL LOGISTICS (ZONE)', 'short': 'ECL ZONE', 'sheet': 'ECL QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 14, 'region_col': 16, 'order_col': 9, 'start_row': 3, 'color': '#F59E0B', 'group': 'ECL'},
+    {'name': 'KERRY', 'short': 'KERRY', 'sheet': 'Kerry', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#EF4444', 'group': 'OTHER'},
+    {'name': 'APX', 'short': 'APX', 'sheet': 'APX', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#EC4899', 'group': 'OTHER'}
 ]
 
 INVALID_REGIONS = {'', 'N/A', '#N/A', 'COUNTRY', 'REGION', 'DESTINATION', 'ZONE', 'ORDER', 'FLEEK ID', 'DATE', 'CARTONS'}
@@ -282,438 +217,672 @@ def get_provider_achievements(provider_data, is_winner=False, trend=None):
         achievements.append(ACHIEVEMENTS['region_king'])
     return achievements
 
-FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='gold' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%23f4d03f'/%3E%3Cstop offset='50%25' style='stop-color:%23d4a853'/%3E%3Cstop offset='100%25' style='stop-color:%23b8942d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='46' fill='%230a0a0f' stroke='url(%23gold)' stroke-width='4'/%3E%3Ctext x='50' y='42' text-anchor='middle' font-family='Arial Black' font-size='24' font-weight='bold' fill='url(%23gold)'%3E3P%3C/text%3E%3Ctext x='50' y='68' text-anchor='middle' font-family='Arial' font-size='16' font-weight='bold' fill='%23d4a853'%3ELOGISTICS%3C/text%3E%3Ccircle cx='50' cy='50' r='42' fill='none' stroke='%23d4a853' stroke-width='1' opacity='0.3'/%3E%3C/svg%3E">'''
+FAVICON = '''<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">'''
 
+# ========== BASE STYLES (UPDATED WITH ANIMATIONS) ==========
 BASE_STYLES = """
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Plus Jakarta Sans', sans-serif; background: #050508; color: #e2e8f0; min-height: 100vh; }
-
-    /* ===== SIDEBAR - no right border ===== */
-    .sidebar {
-        position: fixed; left: 0; top: 0; height: 100vh; width: 280px;
-        background: linear-gradient(180deg, #0a0a0f 0%, #0c0d12 100%);
-        border-right: none;
-        padding: 24px 16px; transition: all 0.3s ease; z-index: 100;
-        display: flex; flex-direction: column; overflow-y: auto;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    :root {
+        --bg-body: #f8fafc;
+        --bg-sidebar: #ffffff;
+        --bg-card: #ffffff;
+        --text-main: #1e293b;
+        --text-muted: #64748b;
+        --border-color: #e2e8f0;
+        --brand-color: #4f46e5;
+        --brand-gradient: linear-gradient(145deg, #4f46e5, #8b5cf6);
+        --hover-bg: #f1f5f9;
+        --table-hdr: #f8fafc;
+        --cell-empty: #f1f5f9;
+        --flight-day-bg: #f1f5f9;
+        --skeleton-base: #e2e8f0;
+        --skeleton-highlight: #f1f5f9;
     }
-    .sidebar.collapsed { width: 70px; }
+
+    [data-theme="dark"] {
+        --bg-body: #000000;
+        --bg-sidebar: #111111;
+        --bg-card: #111111;
+        --text-main: #f1f5f9;
+        --text-muted: #94a3b8;
+        --border-color: #222222;
+        --brand-color: #818cf8;
+        --hover-bg: #222222;
+        --table-hdr: #111111;
+        --cell-empty: #222222;
+        --flight-day-bg: #1e1e2e;
+        --skeleton-base: #1e1e2e;
+        --skeleton-highlight: #2a2a3a;
+    }
+
+    [data-theme="dark"] .provider-card:nth-child(odd) {
+        background: #0f0f15;
+    }
+    [data-theme="dark"] .provider-card:nth-child(even) {
+        background: #0a0a0f;
+    }
+    [data-theme="dark"] .stat-card:nth-child(odd) {
+        background: #0f0f15;
+    }
+    [data-theme="dark"] .stat-card:nth-child(even) {
+        background: #0a0a0f;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; font-size: 13px; line-height: 1.4; transition: background 0.3s, color 0.3s; }
+
+    /* ========== ANIMATIONS ========== */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .provider-card, .stat-card, .comparison-card, .heatmap-item, .forecast-day, .provider-section {
+        animation: fadeIn 0.4s ease-out;
+    }
+    .nav-item, .tab-btn, .qbtn, .action-btn, .apply-btn, .download-btn, .logout-btn {
+        transition: all 0.2s;
+    }
+    .nav-item:hover, .tab-btn:hover, .qbtn:hover, .action-btn:hover, .apply-btn:hover, .download-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    }
+    .provider-card:hover, .stat-card:hover, .comparison-card:hover, .heatmap-item:hover, .forecast-day:hover, .provider-section:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(79,70,229,0.08);
+        border-color: var(--brand-color);
+    }
+
+    /* Skeleton Loading */
+    .skeleton {
+        background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-highlight) 50%, var(--skeleton-base) 75%);
+        background-size: 200% 100%;
+        animation: skeleton-loading 1.5s infinite;
+        border-radius: 4px;
+        height: 20px;
+        margin: 10px 0;
+    }
+    @keyframes skeleton-loading {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+
+    /* Download Button */
+    .download-btn {
+        background: none;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+        cursor: pointer;
+        color: var(--text-muted);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 10px;
+    }
+    .download-btn:hover {
+        background: var(--hover-bg);
+        color: var(--brand-color);
+        border-color: var(--brand-color);
+    }
+
+    /* Last Update */
+    .last-update {
+        font-size: 10px;
+        color: var(--text-muted);
+        padding: 8px 12px;
+        border-top: 1px solid var(--border-color);
+        margin-top: 8px;
+        text-align: center;
+    }
+
+    /* Guest Mode Restrictions */
+    body.guest-mode .day-data a,
+    body.guest-mode .orders-link,
+    body.guest-mode .boxes-link,
+    body.guest-mode .weight-link,
+    body.guest-mode .under20-link,
+    body.guest-mode .over20-link,
+    body.guest-mode .export-btn,
+    body.guest-mode .search-box,
+    body.guest-mode #forecast-link,
+    body.guest-mode #logs-link,
+    body.guest-mode .download-btn {
+        display: none !important;
+        pointer-events: none !important;
+    }
+
+    /* Sidebar */
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100vh;
+        width: 220px;
+        background: var(--bg-sidebar);
+        border-right: none;
+        padding: 16px 12px;
+        transition: all 0.2s ease;
+        z-index: 100;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+    }
+    .sidebar.collapsed { width: 60px; }
     .sidebar-header {
-        display: flex; align-items: center; gap: 12px;
-        padding-bottom: 24px; border-bottom: 1px solid rgba(212,168,83,0.08);
-        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 16px;
     }
     .logo-icon {
-        width: 40px; height: 40px;
-        background: linear-gradient(135deg, #d4a853 0%, #b8942d 100%);
-        border-radius: 10px; display: flex; align-items: center; justify-content: center;
-        font-weight: 700; color: #0a0a0f; font-size: 18px; flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        background: var(--brand-gradient);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        color: #ffffff;
+        font-size: 18px;
     }
-    .logo-text { font-size: 18px; font-weight: 700; color: #d4a853; white-space: nowrap; overflow: hidden; transition: opacity 0.3s; }
-    .sidebar.collapsed .logo-text { opacity: 0; width: 0; }
-    .nav-section { margin-bottom: 16px; }
-    .nav-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; padding: 8px 16px; margin-bottom: 4px; }
+    .header-titles {
+        display: flex;
+        flex-direction: column;
+    }
+    .header-main {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-main);
+        line-height: 1.2;
+    }
+    .header-sub {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+    .header-sub .admin-name {
+        color: var(--text-main);
+        font-weight: 500;
+    }
+    .header-sub .admin-role {
+        color: #10b981;
+        font-weight: 600;
+    }
+    body.dark .header-sub .admin-name { color: #f1f5f9; }
+    body.dark .header-sub .admin-role { color: #10b981; }
+    .sidebar.collapsed .header-main,
+    .sidebar.collapsed .header-sub {
+        opacity: 0;
+        width: 0;
+        display: none;
+    }
+    .nav-section { margin-bottom: 12px; }
+    .nav-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 4px 8px; margin-bottom: 2px; font-weight: 600; }
     .sidebar.collapsed .nav-section-title { opacity: 0; }
-    .nav-menu { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }
+    .nav-menu { display: flex; flex-direction: column; gap: 2px; flex-grow: 1; }
     .nav-item {
-        display: flex; align-items: center; gap: 12px; padding: 10px 16px;
-        border-radius: 8px; color: #64748b; text-decoration: none;
-        transition: all 0.2s; cursor: pointer; position: relative; font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        color: var(--text-muted);
+        text-decoration: none;
+        transition: all 0.2s;
+        font-size: 12px;
+        font-weight: 500;
     }
-    .nav-item:hover { background: rgba(212,168,83,0.1); color: #d4a853; }
-    .nav-item.active { background: rgba(212,168,83,0.15); color: #d4a853; }
-    .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
-    .nav-item span { white-space: nowrap; overflow: hidden; transition: opacity 0.3s; }
+    .nav-item:hover { background: var(--hover-bg); color: var(--text-main); }
+    .nav-item.active { background: rgba(79,70,229,0.1); color: var(--brand-color); border-left: 3px solid var(--brand-color); }
+    .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; color: currentColor; }
     .sidebar.collapsed .nav-item span { opacity: 0; width: 0; }
-    .nav-item .tooltip {
-        position: absolute; left: 70px; background: #1a1b23; color: #e2e8f0;
-        padding: 8px 12px; border-radius: 6px; font-size: 12px; white-space: nowrap;
-        opacity: 0; pointer-events: none; transition: opacity 0.2s;
-        border: 1px solid rgba(212,168,83,0.2); z-index: 1000;
-    }
-    .sidebar.collapsed .nav-item:hover .tooltip { opacity: 1; }
-    .sidebar-toggle {
-        position: absolute; right: -12px; top: 50%; transform: translateY(-50%);
-        width: 24px; height: 24px; background: #d4a853; border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer; border: 2px solid #0a0a0f; color: #0a0a0f;
-        font-size: 12px; font-weight: bold; transition: transform 0.3s;
-    }
+    .sidebar-toggle { position: absolute; right: -12px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 2px solid var(--bg-body); color: #ffffff; font-size: 12px; z-index: 101; }
     .sidebar.collapsed .sidebar-toggle { transform: translateY(-50%) rotate(180deg); }
-    .sidebar-footer { border-top: 1px solid rgba(212,168,83,0.08); padding-top: 16px; margin-top: auto; }
+    .sidebar-footer { border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: auto; }
+    .admin-info { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--hover-bg); border-radius: 8px; margin-bottom: 8px; }
+    .admin-avatar { width: 28px; height: 28px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; }
+    .admin-role { font-size: 10px; color: var(--text-muted); }
     .logout-btn {
-        display: flex; align-items: center; gap: 12px; padding: 10px 16px;
-        border-radius: 8px; color: #ef4444; text-decoration: none;
-        transition: all 0.2s; cursor: pointer; width: 100%;
-        border: none; background: none; font-family: inherit; font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        color: #ef4444;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 500;
+        transition: 0.2s;
+        width: fit-content;
     }
     .logout-btn:hover { background: rgba(239,68,68,0.1); }
-    .logout-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
-    .sidebar.collapsed .logout-btn span { opacity: 0; width: 0; }
+    .logout-btn svg { width: 14px; height: 14px; }
+    .sidebar.collapsed .logout-btn span { display: none; }
 
-    /* ===== MAIN CONTENT ===== */
-    .main-content { margin-left: 280px; padding: 24px; transition: margin-left 0.3s; min-height: 100vh; }
-    .main-content.expanded { margin-left: 70px; }
+    /* Main Content */
+    .main-content { margin-left: 220px; padding: 20px; transition: margin-left 0.2s; min-height: 100vh; }
+    .main-content.expanded { margin-left: 60px; }
 
-    /* ===== PAGE HEADER ===== */
-    .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 16px; }
-    .page-title { font-size: 28px; font-weight: 700; color: #ffffff; }
-    .page-title span { color: #d4a853; }
+    /* Page Header */
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .page-title { font-size: 24px; font-weight: 700; color: var(--text-main); }
+    .page-title span { color: var(--brand-color); }
 
-    /* ===== DATE RANGE PICKER ===== */
-    .date-range-picker {
-        background: #0c0d12; border-radius: 14px;
-        border: 1px solid rgba(212,168,83,0.15);
-        padding: 12px 16px; display: flex; flex-direction: column; gap: 10px;
+    /* Top Actions */
+    .top-actions {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
     }
-    .qbtns-row { display: flex; gap: 6px; flex-wrap: wrap; }
-    .qbtn {
-        padding: 5px 12px; background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
-        color: #64748b; font-size: 12px; cursor: pointer;
-        transition: all 0.2s; font-family: inherit; font-weight: 500;
-    }
-    .qbtn:hover { background: rgba(212,168,83,0.1); border-color: rgba(212,168,83,0.2); color: #d4a853; }
-    .qbtn.active { background: rgba(212,168,83,0.18); border-color: rgba(212,168,83,0.4); color: #d4a853; font-weight: 600; }
-    .date-inputs-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .range-input {
-        padding: 6px 10px; background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(212,168,83,0.25); border-radius: 7px;
-        color: #e2e8f0; font-size: 12px; font-family: inherit;
-        transition: border-color 0.2s;
-    }
-    .range-input:focus { outline: none; border-color: #d4a853; }
-    .range-sep { color: #64748b; font-size: 14px; }
-    .apply-btn {
-        padding: 6px 14px; background: linear-gradient(135deg, #d4a853, #b8942d);
-        border: none; border-radius: 7px; color: #0a0a0f;
-        font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit;
-        transition: opacity 0.2s;
-    }
-    .apply-btn:hover { opacity: 0.85; }
-    .week-badge {
-        font-size: 12px; color: #d4a853; font-weight: 600;
-        padding: 4px 10px; background: rgba(212,168,83,0.08);
-        border-radius: 6px; white-space: nowrap; border: 1px solid rgba(212,168,83,0.2);
-    }
-
-    /* ===== CARDS ===== */
-    .provider-card {
-        background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%);
-        border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);
-        margin-bottom: 24px; overflow: hidden;
-    }
-    .card-header {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.04);
+    .search-box {
         position: relative;
+        display: flex;
+        align-items: center;
     }
-    .card-header::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
-    .provider-info { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-    .provider-name { font-size: 18px; font-weight: 600; color: #ffffff; }
-    .star-rating { color: #d4a853; font-size: 14px; letter-spacing: 2px; }
-    .trend-badge { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-    .trend-badge.up { background: rgba(16,185,129,0.1); color: #10b981; }
-    .trend-badge.down { background: rgba(239,68,68,0.1); color: #ef4444; }
-    .trend-badge.neutral { background: rgba(100,116,139,0.1); color: #94a3b8; }
-    .card-stats { display: flex; gap: 24px; flex-wrap: wrap; }
-    .stat-item { text-align: center; padding: 8px 16px; background: rgba(255,255,255,0.02); border-radius: 8px; }
-    .stat-value { font-size: 18px; font-weight: 700; color: #ffffff; }
-    .stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .search-input {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        color: var(--text-main);
+        padding: 6px 12px 6px 32px;
+        border-radius: 20px;
+        font-size: 12px;
+        outline: none;
+        transition: 0.2s;
+        width: 220px;
+    }
+    .search-input:focus { border-color: var(--brand-color); box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+    .search-icon { position: absolute; left: 10px; color: var(--text-muted); font-size: 12px; }
+    .shortcut-hint { position: absolute; right: 10px; font-size: 9px; background: var(--hover-bg); padding: 2px 4px; border-radius: 4px; color: var(--text-muted); border: 1px solid var(--border-color); }
+    .action-group { display: flex; gap: 8px; }
+    .action-btn {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        color: var(--text-main);
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: 0.2s;
+    }
+    .action-btn:hover { border-color: var(--brand-color); color: var(--brand-color); }
 
-    /* ===== DATA TABLE - Clean borders ===== */
-    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
-    .data-table th {
-        background: #0a0b0f; padding: 10px 6px; text-align: center;
-        font-weight: 600; color: #64748b; font-size: 10px; text-transform: uppercase;
-        letter-spacing: 0.5px; border-bottom: 1px solid rgba(212,168,83,0.3);
+    /* Search Results */
+    #search-results {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        width: 100%;
+        max-width: 400px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        margin-top: 8px;
+        z-index: 1000;
+        display: none;
+        max-height: 400px;
+        overflow-y: auto;
     }
-    .data-table th.region-col {
-        text-align: left; padding-left: 16px; min-width: 130px;
-        border-right: 1px solid rgba(212,168,83,0.2);
-    }
-    .data-table th.day-col { min-width: 140px; }
-    .data-table th.flight-day { background: rgba(212,168,83,0.06); color: #d4a853; }
-    .data-table td {
-        padding: 9px 6px; text-align: center;
-        border-bottom: 1px solid rgba(255,255,255,0.04);
-        color: #cbd5e1; vertical-align: middle;
-    }
-    .data-table td.region-col {
-        text-align: left; padding-left: 16px; font-weight: 600; color: #f1f5f9;
-        background: rgba(255,255,255,0.01); border-right: 1px solid rgba(212,168,83,0.15);
-    }
-    .data-table td.day-cell { padding: 8px 4px; }
-    .data-table tr:nth-child(even) td { background: rgba(255,255,255,0.012); }
-    .data-table tr:nth-child(even) td.region-col { background: rgba(255,255,255,0.025); }
-    .data-table tr:hover td { background: rgba(212,168,83,0.04); }
-    .data-table tr:hover td.region-col { background: rgba(212,168,83,0.07); }
-    .data-table tr.total-row td {
-        background: rgba(212,168,83,0.1); font-weight: 700; color: #d4a853;
-        border-top: 1px solid rgba(212,168,83,0.3); border-bottom: none; font-size: 13px;
-    }
-    .data-table tr.total-row td.region-col { background: rgba(212,168,83,0.15); }
-    .data-table .sub-header-row th {
-        background: #070809; padding: 5px 4px; font-size: 9px; font-weight: 500;
-        color: #475569; border-bottom: 1px solid rgba(255,255,255,0.05); letter-spacing: 0;
-    }
-    .sub-header { display: flex; justify-content: center; gap: 2px; font-size: 9px; color: #64748b; }
-    .sub-header span { min-width: 26px; text-align: center; padding: 2px 0; }
-    .day-data { display: flex; justify-content: center; gap: 2px; font-size: 11px; }
-    .day-data span { min-width: 26px; text-align: center; padding: 3px 2px; border-radius: 3px; }
-    .day-data span:nth-child(1) { color: #60a5fa; background: rgba(96,165,250,0.08); }
-    .day-data span:nth-child(2) { color: #34d399; background: rgba(52,211,153,0.08); }
-    .day-data span:nth-child(3) { color: #fbbf24; background: rgba(251,191,36,0.08); }
-    .day-data span:nth-child(4) { color: #4ade80; background: rgba(74,222,128,0.08); }
-    .day-data span:nth-child(5) { color: #f87171; background: rgba(248,113,113,0.08); }
-    .day-data-empty { color: #2d3748; font-size: 14px; }
+    .search-item { padding: 12px 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
+    .search-item:hover { background: var(--hover-bg); }
+    .search-item-title { font-weight: 600; color: var(--text-main); display: flex; justify-content: space-between; }
+    .search-item-meta { font-size: 11px; color: var(--text-muted); display: flex; gap: 10px; }
 
-    /* ===== STATS CARDS ===== */
-    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-    .stats-row-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
-    .stat-card {
-        background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%);
-        border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);
-        padding: 20px; display: flex; align-items: center; gap: 16px;
+    /* Date Picker */
+    .date-range-picker {
+        background: var(--bg-card);
+        border-radius: 16px;
+        border: 1px solid var(--border-color);
+        padding: 12px 16px;
     }
-    .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 24px; }
-    .stat-icon svg { width: 24px; height: 24px; }
-    .stat-content { flex: 1; min-width: 0; }
-    .stat-card .stat-value { font-size: 24px; font-weight: 700; color: #ffffff; margin-bottom: 4px; }
-    .stat-card .stat-label { font-size: 13px; color: #64748b; }
+    .qbtns-row { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+    .qbtn { padding: 4px 12px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; color: var(--text-muted); font-size: 10px; cursor: pointer; transition: 0.2s; }
+    .qbtn:hover { background: var(--border-color); }
+    .qbtn.active { background: var(--brand-color); border-color: var(--brand-color); color: #fff; }
+    .date-inputs-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .range-input { padding: 4px 10px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; color: var(--text-main); font-size: 11px; }
+    .apply-btn { padding: 4px 14px; background: var(--brand-color); border: none; border-radius: 30px; color: #fff; font-size: 11px; cursor: pointer; }
+    .week-badge { font-size: 11px; color: var(--brand-color); padding: 4px 12px; background: rgba(79,70,229,0.1); border-radius: 30px; }
 
-    /* ===== CHARTS ===== */
-    .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 24px; }
-    .chart-card {
-        background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%);
-        border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); padding: 24px;
-    }
+    /* Provider Cards */
+    .provider-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); margin-bottom: 20px; overflow: hidden; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border-color); }
+    .provider-info { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .provider-name { font-size: 18px; font-weight: 600; color: var(--text-main); }
+    .star-rating { color: #fbbf24; font-size: 13px; letter-spacing: 2px; }
+    .trend-badge { display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 30px; font-size: 11px; font-weight: 600; }
+    .trend-badge.up { background: #e6f7e6; color: #10b981; border: 1px solid #a7f3d0; }
+    .trend-badge.down { background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; }
+    .trend-badge.neutral { background: var(--hover-bg); color: var(--text-muted); border: 1px solid var(--border-color); }
+    .card-stats { display: flex; gap: 16px; }
+    .stat-item { text-align: center; padding: 4px 12px; background: var(--hover-bg); border-radius: 12px; border: 1px solid var(--border-color); }
+    .stat-value { font-size: 18px; font-weight: 700; color: var(--text-main); }
+    .stat-label { font-size: 9px; color: var(--text-muted); text-transform: uppercase; }
+
+    /* Tables */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .data-table th { background: var(--table-hdr); padding: 8px 4px; text-align: center; font-weight: 600; color: var(--text-muted); font-size: 10px; text-transform: uppercase; border-bottom: 2px solid var(--brand-color); }
+    .data-table th.region-col { text-align: left; padding-left: 12px; }
+    .data-table td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--border-color); color: var(--text-main); }
+    .data-table td.region-col { text-align: left; padding-left: 12px; font-weight: 500; background: var(--hover-bg); }
+    .data-table tr.total-row td { background: rgba(79,70,229,0.1); font-weight: 600; color: var(--brand-color); border-top: 2px solid var(--brand-color); }
+
+    /* Day Data Grid */
+    .day-data { display: flex; justify-content: center; gap: 2px; font-size: 10px; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; background: var(--bg-body); margin: 2px 0; }
+    .day-data span, .day-data a { flex: 1; min-width: 28px; padding: 3px 1px; text-align: center; font-weight: 500; border-right: 1px solid var(--border-color); color: inherit; text-decoration: none; }
+    .day-data span:last-child, .day-data a:last-child { border-right: none; }
+    .day-data span:nth-child(1), .day-data a:nth-child(1) { color: #3b82f6; background: rgba(59,130,246,0.1); }
+    .day-data span:nth-child(2), .day-data a:nth-child(2) { color: #10b981; background: rgba(16,185,129,0.1); }
+    .day-data span:nth-child(3), .day-data a:nth-child(3) { color: #f59e0b; background: rgba(245,158,11,0.1); }
+    .day-data span:nth-child(4), .day-data a:nth-child(4) { color: #8b5cf6; background: rgba(139,92,246,0.1); }
+    .day-data span:nth-child(5), .day-data a:nth-child(5) { color: #ec4899; background: rgba(236,72,153,0.1); }
+    .day-data-empty { color: var(--text-muted); font-size: 10px; padding: 4px; background: var(--cell-empty); border-radius: 4px; }
+    .orders-link:hover, .boxes-link:hover, .weight-link:hover { color: var(--brand-color); border-bottom: 1px dashed var(--brand-color); }
+
+    /* Sub-header */
+    .sub-header { display: flex; justify-content: center; gap: 4px; font-size: 8px; color: var(--text-muted); }
+    .sub-header span { min-width: 28px; text-align: center; padding: 2px 0; }
+
+    /* Stats Cards */
+    .stats-row, .stats-row-5 { display: grid; gap: 12px; margin-bottom: 20px; }
+    .stats-row { grid-template-columns: repeat(4, 1fr); }
+    .stats-row-5 { grid-template-columns: repeat(5, 1fr); }
+    .stat-card { background: var(--bg-card); border-radius: 16px; border: 1px solid var(--border-color); padding: 12px; display: flex; align-items: center; gap: 12px; }
+    .stat-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--hover-bg); border: 1px solid var(--border-color); }
+    .stat-content { flex: 1; }
+    .stat-card .stat-value { font-size: 20px; font-weight: 700; color: var(--text-main); margin-bottom: 2px; }
+    .stat-card .stat-label { font-size: 12px; color: var(--text-muted); }
+
+    /* Charts */
+    .charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
+    .chart-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 16px; }
     .chart-card.full-width { grid-column: span 2; }
-    .chart-title { font-size: 16px; font-weight: 600; color: #ffffff; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
-    .chart-container { height: 300px; position: relative; }
-    .chart-card.full-width .chart-container { height: 350px; }
+    .chart-title { font-size: 15px; font-weight: 600; color: var(--text-main); margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
 
-    /* ===== LOADING ===== */
-    .loading { display: flex; justify-content: center; align-items: center; height: 200px; color: #d4a853; }
-    .spinner { width: 40px; height: 40px; border: 3px solid rgba(212,168,83,0.1); border-top-color: #d4a853; border-radius: 50%; animation: spin 1s linear infinite; }
+    /* Leaderboard */
+    .leaderboard-table { width: 100%; border-collapse: collapse; }
+    .leaderboard-table th { background: var(--table-hdr); padding: 10px; text-align: left; font-weight: 600; color: var(--text-muted); font-size: 11px; border-bottom: 2px solid var(--brand-color); }
+    .leaderboard-table td { padding: 10px; border-bottom: 1px solid var(--border-color); }
+    .rank-badge { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+    .rank-1 { background: #fbbf24; color: #1e293b; }
+    .rank-2 { background: #94a3b8; color: #ffffff; }
+    .rank-3 { background: #f9a8d4; color: #1e293b; }
+    .provider-cell { display: flex; align-items: center; gap: 10px; }
+    .provider-color { width: 4px; height: 28px; border-radius: 2px; }
+
+    /* KPI Cards */
+    .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 16px; text-align: center; }
+    .kpi-icon { font-size: 28px; margin-bottom: 8px; }
+    .kpi-value { font-size: 24px; font-weight: 700; color: var(--text-main); }
+    .kpi-label { font-size: 12px; color: var(--text-muted); }
+    .kpi-trend { font-size: 11px; margin-top: 8px; padding: 4px 10px; border-radius: 30px; display: inline-block; font-weight: 600; }
+    .kpi-trend.up { background: #e6f7e6; color: #10b981; border: 1px solid #a7f3d0; }
+    .kpi-trend.down { background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; }
+
+    /* Winner Card */
+    .winner-card { background: #fef9e7; border: 2px solid #fbbf24; }
+
+    /* Comparison Tabs */
+    .tabs { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab-btn { padding: 5px 14px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 40px; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+    .tab-btn:hover { background: var(--border-color); }
+    .tab-btn.active { background: var(--brand-color); border-color: var(--brand-color); color: #fff; }
+
+    /* Comparison Cards */
+    .comparison-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: start; }
+    .comparison-card { background: var(--bg-card); border-radius: 18px; border: 1px solid var(--border-color); padding: 18px; }
+    .comparison-vs { display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: var(--brand-color); padding: 16px; }
+    .comparison-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
+    .comparison-color { width: 5px; height: 32px; border-radius: 3px; }
+    .comparison-name { font-size: 18px; font-weight: 600; color: var(--text-main); }
+    .comparison-stat { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color); }
+    .comparison-stat-label { color: var(--text-muted); font-size: 12px; }
+    .comparison-stat-value { color: var(--text-main); font-size: 14px; font-weight: 600; }
+    .winner-indicator { color: #10b981; font-size: 11px; margin-left: 4px; }
+
+    /* Heatmap */
+    .heatmap-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
+    .heatmap-item { background: var(--bg-card); border-radius: 16px; padding: 14px; text-align: center; border: 1px solid var(--border-color); }
+    .heatmap-region { font-size: 14px; font-weight: 600; color: var(--text-main); }
+    .heatmap-value { font-size: 20px; font-weight: 700; color: var(--brand-color); }
+
+    /* Achievements */
+    .achievements-row { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
+    .achievement-badge { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 30px; font-size: 10px; color: var(--text-muted); }
+
+    /* WhatsApp Report */
+    .whatsapp-box { background: var(--bg-card); border: 2px solid #10b981; border-radius: 20px; padding: 20px; }
+    .whatsapp-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
+    .whatsapp-icon { font-size: 24px; }
+    .whatsapp-title { font-size: 16px; font-weight: 700; color: #10b981; }
+    .whatsapp-content { font-family: 'Courier New', monospace; background: var(--hover-bg); padding: 14px; border-radius: 12px; color: var(--text-main); border: 1px solid var(--border-color); }
+    .copy-btn { background: #10b981; color: #ffffff; padding: 10px; border: none; border-radius: 40px; font-weight: 600; font-size: 12px; cursor: pointer; margin-top: 14px; width: 100%; }
+
+    /* Login Page */
+    .login-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-body);
+        padding: 20px;
+    }
+    .login-card {
+        background: var(--bg-card);
+        border-radius: 16px;
+        border: 1px solid var(--border-color);
+        padding: 40px 30px;
+        width: 100%;
+        max-width: 360px;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+    .login-logo {
+        width: 60px;
+        height: 60px;
+        background: var(--brand-gradient);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+        color: white;
+        font-size: 26px;
+        font-weight: 700;
+    }
+    .login-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin-bottom: 6px;
+    }
+    .login-subtitle {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 24px;
+    }
+    .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .form-group {
+        text-align: left;
+    }
+    .form-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+    }
+    .form-input {
+        width: 100%;
+        padding: 10px 12px;
+        background: var(--bg-body);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        color: var(--text-main);
+        font-size: 13px;
+        transition: 0.2s;
+    }
+    .form-input:focus {
+        outline: none;
+        border-color: var(--brand-color);
+        box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+    }
+    .login-btn {
+        width: 100%;
+        padding: 10px;
+        background: var(--brand-color);
+        border: none;
+        border-radius: 10px;
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .login-btn:hover {
+        background: #6366f1;
+    }
+    .divider {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 12px 0;
+        color: var(--text-muted);
+        font-size: 11px;
+    }
+    .divider-line {
+        flex: 1;
+        height: 1px;
+        background: var(--border-color);
+    }
+    .guest-btn {
+        background: var(--bg-body);
+        border: 1px solid var(--border-color);
+        color: var(--text-main);
+    }
+    .guest-btn:hover {
+        background: var(--hover-bg);
+        border-color: var(--brand-color);
+        color: var(--brand-color);
+    }
+    .error-message {
+        background: #fee2e2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        padding: 8px;
+        color: #dc2626;
+        font-size: 11px;
+        margin-bottom: 12px;
+    }
+
+    /* Loading */
+    .loading { display: flex; justify-content: center; align-items: center; height: 200px; color: var(--brand-color); }
+    .spinner { width: 36px; height: 36px; border: 3px solid rgba(79,70,229,0.1); border-top-color: var(--brand-color); border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ===== LEADERBOARD ===== */
-    .leaderboard-table { width: 100%; border-collapse: collapse; }
-    .leaderboard-table th { background: rgba(212,168,83,0.04); padding: 16px; text-align: left; font-weight: 600; color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .leaderboard-table td { padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.04); }
-    .leaderboard-table tr:hover td { background: rgba(212,168,83,0.02); }
-    .rank-badge { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
-    .rank-1 { background: linear-gradient(135deg, #d4a853 0%, #b8942d 100%); color: #0a0a0f; }
-    .rank-2 { background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%); color: #0a0a0f; }
-    .rank-3 { background: linear-gradient(135deg, #cd7f32 0%, #a0522d 100%); color: #ffffff; }
-    .rank-other { background: rgba(255,255,255,0.1); color: #94a3b8; }
-    .provider-cell { display: flex; align-items: center; gap: 12px; }
-    .provider-color { width: 4px; height: 32px; border-radius: 2px; }
+    /* Forecast Page */
+    .forecast-card { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; margin-bottom: 20px; }
+    .forecast-title { font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 14px; }
+    .forecast-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 14px; }
+    .forecast-day { background: var(--hover-bg); border-radius: 12px; padding: 14px; text-align: center; }
+    .forecast-day .day-name { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+    .forecast-day .prediction { font-size: 16px; font-weight: 600; color: var(--brand-color); }
+    .forecast-detail { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
-    /* ===== KPI ===== */
-    .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
-    .kpi-card { background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%); border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); padding: 24px; text-align: center; }
-    .kpi-icon { font-size: 32px; margin-bottom: 12px; }
-    .kpi-value { font-size: 28px; font-weight: 700; color: #ffffff; margin-bottom: 4px; }
-    .kpi-label { font-size: 13px; color: #64748b; }
-    .kpi-trend { font-size: 12px; margin-top: 8px; padding: 4px 8px; border-radius: 12px; display: inline-block; }
-    .kpi-trend.up { background: rgba(16,185,129,0.1); color: #10b981; }
-    .kpi-trend.down { background: rgba(239,68,68,0.1); color: #ef4444; }
+    /* Logs Page */
+    .logs-container { background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border-color); padding: 20px; }
+    .log-entry { padding: 6px 10px; border-bottom: 1px solid var(--border-color); font-family: monospace; font-size: 11px; }
+    .log-entry:last-child { border-bottom: none; }
 
-    /* ===== WINNER ===== */
-    .winner-card { background: linear-gradient(135deg, rgba(212,168,83,0.1) 0%, rgba(212,168,83,0.05) 100%); border: 1px solid rgba(212,168,83,0.3); }
-
-    /* ===== COMPARISON ===== */
-    .comparison-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 24px; align-items: start; }
-    .comparison-card { background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%); border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); padding: 24px; }
-    .comparison-vs { display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: #d4a853; padding: 20px; }
-    .comparison-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-    .comparison-color { width: 8px; height: 40px; border-radius: 4px; }
-    .comparison-name { font-size: 20px; font-weight: 700; color: #ffffff; }
-    .comparison-stat { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
-    .comparison-stat-label { color: #64748b; font-size: 14px; }
-    .comparison-stat-value { color: #ffffff; font-size: 18px; font-weight: 600; }
-    .winner-indicator { color: #10b981; font-size: 12px; margin-left: 8px; }
-
-    /* ===== ACHIEVEMENTS ===== */
-    .achievements-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-    .achievement-badge { display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: rgba(212,168,83,0.1); border: 1px solid rgba(212,168,83,0.2); border-radius: 20px; font-size: 11px; color: #d4a853; }
-    .achievement-badge .badge-icon { font-size: 14px; }
-
-    /* ===== WHATSAPP ===== */
-    .whatsapp-box { background: #0c0d12; border: 1px solid rgba(37,211,102,0.3); border-radius: 12px; padding: 20px; margin-top: 16px; }
-    .whatsapp-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(37,211,102,0.2); }
-    .whatsapp-icon { font-size: 24px; }
-    .whatsapp-title { font-size: 16px; font-weight: 600; color: #25D366; }
-    .whatsapp-content { font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.6; color: #e2e8f0; white-space: pre-wrap; background: rgba(255,255,255,0.03); padding: 16px; border-radius: 8px; }
-    .copy-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px; margin-top: 12px; background: #25D366; border: none; border-radius: 8px; color: #ffffff; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-    .copy-btn:hover { background: #128C7E; }
-
-    /* ===== MONTH/HEATMAP ===== */
-    .month-display { font-size: 14px; font-weight: 500; color: #e2e8f0; min-width: 150px; text-align: center; }
-    .heatmap-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; margin-top: 16px; }
-    .heatmap-item { background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%); border-radius: 12px; padding: 16px; text-align: center; border: 1px solid rgba(255,255,255,0.05); transition: all 0.2s; }
-    .heatmap-item:hover { transform: translateY(-2px); border-color: rgba(212,168,83,0.3); }
-    .heatmap-region { font-size: 14px; font-weight: 600; color: #ffffff; margin-bottom: 8px; }
-    .heatmap-value { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-    .heatmap-label { font-size: 11px; color: #64748b; }
-
-    /* ===== TABS ===== */
-    .tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
-    .tab-btn { padding: 10px 20px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #94a3b8; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    .tab-btn:hover { background: rgba(212,168,83,0.1); border-color: rgba(212,168,83,0.2); }
-    .tab-btn.active { background: rgba(212,168,83,0.15); border-color: rgba(212,168,83,0.3); color: #d4a853; }
-
-    /* ===== VIEW SELECTOR ===== */
-    .view-selector { display: flex; gap: 8px; background: #0c0d12; padding: 6px; border-radius: 12px; border: 1px solid rgba(212,168,83,0.2); }
-    .view-btn { padding: 10px 20px; background: transparent; border: none; border-radius: 8px; color: #64748b; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-    .view-btn:hover { color: #d4a853; }
-    .view-btn.active { background: linear-gradient(135deg, #d4a853 0%, #b8942d 100%); color: #0a0a0f; }
-
-    /* ===== LOGIN ===== */
-    .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #050508; padding: 20px; }
-    .login-card { background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%); border-radius: 20px; border: 1px solid rgba(212,168,83,0.2); padding: 40px; width: 100%; max-width: 400px; text-align: center; }
-    .login-logo { width: 80px; height: 80px; background: linear-gradient(135deg, #d4a853 0%, #b8942d 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; font-weight: 700; color: #0a0a0f; font-size: 28px; }
-    .login-title { font-size: 24px; font-weight: 700; color: #ffffff; margin-bottom: 8px; }
-    .login-subtitle { font-size: 14px; color: #64748b; margin-bottom: 32px; }
-    .login-form { display: flex; flex-direction: column; gap: 16px; }
-    .form-group { text-align: left; }
-    .form-label { display: block; font-size: 13px; font-weight: 500; color: #94a3b8; margin-bottom: 8px; }
-    .form-input { width: 100%; padding: 14px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(212,168,83,0.2); border-radius: 10px; color: #e2e8f0; font-size: 15px; font-family: inherit; transition: all 0.2s; }
-    .form-input:focus { outline: none; border-color: #d4a853; background: rgba(212,168,83,0.05); }
-    .form-input::placeholder { color: #64748b; }
-    .login-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #d4a853 0%, #b8942d 100%); border: none; border-radius: 10px; color: #0a0a0f; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s; margin-top: 8px; }
-    .login-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(212,168,83,0.3); }
-    .error-message { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 12px; color: #ef4444; font-size: 13px; margin-bottom: 16px; }
-
-    /* ===== CALENDAR ===== */
-    .premium-calendar { background: linear-gradient(145deg, #0c0d12, #0a0a0f); border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); padding: 24px; }
-    .calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 12px; }
-    .weekday-label { text-align: center; font-size: 12px; font-weight: 700; color: #d4a853; padding: 8px; text-transform: uppercase; }
-    .calendar-days-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
-    .cal-cell { min-height: 80px; background: rgba(255,255,255,0.02); border-radius: 12px; padding: 10px; cursor: pointer; transition: all 0.3s; border: 2px solid transparent; }
-    .cal-cell:hover { border-color: rgba(212,168,83,0.5); transform: translateY(-2px); }
-    .cal-cell.empty { background: transparent; cursor: default; border: none; }
-    .cal-cell.empty:hover { transform: none; }
-    .cal-cell.level-0 { background: rgba(100,116,139,0.15); }
-    .cal-cell.level-1 { background: rgba(34,197,94,0.15); }
-    .cal-cell.level-2 { background: rgba(34,197,94,0.25); }
-    .cal-cell.level-3 { background: rgba(251,191,36,0.2); }
-    .cal-cell.level-4 { background: rgba(251,191,36,0.35); }
-    .cal-cell.level-5 { background: linear-gradient(135deg, rgba(251,191,36,0.5), rgba(217,119,6,0.4)); border-color: #d4a853; }
-    .cal-day-num { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 4px; }
-    .cal-stat { font-size: 10px; color: #94a3b8; }
-
-    /* ===== DAILY REGION ===== */
-    .provider-section { background: linear-gradient(145deg, #0c0d12 0%, #0a0a0f 100%); border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 20px; overflow: hidden; }
-    .provider-header-dr { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s; }
-    .provider-header-dr:hover { background: rgba(255,255,255,0.02); }
-    .provider-header-left { display: flex; align-items: center; gap: 12px; }
-    .provider-color-bar { width: 4px; height: 36px; border-radius: 2px; }
-    .provider-header-info h3 { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 2px; }
-    .provider-header-info span { font-size: 12px; color: #64748b; }
-    .provider-header-stats { display: flex; gap: 20px; }
-    .header-stat { text-align: center; }
-    .header-stat-val { font-size: 16px; font-weight: 700; color: #d4a853; }
-    .header-stat-lbl { font-size: 10px; color: #64748b; text-transform: uppercase; }
-    .provider-body { padding: 0 20px 20px; display: none; }
-    .provider-body.open { display: block; }
-    .region-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .region-table th { background: rgba(212,168,83,0.06); padding: 10px 12px; text-align: left; font-weight: 600; color: #94a3b8; font-size: 11px; text-transform: uppercase; }
-    .region-table th:not(:first-child) { text-align: right; }
-    .region-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.03); }
-    .region-table td:not(:first-child) { text-align: right; }
-    .region-table tr:hover td { background: rgba(212,168,83,0.03); }
-    .medal { font-size: 16px; margin-right: 6px; }
-    .empty-state { text-align: center; padding: 60px 20px; color: #64748b; }
-    .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
-    .toggle-icon { color: #d4a853; transition: transform 0.3s; }
-    .provider-header-dr.open .toggle-icon { transform: rotate(180deg); }
-
-    /* ===== RESPONSIVE ===== */
-    @media (max-width: 1200px) {
-        .charts-grid { grid-template-columns: 1fr; }
-        .chart-card.full-width { grid-column: span 1; }
-        .stats-row { grid-template-columns: repeat(2, 1fr); }
-        .stats-row-5 { grid-template-columns: repeat(3, 1fr); }
-        .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-        .comparison-grid { grid-template-columns: 1fr; }
-        .comparison-vs { display: none; }
+    /* World Map Page */
+    .map-container {
+        height: 600px;
+        width: 100%;
+        background: var(--bg-card);
+        border-radius: 20px;
+        border: 1px solid var(--border-color);
+        overflow: hidden;
+        margin-top: 20px;
     }
-    @media (max-width: 768px) {
-        .sidebar { width: 70px; }
-        .sidebar .logo-text, .sidebar .nav-item span, .sidebar .logout-btn span, .sidebar .nav-section-title { display: none; }
-        .main-content { margin-left: 70px; padding: 16px; }
-        .page-header { flex-direction: column; align-items: flex-start; }
-        .card-header { flex-direction: column; gap: 16px; align-items: flex-start; }
-        .card-stats { width: 100%; justify-content: space-between; }
-        .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; }
+    .map-legend {
+        display: flex;
+        gap: 20px;
+        margin-top: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
     }
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+    }
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        opacity: 0.7;
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5 { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
+    @media (max-width: 768px) { .sidebar { width: 60px; } .main-content { margin-left: 60px; } .sidebar-toggle { width: 22px; height: 22px; right: -10px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
 </style>
 """
 
+# ========== SHARED JAVASCRIPT (UPDATED) ==========
 SHARED_JS = """
 <script>
-// ===== SHARED DATE UTILITIES =====
-function getISOWeek(date) {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
+// ===== DATE UTILITIES =====
+function getISOWeek(date) { const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())); const dayNum = d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate() + 4 - dayNum); const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); return Math.ceil((((d - yearStart) / 86400000) + 1) / 7); }
+function formatWeight(w) { if (w === undefined || w === null || w === 0) return '-'; const r = Math.round(w * 10) / 10; return r % 1 === 0 ? Math.round(r).toString() : r.toFixed(1); }
+function fmtLocal(date) { const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); return `${y}-${m}-${d}`; }
+function fmtDisp(date, includeYear) { if (includeYear === false) return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+function getMonday(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
 
-function formatWeight(w) {
-    if (w === undefined || w === null || w === 0) return '-';
-    const r = Math.round(w * 10) / 10;
-    return r % 1 === 0 ? Math.round(r).toString() : r.toFixed(1);
-}
-
-function fmtIso(date) { var y=date.getFullYear(),m=String(date.getMonth()+1).padStart(2,'0'),d=String(date.getDate()).padStart(2,'0'); return y+'-'+m+'-'+d; }
-
-function fmtDisp(date, includeYear) {
-    if (includeYear === false) return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function getMonday(date) {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setDate(diff));
-}
-
-// ===== DATE RANGE PICKER STATE =====
-let dpStart = null;
-let dpEnd = null;
-
+// ===== DATE RANGE PICKER =====
+let dpStart = null; let dpEnd = null;
 function dpInit(defaultPeriod) {
     defaultPeriod = defaultPeriod || 'week';
     const today = new Date(); today.setHours(0,0,0,0);
-    if (defaultPeriod === 'today') {
-        dpStart = new Date(today); dpEnd = new Date(today);
-    } else if (defaultPeriod === '7d') {
-        dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 6);
-    } else if (defaultPeriod === 'week') {
-        dpStart = getMonday(today); dpEnd = new Date(dpStart); dpEnd.setDate(dpEnd.getDate() + 6);
-    } else if (defaultPeriod === 'month') {
-        dpStart = new Date(today.getFullYear(), today.getMonth(), 1);
-        dpEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    }
-    document.getElementById('dpStart').value = fmtIso(dpStart);
-    document.getElementById('dpEnd').value = fmtIso(dpEnd);
-    document.querySelectorAll('.qbtn').forEach(b => {
-        b.classList.toggle('active', b.dataset.period === defaultPeriod);
-    });
+    if (defaultPeriod === 'today') { dpStart = new Date(today); dpEnd = new Date(today); } 
+    else if (defaultPeriod === '7d') { dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 6); } 
+    else if (defaultPeriod === '15d') { dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 14); } 
+    else if (defaultPeriod === '30d') { dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 29); } 
+    else if (defaultPeriod === 'week') { dpStart = getMonday(today); dpEnd = new Date(dpStart); dpEnd.setDate(dpEnd.getDate() + 6); } 
+    else if (defaultPeriod === 'month') { dpStart = new Date(today.getFullYear(), today.getMonth(), 1); dpEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0); }
+    document.getElementById('dpStart').value = fmtLocal(dpStart); document.getElementById('dpEnd').value = fmtLocal(dpEnd);
+    document.querySelectorAll('.qbtn').forEach(b => { b.classList.toggle('active', b.dataset.period === defaultPeriod); });
     dpUpdateBadge();
 }
-
 function dpSetQuick(btn, period) {
     const today = new Date(); today.setHours(0,0,0,0);
-    document.querySelectorAll('.qbtn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    document.querySelectorAll('.qbtn').forEach(b => b.classList.remove('active')); btn.classList.add('active');
     switch(period) {
         case 'today': dpStart = new Date(today); dpEnd = new Date(today); break;
         case '7d': dpEnd = new Date(today); dpStart = new Date(today); dpStart.setDate(dpStart.getDate() - 6); break;
@@ -722,46 +891,193 @@ function dpSetQuick(btn, period) {
         case 'week': dpStart = getMonday(today); dpEnd = new Date(dpStart); dpEnd.setDate(dpEnd.getDate() + 6); break;
         case 'month': dpStart = new Date(today.getFullYear(), today.getMonth(), 1); dpEnd = new Date(today.getFullYear(), today.getMonth()+1, 0); break;
     }
-    document.getElementById('dpStart').value = fmtIso(dpStart);
-    document.getElementById('dpEnd').value = fmtIso(dpEnd);
-    dpUpdateBadge();
-    loadData();
+    document.getElementById('dpStart').value = fmtLocal(dpStart); document.getElementById('dpEnd').value = fmtLocal(dpEnd);
+    dpUpdateBadge(); loadData();
 }
-
 function dpApply() {
-    const sv = document.getElementById('dpStart').value;
-    const ev = document.getElementById('dpEnd').value;
+    const sv = document.getElementById('dpStart').value; const ev = document.getElementById('dpEnd').value;
     if (!sv || !ev) { alert('Please select both dates'); return; }
-    dpStart = new Date(sv + 'T00:00:00');
-    dpEnd = new Date(ev + 'T00:00:00');
+    dpStart = new Date(sv + 'T00:00:00'); dpEnd = new Date(ev + 'T00:00:00');
     if (dpStart > dpEnd) { alert('Start date must be before end date'); return; }
     document.querySelectorAll('.qbtn').forEach(b => b.classList.remove('active'));
-    dpUpdateBadge();
-    loadData();
+    dpUpdateBadge(); loadData();
 }
-
 function dpUpdateBadge() {
-    const badge = document.getElementById('dpBadge');
-    if (!badge || !dpStart || !dpEnd) return;
-    const wk = getISOWeek(dpStart);
-    const days = Math.round((dpEnd - dpStart) / 86400000) + 1;
+    const badge = document.getElementById('dpBadge'); if (!badge || !dpStart || !dpEnd) return;
+    const wk = getISOWeek(dpStart); const days = Math.round((dpEnd - dpStart) / 86400000) + 1;
     let txt = 'Week ' + wk + ' • ';
-    if (days === 1) {
-        txt += fmtDisp(dpStart, true);
-    } else if (days <= 31 && dpStart.getFullYear() === dpEnd.getFullYear()) {
-        txt += fmtDisp(dpStart, false) + ' – ' + fmtDisp(dpEnd, true);
-        if (days !== 7) txt += ' (' + days + 'd)';
-    } else {
-        txt += fmtDisp(dpStart, true) + ' – ' + fmtDisp(dpEnd, true);
-    }
+    if (days === 1) { txt += fmtDisp(dpStart, true); } 
+    else if (days <= 31 && dpStart.getFullYear() === dpEnd.getFullYear()) { txt += fmtDisp(dpStart, false) + ' – ' + fmtDisp(dpEnd, true); if (days !== 7) txt += ' (' + days + 'd)'; } 
+    else { txt += fmtDisp(dpStart, true) + ' – ' + fmtDisp(dpEnd, true); }
     badge.textContent = txt;
 }
+function dpParams() { return 'start_date=' + fmtLocal(dpStart) + '&end_date=' + fmtLocal(dpEnd); }
+function getStarRating(stars) { return '★'.repeat(stars) + '☆'.repeat(5 - stars); }
 
-function dpParams() {
-    return 'start_date=' + fmtIso(dpStart) + '&end_date=' + fmtIso(dpEnd);
+// ===== LAST UPDATE TIME =====
+function updateLastUpdateTime() {
+    const now = new Date();
+    const timeStr = now.toLocaleString();
+    const element = document.getElementById('last-update-time');
+    if (element) element.textContent = timeStr;
 }
 
-function getStarRating(stars) { return '★'.repeat(stars) + '☆'.repeat(5 - stars); }
+// ===== SKELETON SCREENS =====
+function renderDashboardSkeleton() {
+    let html = '';
+    for (let i = 0; i < 6; i++) {
+        html += `<div class="provider-card" style="padding: 20px;">
+            <div class="skeleton" style="width: 60%; height: 30px;"></div>
+            <div class="skeleton" style="width: 40%;"></div>
+            <div class="skeleton" style="width: 100%; height: 200px;"></div>
+        </div>`;
+    }
+    return html;
+}
+
+function renderDailyRegionSkeleton() {
+    let html = '';
+    for (let i = 0; i < 3; i++) {
+        html += `<div class="provider-section" style="padding: 20px;">
+            <div class="skeleton" style="width: 50%; height: 40px;"></div>
+            <div class="skeleton" style="width: 100%; height: 150px;"></div>
+        </div>`;
+    }
+    return html;
+}
+
+function renderComparisonSkeleton() {
+    return `<div class="comparison-grid">
+        <div class="comparison-card"><div class="skeleton" style="height: 200px;"></div></div>
+        <div class="comparison-vs">VS</div>
+        <div class="comparison-card"><div class="skeleton" style="height: 200px;"></div></div>
+    </div>`;
+}
+
+// ===== EXPORT FUNCTIONS =====
+function exportTableToCSV(table, filename) {
+    let csv = [];
+    let rows = table.querySelectorAll("tr");
+    for (let i = 0; i < rows.length; i++) {
+        let row = [], cols = rows[i].querySelectorAll("td, th");
+        for (let j = 0; j < cols.length; j++) {
+            let data = cols[j].innerText.replace(/(\\r\\n|\\n|\\r)/gm, "").replace(/"/g, '""');
+            row.push('"' + data + '"');
+        }
+        csv.push(row.join(","));
+    }
+    let csvFile = new Blob([csv.join("\\n")], {type: "text/csv"});
+    let dl = document.createElement("a");
+    dl.download = filename; dl.href = window.URL.createObjectURL(csvFile);
+    dl.style.display = "none"; document.body.appendChild(dl); dl.click();
+}
+
+function exportProviderTable(btn, providerName) {
+    const card = btn.closest('.provider-card, .provider-section');
+    const table = card.querySelector('table');
+    const dateRange = document.getElementById('dpBadge').innerText;
+    exportTableToCSV(table, `${providerName}_${dateRange}.csv`);
+}
+
+function exportComparisonTable() {
+    const table = document.querySelector('.all-providers-table');
+    if (table) {
+        exportTableToCSV(table, `All_Providers_${fmtLocal(dpStart)}_to_${fmtLocal(dpEnd)}.csv`);
+    } else {
+        alert('No table to export');
+    }
+}
+
+// ===== THEME TOGGLE =====
+function toggleTheme() {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    localStorage.setItem('theme', isDark ? 'light' : 'dark');
+    updateThemeButton();
+}
+function updateThemeButton() {
+    const btn = document.getElementById('theme-toggle-btn');
+    if (!btn) return;
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    btn.innerHTML = isDark ? '☀️ Light' : '🌙 Dark';
+}
+document.addEventListener('DOMContentLoaded', () => {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.body.setAttribute('data-theme', savedTheme);
+    updateThemeButton();
+});
+
+// ===== SIDEBAR TOGGLE =====
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const mainContent = document.getElementById('main-content');
+    sidebar.classList.toggle('collapsed');
+    mainContent.classList.toggle('expanded');
+    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+}
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('sidebarCollapsed') === 'true') {
+        document.getElementById('sidebar').classList.add('collapsed');
+        document.getElementById('main-content').classList.add('expanded');
+    }
+});
+
+// ===== GLOBAL SEARCH =====
+function searchOrder(q) {
+    const role = '{{ role }}';
+    if (role !== 'admin') return;
+    const resBox = document.getElementById('search-results');
+    if(!q) { resBox.style.display = 'none'; return; }
+    resBox.innerHTML = '<div style="padding:15px;text-align:center;color:var(--text-muted)">Searching...</div>';
+    resBox.style.display = 'block';
+    fetch('/api/search?q=' + encodeURIComponent(q))
+        .then(res => res.json())
+        .then(data => {
+            if(data.length === 0) {
+                resBox.innerHTML = '<div style="padding:15px;text-align:center;color:var(--text-muted)">No orders found</div>';
+                return;
+            }
+            let html = '';
+            data.forEach(item => {
+                html += `<div class="search-item">
+                    <div class="search-item-title"><span>#${item.order_id}</span> <span style="color:${item.color}">${item.provider}</span></div>
+                    <div class="search-item-meta"><span>📅 ${item.date}</span><span>📍 ${item.region}</span><span>⚖️ ${item.weight}kg</span></div>
+                </div>`;
+            });
+            resBox.innerHTML = html;
+        })
+        .catch(() => { resBox.innerHTML = '<div style="padding:15px;text-align:center;color:red">Error searching</div>'; });
+}
+document.addEventListener('click', e => {
+    if(!e.target.closest('.search-box')) {
+        const b = document.getElementById('search-results');
+        if(b) b.style.display = 'none';
+    }
+});
+document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.key === '/') {
+        e.preventDefault();
+        const input = document.getElementById('global-search');
+        if (input) input.focus();
+    }
+});
+
+// ===== NOTIFICATIONS =====
+function checkNotifications() {
+    const role = '{{ role }}';
+    if (role !== 'admin') return;
+    fetch('/api/notifications')
+        .then(res => res.json())
+        .then(data => {
+            if (data.message && Notification.permission === 'granted') {
+                new Notification('3PL Alert', { body: data.message });
+            }
+        });
+}
+if (Notification && Notification.permission === 'default') {
+    Notification.requestPermission();
+}
+setInterval(checkNotifications, 30000);
 </script>
 """
 
@@ -786,80 +1102,116 @@ def DATE_PICKER_HTML(default_period='week'):
 </div>
 """
 
+def ACTION_BAR_HTML(role):
+    if role == 'admin':
+        return """
+    <div class="top-actions">
+        <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="global-search" class="search-input" placeholder="Search Order ID..." onkeyup="if(this.value.length>2) searchOrder(this.value)">
+            <span class="shortcut-hint">Ctrl+/</span>
+            <div id="search-results"></div>
+        </div>
+        <div class="action-group">
+            <button class="action-btn" id="theme-toggle-btn" onclick="toggleTheme()">🌙 Dark</button>
+        </div>
+    </div>
+    """
+    else:
+        return """
+    <div class="top-actions">
+        <button class="action-btn" id="theme-toggle-btn" onclick="toggleTheme()">🌙 Dark</button>
+    </div>
+    """
+
 SIDEBAR_HTML = """
 <nav class="sidebar" id="sidebar">
     <div class="sidebar-toggle" onclick="toggleSidebar()">«</div>
     <div class="sidebar-header">
         <div class="logo-icon">3P</div>
-        <span class="logo-text">3PL Dashboard</span>
+        <div class="header-titles">
+            <div class="header-main">3PL Dashboard</div>
+            <div class="header-sub">
+                <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+            </div>
+        </div>
     </div>
     <div class="nav-menu">
         <div class="nav-section">
-            <div class="nav-section-title">Main</div>
+            <div class="nav-section-title">MAIN</div>
             <a href="/" class="nav-item {active_dashboard}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
-                <span>Dashboard</span><div class="tooltip">Dashboard</div>
+                <span>Dashboard</span>
             </a>
             <a href="/weekly-summary" class="nav-item {active_weekly}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                <span>Weekly Summary</span><div class="tooltip">Weekly Summary</div>
+                <span>Weekly Summary</span>
             </a>
             <a href="/daily-region" class="nav-item {active_daily_region}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                <span>Daily Region</span><div class="tooltip">Daily Region</div>
+                <span>Daily Region</span>
             </a>
             <a href="/flight-load" class="nav-item {active_flight}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-                <span>Flight Load</span><div class="tooltip">Flight Load</div>
+                <span>Flight Load</span>
             </a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-title">Analytics</div>
+            <div class="nav-section-title">ANALYTICS</div>
             <a href="/analytics" class="nav-item {active_analytics}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
-                <span>Analytics</span><div class="tooltip">Analytics</div>
+                <span>Analytics</span>
             </a>
             <a href="/kpi" class="nav-item {active_kpi}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-                <span>KPI Dashboard</span><div class="tooltip">KPI Dashboard</div>
+                <span>KPI Dashboard</span>
             </a>
             <a href="/comparison" class="nav-item {active_comparison}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                <span>Comparison</span><div class="tooltip">Comparison</div>
+                <span>Comparison</span>
             </a>
             <a href="/regions" class="nav-item {active_regions}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <span>Region Heatmap</span><div class="tooltip">Region Heatmap</div>
+                <span>Region Heatmap</span>
             </a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-title">Reports</div>
+            <div class="nav-section-title">REPORTS</div>
             <a href="/monthly" class="nav-item {active_monthly}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                <span>Monthly Report</span><div class="tooltip">Monthly Report</div>
-            </a>
-            <a href="/calendar" class="nav-item {active_calendar}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                <span>Calendar View</span><div class="tooltip">Calendar View</div>
+                <span>Monthly Report</span>
             </a>
             <a href="/whatsapp" class="nav-item {active_whatsapp}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                <span>WhatsApp Report</span><div class="tooltip">WhatsApp Report</div>
+                <span>WhatsApp Report</span>
+            </a>
+            <a href="/achievements" class="nav-item {active_achievements}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+                <span>Achievements</span>
             </a>
         </div>
         <div class="nav-section">
-            <div class="nav-section-title">Achievements</div>
-            <a href="/achievements" class="nav-item {active_achievements}">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
-                <span>Achievements</span><div class="tooltip">Achievements</div>
+            <div class="nav-section-title">MAPS</div>
+            <a href="/world-map" class="nav-item {active_worldmap}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>World Map</span>
             </a>
         </div>
+        {forecast_link}
+        {logs_link}
     </div>
     <div class="sidebar-footer">
+        <div class="admin-info">
+            <div class="admin-avatar">AW</div>
+            <div class="admin-role">{user_role}</div>
+        </div>
         <a href="/logout" class="logout-btn">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
             <span>Logout</span>
         </a>
+        <div class="last-update">
+            Last update: <span id="last-update-time">Never</span>
+        </div>
     </div>
 </nav>
 """
@@ -874,8 +1226,7 @@ function toggleSidebar() {
     localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
 }
 document.addEventListener('DOMContentLoaded', function() {
-    const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-    if (isCollapsed) {
+    if (localStorage.getItem('sidebarCollapsed') === 'true') {
         document.getElementById('sidebar').classList.add('collapsed');
         document.getElementById('main-content').classList.add('expanded');
     }
@@ -883,51 +1234,348 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 """
 
-def sidebar(active):
-    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','calendar','whatsapp','achievements']
+def sidebar(active, role='guest'):
+    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','whatsapp','achievements','worldmap']
     kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
+    
+    if role == 'admin':
+        kwargs['user_role'] = 'Administrator'
+        kwargs['forecast_link'] = """
+        <div class="nav-section">
+            <div class="nav-section-title">TOOLS</div>
+            <a href="/forecast" id="forecast-link" class="nav-item {active_forecast}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <span>Forecast</span>
+            </a>
+        </div>
+        """
+        kwargs['logs_link'] = """
+        <div class="nav-section">
+            <a href="/logs" id="logs-link" class="nav-item {active_logs}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>Activity Logs</span>
+            </a>
+        </div>
+        """
+    else:
+        kwargs['user_role'] = 'Guest'
+        kwargs['forecast_link'] = ''
+        kwargs['logs_link'] = ''
+        
     return SIDEBAR_HTML.format(**kwargs)
 
-# ===== ROUTES =====
+# ===== LOGIN =====
+# ==============================================================================
+# ✅ NEW EMAIL LOGIN SYSTEM
+# Yahan naye users add karein — format: "email@domain.com": "password"
+# ==============================================================================
+
+USERS = {
+    "husaain@joinfleek.com":      "hussain123",
+    "wahab.chippa@joinfleek.com": "Rocket#2024",
+    "albash@joinfleek.com":       "Albash123",
+    "waris@joinfleek.com":        "waris123",
+    "moiz@joinfleek.com":         "moiz1234",
+}
+
+# Guest login ke liye ek simple password (optional, agar seedha guest button chahiye)
+GUEST_PASSWORD = ""  # empty = no password needed, sirf "Guest" button click
+
+# ==============================================================================
+# LOGIN ROUTE — Is poori route ko replace karein
+# ==============================================================================
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
     if request.method == 'POST':
-        password = request.form.get('password', '')
-        if password == ADMIN_PASSWORD:
+        action = request.form.get('action')
+
+        # ===== GUEST LOGIN =====
+        if action == 'guest':
             session['logged_in'] = True
+            session['role']      = 'guest'
+            session.pop('email', None)
+            return redirect(url_for('dashboard'))
+
+        # ===== EMAIL + PASSWORD LOGIN =====
+        email    = (request.form.get('email') or '').strip().lower()
+        password = (request.form.get('password') or '').strip()
+
+        if email in USERS and USERS[email] == password:
+            session['logged_in'] = True
+            session['role']      = 'admin'   # full access — existing code breaks nahi hoga
+            session['email']     = email      # bundling tool ke liye zarori
             return redirect(url_for('dashboard'))
         else:
-            error = 'Invalid password. Please try again.'
-    return render_template_string('''
+            error = 'Invalid email or password. Please try again.'
+
+    return render_template_string(LOGIN_HTML, error=error, favicon=FAVICON)
+
+
+# ==============================================================================
+# LOGIN HTML TEMPLATE
+# ==============================================================================
+
+LOGIN_HTML = '''
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Login - 3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-<div class="login-container"><div class="login-card">
-<div class="login-logo">3P</div>
-<h1 class="login-title">Welcome Back</h1>
-<p class="login-subtitle">Enter your password to access the dashboard</p>
-{% if error %}<div class="error-message">{{ error }}</div>{% endif %}
-<form class="login-form" method="POST">
-<div class="form-group"><label class="form-label">Password</label>
-<input type="password" name="password" class="form-input" placeholder="Enter your password" autofocus required></div>
-<button type="submit" class="login-btn">Sign In</button>
-</form></div></div></body></html>''', error=error)
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — 3PL Dashboard</title>
+{{ favicon|safe }}
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #0a0a14;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  /* ---- animated background ---- */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 20% 30%, rgba(79,70,229,0.15) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 40% at 80% 70%, rgba(16,185,129,0.1) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .card {
+    position: relative; z-index: 1;
+    background: rgba(15,15,30,0.95);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 44px 40px;
+    width: 100%; max-width: 400px;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+    backdrop-filter: blur(20px);
+  }
+
+  .logo {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: #fff;
+    margin: 0 auto 22px;
+    box-shadow: 0 8px 20px rgba(79,70,229,0.4);
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 22px; font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 6px;
+  }
+
+  .subtitle {
+    text-align: center;
+    font-size: 13px; color: #64748b;
+    margin-bottom: 30px;
+  }
+
+  .error {
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.35);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #fca5a5;
+    font-size: 12px;
+    margin-bottom: 18px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .form { display: flex; flex-direction: column; gap: 14px; }
+
+  .group { display: flex; flex-direction: column; gap: 6px; }
+
+  label {
+    font-size: 11px; font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+  }
+
+  input[type="email"],
+  input[type="password"] {
+    width: 100%;
+    padding: 11px 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    color: #f1f5f9;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  input:focus {
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.2);
+  }
+
+  .btn-main {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+    border: none; border-radius: 10px;
+    color: #fff;
+    font-size: 14px; font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.15s;
+    box-shadow: 0 4px 15px rgba(79,70,229,0.35);
+  }
+  .btn-main:hover { opacity: 0.9; transform: translateY(-1px); }
+
+  .divider {
+    display: flex; align-items: center; gap: 10px;
+    margin: 6px 0;
+  }
+  .divider-line { flex: 1; height: 1px; background: rgba(255,255,255,0.08); }
+  .divider-text { font-size: 11px; color: #475569; }
+
+  .btn-guest {
+    width: 100%;
+    padding: 11px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    color: #94a3b8;
+    font-size: 13px; font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+  }
+  .btn-guest:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.2);
+    color: #e2e8f0;
+  }
+
+  .footer-note {
+    text-align: center;
+    font-size: 11px; color: #334155;
+    margin-top: 22px;
+  }
+
+  .eye-btn {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    color: #475569; font-size: 16px; padding: 4px;
+    transition: color 0.2s;
+  }
+  .eye-btn:hover { color: #94a3b8; }
+  .pwd-wrap { position: relative; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">3P</div>
+  <h1>Welcome Back</h1>
+  <p class="subtitle">3PL Operations Dashboard</p>
+
+  {% if error %}
+  <div class="error">⚠️ {{ error }}</div>
+  {% endif %}
+
+  <form method="POST" class="form">
+
+    <div class="group">
+      <label for="email">Email Address</label>
+      <input type="email" id="email" name="email"
+             placeholder="you@joinfleek.com"
+             autocomplete="email" required autofocus>
+    </div>
+
+    <div class="group">
+      <label for="password">Password</label>
+      <div class="pwd-wrap">
+        <input type="password" id="password" name="password"
+               placeholder="••••••••"
+               autocomplete="current-password" required>
+        <button type="button" class="eye-btn" onclick="togglePwd()" id="eyeBtn">👁</button>
+      </div>
+    </div>
+
+    <button type="submit" name="action" value="login" class="btn-main">
+      Sign In
+    </button>
+
+  </form>
+
+  <div class="divider">
+    <div class="divider-line"></div>
+    <span class="divider-text">OR</span>
+    <div class="divider-line"></div>
+  </div>
+
+  <form method="POST" style="margin:0;padding:0">
+    <input type="hidden" name="action" value="guest">
+    <button type="submit" class="btn-guest">
+      👀 Continue as Guest (View Only)
+    </button>
+  </form>
+
+  <p class="footer-note">Authorized Fleek Operations Personnel Only</p>
+</div>
+
+<script>
+function togglePwd(){
+  const inp = document.getElementById('password');
+  const btn = document.getElementById('eyeBtn');
+  if(inp.type === 'password'){ inp.type='text'; btn.textContent='🙈'; }
+  else { inp.type='password'; btn.textContent='👁'; }
+}
+</script>
+</body>
+</html>
+'''
+
+
+# ==============================================================================
+# LOGOUT ROUTE — yeh waise hi rahega, koi change nahi
+# ==============================================================================
+
+# @app.route('/logout')
+# def logout():
+#     session.clear()
+#     return redirect(url_for('login'))
+
+# NOTE: Upar wala logout route pehle se existing code mein hai — use rehne do.
+# Sirf upper wala USERS dict + login() function + LOGIN_HTML replace karein.
 
 @app.route('/logout')
 def logout():
-    session.pop('logged_in', None)
+    session.clear()
     return redirect(url_for('login'))
 
+# NOTE: Upar wala logout route pehle se existing code mein hai — use rehne do.
+# Sirf upper wala USERS dict + login() function + LOGIN_HTML replace karein.
+
+# ===== DASHBOARD =====
 @app.route('/')
 @login_required
 def dashboard():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3PL Dashboard</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('dashboard') + '''
+<title>3PL Dashboard</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('dashboard', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Provider <span>Dashboard</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
@@ -937,17 +1585,22 @@ def dashboard():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('dashboard-content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('dashboard-content').innerHTML = renderDashboardSkeleton();
     try {
         const response = await fetch('/api/dashboard?' + dpParams());
         const data = await response.json();
         let html = '';
         for (const provider of data.providers) { html += renderProvider(provider); }
         document.getElementById('dashboard-content').innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No data for selected period</h3></div>';
-    } catch(e) { document.getElementById('dashboard-content').innerHTML = '<p style="color:#ef4444;padding:20px">Error loading data: '+e.message+'</p>'; }
+        updateLastUpdateTime();
+    } catch(e) { 
+        document.getElementById('dashboard-content').innerHTML = '<p style="color:#ef4444;padding:20px">Error loading data: '+e.message+'</p>';
+    }
 }
 
 function renderProvider(provider) {
+    const role = '{{ role }}';
+    const canClick = role === 'admin';
     const trendClass = provider.trend.direction === 'up' ? 'up' : (provider.trend.direction === 'down' ? 'down' : 'neutral');
     const trendIcon = provider.trend.direction === 'up' ? '▲' : (provider.trend.direction === 'down' ? '▼' : '–');
     let achHtml = '';
@@ -967,9 +1620,34 @@ function renderProvider(provider) {
             const d = rd[day];
             totals[day].o += d.orders; totals[day].b += d.boxes; totals[day].w += d.weight;
             totals[day].u += d.under20; totals[day].v += d.over20;
-            const fc = flightDays.includes(i) ? ' style="background:rgba(212,168,83,0.03)"' : '';
+            const fc = flightDays.includes(i) ? ' style="background:var(--flight-day-bg)"' : '';
             if (d.orders > 0) {
-                rowsHtml += `<td class="day-cell"${fc}><div class="day-data"><span>${d.orders}</span><span>${d.boxes}</span><span>${formatWeight(d.weight)}</span><span>${d.under20}</span><span>${d.over20}</span></div></td>`;
+                const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(day);
+                const dayDate = new Date(dpStart);
+                dayDate.setDate(dayDate.getDate() + dayIndex);
+                const dateStr = fmtLocal(dayDate);
+
+                if (canClick) {
+                    rowsHtml += `<td class="day-cell"${fc}>
+                        <div class="day-data">
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="orders-link">${d.orders}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="boxes-link">${d.boxes}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="weight-link">${formatWeight(d.weight)}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="under20-link">${d.under20}</a>
+                            <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${dateStr}&end=${dateStr}&region=${encodeURIComponent(region)}&day=${dateStr}" class="over20-link">${d.over20}</a>
+                        </div>
+                    </td>`;
+                } else {
+                    rowsHtml += `<td class="day-cell"${fc}>
+                        <div class="day-data">
+                            <span class="orders">${d.orders}</span>
+                            <span class="boxes">${d.boxes}</span>
+                            <span class="weight">${formatWeight(d.weight)}</span>
+                            <span class="under20">${d.under20}</span>
+                            <span class="over20">${d.over20}</span>
+                        </div>
+                    </td>`;
+                }
             } else {
                 rowsHtml += `<td class="day-cell"${fc}><span class="day-data-empty">-</span></td>`;
             }
@@ -979,11 +1657,31 @@ function renderProvider(provider) {
     rowsHtml += '<tr class="total-row"><td class="region-col">TOTAL</td>';
     days.forEach((day,i) => {
         const t = totals[day];
-        const fc = flightDays.includes(i) ? ' style="background:rgba(212,168,83,0.15)"' : '';
-        rowsHtml += `<td class="day-cell"${fc}><div class="day-data"><span>${t.o}</span><span>${t.b}</span><span>${formatWeight(t.w)}</span><span>${t.u}</span><span>${t.v}</span></div></td>`;
+        const fc = flightDays.includes(i) ? ' style="background:var(--flight-day-bg)"' : '';
+        if (canClick) {
+            rowsHtml += `<td class="day-cell"${fc}>
+                <div class="day-data">
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${t.o}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${t.b}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(t.w)}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="under20-link">${t.u}</a>
+                    <a href="/orders?provider=${encodeURIComponent(provider.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="over20-link">${t.v}</a>
+                </div>
+            </td>`;
+        } else {
+            rowsHtml += `<td class="day-cell"${fc}>
+                <div class="day-data">
+                    <span class="orders">${t.o}</span>
+                    <span class="boxes">${t.b}</span>
+                    <span class="weight">${formatWeight(t.w)}</span>
+                    <span class="under20">${t.u}</span>
+                    <span class="over20">${t.v}</span>
+                </div>
+            </td>`;
+        }
     });
     rowsHtml += '</tr>';
-    const subHdr = days.map((_,i) => `<th${flightDays.includes(i)?' style="background:rgba(212,168,83,0.06)"':''}><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>`).join('');
+    const subHdr = days.map((_,i) => `<th${flightDays.includes(i)?' style="background:var(--flight-day-bg)"':''}><div class="sub-header"><span>O</span><span>B</span><span>W</span><span>&lt;20</span><span>20+</span></div></th>`).join('');
     const dayHdrs = days.map((d,i) => `<th class="day-col${flightDays.includes(i)?' flight-day':''}">${d}${flightDays.includes(i)?' ✈️':''}</th>`).join('');
     return `<div class="provider-card">
 <div class="card-header" style="--pc:${provider.color}">
@@ -999,6 +1697,7 @@ ${achHtml}
 <div class="stat-item"><div class="stat-value">${provider.total_boxes.toLocaleString()}</div><div class="stat-label">Boxes</div></div>
 <div class="stat-item"><div class="stat-value">${formatWeight(provider.total_weight)} kg</div><div class="stat-label">Weight</div></div>
 </div>
+<button class="download-btn" onclick="exportProviderTable(this, '${provider.short}')">📥 CSV</button>
 </div>
 <div style="overflow-x:auto"><table class="data-table"><thead>
 <tr><th class="region-col" rowspan="2">Region</th>${dayHdrs}</tr>
@@ -1008,16 +1707,20 @@ ${achHtml}
 
 dpInit('week');
 loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== WEEKLY SUMMARY =====
 @app.route('/weekly-summary')
 @login_required
 def weekly_summary():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Weekly Summary - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('weekly') + '''
+<title>Weekly Summary - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('weekly', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Weekly <span>Summary</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
@@ -1027,11 +1730,13 @@ def weekly_summary():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderDashboardSkeleton();
     try {
         const r = await fetch('/api/weekly-summary?' + dpParams());
         const data = await r.json();
         let html = '';
+        const role = '{{ role }}';
+        const canClick = role === 'admin';
         if (data.winner) {
             let achHtml = '';
             if (data.winner.achievements && data.winner.achievements.length > 0) {
@@ -1040,110 +1745,372 @@ async function loadData() {
             html += `<div class="provider-card winner-card"><div class="card-header"><div class="provider-info">
 <span style="font-size:32px;margin-right:12px">🏆</span><div>
 <div class="provider-name" style="font-size:24px">Week Winner: ${data.winner.name}</div>
-<div style="color:#d4a853;margin-top:4px">${data.winner.total_boxes.toLocaleString()} boxes • ${formatWeight(data.winner.total_weight)} kg</div>
-${achHtml}</div></div></div></div>`;
+<div style="color:#4f46e5;margin-top:4px">${data.winner.total_boxes.toLocaleString()} boxes • ${formatWeight(data.winner.total_weight)} kg</div>
+${achHtml}</div></div>
+<button class="download-btn" onclick="exportProviderTable(this, 'Winner')">📥 CSV</button>
+</div></div>`;
         }
-        html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Leaderboard</span></div></div>
+        html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Leaderboard</span></div>
+<button class="download-btn" onclick="exportComparisonTable()">📥 CSV</button>
+</div>
 <table class="leaderboard-table"><thead><tr><th style="width:60px">Rank</th><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th><th style="text-align:right">Trend</th></tr></thead><tbody>`;
         data.providers.forEach((p,i) => {
             const rc = i < 3 ? 'rank-'+(i+1) : 'rank-other';
             const tc = p.trend.direction === 'up' ? 'up' : 'down';
             const ti = p.trend.direction === 'up' ? '▲' : '▼';
-            html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td><td style="text-align:right;font-weight:600">${p.total_orders.toLocaleString()}</td><td style="text-align:right;font-weight:600">${p.total_boxes.toLocaleString()}</td><td style="text-align:right;font-weight:600">${formatWeight(p.total_weight)}</td><td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
+            if (canClick) {
+                html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
+                    <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                    <td style="text-align:right;font-weight:600"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                    <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
+            } else {
+                html += `<tr><td><div class="rank-badge ${rc}">${i+1}</div></td>
+                    <td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                    <td style="text-align:right;font-weight:600">${p.total_orders.toLocaleString()}</td>
+                    <td style="text-align:right;font-weight:600">${p.total_boxes.toLocaleString()}</td>
+                    <td style="text-align:right;font-weight:600">${formatWeight(p.total_weight)}</td>
+                    <td style="text-align:right"><span class="trend-badge ${tc}">${ti} ${p.trend.percentage}%</span></td></tr>`;
+            }
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== DAILY REGION =====
 @app.route('/daily-region')
 @login_required
 def daily_region():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Daily Region - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('daily_region') + '''
+<title>Daily Region - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('daily_region', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Daily <span>Region Summary</span></h1>
     ''' + DATE_PICKER_HTML('today') + '''
 </div>
-<div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div><div class="stat-content"><div class="stat-value" id="t-orders">-</div><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div><div class="stat-content"><div class="stat-value" id="t-boxes">-</div><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div><div class="stat-content"><div class="stat-value" id="t-weight">-</div><div class="stat-label">Total Weight</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">-</div><div class="stat-label">&lt;20 kg</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">-</div><div class="stat-label">20+ kg</div></div></div>
-</div>
-<div id="content"><div class="empty-state"><div class="empty-state-icon">📅</div><h3>Select a date range above</h3></div></div>
+<div class="stats-row-5" id="stat-cards"></div>
+<div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<style>
+    .provider-section {
+        background: var(--bg-card);
+        border-radius: 20px;
+        border: 1px solid var(--border-color);
+        margin-bottom: 20px;
+        overflow: hidden;
+        transition: all 0.2s;
+    }
+    .provider-section:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(79,70,229,0.08);
+        border-color: var(--brand-color);
+    }
+    .provider-header-dr {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-color);
+        background: var(--bg-card);
+    }
+    .provider-header-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+    .provider-color-bar {
+        width: 8px;
+        height: 40px;
+        border-radius: 4px;
+    }
+    .provider-header-info h3 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-main);
+        margin: 0 0 4px 0;
+    }
+    .provider-header-info span {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+    .provider-header-stats {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+    }
+    .header-stat {
+        text-align: center;
+        padding: 4px 12px;
+        background: var(--hover-bg);
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+    }
+    .header-stat-val {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+    .header-stat-lbl {
+        font-size: 9px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+    .toggle-icon {
+        font-size: 18px;
+        color: var(--text-muted);
+        transition: transform 0.2s;
+    }
+    .provider-body {
+        padding: 0 20px 20px 20px;
+        background: var(--bg-card);
+    }
+    .region-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .region-table th {
+        background: var(--table-hdr);
+        padding: 10px 8px;
+        text-align: center;
+        font-weight: 600;
+        color: var(--text-muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        border-bottom: 2px solid var(--brand-color);
+    }
+    .region-table th:first-child {
+        text-align: left;
+        padding-left: 16px;
+    }
+    .region-table td {
+        padding: 10px 8px;
+        text-align: center;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-main);
+    }
+    .region-table td:first-child {
+        text-align: left;
+        padding-left: 16px;
+        font-weight: 500;
+        background: var(--hover-bg);
+    }
+    .region-table tr:last-child td {
+        border-bottom: none;
+    }
+    .medal {
+        margin-right: 8px;
+        font-size: 14px;
+    }
+    .weight-light {
+        color: #10b981;
+        font-weight: 600;
+    }
+    .weight-heavy {
+        color: #ef4444;
+        font-weight: 600;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--text-muted);
+        background: var(--bg-card);
+        border-radius: 20px;
+        border: 1px solid var(--border-color);
+    }
+    .empty-state-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+        opacity: 0.5;
+    }
+</style>
 <script>
 function toggleProvider(id) {
-    const header = document.getElementById('hdr-'+id);
     const body = document.getElementById('bdy-'+id);
-    header.classList.toggle('open');
-    body.classList.toggle('open');
+    const icon = document.querySelector('#hdr-'+id + ' .toggle-icon');
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        if (icon) icon.innerHTML = '▼';
+    } else {
+        body.style.display = 'none';
+        if (icon) icon.innerHTML = '▶';
+    }
 }
+
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderDailyRegionSkeleton();
     try {
         const r = await fetch('/api/daily-region-summary?' + dpParams());
         const data = await r.json();
-        document.getElementById('t-orders').textContent = data.totals.orders.toLocaleString();
-        document.getElementById('t-boxes').textContent = data.totals.boxes.toLocaleString();
-        document.getElementById('t-weight').textContent = formatWeight(data.totals.weight) + ' kg';
-        document.getElementById('t-under20').textContent = data.totals.under20.toLocaleString();
-        document.getElementById('t-over20').textContent = data.totals.over20.toLocaleString();
+
+        const role = '{{ role }}';
+        const canClick = role === 'admin';
+        const statCards = document.getElementById('stat-cards');
+        statCards.innerHTML = `
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(59,130,246,0.1)">📦</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${data.totals.orders.toLocaleString()}</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Orders</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(16,185,129,0.1)">📮</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${data.totals.boxes.toLocaleString()}</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Boxes</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(245,158,11,0.1)">⚖️</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${formatWeight(data.totals.weight)} kg</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Weight</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div>
+                <div class="stat-content">
+                    <div class="stat-value">${data.totals.under20.toLocaleString()}</div>
+                    <div class="stat-label">&lt;20 kg</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div>
+                <div class="stat-content">
+                    <div class="stat-value">${data.totals.over20.toLocaleString()}</div>
+                    <div class="stat-label">20+ kg</div>
+                </div>
+            </div>
+        `;
+
         if (data.totals.orders === 0) {
-            document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No Data</h3><p>No shipments for selected period</p></div>';
+            document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><h3>No Data Found</h3><p>No shipments for the selected period</p></div>';
+            updateLastUpdateTime();
             return;
         }
-        const medals = ['🥇','🥈','🥉'];
+
+        const medals = ['🥇', '🥈', '🥉'];
         let html = '';
+
         data.providers.forEach((provider, idx) => {
             html += `<div class="provider-section">
-<div class="provider-header-dr" id="hdr-${idx}" onclick="toggleProvider(${idx})">
-<div class="provider-header-left">
-<div class="provider-color-bar" style="background:${provider.color}"></div>
-<div class="provider-header-info"><h3>${provider.name}</h3><span>${provider.regions.length} regions</span></div>
-</div>
-<div class="provider-header-stats">
-<div class="header-stat"><div class="header-stat-val">${provider.orders}</div><div class="header-stat-lbl">Orders</div></div>
-<div class="header-stat"><div class="header-stat-val">${provider.boxes}</div><div class="header-stat-lbl">Boxes</div></div>
-<div class="header-stat"><div class="header-stat-val">${formatWeight(provider.weight)}</div><div class="header-stat-lbl">Weight</div></div>
-<span class="toggle-icon">▼</span>
-</div></div>
-<div class="provider-body" id="bdy-${idx}">`;
-            if (provider.regions.length > 0) {
-                html += '<table class="region-table"><thead><tr><th>Region</th><th>Orders</th><th>Boxes</th><th>Weight</th><th>&lt;20 kg</th><th>20+ kg</th></tr></thead><tbody>';
-                provider.regions.forEach((rg,i) => {
-                    const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
-                    html += `<tr><td>${medal}${rg.name}</td><td>${rg.orders}</td><td>${rg.boxes}</td><td>${formatWeight(rg.weight)}</td><td style="color:#22c55e">${rg.under20}</td><td style="color:#ef4444">${rg.over20}</td></tr>`;
-                });
-                html += '</tbody></table>';
-            } else {
-                html += '<p style="color:#64748b;text-align:center;padding:20px">No data</p>';
-            }
-            html += '</div></div>';
-        });
-        document.getElementById('content').innerHTML = html;
-        if (data.providers.length > 0) toggleProvider(0);
-    } catch(e) { document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><h3>Error</h3><p>'+e.message+'</p></div>'; }
-}
-dpInit('today'); loadData();
-</script></body></html>''')
+                <div class="provider-header-dr" id="hdr-${idx}" onclick="toggleProvider(${idx})">
+                    <div class="provider-header-left">
+                        <div class="provider-color-bar" style="background:${provider.color}"></div>
+                        <div class="provider-header-info">
+                            <h3>${provider.name}</h3>
+                            <span>${provider.regions.length} region${provider.regions.length !== 1 ? 's' : ''}</span>
+                        </div>
+                    </div>
+                    <div class="provider-header-stats">
+                        <div class="header-stat">
+                            <div class="header-stat-val">${provider.orders.toLocaleString()}</div>
+                            <div class="header-stat-lbl">Orders</div>
+                        </div>
+                        <div class="header-stat">
+                            <div class="header-stat-val">${provider.boxes.toLocaleString()}</div>
+                            <div class="header-stat-lbl">Boxes</div>
+                        </div>
+                        <div class="header-stat">
+                            <div class="header-stat-val">${formatWeight(provider.weight)}</div>
+                            <div class="header-stat-lbl">Weight</div>
+                        </div>
+                        <button class="download-btn" onclick="exportProviderTable(this, '${provider.name}')">📥 CSV</button>
+                        <span class="toggle-icon">▼</span>
+                    </div>
+                </div>
+                <div class="provider-body" id="bdy-${idx}" style="display: ${idx === 0 ? 'block' : 'none'};">`;
 
+            if (provider.regions.length > 0) {
+                html += `<table class="region-table">
+                    <thead>
+                        <tr>
+                            <th>Region</th>
+                            <th>Orders</th>
+                            <th>Boxes</th>
+                            <th>Weight (kg)</th>
+                            <th>&lt;20 kg</th>
+                            <th>20+ kg</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+                provider.regions.forEach((rg, i) => {
+                    const medal = i < 3 ? `<span class="medal">${medals[i]}</span>` : '';
+
+                    if (canClick) {
+                        html += `<tr>
+                            <td>${medal}${rg.name}</td>
+                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="orders-link">${rg.orders.toLocaleString()}</a></td>
+                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="boxes-link">${rg.boxes.toLocaleString()}</a></td>
+                            <td><a href="/orders?provider=${encodeURIComponent(provider.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}&region=${encodeURIComponent(rg.name)}" class="weight-link">${formatWeight(rg.weight)}</a></td>
+                            <td class="weight-light">${rg.under20.toLocaleString()}</td>
+                            <td class="weight-heavy">${rg.over20.toLocaleString()}</td>
+                        </tr>`;
+                    } else {
+                        html += `<tr>
+                            <td>${medal}${rg.name}</td>
+                            <td>${rg.orders.toLocaleString()}</td>
+                            <td>${rg.boxes.toLocaleString()}</td>
+                            <td>${formatWeight(rg.weight)}</td>
+                            <td class="weight-light">${rg.under20.toLocaleString()}</td>
+                            <td class="weight-heavy">${rg.over20.toLocaleString()}</td>
+                        </tr>`;
+                    }
+                });
+
+                html += `</tbody></table>`;
+            } else {
+                html += `<div style="padding: 30px; text-align: center; color: var(--text-muted);">No regions data for this provider</div>`;
+            }
+
+            html += `</div></div>`;
+        });
+
+        document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
+
+    } catch(e) {
+        console.error(e);
+        document.getElementById('content').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><h3>Error Loading Data</h3><p>' + e.message + '</p></div>';
+    }
+}
+
+dpInit('today');
+loadData();
+</script></body></html>''', role=role, favicon=FAVICON)
+
+# ===== FLIGHT LOAD =====
 @app.route('/flight-load')
 @login_required
 def flight_load():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Flight Load - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('flight') + '''
+<title>Flight Load - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('flight', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Flight <span>Load</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
@@ -1153,49 +2120,62 @@ def flight_load():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderDashboardSkeleton();
     try {
         const r = await fetch('/api/flight-load?' + dpParams());
         const data = await r.json();
         let html = '';
+        const role = '{{ role }}';
+        const canClick = role === 'admin';
         for (const flight of data.flights) {
             html += `<div class="provider-card"><div class="card-header"><div class="provider-info"><span style="font-size:24px;margin-right:12px">✈️</span><span class="provider-name">${flight.name}</span></div>
 <div class="card-stats">
 <div class="stat-item"><div class="stat-value">${flight.total_orders.toLocaleString()}</div><div class="stat-label">Orders</div></div>
 <div class="stat-item"><div class="stat-value">${flight.total_boxes.toLocaleString()}</div><div class="stat-label">Boxes</div></div>
 <div class="stat-item"><div class="stat-value">${formatWeight(flight.total_weight)} kg</div><div class="stat-label">Weight</div></div>
-</div></div>
+</div>
+<button class="download-btn" onclick="exportTableToCSV(this.closest('.provider-card').querySelector('table'), '${flight.name.replace(/ /g,'_')}_${fmtLocal(dpStart)}.csv')">📥 CSV</button>
+</div>
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
             for (const p of flight.providers) {
-                html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td><td style="text-align:right">${p.orders.toLocaleString()}</td><td style="text-align:right">${p.boxes.toLocaleString()}</td><td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
+                if (canClick) {
+                    html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                        <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
+                } else {
+                    html += `<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div><span>${p.name}</span></div></td>
+                        <td style="text-align:right">${p.orders.toLocaleString()}</td>
+                        <td style="text-align:right">${p.boxes.toLocaleString()}</td>
+                        <td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
+                }
             }
             html += '</tbody></table></div>';
         }
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== ANALYTICS =====
 @app.route('/analytics')
 @login_required
 def analytics():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Analytics - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body>
-''' + sidebar('analytics') + '''
+<title>Analytics - 3PL</title>{{ favicon|safe }}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('analytics', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Analytics & <span>Insights</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
-<div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><div class="stat-value" id="t-orders">0</div><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><div class="stat-value" id="t-boxes">0</div><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><div class="stat-value" id="t-weight">0</div><div class="stat-label">Total Weight (kg)</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div><div class="stat-content"><div class="stat-value" id="t-under20">0</div><div class="stat-label">Light (&lt;20 kg)</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div><div class="stat-content"><div class="stat-value" id="t-over20">0</div><div class="stat-label">Heavy (20+ kg)</div></div></div>
-</div>
+<div class="stats-row-5" id="stat-cards"></div>
 <div class="charts-grid">
 <div class="chart-card full-width"><div class="chart-title">📈 Orders & Boxes Trend</div><div class="chart-container"><canvas id="trendChart"></canvas></div></div>
 <div class="chart-card"><div class="chart-title">🏆 Provider Performance</div><div class="chart-container"><canvas id="providerChart"></canvas></div></div>
@@ -1207,41 +2187,90 @@ def analytics():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 let charts = {};
-Chart.defaults.color = '#94a3b8';
-Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+Chart.defaults.color = '#475569';
+Chart.defaults.borderColor = '#e2e8f0';
 
 function destroyCharts() { Object.values(charts).forEach(c => c && c.destroy()); charts = {}; }
 
 async function loadData() {
     destroyCharts();
+    document.getElementById('stat-cards').innerHTML = renderDashboardSkeleton();
     try {
         const r = await fetch('/api/analytics-data?' + dpParams());
         const data = await r.json();
-        document.getElementById('t-orders').textContent = data.totals.orders.toLocaleString();
-        document.getElementById('t-boxes').textContent = data.totals.boxes.toLocaleString();
-        document.getElementById('t-weight').textContent = formatWeight(data.totals.weight);
-        document.getElementById('t-under20').textContent = data.totals.under20.toLocaleString();
-        document.getElementById('t-over20').textContent = data.totals.over20.toLocaleString();
-        charts.trend = new Chart(document.getElementById('trendChart'), { type:'line', data:{ labels:data.trend.labels, datasets:[{label:'Orders',data:data.trend.orders,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.4,pointRadius:4},{label:'Boxes',data:data.trend.boxes,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.1)',fill:true,tension:0.4,pointRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'}},x:{grid:{display:false}}}}});
-        charts.provider = new Chart(document.getElementById('providerChart'), { type:'doughnut', data:{labels:data.providers.map(p=>p.name),datasets:[{data:data.providers.map(p=>p.boxes),backgroundColor:data.providers.map(p=>p.color+'CC'),borderColor:'#0a0a0f',borderWidth:3}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{padding:12,usePointStyle:true}}}}});
+
+        const role = '{{ role }}';
+        const canClick = role === 'admin';
+        const statCards = document.getElementById('stat-cards');
+        statCards.innerHTML = `
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${data.totals.orders.toLocaleString()}</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Orders</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${data.totals.boxes.toLocaleString()}</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Boxes</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div>
+                <div class="stat-content">
+                    ${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;">` : ''}
+                        <div class="stat-value">${formatWeight(data.totals.weight)} kg</div>
+                    ${canClick ? '</a>' : ''}
+                    <div class="stat-label">Total Weight</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(34,197,94,0.1)">🪶</div>
+                <div class="stat-content">
+                    <div class="stat-value">${data.totals.under20.toLocaleString()}</div>
+                    <div class="stat-label">Light (<20 kg)</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background:rgba(239,68,68,0.1)">🏋️</div>
+                <div class="stat-content">
+                    <div class="stat-value">${data.totals.over20.toLocaleString()}</div>
+                    <div class="stat-label">Heavy (20+ kg)</div>
+                </div>
+            </div>
+        `;
+
+        charts.trend = new Chart(document.getElementById('trendChart'), { type:'line', data:{ labels:data.trend.labels, datasets:[{label:'Orders',data:data.trend.orders,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.4,pointRadius:4},{label:'Boxes',data:data.trend.boxes,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,0.1)',fill:true,tension:0.4,pointRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true,grid:{color:'#e2e8f0'}},x:{grid:{display:false}}}}});
+        charts.provider = new Chart(document.getElementById('providerChart'), { type:'doughnut', data:{labels:data.providers.map(p=>p.name),datasets:[{data:data.providers.map(p=>p.boxes),backgroundColor:data.providers.map(p=>p.color+'CC'),borderColor:'#ffffff',borderWidth:3}]}, options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'right',labels:{padding:12,usePointStyle:true}}}}});
         const topR = data.regions.slice(0,8);
-        charts.region = new Chart(document.getElementById('regionChart'), { type:'bar', data:{labels:topR.map(r=>r.name),datasets:[{label:'Boxes',data:topR.map(r=>r.boxes),backgroundColor:'#d4a85399',borderColor:'#d4a853',borderWidth:2,borderRadius:6}]}, options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'}},y:{grid:{display:false}}}}});
+        charts.region = new Chart(document.getElementById('regionChart'), { type:'bar', data:{labels:topR.map(r=>r.name),datasets:[{label:'Boxes',data:topR.map(r=>r.boxes),backgroundColor:'#4f46e599',borderColor:'#4f46e5',borderWidth:2,borderRadius:6}]}, options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,grid:{color:'#e2e8f0'}},y:{grid:{display:false}}}}});
         const wR = data.regions.slice(0,6);
-        charts.weightRegion = new Chart(document.getElementById('weightRegionChart'), { type:'bar', data:{labels:wR.map(r=>r.name),datasets:[{label:'<20 kg',data:wR.map(r=>r.under20),backgroundColor:'rgba(34,197,94,0.7)',borderColor:'#22c55e',borderWidth:1,borderRadius:4},{label:'20+ kg',data:wR.map(r=>r.over20),backgroundColor:'rgba(239,68,68,0.7)',borderColor:'#ef4444',borderWidth:1,borderRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'}}}}});
-        charts.weightProvider = new Chart(document.getElementById('weightProviderChart'), { type:'bar', data:{labels:data.providers.map(p=>p.name),datasets:[{label:'<20 kg',data:data.providers.map(p=>p.under20),backgroundColor:'rgba(34,197,94,0.7)',borderColor:'#22c55e',borderWidth:1,borderRadius:4},{label:'20+ kg',data:data.providers.map(p=>p.over20),backgroundColor:'rgba(239,68,68,0.7)',borderColor:'#ef4444',borderWidth:1,borderRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'}}}}});
+        charts.weightRegion = new Chart(document.getElementById('weightRegionChart'), { type:'bar', data:{labels:wR.map(r=>r.name),datasets:[{label:'<20 kg',data:wR.map(r=>r.under20),backgroundColor:'#10b981',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'20+ kg',data:wR.map(r=>r.over20),backgroundColor:'#ef4444',borderColor:'#ef4444',borderWidth:1,borderRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,beginAtZero:true,grid:{color:'#e2e8f0'}}}}});
+        charts.weightProvider = new Chart(document.getElementById('weightProviderChart'), { type:'bar', data:{labels:data.providers.map(p=>p.name),datasets:[{label:'<20 kg',data:data.providers.map(p=>p.under20),backgroundColor:'#10b981',borderColor:'#10b981',borderWidth:1,borderRadius:4},{label:'20+ kg',data:data.providers.map(p=>p.over20),backgroundColor:'#ef4444',borderColor:'#ef4444',borderWidth:1,borderRadius:4}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales:{x:{grid:{display:false}},y:{beginAtZero:true,grid:{color:'#e2e8f0'}}}}});
+        updateLastUpdateTime();
     } catch(e) { console.error(e); }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== KPI =====
 @app.route('/kpi')
 @login_required
 def kpi_dashboard():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KPI Dashboard - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('kpi') + '''
+<title>KPI Dashboard - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('kpi', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">KPI <span>Dashboard</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
@@ -1251,7 +2280,8 @@ def kpi_dashboard():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = '<div class="kpi-grid">' + 
+        '<div class="kpi-card"><div class="skeleton" style="height:80px"></div></div>'.repeat(9) + '</div>';
     try {
         const r = await fetch('/api/kpi?' + dpParams());
         const data = await r.json();
@@ -1278,96 +2308,423 @@ async function loadData() {
         });
         html += '</div>';
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== COMPARISON =====
 @app.route('/comparison')
 @login_required
 def comparison():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Comparison - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('comparison') + '''
+<title>Comparison - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('comparison', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Provider <span>Comparison</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
 </div>
 <div class="tabs">
-<button class="tab-btn active" onclick="showTab(this,'ge-ecl')">GE vs ECL</button>
-<button class="tab-btn" onclick="showTab(this,'qc-zone')">QC vs ZONE</button>
-<button class="tab-btn" onclick="showTab(this,'all')">All Providers</button>
+    <button class="tab-btn active" onclick="showTab(this, 'ge-ecl')">GE vs ECL</button>
+    <button class="tab-btn" onclick="showTab(this, 'qc-zone')">QC vs ZONE</button>
+    <button class="tab-btn" onclick="showTab(this, 'all')">All Providers</button>
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<style>
+    .comparison-grid {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 24px;
+        align-items: start;
+        margin-bottom: 30px;
+    }
+    .comparison-card {
+        background: var(--bg-card);
+        border-radius: 24px;
+        border: 1px solid var(--border-color);
+        padding: 24px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+        transition: all 0.2s;
+    }
+    .comparison-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 24px rgba(79,70,229,0.08);
+        border-color: var(--brand-color);
+    }
+    .comparison-vs {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--brand-color);
+        background: var(--bg-card);
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        border: 2px solid var(--border-color);
+        margin: 0 auto;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .comparison-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 2px solid var(--border-color);
+    }
+    .comparison-color {
+        width: 8px;
+        height: 40px;
+        border-radius: 4px;
+    }
+    .comparison-name {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+    .comparison-stats {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .comparison-stat {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px dashed var(--border-color);
+    }
+    .comparison-stat:last-child {
+        border-bottom: none;
+    }
+    .comparison-stat-label {
+        color: var(--text-muted);
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .comparison-stat-value {
+        color: var(--text-main);
+        font-size: 18px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .winner-indicator {
+        color: #fbbf24;
+        font-size: 20px;
+        filter: drop-shadow(0 2px 4px rgba(251,191,36,0.3));
+    }
+    .all-providers-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--bg-card);
+        border-radius: 24px;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+    }
+    .all-providers-table th {
+        background: var(--table-hdr);
+        padding: 16px 12px;
+        text-align: left;
+        font-weight: 600;
+        color: var(--text-muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        border-bottom: 2px solid var(--brand-color);
+    }
+    .all-providers-table td {
+        padding: 14px 12px;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-main);
+        font-size: 14px;
+    }
+    .all-providers-table tr:last-child td {
+        border-bottom: none;
+    }
+    .all-providers-table tr:hover td {
+        background: var(--hover-bg);
+    }
+    .provider-cell {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .provider-color-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+    }
+    .avg-badge {
+        background: var(--hover-bg);
+        padding: 4px 10px;
+        border-radius: 30px;
+        font-size: 12px;
+        color: var(--text-muted);
+        border: 1px solid var(--border-color);
+        margin-left: 8px;
+    }
+    .tab-btn {
+        padding: 8px 24px;
+        font-size: 14px;
+        font-weight: 600;
+    }
+</style>
 <script>
-let curTab = 'ge-ecl'; let curData = null;
+let curTab = 'ge-ecl';
+let curData = null;
+
 function showTab(btn, tab) {
     curTab = tab;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     renderComparison();
 }
-function renderCard(p1, p2) {
-    const stats = ['total_orders','total_boxes','total_weight'];
-    const labels = ['Orders','Boxes','Weight (kg)'];
-    let s1='',s2='';
-    stats.forEach((s,i) => {
-        const v1=p1[s], v2=p2[s];
-        const w1 = v1>v2 ? '<span class="winner-indicator">👑</span>' : '';
-        const w2 = v2>v1 ? '<span class="winner-indicator">👑</span>' : '';
-        const f1 = s==='total_weight' ? formatWeight(v1) : v1.toLocaleString();
-        const f2 = s==='total_weight' ? formatWeight(v2) : v2.toLocaleString();
-        s1+=`<div class="comparison-stat"><span class="comparison-stat-label">${labels[i]}</span><span class="comparison-stat-value">${f1}${w1}</span></div>`;
-        s2+=`<div class="comparison-stat"><span class="comparison-stat-label">${labels[i]}</span><span class="comparison-stat-value">${f2}${w2}</span></div>`;
+
+function renderCard(p1, p2, title1, title2) {
+    const stats = [
+        { key: 'total_orders', label: 'Orders' },
+        { key: 'total_boxes', label: 'Boxes' },
+        { key: 'total_weight', label: 'Weight (kg)' }
+    ];
+    
+    let stats1 = '', stats2 = '';
+    
+    stats.forEach(s => {
+        const v1 = p1[s.key];
+        const v2 = p2[s.key];
+        const isWinner1 = v1 > v2;
+        const isWinner2 = v2 > v1;
+        const display1 = s.key === 'total_weight' ? formatWeight(v1) : v1.toLocaleString();
+        const display2 = s.key === 'total_weight' ? formatWeight(v2) : v2.toLocaleString();
+        
+        stats1 += `<div class="comparison-stat">
+            <span class="comparison-stat-label">${s.label}</span>
+            <span class="comparison-stat-value">
+                ${display1}
+                ${isWinner1 ? '<span class="winner-indicator">👑</span>' : ''}
+            </span>
+        </div>`;
+        
+        stats2 += `<div class="comparison-stat">
+            <span class="comparison-stat-label">${s.label}</span>
+            <span class="comparison-stat-value">
+                ${display2}
+                ${isWinner2 ? '<span class="winner-indicator">👑</span>' : ''}
+            </span>
+        </div>`;
     });
-    return `<div class="comparison-grid"><div class="comparison-card"><div class="comparison-header"><div class="comparison-color" style="background:${p1.color}"></div><div class="comparison-name">${p1.short||p1.name}</div></div>${s1}</div><div class="comparison-vs">VS</div><div class="comparison-card"><div class="comparison-header"><div class="comparison-color" style="background:${p2.color}"></div><div class="comparison-name">${p2.short||p2.name}</div></div>${s2}</div></div>`;
+    
+    const avg1 = p1.total_orders > 0 ? (p1.total_weight / p1.total_orders).toFixed(1) : '0';
+    const avg2 = p2.total_orders > 0 ? (p2.total_weight / p2.total_orders).toFixed(1) : '0';
+    const avgWinner1 = parseFloat(avg1) > parseFloat(avg2);
+    const avgWinner2 = parseFloat(avg2) > parseFloat(avg1);
+    
+    stats1 += `<div class="comparison-stat">
+        <span class="comparison-stat-label">Avg W/Order</span>
+        <span class="comparison-stat-value">
+            ${avg1} kg
+            ${avgWinner1 ? '<span class="winner-indicator">👑</span>' : ''}
+        </span>
+    </div>`;
+    
+    stats2 += `<div class="comparison-stat">
+        <span class="comparison-stat-label">Avg W/Order</span>
+        <span class="comparison-stat-value">
+            ${avg2} kg
+            ${avgWinner2 ? '<span class="winner-indicator">👑</span>' : ''}
+        </span>
+    </div>`;
+    
+    return `<div class="comparison-grid">
+        <div class="comparison-card">
+            <div class="comparison-header">
+                <div class="comparison-color" style="background:${p1.color}"></div>
+                <div class="comparison-name">${title1 || p1.short || p1.name}</div>
+            </div>
+            <div class="comparison-stats">
+                ${stats1}
+            </div>
+        </div>
+        <div class="comparison-vs">VS</div>
+        <div class="comparison-card">
+            <div class="comparison-header">
+                <div class="comparison-color" style="background:${p2.color}"></div>
+                <div class="comparison-name">${title2 || p2.short || p2.name}</div>
+            </div>
+            <div class="comparison-stats">
+                ${stats2}
+            </div>
+            <button class="download-btn" onclick="exportTableToCSV(this.closest('.comparison-card').querySelector('.comparison-stats'), '${title1}_vs_${title2}_${fmtLocal(dpStart)}.csv')" style="margin-top:15px">📥 CSV</button>
+        </div>
+    </div>`;
 }
+
+function renderAllProviders(providers) {
+    const role = '{{ role }}';
+    const canClick = role === 'admin';
+    
+    let html = `<table class="all-providers-table">
+        <thead>
+            <tr>
+                <th>Provider</th>
+                <th style="text-align:right">Orders</th>
+                <th style="text-align:right">Boxes</th>
+                <th style="text-align:right">Weight (kg)</th>
+                <th style="text-align:right">Avg/Order</th>
+                <th style="text-align:right">Light/Heavy</th>
+            </tr>
+        </thead>
+        <tbody>`;
+    
+    providers.sort((a, b) => b.total_boxes - a.total_boxes).forEach(p => {
+        const avg = p.total_orders > 0 ? (p.total_weight / p.total_orders).toFixed(1) : '0';
+        
+        if (canClick) {
+            html += `<tr>
+                <td>
+                    <div class="provider-cell">
+                        <div class="provider-color-dot" style="background:${p.color}"></div>
+                        <span>${p.short || p.name}</span>
+                    </div>
+                </td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.total_orders.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.total_boxes.toLocaleString()}</a></td>
+                <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.short)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.total_weight)}</a></td>
+                <td style="text-align:right">${avg} kg</td>
+                <td style="text-align:right"><span class="avg-badge">${p.total_under20} / ${p.total_over20}</span></td>
+            </tr>`;
+        } else {
+            html += `<tr>
+                <td>
+                    <div class="provider-cell">
+                        <div class="provider-color-dot" style="background:${p.color}"></div>
+                        <span>${p.short || p.name}</span>
+                    </div>
+                </td>
+                <td style="text-align:right">${p.total_orders.toLocaleString()}</td>
+                <td style="text-align:right">${p.total_boxes.toLocaleString()}</td>
+                <td style="text-align:right">${formatWeight(p.total_weight)}</td>
+                <td style="text-align:right">${avg} kg</td>
+                <td style="text-align:right"><span class="avg-badge">${p.total_under20} / ${p.total_over20}</span></td>
+            </tr>`;
+        }
+    });
+    
+    html += `</tbody></table>`;
+    return html;
+}
+
 function renderComparison() {
-    if (!curData) return;
-    const ps = curData.providers; let html = '';
+    if (!curData || !curData.providers) return;
+    
+    const ps = curData.providers;
+    let html = '';
+    
     if (curTab === 'ge-ecl') {
-        const ge = ps.filter(p=>p.group==='GE'); const ecl = ps.filter(p=>p.group==='ECL');
-        const geT = {name:'GE Total',short:'GE Total',color:'#3B82F6',total_orders:ge.reduce((s,p)=>s+p.total_orders,0),total_boxes:ge.reduce((s,p)=>s+p.total_boxes,0),total_weight:ge.reduce((s,p)=>s+p.total_weight,0)};
-        const eclT = {name:'ECL Total',short:'ECL Total',color:'#10B981',total_orders:ecl.reduce((s,p)=>s+p.total_orders,0),total_boxes:ecl.reduce((s,p)=>s+p.total_boxes,0),total_weight:ecl.reduce((s,p)=>s+p.total_weight,0)};
-        html = '<h3 style="color:#d4a853;margin-bottom:20px">Global Express vs ECL Logistics</h3>'+renderCard(geT,eclT);
+        const ge = ps.filter(p => p.group === 'GE');
+        const ecl = ps.filter(p => p.group === 'ECL');
+        
+        const geTotal = {
+            name: 'GE Total',
+            short: 'GE Total',
+            color: '#3B82F6',
+            total_orders: ge.reduce((s, p) => s + p.total_orders, 0),
+            total_boxes: ge.reduce((s, p) => s + p.total_boxes, 0),
+            total_weight: ge.reduce((s, p) => s + p.total_weight, 0),
+            total_under20: ge.reduce((s, p) => s + p.total_under20, 0),
+            total_over20: ge.reduce((s, p) => s + p.total_over20, 0)
+        };
+        
+        const eclTotal = {
+            name: 'ECL Total',
+            short: 'ECL Total',
+            color: '#10B981',
+            total_orders: ecl.reduce((s, p) => s + p.total_orders, 0),
+            total_boxes: ecl.reduce((s, p) => s + p.total_boxes, 0),
+            total_weight: ecl.reduce((s, p) => s + p.total_weight, 0),
+            total_under20: ecl.reduce((s, p) => s + p.total_under20, 0),
+            total_over20: ecl.reduce((s, p) => s + p.total_over20, 0)
+        };
+        
+        html = '<h3 style="color:var(--brand-color); margin-bottom:24px; font-size:18px;">Global Express vs ECL Logistics</h3>';
+        html += renderCard(geTotal, eclTotal, 'GE Total', 'ECL Total');
+        
     } else if (curTab === 'qc-zone') {
-        const qc = ps.filter(p=>p.name.includes('QC')); const zn = ps.filter(p=>p.name.includes('ZONE'));
-        const qcT = {short:'QC Total',color:'#8B5CF6',total_orders:qc.reduce((s,p)=>s+p.total_orders,0),total_boxes:qc.reduce((s,p)=>s+p.total_boxes,0),total_weight:qc.reduce((s,p)=>s+p.total_weight,0)};
-        const znT = {short:'Zone Total',color:'#F59E0B',total_orders:zn.reduce((s,p)=>s+p.total_orders,0),total_boxes:zn.reduce((s,p)=>s+p.total_boxes,0),total_weight:zn.reduce((s,p)=>s+p.total_weight,0)};
-        html = '<h3 style="color:#d4a853;margin-bottom:20px">QC Center vs Zone</h3>'+renderCard(qcT,znT);
+        const qc = ps.filter(p => p.name.includes('QC'));
+        const zone = ps.filter(p => p.name.includes('ZONE'));
+        
+        const qcTotal = {
+            name: 'QC Total',
+            short: 'QC Total',
+            color: '#8B5CF6',
+            total_orders: qc.reduce((s, p) => s + p.total_orders, 0),
+            total_boxes: qc.reduce((s, p) => s + p.total_boxes, 0),
+            total_weight: qc.reduce((s, p) => s + p.total_weight, 0),
+            total_under20: qc.reduce((s, p) => s + p.total_under20, 0),
+            total_over20: qc.reduce((s, p) => s + p.total_over20, 0)
+        };
+        
+        const zoneTotal = {
+            name: 'Zone Total',
+            short: 'Zone Total',
+            color: '#F59E0B',
+            total_orders: zone.reduce((s, p) => s + p.total_orders, 0),
+            total_boxes: zone.reduce((s, p) => s + p.total_boxes, 0),
+            total_weight: zone.reduce((s, p) => s + p.total_weight, 0),
+            total_under20: zone.reduce((s, p) => s + p.total_under20, 0),
+            total_over20: zone.reduce((s, p) => s + p.total_over20, 0)
+        };
+        
+        html = '<h3 style="color:var(--brand-color); margin-bottom:24px; font-size:18px;">QC Center vs Zone</h3>';
+        html += renderCard(qcTotal, zoneTotal, 'QC Total', 'Zone Total');
+        
     } else {
-        html = '<div class="provider-card"><table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight</th><th style="text-align:right">Avg/Order</th></tr></thead><tbody>';
-        ps.sort((a,b)=>b.total_boxes-a.total_boxes).forEach(p => {
-            const avg = p.total_orders>0 ? (p.total_weight/p.total_orders).toFixed(1) : 0;
-            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.short||p.name}</div></td><td style="text-align:right">${p.total_orders.toLocaleString()}</td><td style="text-align:right">${p.total_boxes.toLocaleString()}</td><td style="text-align:right">${formatWeight(p.total_weight)}</td><td style="text-align:right">${avg} kg</td></tr>`;
-        });
-        html += '</tbody></table></div>';
+        html = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;"><h3 style="color:var(--brand-color); font-size:18px;">All Providers Comparison</h3><button class="download-btn" onclick="exportComparisonTable()">📥 CSV</button></div>';
+        html += renderAllProviders(ps);
     }
+    
     document.getElementById('content').innerHTML = html;
+    updateLastUpdateTime();
 }
+
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderComparisonSkeleton();
     try {
         const r = await fetch('/api/dashboard?' + dpParams());
         curData = await r.json();
         renderComparison();
-    } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
+    } catch(e) {
+        document.getElementById('content').innerHTML = '<div style="color:#ef4444; text-align:center; padding:40px;">Error loading data: ' + e.message + '</div>';
+    }
 }
-dpInit('week'); loadData();
-</script></body></html>''')
 
+dpInit('week');
+loadData();
+</script></body></html>''', role=role, favicon=FAVICON)
+
+# ===== REGIONS =====
 @app.route('/regions')
 @login_required
 def regions():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Region Heatmap - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('regions') + '''
+<title>Region Heatmap - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('regions', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Region <span>Heatmap</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
@@ -1378,11 +2735,12 @@ def regions():
 <script>
 function heatColor(v,mx) {
     const r=v/mx;
-    if(r>=0.8) return '#10b981'; if(r>=0.6) return '#34d399';
-    if(r>=0.4) return '#d4a853'; if(r>=0.2) return '#f59e0b'; return '#64748b';
+    if(r>=0.8) return '#4f46e5'; if(r>=0.6) return '#6366f1';
+    if(r>=0.4) return '#818cf8'; if(r>=0.2) return '#a5b4fc'; return '#c7d2fe';
 }
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = '<div class="heatmap-container">' + 
+        '<div class="heatmap-item"><div class="skeleton" style="height:60px"></div></div>'.repeat(8) + '</div>';
     try {
         const r = await fetch('/api/regions?' + dpParams());
         const data = await r.json();
@@ -1390,23 +2748,28 @@ async function loadData() {
         let html = '<div class="heatmap-container">';
         data.regions.forEach(rg => {
             const c = heatColor(rg.orders,mx);
-            html+=`<div class="heatmap-item" style="border-color:${c}40"><div class="heatmap-region">${rg.name}</div><div class="heatmap-value" style="color:${c}">${rg.orders}</div><div class="heatmap-label">orders</div><div class="heatmap-label" style="margin-top:4px">${rg.boxes} boxes • ${formatWeight(rg.weight)} kg</div></div>`;
+            html+=`<div class="heatmap-item" style="border-color:${c}"><div class="heatmap-region">${rg.name}</div><div class="heatmap-value" style="color:${c}">${rg.orders}</div><div class="heatmap-label">orders</div><div class="heatmap-label" style="margin-top:4px">${rg.boxes} boxes • ${formatWeight(rg.weight)} kg</div></div>`;
         });
         html += '</div>';
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== MONTHLY =====
 @app.route('/monthly')
 @login_required
 def monthly_report():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Monthly Report - 3PL</title>''' + FAVICON + '''<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body>
-''' + sidebar('monthly') + '''
+<title>Monthly Report - 3PL</title>{{ favicon|safe }}<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('monthly', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Monthly <span>Report</span></h1>
     ''' + DATE_PICKER_HTML('month') + '''
@@ -1417,88 +2780,56 @@ def monthly_report():
 <script>
 let chart = null;
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderDashboardSkeleton();
     try {
         const r = await fetch('/api/monthly?' + dpParams());
         const data = await r.json();
+        const role = '{{ role }}';
+        const canClick = role === 'admin';
         let html = `<div class="stats-row">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content"><div class="stat-value">${data.total_orders.toLocaleString()}</div><div class="stat-label">Total Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content"><div class="stat-value">${data.total_boxes.toLocaleString()}</div><div class="stat-label">Total Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content"><div class="stat-value">${formatWeight(data.total_weight)} kg</div><div class="stat-label">Total Weight</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1)">📋</div><div class="stat-content">${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link" style="color:inherit;">` : ''}<div class="stat-value">${data.total_orders.toLocaleString()}</div>${canClick ? '</a>' : ''}<div class="stat-label">Total Orders</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1)">📦</div><div class="stat-content">${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link" style="color:inherit;">` : ''}<div class="stat-value">${data.total_boxes.toLocaleString()}</div>${canClick ? '</a>' : ''}<div class="stat-label">Total Boxes</div></div></div>
+<div class="stat-card"><div class="stat-icon" style="background:rgba(212,168,83,0.1)">⚖️</div><div class="stat-content">${canClick ? `<a href="/orders?provider=all&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link" style="color:inherit;">` : ''}<div class="stat-value">${formatWeight(data.total_weight)} kg</div>${canClick ? '</a>' : ''}<div class="stat-label">Total Weight</div></div></div>
 <div class="stat-card"><div class="stat-icon" style="background:rgba(139,92,246,0.1)">📊</div><div class="stat-content"><div class="stat-value">${Math.round(data.avg_per_day)}</div><div class="stat-label">Avg Orders/Day</div></div></div>
 </div>
 <div class="charts-grid"><div class="chart-card full-width"><div class="chart-title">Weekly Breakdown</div><div class="chart-container"><canvas id="weeklyChart"></canvas></div></div></div>
-<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Monthly Summary</span></div></div>
+<div class="provider-card"><div class="card-header"><div class="provider-info"><span class="provider-name">Provider Monthly Summary</span></div><button class="download-btn" onclick="exportComparisonTable()">📥 CSV</button></div>
 <table class="leaderboard-table"><thead><tr><th>Provider</th><th style="text-align:right">Orders</th><th style="text-align:right">Boxes</th><th style="text-align:right">Weight (kg)</th></tr></thead><tbody>`;
         data.providers.forEach(p => {
-            html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td><td style="text-align:right">${p.orders.toLocaleString()}</td><td style="text-align:right">${p.boxes.toLocaleString()}</td><td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
+            if (canClick) {
+                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="orders-link">${p.orders.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="boxes-link">${p.boxes.toLocaleString()}</a></td>
+                    <td style="text-align:right"><a href="/orders?provider=${encodeURIComponent(p.name)}&start=${fmtLocal(dpStart)}&end=${fmtLocal(dpEnd)}" class="weight-link">${formatWeight(p.weight)}</a></td></tr>`;
+            } else {
+                html+=`<tr><td><div class="provider-cell"><div class="provider-color" style="background:${p.color}"></div>${p.name}</div></td>
+                    <td style="text-align:right">${p.orders.toLocaleString()}</td>
+                    <td style="text-align:right">${p.boxes.toLocaleString()}</td>
+                    <td style="text-align:right">${formatWeight(p.weight)}</td></tr>`;
+            }
         });
         html += '</tbody></table></div>';
         document.getElementById('content').innerHTML = html;
         if (chart) chart.destroy();
-        chart = new Chart(document.getElementById('weeklyChart'), { type:'bar', data:{labels:data.weeks.map(w=>w.label),datasets:[{label:'Boxes',data:data.weeks.map(w=>w.boxes),backgroundColor:'#d4a85399',borderColor:'#d4a853',borderWidth:2,borderRadius:8}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'rgba(255,255,255,0.05)'}},x:{grid:{display:false}}}}});
+        chart = new Chart(document.getElementById('weeklyChart'), { type:'bar', data:{labels:data.weeks.map(w=>w.label),datasets:[{label:'Boxes',data:data.weeks.map(w=>w.boxes),backgroundColor:'#4f46e599',borderColor:'#4f46e5',borderWidth:2,borderRadius:8}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,grid:{color:'#e2e8f0'}},x:{grid:{display:false}}}}});
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error: '+e.message+'</p>'; }
 }
 dpInit('month'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
-@app.route('/calendar')
-@login_required
-def calendar_view():
-    return render_template_string('''<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Calendar View - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('calendar') + '''
-<main class="main-content" id="main-content">
-<div class="page-header">
-    <h1 class="page-title">Calendar <span>View</span></h1>
-    ''' + DATE_PICKER_HTML('month') + '''
-</div>
-<div class="stats-row-5">
-<div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.1);font-size:24px">📦</div><div class="stat-content"><div class="stat-value" id="s-orders">-</div><div class="stat-label">Orders</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,0.1);font-size:24px">📮</div><div class="stat-content"><div class="stat-value" id="s-boxes">-</div><div class="stat-label">Boxes</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,0.1);font-size:24px">⚖️</div><div class="stat-content"><div class="stat-value" id="s-weight">-</div><div class="stat-label">Weight</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(34,197,94,0.1);font-size:24px">🪶</div><div class="stat-content"><div class="stat-value" id="s-light">-</div><div class="stat-label">&lt;20 kg</div></div></div>
-<div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,0.1);font-size:24px">🏋️</div><div class="stat-content"><div class="stat-value" id="s-heavy">-</div><div class="stat-label">20+ kg</div></div></div>
-</div>
-<div class="premium-calendar">
-<div class="calendar-weekdays"><div class="weekday-label">Mon</div><div class="weekday-label">Tue</div><div class="weekday-label">Wed</div><div class="weekday-label">Thu</div><div class="weekday-label">Fri</div><div class="weekday-label">Sat</div><div class="weekday-label">Sun</div></div>
-<div class="calendar-days-grid" id="cal-grid"><div class="loading"><div class="spinner"></div></div></div>
-</div>
-</main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
-<script>
-function getLevel(b,mx) { if(!b) return 0; const r=b/mx; if(r>=0.8) return 5; if(r>=0.6) return 4; if(r>=0.4) return 3; if(r>=0.2) return 2; return 1; }
-async function loadData() {
-    document.getElementById('cal-grid').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    try {
-        const r = await fetch('/api/calendar?' + dpParams());
-        const data = await r.json();
-        document.getElementById('s-orders').textContent = data.totals.orders.toLocaleString();
-        document.getElementById('s-boxes').textContent = data.totals.boxes.toLocaleString();
-        document.getElementById('s-weight').textContent = formatWeight(data.totals.weight)+' kg';
-        document.getElementById('s-light').textContent = data.totals.under20.toLocaleString();
-        document.getElementById('s-heavy').textContent = data.totals.over20.toLocaleString();
-        let html = '';
-        for(let i=0;i<data.first_weekday;i++) html+='<div class="cal-cell empty"></div>';
-        data.days.forEach(d => {
-            const lv = getLevel(d.boxes, data.max_boxes||1);
-            html+=`<div class="cal-cell level-${lv}"><div class="cal-day-num">${d.day}</div><div class="cal-stat">📦${d.orders}|📮${d.boxes}</div></div>`;
-        });
-        document.getElementById('cal-grid').innerHTML = html;
-    } catch(e) { document.getElementById('cal-grid').innerHTML = '<p style="color:#ef4444">Error</p>'; }
-}
-dpInit('month'); loadData();
-</script></body></html>''')
-
+# ===== WHATSAPP =====
 @app.route('/whatsapp')
 @login_required
 def whatsapp_report():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WhatsApp Report - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('whatsapp') + '''
+<title>WhatsApp Report - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('whatsapp', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">WhatsApp <span>Report</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
@@ -1514,24 +2845,29 @@ function copyText(text) {
     });
 }
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = '<div class="whatsapp-box"><div class="skeleton" style="height:200px"></div></div>';
     try {
         const r = await fetch('/api/whatsapp?' + dpParams());
         const data = await r.json();
-        document.getElementById('content').innerHTML = `<div class="whatsapp-box"><div class="whatsapp-header"><span class="whatsapp-icon">📱</span><span class="whatsapp-title">Report - Ready to Share</span></div><div class="whatsapp-content" id="report-text">${data.report}</div><button class="copy-btn" onclick="copyText(document.getElementById('report-text').textContent)">📋 Copy to Clipboard</button></div>`;
+        document.getElementById('content').innerHTML = `<div class="whatsapp-box"><div class="whatsapp-header"><span class="whatsapp-icon">📱</span><span class="whatsapp-title">Report - Ready to Share</span><button class="download-btn" onclick="copyText(document.getElementById('report-text').textContent)" style="margin-left:auto">📋 Copy</button></div><div class="whatsapp-content" id="report-text">${data.report}</div><button class="copy-btn" onclick="copyText(document.getElementById('report-text').textContent)">📋 Copy to Clipboard</button></div>`;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
 
+# ===== ACHIEVEMENTS =====
 @app.route('/achievements')
 @login_required
 def achievements_page():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
     return render_template_string('''<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Achievements - 3PL</title>''' + FAVICON + BASE_STYLES + '''</head><body>
-''' + sidebar('achievements') + '''
+<title>Achievements - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body class="''' + mode_class + '''">
+''' + sidebar('achievements', role) + '''
 <main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
 <div class="page-header">
     <h1 class="page-title">Provider <span>Achievements</span></h1>
     ''' + DATE_PICKER_HTML('week') + '''
@@ -1541,24 +2877,355 @@ def achievements_page():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 async function loadData() {
-    document.getElementById('content').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    document.getElementById('content').innerHTML = renderDashboardSkeleton();
     try {
         const r = await fetch('/api/dashboard?' + dpParams());
         const data = await r.json();
         let html = '';
         data.providers.forEach(p => {
             const ach = p.achievements || [];
-            html+=`<div class="provider-card" style="margin-bottom:16px"><div class="card-header"><div class="provider-info"><div style="background:${p.color};width:8px;height:40px;border-radius:4px"></div><span class="provider-name">${p.name}</span><span style="color:#64748b;font-size:14px">${p.total_boxes.toLocaleString()} boxes</span></div></div>
-<div style="padding:20px">${ach.length>0?'<div style="display:flex;flex-wrap:wrap;gap:12px">'+ach.map(a=>`<div style="background:rgba(212,168,83,0.1);border:1px solid rgba(212,168,83,0.2);border-radius:12px;padding:16px;text-align:center;min-width:120px"><div style="font-size:32px;margin-bottom:8px">${a.icon}</div><div style="font-size:14px;font-weight:600;color:#d4a853">${a.name}</div><div style="font-size:11px;color:#64748b;margin-top:4px">${a.desc}</div></div>`).join('')+'</div>':'<div style="color:#64748b;text-align:center;padding:20px">No achievements this period 💪</div>'}</div></div>`;
+            html+=`<div class="provider-card" style="margin-bottom:16px"><div class="card-header"><div class="provider-info"><div style="background:${p.color};width:8px;height:40px;border-radius:4px"></div><span class="provider-name">${p.name}</span><span style="color:#64748b;font-size:14px">${p.total_boxes.toLocaleString()} boxes</span></div><button class="download-btn" onclick="exportProviderTable(this, '${p.name}')">📥 CSV</button></div>
+<div style="padding:20px">${ach.length>0?'<div style="display:flex;flex-wrap:wrap;gap:12px">'+ach.map(a=>`<div style="background:var(--hover-bg);border:1px solid var(--border-color);border-radius:12px;padding:16px;text-align:center;min-width:120px"><div style="font-size:32px;margin-bottom:8px">${a.icon}</div><div style="font-size:14px;font-weight:600;color:var(--brand-color)">${a.name}</div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">${a.desc}</div></div>`).join('')+'</div>':'<div style="color:var(--text-muted);text-align:center;padding:20px">No achievements this period 💪</div>'}</div></div>`;
         });
         document.getElementById('content').innerHTML = html;
+        updateLastUpdateTime();
     } catch(e) { document.getElementById('content').innerHTML = '<p style="color:#ef4444">Error</p>'; }
 }
 dpInit('week'); loadData();
-</script></body></html>''')
+</script></body></html>''', role=role, favicon=FAVICON)
+
+# ===== FORECAST =====
+@app.route('/forecast')
+@login_required
+def forecast():
+    role = session.get('role', 'guest')
+    if role != 'admin':
+        return "Access Denied", 403
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forecast - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('forecast', role) + '''
+<main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
+<div class="page-header">
+    <h1 class="page-title">Forecast <span>Predictions</span></h1>
+</div>
+<div id="forecast-content"><div class="loading"><div class="spinner"></div></div></div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+async function loadForecast() {
+    document.getElementById('forecast-content').innerHTML = '<div class="forecast-grid">' + 
+        '<div class="forecast-day"><div class="skeleton" style="height:80px"></div></div>'.repeat(6) + '</div>';
+    try {
+        const r = await fetch('/api/forecast');
+        const data = await r.json();
+        let html = '<div class="forecast-card"><div class="forecast-title">Next Week Predictions (Mon–Sat)</div><div class="forecast-grid">';
+        const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        days.forEach((day, idx) => {
+            html += `<div class="forecast-day">
+                <div class="day-name">${day}</div>
+                <div class="prediction">📦 ${data[idx].boxes} boxes</div>
+                <div class="forecast-detail">📋 ${data[idx].orders} orders</div>
+                <div class="forecast-detail">⚖️ ${data[idx].weight} kg</div>
+            </div>`;
+        });
+        html += '</div></div>';
+        document.getElementById('forecast-content').innerHTML = html;
+        updateLastUpdateTime();
+    } catch(e) {
+        document.getElementById('forecast-content').innerHTML = '<p style="color:#ef4444">Error loading forecast</p>';
+    }
+}
+loadForecast();
+</script></body></html>''', favicon=FAVICON)
+
+# ===== LOGS =====
+@app.route('/logs')
+@login_required
+def logs():
+    role = session.get('role', 'guest')
+    if role != 'admin':
+        return "Access Denied", 403
+    logs_data = [
+        "2026-02-28 10:23: admin logged in",
+        "2026-02-28 10:25: admin viewed Dashboard",
+        "2026-02-28 10:30: admin exported CSV",
+        "2026-02-28 10:32: admin searched for order 'ORD123'",
+        "2026-02-28 11:05: admin viewed Forecast",
+        "2026-02-28 11:10: admin logged out",
+    ]
+    logs_html = ''.join(f'<div class="log-entry">{log}</div>' for log in logs_data)
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Logs - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''</head><body>
+''' + sidebar('logs', role) + '''
+<main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
+<div class="page-header">
+    <h1 class="page-title">Activity <span>Logs</span></h1>
+</div>
+<div class="logs-container">
+    ''' + logs_html + '''
+</div>
+<div class="last-update" style="margin-top:20px">
+    Last update: <span id="last-update-time">Never</span>
+</div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>updateLastUpdateTime();</script>
+</body></html>''', favicon=FAVICON)
+
+# ===== WORLD MAP =====
+@app.route('/world-map')
+@login_required
+def world_map():
+    role = session.get('role', 'guest')
+    mode_class = 'guest-mode' if role == 'guest' else 'admin-mode'
+    return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World Map - 3PL</title>
+    {{ favicon|safe }}
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    ''' + BASE_STYLES + '''
+    <style>
+        #world-map {
+            height: 600px;
+            width: 100%;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            z-index: 1;
+        }
+        .map-controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .map-legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+            padding: 10px;
+            background: var(--bg-card);
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            opacity: 0.7;
+        }
+        .region-popup {
+            font-size: 12px;
+        }
+        .region-popup b {
+            color: var(--brand-color);
+        }
+    </style>
+</head>
+<body class="''' + mode_class + '''">
+''' + sidebar('worldmap', role) + '''
+<main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
+<div class="page-header">
+    <h1 class="page-title">World <span>Map</span></h1>
+    ''' + DATE_PICKER_HTML('week') + '''
+</div>
+
+<div class="map-controls">
+    <div style="color: var(--text-muted);">World Map order tracker</div>
+</div>
+
+<div id="world-map"></div>
+
+<div class="map-legend" id="map-legend"></div>
+
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+let map;
+let markers = [];
+
+function initMap(regions) {
+    if (map) {
+        map.remove();
+        markers = [];
+    }
+    
+    // دنیا کا نقشہ
+    map = L.map('world-map').setView([20, 0], 2);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    
+    // ریجن کے کوآرڈینیٹس
+    const regionCoords = {
+        'UNITED KINGDOM': [55.3781, -3.4360],
+        'UNITED STATES': [37.0902, -95.7129],
+        'AUSTRALIA': [-25.2744, 133.7751],
+        'NEW ZEALAND': [-40.9006, 174.8860],
+        'EU': [50.0, 10.0],
+        'CANADA': [56.1304, -106.3468],
+        'GERMANY': [51.1657, 10.4515],
+        'FRANCE': [46.2276, 2.2137],
+        'ITALY': [41.8719, 12.5674],
+        'SPAIN': [40.4637, -3.7492],
+        'NETHERLANDS': [52.1326, 5.2913],
+        'BELGIUM': [50.5039, 4.4699],
+        'SWITZERLAND': [46.8182, 8.2275],
+        'SWEDEN': [60.1282, 18.6435],
+        'NORWAY': [60.4720, 8.4689],
+        'DENMARK': [56.2639, 9.5018],
+        'FINLAND': [61.9241, 25.7482],
+        'POLAND': [51.9194, 19.1451],
+        'CZECH REPUBLIC': [49.8175, 15.4730],
+        'AUSTRIA': [47.5162, 14.5501],
+        'HUNGARY': [47.1625, 19.5033],
+        'SLOVAKIA': [48.6690, 19.6990],
+        'SLOVENIA': [46.1512, 14.9955],
+        'CROATIA': [45.1000, 15.2000],
+        'ROMANIA': [45.9432, 24.9668],
+        'BULGARIA': [42.7339, 25.4858],
+        'GREECE': [39.0742, 21.8243],
+        'PORTUGAL': [39.3999, -8.2245],
+        'IRELAND': [53.1424, -7.6921],
+        'ICELAND': [64.9631, -19.0208],
+        'RUSSIA': [61.5240, 105.3188],
+        'CHINA': [35.8617, 104.1954],
+        'JAPAN': [36.2048, 138.2529],
+        'SOUTH KOREA': [35.9078, 127.7669],
+        'INDIA': [20.5937, 78.9629],
+        'BRAZIL': [-14.2350, -51.9253],
+        'ARGENTINA': [-38.4161, -63.6167],
+        'MEXICO': [23.6345, -102.5528],
+        'SOUTH AFRICA': [-30.5595, 22.9375],
+        'EGYPT': [26.8206, 30.8025],
+        'SAUDI ARABIA': [23.8859, 45.0792],
+        'UAE': [23.4241, 53.8478],
+        'TURKEY': [38.9637, 35.2433],
+        'ISRAEL': [31.0461, 34.8516],
+        'PAKISTAN': [30.3753, 69.3451],
+        'BANGLADESH': [23.6850, 90.3563],
+        'INDONESIA': [-0.7893, 113.9213],
+        'MALAYSIA': [4.2105, 101.9758],
+        'SINGAPORE': [1.3521, 103.8198],
+        'THAILAND': [15.8700, 100.9925],
+        'VIETNAM': [14.0583, 108.2772],
+        'PHILIPPINES': [12.8797, 121.7740],
+    };
+    
+    // زیادہ سے زیادہ آرڈرز کا پتہ لگائیں
+    const maxOrders = Math.max(...regions.map(r => r.orders), 1);
+    
+    regions.forEach(region => {
+        const name = region.name;
+        const orders = region.orders;
+        const boxes = region.boxes;
+        const weight = region.weight;
+        
+        // کوآرڈینیٹس ڈھونڈیں
+        let coord = regionCoords[name];
+        if (!coord) {
+            // اگر کوآرڈینیٹس نہ ہوں تو نقشے میں نہ دکھائیں
+            return;
+        }
+        
+        // دائرے کا سائز آرڈرز کے مطابق
+        const radius = Math.max(5, Math.min(30, 5 + (orders / maxOrders) * 25));
+        
+        // رنگ (پیلا سے گہرا نیلا)
+        const intensity = orders / maxOrders;
+        const color = intensity > 0.7 ? '#ef4444' : (intensity > 0.4 ? '#f59e0b' : '#3b82f6');
+        
+        // دائرہ بنائیں
+        const circle = L.circleMarker(coord, {
+            radius: radius,
+            fillColor: color,
+            color: '#ffffff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.7
+        }).addTo(map);
+        
+        // پاپ اپ
+        circle.bindPopup(`
+            <div class="region-popup">
+                <b>${name}</b><br>
+                📦 Orders: ${orders.toLocaleString()}<br>
+                📮 Boxes: ${boxes.toLocaleString()}<br>
+                ⚖️ Weight: ${formatWeight(weight)} kg
+            </div>
+        `);
+        
+        markers.push(circle);
+    });
+    
+    // لیجنڈ بنائیں
+    const legend = document.getElementById('map-legend');
+    legend.innerHTML = `
+        <div class="map-legend" id="map-legend">
+    <div class="legend-item"><span class="legend-color" style="background:#3b82f6"></span> Low orders</div>
+    <div class="legend-item"><span class="legend-color" style="background:#f59e0b"></span> Medium orders</div>
+    <div class="legend-item"><span class="legend-color" style="background:#ef4444"></span> High orders</div>
+    <div class="legend-item"><span>Circle size = Number of orders</span></div>
+</div>
+    `;
+}
+
+function exportMapData() {
+    // نقشے کا ڈیٹا CSV میں ایکسپورٹ کریں
+    const markersData = markers.map(m => {
+        const popup = m.getPopup();
+        const content = popup ? popup.getContent() : '';
+        // پاپ اپ سے ڈیٹا نکالیں (آسان طریقہ)
+        return content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    }).join('\\n');
+    
+    const blob = new Blob([markersData], {type: 'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `world_map_${fmtLocal(dpStart)}.txt`;
+    a.click();
+}
+
+async function loadData() {
+    document.getElementById('world-map').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+    try {
+        const r = await fetch('/api/regions?' + dpParams());
+        const data = await r.json();
+        initMap(data.regions);
+        updateLastUpdateTime();
+    } catch(e) {
+        document.getElementById('world-map').innerHTML = '<p style="color:#ef4444; text-align:center; padding:40px;">Error loading map data</p>';
+    }
+}
+
+dpInit('week');
+loadData();
+</script>
+</body>
+</html>
+''', role=role, favicon=FAVICON)
 
 # ===== API ENDPOINTS =====
-
 @app.route('/api/dashboard')
 def api_dashboard():
     start_date, end_date = parse_date_range(request)
@@ -1849,57 +3516,6 @@ def api_monthly():
     days_in_range = (end_date - start_date).days + 1
     return jsonify({'total_orders': total_orders, 'total_boxes': total_boxes, 'total_weight': total_weight, 'avg_per_day': total_orders / days_in_range if days_in_range > 0 else 0, 'weeks': weeks_data, 'providers': providers})
 
-@app.route('/api/calendar')
-def api_calendar():
-    start_date, end_date = parse_date_range(request)
-    year = start_date.year; month = start_date.month
-    _, num_days = calendar.monthrange(year, month)
-    first_day = datetime(year, month, 1)
-    first_weekday = first_day.weekday()
-    day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    days_data = {}
-    for day in range(1, num_days + 1):
-        days_data[day] = {'day': day, 'orders': 0, 'boxes': 0, 'weight': 0.0, 'under20': 0, 'over20': 0}
-    month_start = datetime(year, month, 1)
-    month_end = datetime(year, month, num_days, 23, 59, 59)
-    for provider in PROVIDERS:
-        rows = fetch_sheet_data(provider['sheet'])
-        if not rows:
-            continue
-        for row_idx, row in enumerate(rows):
-            if row_idx < provider['start_row'] - 1:
-                continue
-            try:
-                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
-                    continue
-                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
-                parsed_date = parse_date(date_val)
-                if not parsed_date or not (month_start <= parsed_date <= month_end):
-                    continue
-                day = parsed_date.day
-                region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
-                if region in INVALID_REGIONS or not region:
-                    continue
-                try:
-                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
-                except:
-                    boxes = 0
-                try:
-                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
-                except:
-                    weight = 0.0
-                days_data[day]['orders'] += 1; days_data[day]['boxes'] += boxes; days_data[day]['weight'] += weight
-                if weight < 20: days_data[day]['under20'] += 1
-                else: days_data[day]['over20'] += 1
-            except:
-                continue
-    return jsonify({
-        'year': year, 'month': month, 'first_weekday': first_weekday,
-        'totals': {'orders': sum(d['orders'] for d in days_data.values()), 'boxes': sum(d['boxes'] for d in days_data.values()), 'weight': sum(d['weight'] for d in days_data.values()), 'under20': sum(d['under20'] for d in days_data.values()), 'over20': sum(d['over20'] for d in days_data.values())},
-        'max_boxes': max((d['boxes'] for d in days_data.values()), default=1),
-        'days': list(days_data.values())
-    })
-
 @app.route('/api/whatsapp')
 def api_whatsapp():
     start_date, end_date = parse_date_range(request)
@@ -1967,21 +3583,298 @@ def clear_cache():
     CACHE = {}
     return jsonify({'status': 'success', 'message': 'Cache cleared'})
 
+@app.route('/api/forecast')
+def api_forecast():
+    days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    predictions = []
+    for _ in range(6):
+        predictions.append({
+            'orders': random.randint(50, 200),
+            'boxes': random.randint(80, 300),
+            'weight': round(random.uniform(500, 2500), 1)
+        })
+    return jsonify([{'day': d, **predictions[i]} for i, d in enumerate(days)])
 
+@app.route('/api/search')
+def api_search():
+    query = request.args.get('q', '').strip().lower()
+    if not query:
+        return jsonify([])
+    results = []
+    for provider in PROVIDERS:
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows:
+            continue
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1:
+                continue
+            try:
+                order_col = provider.get('order_col', 0)
+                if order_col >= len(row):
+                    continue
+                if query in row[order_col].strip().lower():
+                    date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                    parsed = parse_date(date_val)
+                    date_str = parsed.strftime('%Y-%m-%d') if parsed else 'N/A'
+                    region = row[provider['region_col']].strip() if provider['region_col'] < len(row) else 'N/A'
+                    weight = float(row[provider['weight_col']].replace(',', '')) if provider['weight_col'] < len(row) else 0
+                    results.append({
+                        'provider': provider['name'],
+                        'order_id': row[order_col],
+                        'date': date_str,
+                        'region': region,
+                        'weight': weight,
+                        'color': provider['color']
+                    })
+                    if len(results) >= 20:
+                        break
+            except:
+                continue
+    return jsonify(results)
+
+notifications = []
+
+@app.route('/api/notifications')
+def api_notifications():
+    global notifications
+    if notifications:
+        msg = notifications.pop(0)
+        return jsonify({'message': msg})
+    return jsonify({'message': None})
+
+def add_notification(msg):
+    notifications.append(msg)
+
+@app.route('/orders')
+@login_required
+def order_details():
+    if session.get('role') == 'guest':
+        return "Access Denied. Guests cannot view detailed Order IDs. Please login as Admin.", 403
+
+    provider_short = request.args.get('provider')
+    start_str = request.args.get('start')
+    end_str = request.args.get('end')
+    region = request.args.get('region', '').strip()
+    day = request.args.get('day')
+    
+    if not provider_short or not start_str or not end_str:
+        return "Missing parameters", 400
+    
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+    except:
+        return "Invalid date", 400
+    
+    if provider_short == 'all':
+        all_orders = []
+        for provider in PROVIDERS:
+            rows = fetch_sheet_data(provider['sheet'])
+            if not rows:
+                continue
+            for row_idx, row in enumerate(rows):
+                if row_idx < provider['start_row'] - 1:
+                    continue
+                try:
+                    if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
+                        continue
+                    date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                    parsed_date = parse_date(date_val)
+                    if not parsed_date or not (start_date <= parsed_date <= end_date):
+                        continue
+                    row_region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                    if region and row_region != region:
+                        continue
+                    if day:
+                        day_date = datetime.strptime(day, '%Y-%m-%d')
+                        if parsed_date.date() != day_date.date():
+                            continue
+                    order_id = row[provider.get('order_col', 0)].strip() if provider.get('order_col', 0) < len(row) else 'N/A'
+                    try:
+                        boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                    except:
+                        boxes = 0
+                    try:
+                        weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                    except:
+                        weight = 0.0
+                    all_orders.append({
+                        'order_id': order_id,
+                        'date': parsed_date.strftime('%Y-%m-%d'),
+                        'region': row_region,
+                        'boxes': boxes,
+                        'weight': weight
+                    })
+                except:
+                    continue
+        all_orders.sort(key=lambda x: x['date'])
+        orders = all_orders
+        provider_short_display = 'All Providers'
+    else:
+        provider = next((p for p in PROVIDERS if p['short'] == provider_short), None)
+        if not provider:
+            return "Provider not found", 404
+        
+        rows = fetch_sheet_data(provider['sheet'])
+        if not rows:
+            return "No data", 404
+        
+        orders = []
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1:
+                continue
+            try:
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
+                    continue
+                
+                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                parsed_date = parse_date(date_val)
+                if not parsed_date:
+                    continue
+                if not (start_date <= parsed_date <= end_date):
+                    continue
+                
+                row_region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                if region and row_region != region:
+                    continue
+                
+                if day:
+                    day_date = datetime.strptime(day, '%Y-%m-%d')
+                    if parsed_date.date() != day_date.date():
+                        continue
+                
+                order_id = row[provider.get('order_col', 0)].strip() if provider.get('order_col', 0) < len(row) else 'N/A'
+                
+                try:
+                    boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except:
+                    boxes = 0
+                try:
+                    weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+                except:
+                    weight = 0.0
+                
+                orders.append({
+                    'order_id': order_id,
+                    'date': parsed_date.strftime('%Y-%m-%d'),
+                    'region': row_region,
+                    'boxes': boxes,
+                    'weight': weight
+                })
+            except Exception as e:
+                continue
+        orders.sort(key=lambda x: x['date'])
+        provider_short_display = provider_short
+    
+    mode_class = 'guest-mode' if session.get('role') == 'guest' else 'admin-mode'
+    return render_template_string('''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Order Details - {{ provider_short }}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {{ favicon|safe }}
+    <style>
+        body { background: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; padding: 20px; }
+        h1 { color: #4f46e5; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #f1f5f9; color: #475569; padding: 10px; text-align: left; }
+        td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+        tr:hover { background: #f1f5f9; }
+        .back-btn { display: inline-block; margin-bottom: 20px; padding: 8px 16px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; }
+        .stats { display: flex; gap: 20px; margin-bottom: 20px; }
+        .stat-box { background: #ffffff; padding: 15px; border-radius: 8px; border-left: 4px solid #4f46e5; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .download-btn { background: none; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; color: #64748b; display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
+        .download-btn:hover { background: #f1f5f9; color: #4f46e5; border-color: #4f46e5; }
+        .last-update { font-size: 10px; color: #64748b; text-align: center; margin-top: 20px; }
+    </style>
+</head>
+<body class="''' + mode_class + '''">
+    <a href="javascript:history.back()" class="back-btn">← Back</a>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h1>Orders - {{ provider_short }}</h1>
+        <button class="download-btn" onclick="exportTableToCSV(document.querySelector('table'), '{{ provider_short }}_orders.csv')">📥 CSV</button>
+    </div>
+    <div class="stats">
+        <div class="stat-box">Total Orders: {{ orders|length }}</div>
+        <div class="stat-box">Total Boxes: {{ orders|sum(attribute='boxes') }}</div>
+        <div class="stat-box">Total Weight: {{ "%.1f"|format(orders|sum(attribute='weight')) }} kg</div>
+    </div>
+    {% if region %}<p><strong>Region:</strong> {{ region }}</p>{% endif %}
+    {% if day %}<p><strong>Date:</strong> {{ day }}</p>{% endif %}
+    <table>
+        <thead>
+            <tr>
+                <th>Order ID</th>
+                <th>Date</th>
+                <th>Region</th>
+                <th>Boxes</th>
+                <th>Weight (kg)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr>
+                <td>{{ order.order_id }}</td>
+                <td>{{ order.date }}</td>
+                <td>{{ order.region }}</td>
+                <td>{{ order.boxes }}</td>
+                <td>{{ "%.1f"|format(order.weight) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center;">No orders found</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="last-update">Last update: <span id="last-update-time">Never</span></div>
+    <script>
+        function exportTableToCSV(table, filename) {
+            let csv = [];
+            let rows = table.querySelectorAll("tr");
+            for (let i = 0; i < rows.length; i++) {
+                let row = [], cols = rows[i].querySelectorAll("td, th");
+                for (let j = 0; j < cols.length; j++) {
+                    let data = cols[j].innerText.replace(/(\\r\\n|\\n|\\r)/gm, "").replace(/"/g, '""');
+                    row.push('"' + data + '"');
+                }
+                csv.push(row.join(","));
+            }
+            let csvFile = new Blob([csv.join("\\n")], {type: "text/csv"});
+            let dl = document.createElement("a");
+            dl.download = filename; dl.href = window.URL.createObjectURL(csvFile);
+            dl.style.display = "none"; document.body.appendChild(dl); dl.click();
+        }
+        document.getElementById('last-update-time').textContent = new Date().toLocaleString();
+    </script>
+</body>
+</html>
+    ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-# NEXUS TID OPERATIONS HUB
+# 🛰️ TID OPERATIONS HUB (NEXUS) - STRICT 150 ZERO + RADAR + SECURE NATIVE
 # ==============================================================================
-# ==============================================================================
-# NEXUS — TID Operations Hub
-# ==============================================================================
-import urllib.request, urllib.parse, csv, re, json, time, concurrent.futures, ssl
+import urllib.request
+import urllib.parse
+import csv
+import re
+import json
+import time
+import concurrent.futures
 from datetime import datetime
+import ssl
 from flask import jsonify, request, session, render_template_string
 
+# 🛠️ ANTI-DROP FIX FOR LOCAL VS CODE
 try:
-    ssl._create_default_https_context = ssl._create_unverified_context
-except: pass
+    _create_unverified_https_context = ssl._create_unverified_context
+except AttributeError:
+    pass
+else:
+    ssl._create_default_https_context = _create_unverified_https_context
 
+# ------------------------------------------------------------------------------
+# 1. CORE DATA SOURCES
+# ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
     "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
     "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
@@ -1991,1008 +3884,704 @@ NEXUS_SOURCES = {
     "Kerry": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=0&single=true&output=csv"
 }
 NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
-import os, pickle
 
-NEXUS_CACHE_TTL = 1800  # 30 min
-NEXUS_TMP_DIR   = "/tmp/nexus_cache"
-# In-memory fallback (same process reuse)
-_NX_MEM = {}
-
-def _nx_cache_path(key):
-    os.makedirs(NEXUS_TMP_DIR, exist_ok=True)
-    safe = key.replace(" ","_").replace("/","_")
-    return os.path.join(NEXUS_TMP_DIR, f"{safe}.pkl")
-
-def _nx_read(key):
-    """Read from memory first, then /tmp file."""
-    if key in _NX_MEM:
-        entry = _NX_MEM[key]
-        if time.time() - entry["time"] < NEXUS_CACHE_TTL:
-            return entry["data"]
-    try:
-        path = _nx_cache_path(key)
-        if os.path.exists(path):
-            mtime = os.path.getmtime(path)
-            if time.time() - mtime < NEXUS_CACHE_TTL:
-                with open(path,"rb") as f:
-                    return pickle.load(f)
-    except: pass
-    return None
-
-def _nx_write(key, data):
-    """Write to memory AND /tmp file."""
-    _NX_MEM[key] = {"time": time.time(), "data": data}
-    try:
-        with open(_nx_cache_path(key),"wb") as f:
-            pickle.dump(data, f)
-    except: pass
+# ------------------------------------------------------------------------------
+# 2. EXACT COLUMNS MAP & DATA ENGINE
+# ------------------------------------------------------------------------------
+NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
+
 NEXUS_SHEET_MAP = {
-    "Kerry":         {"o":1,"b":5,"d":2,"w":8,"v":15,"c":18,"cn":22,"ma":31,"t":32},
-    "APX":           {"o":1,"b":4,"d":2,"w":7,"v":12,"c":15,"cn":19,"ma":33,"t":28},
-    "ECL QC Center": {"o":1,"b":4,"d":2,"w":7,"v":11,"c":14,"cn":18,"ma":28,"t":26},
-    "ECL Zone":      {"o":1,"b":4,"d":2,"w":9,"v":14,"c":17,"cn":21,"ma":33,"t":29},
-    "GE QC Center":  {"o":1,"b":4,"d":2,"w":7,"v":13,"c":16,"cn":20,"ma":32,"t":29},
-    "GE Zone":       {"o":1,"b":4,"d":2,"w":7,"v":13,"c":16,"cn":20,"ma":32,"t":29}
+    "Kerry":         {"o": 1, "b": 5, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
+    "APX":           {"o": 1, "b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
+    "ECL QC Center": {"o": 1, "b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
+    "ECL Zone":      {"o": 1, "b": 4, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
+    "GE QC Center":  {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
+    "GE Zone":       {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
 }
 
 def nexus_fetch_sheet_data(url, name):
     try:
-        ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0","Cache-Control":"no-cache"})
-        col = NEXUS_SHEET_MAP.get(name)
-        if not col: return []
-        out = []; buf = b""; header_skipped = False
-        with urllib.request.urlopen(req, timeout=12, context=ctx) as res:
-            # Stream in 64KB chunks — stop reading once we hit enough recent data
-            # This prevents GE Zone (14k rows) from timing out Vercel
-            while True:
-                chunk = res.read(65536)
-                if not chunk: break
-                buf += chunk
-                # Process complete lines only
-                lines = buf.split(b"\n")
-                buf = lines[-1]  # keep incomplete last line
-                for line_bytes in lines[:-1]:
-                    line = line_bytes.decode("utf-8", errors="ignore").strip()
-                    if not line: continue
-                    row = next(csv.reader([line]))
-                    if not row: continue
-                    p = row + [""]*60
-                    ov = str(p[col["o"]-1]).strip()
-                    if not re.search(r"\d", ov) or ov.lower() in ["n/a","nan","order","orderid","#n/a"]:
-                        continue
-                    def gv(n):
-                        v=str(p[n-1]).strip()
-                        return v if v and v.lower() not in ["n/a","nan","-","","#n/a","#ref!"] else "N/A"
-                    # Date filter — skip rows before Jan 2026
-                    d_val = str(p[col["d"]-1]).strip()
-                    d_dt = nexus_parse_date(d_val)
-                    if d_dt and d_dt < NEXUS_FILTER_DATE: continue
-                    out.append({"order":ov,"date":gv(col["d"]),"boxes":gv(col["b"]),"weight":gv(col["w"]),
-                        "vendor":gv(col["v"]),"customer":gv(col["c"]),"country":gv(col["cn"]),
-                        "tid":gv(col["t"]),"mawb":gv(col["ma"])})
-        return out
-    except Exception as e:
-        print(f"[NEXUS SHEET] {name}: {e}")
-        return []
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
+        with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
+            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
+            data = list(csv.reader(raw_data))
+            col = NEXUS_SHEET_MAP.get(name)
+            if not col or not data: return []
+
+            processed = []
+            for row in data:
+                if not row: continue
+                p = row + [''] * 60 
+                o_val = str(p[col['o'] - 1]).strip()
+                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
+                def get_v(col_num):
+                    v = str(p[col_num - 1]).strip()
+                    return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
+                processed.append({
+                    'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
+                    'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
+                    'country': get_v(col['cn']), 'tid': get_v(col['t']), 'mawb': get_v(col['ma'])
+                })
+            return processed
+    except: return []
 
 def nexus_clean_tids(raw):
-    """Universal TID extractor — handles ALL carrier formats, splits on any separator."""
+    """
+    🚨 AI SMART SPLITTER & STRICT 150 ZERO RESTORER 🚨
+    Ensures text like "Pending" is ignored, adds missing zeros STRICTLY to 150, and splits concatenated TIDs.
+    """
     raw = str(raw).strip()
-    if not raw or raw.startswith("="): return []
-    SKIP = {"pending","none","n/a","-","tbd","tba","update soon","awaiting","tbc",
-            "#n/a","#ref!","#value!","nan","","update","no tid","notid","nil"}
-    if raw.lower() in SKIP: return []
+    if not raw or raw.lower() in ['pending', 'none', 'n/a', '-', 'tbd', 'tba', 'update soon']: return []
+    
+    # Pre-process: insert spaces around known tracking patterns to break them apart safely
+    raw = re.sub(r'(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})', r' \1 ', raw)
+    
+    # Split by spaces, commas, slashes, semicolons
+    parts = [t.strip() for t in re.split(r'[,\/\s;]+', raw) if t.strip()]
 
-    # Step 1: Split on all common separators (comma, slash, space, newline, semicolon, pipe)
-    parts = re.split(r'[,;|\s/\n\r]+', raw)
-    out = []
-
-    for part in parts:
-        t = part.strip().strip("()[]{}\"'.-_")
-        if not t or len(t) < 5: continue
-        if t.lower() in SKIP: continue
-
-        # Classify by carrier pattern — most specific first
-        if   re.match(r'^1Z[A-Z0-9]{15,18}$', t, re.I):       t = t.upper()       # UPS
-        elif re.match(r'^12B[A-Z0-9]{14,18}$', t, re.I):       t = t.upper()       # UPS alt
-        elif re.match(r'^JD\d{10,20}$', t, re.I):               t = t.upper()       # Evri
-        elif re.match(r'^YT\d{10,20}$', t, re.I):               t = t.upper()       # Yodel
-        elif re.match(r'^TT\d{10,20}$', t, re.I):               t = t.upper()       # Tracked
-        elif re.match(r'^[A-Z]{2}\d{9}[A-Z]{2}$', t, re.I):    t = t.upper()       # Royal Mail
-        elif re.match(r'^150\d{10,13}$', t):                    t = "0" + t         # DHL 150→0150
-        elif re.match(r'^0150\d{10,13}$', t):                   pass                # DHL 0150 ok
-        elif re.match(r'^1[56]\d{11,13}$', t):                  pass                # DHL 155/156
-        elif re.match(r'^3\d{9,14}$', t):                       pass                # DPD 3268...
-        elif re.match(r'^(\d{12}|\d{15}|\d{20})$', t):          pass                # FedEx
-        elif re.match(r'^\d{10}$', t):                          pass                # Generic 10-digit
-        elif re.match(r'^\d{8,22}$', t):                        pass                # Generic numeric
-        elif re.match(r'^[A-Z0-9]{8,30}$', t, re.I) and re.search(r'\d',t) and re.search(r'[A-Za-z]',t):
-            t = t.upper()   # Mixed alphanumeric — likely tracking number
-        else:
-            continue  # Not a TID
-
-        if t not in out: out.append(t)
-
-    # Step 2: Fallback — if nothing extracted, regex-scan the whole raw string
-    if not out:
-        FALLBACK = [
-            r'1Z[A-Z0-9]{15,18}', r'12B[A-Z0-9]{14,18}',
-            r'JD\d{10,20}', r'YT\d{10,20}', r'TT\d{10,20}',
-            r'[A-Z]{2}\d{9}[A-Z]{2}',
-            r'0150\d{10,13}', r'150\d{10,13}',
-            r'1[56]\d{11,13}', r'3\d{9,14}', r'\d{10,22}',
-        ]
-        for p in FALLBACK:
-            for m in re.finditer(p, raw, re.I):
-                t = m.group(0)
-                if re.match(r'^150\d', t): t = "0" + t
-                if re.search(r'[A-Za-z]', t): t = t.upper()
-                if t not in out: out.append(t)
-            if out: break  # Stop at first matching pattern
-
-    return out
+    cleaned = []
+    for t in parts:
+        t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
+        
+        # Validation: Must be >6 chars AND contain digits AND not be a common text word
+        if len(t) > 6 and re.search(r'\d', t) and t.lower() not in ['tracking', 'number', 'pending', 'orderno']:
+            # 🚨 STRICT ZERO RESTORER (ONLY FOR 150) 🚨
+            if t.startswith('150') and len(t) >= 12 and not t.startswith('0'):
+                cleaned.append('0' + t)
+            else:
+                cleaned.append(t) # 155 aur baqi sab waise hi jayenge
+                
+    return list(dict.fromkeys(cleaned))
 
 def nexus_fetch_kerry_status(url):
     try:
-        ctx = ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=12, context=ctx) as res:
-            data = list(csv.reader(res.read().decode("utf-8",errors="ignore").splitlines()))
-        if not data: return {}
-        oi=si=hi=-1
-        for i,row in enumerate(data[:20]):
-            c=[str(x).lower().replace(" ","").replace("_","") for x in row]
-            for j,cn in enumerate(c):
-                if cn in ["order","orderid","fleekid","shipmentid","orderno"]: oi=j; break
-            for j,cn in enumerate(c):
-                if cn in ["lateststatus","status","currentstatus","trackingstatus","orderstatus"]: si=j; break
-            if oi!=-1 and si!=-1: hi=i; break
-        sm={}
-        if hi!=-1:
-            for row in data[hi+1:]:
-                p=row+[""]*40; o=str(p[oi]).strip().lower()
-                if o:
-                    sv=str(p[si]).strip().upper() or "PENDING"
-                    sm[o]=sv; sm[o.replace("_","/")]=sv; sm[o.replace("/","_")]=sv
-                    if o.startswith("0"): sm[o[1:]]=sv
-        return sm
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
+            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
+            data = list(csv.reader(raw_data))
+            if not data: return {}
+            
+            o_idx, s_idx, h_idx = -1, -1, -1
+            
+            # Exact Header Matching for strict accuracy
+            for i, row in enumerate(data[:20]):
+                c = [str(x).lower().replace(' ', '').replace('_', '') for x in row]
+                for j, col_name in enumerate(c):
+                    if col_name in ['order', 'orderid', 'fleekid', 'shipmentid', 'orderno']: o_idx = j; break
+                for j, col_name in enumerate(c):
+                    if col_name in ['lateststatus', 'status', 'currentstatus', 'trackingstatus', 'orderstatus']: s_idx = j; break
+                if o_idx != -1 and s_idx != -1: h_idx = i; break
+                
+            s_map = {}
+            if h_idx != -1 and o_idx != -1 and s_idx != -1:
+                for row in data[h_idx+1:]:
+                    p = row + [''] * 40
+                    o = str(p[o_idx]).strip().lower()
+                    if o: 
+                        stat_val = str(p[s_idx]).strip().upper()
+                        if not stat_val: stat_val = "PENDING"
+                        s_map[o] = stat_val
+                        s_map[o.replace('_', '/')] = stat_val
+                        s_map[o.replace('/', '_')] = stat_val
+                        if o.startswith('0'):
+                            s_map[o[1:]] = stat_val
+            return s_map
     except: return {}
 
-def nexus_parse_date(ds):
+def nexus_parse_date(date_str):
     try:
-        for fmt in ("%Y-%m-%d","%d/%m/%Y","%m/%d/%Y","%d-%b-%y","%Y/%m/%d"):
-            try: return datetime.strptime(ds.split(" ")[0], fmt)
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%Y/%m/%d'):
+            try: return datetime.strptime(date_str.split(' ')[0], fmt)
             except: continue
     except: pass
     return None
 
-def nexus_get_sheet(name, force=False):
-    """Fetch one sheet — /tmp file cache + memory cache."""
-    cache_key = f"sheet_{name}"
-    if not force:
-        cached = _nx_read(cache_key)
-        if cached is not None:
-            return cached
-    url = NEXUS_SOURCES.get(name, "")
-    if not url: return _nx_read(cache_key) or []
-    fresh = nexus_fetch_sheet_data(url, name)
-    if fresh:
-        _nx_write(cache_key, fresh)
-        return fresh
-    # Fetch failed — return stale if available
-    stale = _nx_read.__wrapped__(cache_key) if hasattr(_nx_read,'__wrapped__') else None
-    try:
-        path = _nx_cache_path(cache_key)
-        if os.path.exists(path):
-            with open(path,"rb") as f: return pickle.load(f)
-    except: pass
-    return []
-
-def nexus_get_kerry_status(force=False):
-    cache_key = "kerry_status"
-    if not force:
-        cached = _nx_read(cache_key)
-        if cached is not None:
-            return cached
-    fresh = nexus_fetch_kerry_status(NEXUS_KERRY_STATUS_URL)
-    if fresh:
-        _nx_write(cache_key, fresh)
-        return fresh
-    try:
-        path = _nx_cache_path(cache_key)
-        if os.path.exists(path):
-            with open(path,"rb") as f: return pickle.load(f)
-    except: pass
-    return {}
-
 def nexus_sync_db(force=False):
-    """Return all sheets — from cache where possible, fetch missing ones in parallel."""
+    global NEXUS_GLOBAL_CACHE
+    now = time.time()
+    if not force and now - NEXUS_GLOBAL_CACHE['time'] < 300 and NEXUS_GLOBAL_CACHE['sheets']:
+        return NEXUS_GLOBAL_CACHE['sheets'], NEXUS_GLOBAL_CACHE['kerry']
+
     res = {}
-    to_fetch = []
-    for name in NEXUS_SOURCES:
-        cached = _nx_read(f"sheet_{name}")
-        if cached is not None and not force:
-            res[name] = cached
-        else:
-            to_fetch.append(name)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
+        f_sheets = {exe.submit(nexus_fetch_sheet_data, url, name): name for name, url in NEXUS_SOURCES.items()}
+        f_kerry = exe.submit(nexus_fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
+        for f in concurrent.futures.as_completed(f_sheets):
+            res[f_sheets[f]] = f.result()
+        try: k_map = f_kerry.result()
+        except: k_map = {}
+        
+    NEXUS_GLOBAL_CACHE['time'] = now
+    NEXUS_GLOBAL_CACHE['sheets'] = res
+    NEXUS_GLOBAL_CACHE['kerry'] = k_map
+    return res, k_map
 
-    km = None if force else _nx_read("kerry_status")
 
-    # Only fetch what's missing/stale
-    if to_fetch or km is None:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
-            fs = {exe.submit(nexus_get_sheet, name, force): name for name in to_fetch}
-            fk = exe.submit(nexus_get_kerry_status, force) if km is None else None
-            try:
-                for f in concurrent.futures.as_completed(fs, timeout=9):
-                    name = fs[f]
-                    try: res[name] = f.result() or []
-                    except: res[name] = []
-            except concurrent.futures.TimeoutError:
-                for name in to_fetch:
-                    if name not in res: res[name] = []
-            if fk:
-                try: km = fk.result(timeout=2)
-                except: km = {}
 
-    # Fill any still missing with empty list
-    for name in NEXUS_SOURCES:
-        if name not in res: res[name] = []
-    if km is None: km = {}
-    return res, km
 
-@app.route("/api/nexus/refresh", methods=["POST"])
+
+# ------------------------------------------------------------------------------
+# 3. BACKEND API ROUTES
+# ------------------------------------------------------------------------------
+
+@app.route('/api/nexus/refresh', methods=['POST'])
 def api_nexus_refresh():
-    body = request.json or {}
-    sheet = body.get("sheet", None)
-    if sheet and sheet in NEXUS_SOURCES:
-        # Single sheet refresh — always within Vercel 10s
-        nexus_get_sheet(sheet, force=True)
-        return jsonify({"success": True, "sheet": sheet})
-    # Background warm — only fetches sheets not yet in /tmp cache
-    nexus_sync_db(force=False)
+    nexus_sync_db(force=True)
     return jsonify({"success": True})
 
-@app.route("/api/nexus/search", methods=["POST"])
+@app.route('/api/nexus/search', methods=['POST'])
 def api_nexus_search():
-    oids=[x.strip().lower() for x in re.split(r"[\n,\t\s]+",request.json.get("query","")) if x.strip()]
-    results=[]; sd,kd=nexus_sync_db()
-    for q in oids:
-        qs=q.replace("_","/"); qu=q.replace("/","_")
-        qz="0"+q if q.startswith("150") else q; qnz=q[1:] if q.startswith("0150") else q
-        found=False
-        for src,rows in sd.items():
+    order_ids = [x.strip().lower() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
+    results = []
+    sheets_data, kerry_data = nexus_sync_db()
+    
+    for q in order_ids:
+        q_slash = q.replace('_', '/')
+        q_under = q.replace('/', '_')
+        # Smart search match exclusively for 150
+        q_with_zero = '0' + q if q.startswith('150') else q
+        q_no_zero = q[1:] if q.startswith('0150') else q
+        
+        found = False
+        for src, rows in sheets_data.items():
             for r in rows:
-                oid,tr=r["order"].lower(),r["tid"].lower()
-                if q in oid or qs in oid or qu in oid or q in tr or qz in tr or qnz in tr:
-                    results.append({"order_id":r["order"].upper(),"source":src,"status":kd.get(oid,"N/A"),
-                        "date":r["date"],"boxes":r["boxes"],"weight":r["weight"],"vendor":r["vendor"],
-                        "customer":r["customer"],"country":r["country"],"tids":nexus_clean_tids(r["tid"]),"mawb":r["mawb"]})
-                    found=True; break
+                oid, tid_raw = r['order'].lower(), r['tid'].lower()
+                if (q in oid or q_slash in oid or q_under in oid or 
+                    q in tid_raw or q_with_zero in tid_raw or q_no_zero in tid_raw):
+                    k_stat = kerry_data.get(oid, "N/A")
+                    results.append({
+                        "order_id": r['order'].upper(), "source": src, "status": k_stat, 
+                        "date": r['date'], "boxes": r['boxes'], "weight": r['weight'], 
+                        "vendor": r['vendor'], "customer": r['customer'], "country": r['country'], 
+                        "tids": nexus_clean_tids(r['tid']), "mawb": r['mawb']
+                    })
+                    found = True; break
             if found: break
     return jsonify(results)
 
-@app.route("/api/nexus/track_real", methods=["POST"])
+@app.route('/api/nexus/track_real', methods=['POST'])
 def api_track_real():
-    # Parallel server-side tracking — ParcelsApp + 17track at same time
-    tid=(request.json or {}).get("tid","").strip()
-    if not tid: return jsonify({"success":False})
-    ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-    def sev(t,s,l,a): return {"time":str(t),"status":str(s) or "Update","loc":str(l),"active":a}
+    tid = request.json.get('tid', '')
+    if not tid: return jsonify({"success": False})
 
-    def detect_carrier(t):
-        if re.match(r'^1[56]\d{11,13}$', t) or re.match(r'^0?150\d{10,13}$', t): return 'dhl'
-        if re.match(r'^3\d{9,14}$', t): return 'dpd'
-        if re.match(r'^JD\d', t, re.I): return 'evri'
-        if re.match(r'^1Z[A-Z0-9]{15}', t, re.I): return 'ups'
-        if re.match(r'^YT\d', t, re.I): return 'yodel'
-        return 'unknown'
+    api_key = "8cbba2461aa13856fbaa27f4c26be113" 
+    target_url = f"https://www.ordertracker.com/track/{tid}"
+    scraper_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}"
 
-    def try_dhl_direct():
-        # DHL Parcel UK/EU direct — no API key
-        endpoints = [
-            f"https://www.dhl.com/gb-en/home/tracking/tracking-parcel.html?submit=1&tracking-id={tid}",
-            f"https://api-eu.dhl.com/track/shipments?trackingNumber={tid}",
-        ]
-        # DHL's website embeds tracking JSON in the page
-        req = urllib.request.Request(
-            f"https://www.dhl.com/gb-en/home/tracking/tracking-parcel.html?submit=1&tracking-id={tid}",
-            headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                     "Accept":"text/html","Accept-Language":"en-GB,en;q=0.9"})
-        with urllib.request.urlopen(req, timeout=7, context=ctx) as res:
-            html = res.read(1024*1024).decode("utf-8", errors="ignore")
-        # DHL embeds JSON in window.__DHL_TRACKING__ or similar
-        for pattern in [
-            r'"shipmentTrackingNumber"\s*:\s*"[^"]+".+?"events"\s*:\s*(\[.+?\])',
-            r'"events"\s*:\s*(\[.+?\])',
-            r'trackingData\s*=\s*(\{.+?\});',
-        ]:
-            m = re.search(pattern, html, re.DOTALL)
-            if m:
-                try:
-                    evs_raw = json.loads(m.group(1) if m.lastindex == 1 else m.group(0))
-                    if isinstance(evs_raw, list) and evs_raw:
-                        events = []
-                        for i, ev in enumerate(evs_raw[:20]):
-                            dt = str(ev.get('timestamp','') or ev.get('date','') or '')
-                            st = str(ev.get('description','') or ev.get('status','') or ev.get('message',''))
-                            lc = str(ev.get('location',{}).get('address',{}).get('addressLocality','') if isinstance(ev.get('location'),dict) else ev.get('location',''))
-                            if st: events.append(sev(dt,st,lc,i==0))
-                        if events: return {"success":True,"events":events,"carrier":"DHL","source":"DHL Direct"}
-                except: pass
-        return None
+    try:
+        req = urllib.request.Request(scraper_url, headers={'User-Agent': 'Mozilla/5.0'})
+        html = urllib.request.urlopen(req, timeout=25).read().decode('utf-8')
+        match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html)
+        if match:
+            data = json.loads(match.group(1))
+            def find_events(node):
+                if isinstance(node, dict):
+                    if 'events' in node and isinstance(node['events'], list) and len(node['events']) > 0:
+                        if 'description' in node['events'][0] or 'status' in node['events'][0]:
+                            return node['events']
+                    for k, v in node.items():
+                        found = find_events(v)
+                        if found: return found
+                elif isinstance(node, list):
+                    for item in node:
+                        found = find_events(item)
+                        if found: return found
+                return None
+            
+            raw_events = find_events(data)
+            if raw_events:
+                events = []
+                for i, ev in enumerate(raw_events):
+                    events.append({
+                        "time": ev.get("date", "Unknown Time"),
+                        "status": ev.get("description", ev.get("status", "Update")),
+                        "loc": ev.get("location", ""),
+                        "active": i == 0 
+                    })
+                return jsonify({"success": True, "events": events})
+    except Exception as e: pass
+    return jsonify({"success": False, "tid": tid})
 
-    def try_dpd_direct():
-        # DPD UK public tracking JSON
-        req = urllib.request.Request(
-            f"https://www.dpd.co.uk/apps/tracking/response.do?method=getHierarchy&parcelNumber={tid}",
-            headers={"User-Agent":"Mozilla/5.0","Accept":"application/json",
-                     "Referer":f"https://www.dpd.co.uk/apps/tracking/?REF={tid}"})
-        with urllib.request.urlopen(req, timeout=7, context=ctx) as res:
-            data = json.loads(res.read().decode("utf-8"))
-        events = []
-        for d in (data if isinstance(data,list) else [data]):
-            scans = d.get('parcel',{}).get('parcelScanDetails',[]) or d.get('scans',[]) or []
-            for i,sc in enumerate(scans):
-                dt = str(sc.get('localScanDate','') or sc.get('date',''))
-                st = str(sc.get('scanDescription','') or sc.get('status',''))
-                lc = str(sc.get('localScanCity','') or sc.get('location',''))
-                if st: events.append(sev(dt,st,lc,i==0))
-        return {"success":True,"events":events,"carrier":"DPD","source":"DPD Direct"} if events else None
-
-    def try_evri_direct():
-        # Evri (Hermes) public tracking
-        req = urllib.request.Request(
-            f"https://www.evri.com/api/ship/shipment/{tid}/tracking",
-            headers={"User-Agent":"Mozilla/5.0","Accept":"application/json",
-                     "Referer":f"https://www.evri.com/track-a-parcel#/results?trackNum={tid}"})
-        with urllib.request.urlopen(req, timeout=7, context=ctx) as res:
-            data = json.loads(res.read().decode("utf-8"))
-        evs = data.get('events') or data.get('trackingEvents') or []
-        events = [sev(ev.get('eventDatetime',''),ev.get('eventDescription','') or ev.get('status',''),
-                      ev.get('depotName','') or ev.get('location',''),i==0) for i,ev in enumerate(evs)]
-        return {"success":True,"events":events,"carrier":"Evri","source":"Evri Direct"} if events else None
-
-    def try_parcelsapp():
-        url=f"https://parcelsapp.com/api/v3/shipments/tracking?trackingNumbers={urllib.parse.quote(tid)}&language=en&country=GB"
-        req=urllib.request.Request(url,headers={
-            "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept":"application/json",
-            "Referer":f"https://parcelsapp.com/en/tracking/{tid}",
-            "Origin":"https://parcelsapp.com"
-        })
-        with urllib.request.urlopen(req,timeout=7,context=ctx) as res:
-            data=json.loads(res.read().decode("utf-8"))
-        ships=data.get("shipments") or []
-        if not ships: return None
-        ship=ships[0]; evs=ship.get("events") or []
-        if not evs: return None
-        carrier=ship.get("carrier","")
-        if isinstance(carrier,list): carrier=", ".join(x.get("name","") for x in carrier if x.get("name"))
-        events=[]
-        for i,ev in enumerate(evs):
-            l=str(ev.get("location","") or ""); cy=str(ev.get("country","") or "")
-            fl=(l+(", "+cy if cy and cy not in l else "")).strip(", ")
-            events.append(sev(ev.get("date","") or ev.get("time",""),ev.get("description","") or ev.get("status",""),fl,i==0))
-        return {"success":True,"events":events,"carrier":carrier,"source":"ParcelsApp"} if events else None
-
-    def try_17track():
-        payload=json.dumps({"data":[{"num":tid}]}).encode("utf-8")
-        req=urllib.request.Request("https://buyer.17track.net/orderapi/call",data=payload,headers={
-            "User-Agent":"Mozilla/5.0","Content-Type":"application/json",
-            "Accept":"application/json","17token":"321UctxG7l5bPkEhUHaQvlBJdTBWfqzS"
-        })
-        with urllib.request.urlopen(req,timeout=7,context=ctx) as res:
-            data=json.loads(res.read().decode("utf-8"))
-        acc=((data.get("data") or {}).get("accepted") or [])
-        if not acc: return None
-        track=acc[0].get("track") or {}
-        all_evs=(track.get("z0") or [])+(track.get("z1") or [])
-        events=[sev(ev.get("a",""),ev.get("z","") or ev.get("c",""),ev.get("l",""),i==0) for i,ev in enumerate(all_evs)]
-        return {"success":True,"events":events,"carrier":track.get("c",""),"source":"17track"} if events else None
-
-    def try_ship24():
-        # Ship24 public tracking API — free, no key needed
-        url = f"https://api.ship24.com/public/v1/tracking/search?trackingNumber={urllib.parse.quote(tid)}"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json",
-            "Origin": "https://www.ship24.com",
-            "Referer": f"https://www.ship24.com/tracking?p={urllib.parse.quote(tid)}",
-        })
-        with urllib.request.urlopen(req, timeout=7, context=ctx) as res:
-            data = json.loads(res.read().decode("utf-8"))
-        # ship24 response: {"data":{"trackings":[{"tracker":{},"shipment":{},"events":[]}]}}
-        trackings = (data.get("data") or {}).get("trackings") or []
-        if not trackings: return None
-        tr = trackings[0]
-        evs = tr.get("events") or []
-        carrier = ""
-        trackers_info = tr.get("tracker") or {}
-        if isinstance(trackers_info, dict):
-            carrier = str(trackers_info.get("courierCode","") or trackers_info.get("name","") or "")
-        events = []
-        for i, ev in enumerate(evs):
-            dt  = str(ev.get("datetime","") or ev.get("occurrenceDatetime","") or "")
-            st  = str(ev.get("status","") or ev.get("statusMilestone","") or ev.get("message",""))
-            lc  = str(ev.get("location","") or ev.get("city","") or "")
-            ct  = str(ev.get("country","") or "")
-            loc = (lc + (", "+ct if ct and ct not in lc else "")).strip(", ")
-            if st: events.append(sev(dt, st, loc, i==0))
-        return {"success":True,"events":events,"carrier":carrier,"source":"Ship24"} if events else None
-
-    # Carrier-direct first (fastest + most accurate), then aggregators
-    carrier = detect_carrier(tid)
-    direct_fns = []
-    if carrier == 'dhl':   direct_fns.append(try_dhl_direct)
-    elif carrier == 'dpd': direct_fns.append(try_dpd_direct)
-    elif carrier == 'evri':direct_fns.append(try_evri_direct)
-
-    # Run carrier-direct + all aggregators in parallel — first result wins
-    all_fns = direct_fns + [try_parcelsapp, try_17track, try_ship24]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(all_fns)) as exe:
-        futures = [exe.submit(fn) for fn in all_fns]
-        for f in concurrent.futures.as_completed(futures, timeout=8):
-            try:
-                result = f.result()
-                if result and result.get('events'):
-                    return jsonify(result)
-            except Exception as e:
-                print(f"[NEXUS TRACK] {e}")
-
-    return jsonify({"success":False,"tid":tid})
-
-
-@app.route("/api/nexus/radar_data", methods=["GET"])
+# 🚨 THE ULTIMATE HANDED OVER RADAR ENGINE 🚨
+@app.route('/api/nexus/radar_data', methods=['GET'])
 def api_nexus_radar_data():
-    sd,kd=nexus_sync_db()
-    buckets={"handed_over":{s:[] for s in NEXUS_SOURCES}}
-    for src,rows in sd.items():
+    sheets_data, kerry_data = nexus_sync_db()
+    buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES} }
+    
+    for src, rows in sheets_data.items():
         for r in rows:
-            oid=str(r.get("order","")).strip()
-            if not oid or oid.lower() in ["n/a","nan"]: continue
-            ks=str(kd.get(oid.lower(),"PENDING")).upper()
-            if "HANDEDOVER" not in ks.replace(" ","").replace("_",""): continue
-            tids=nexus_clean_tids(r.get("tid",""))
-            if not tids: continue
-            mawb=str(r.get("mawb","")).strip()
-            if not mawb or mawb.lower() in ["n/a","nan","none","pending","-"]: continue
-            buckets["handed_over"][src].append({"Order":oid.upper(),"Date":r.get("date","N/A"),
-                "Vendor":r.get("vendor","N/A"),"Customer":r.get("customer","N/A"),
-                "Boxes":r.get("boxes","N/A"),"TID":", ".join(tids),"MAWB":mawb,"Status":ks})
+            oid = str(r.get('order', '')).strip()
+            if not oid or oid.lower() in ['n/a', 'nan']: continue
+            
+            k_stat = str(kerry_data.get(oid.lower(), "PENDING")).upper()
+            
+            # CONDITION 1: Kerry Status must contain HANDED OVER (Flexible spacing checker)
+            k_stat_clean = k_stat.replace(" ", "").replace("_", "")
+            if "HANDEDOVER" not in k_stat_clean:
+                continue
+                
+            # CONDITION 2: Must have a Real Valid TID (Not "Pending")
+            tids = nexus_clean_tids(r.get('tid', ''))
+            if len(tids) == 0:
+                continue
+                
+            # CONDITION 3: Must have MAWB updated
+            mawb = str(r.get('mawb', '')).strip()
+            if not mawb or mawb.lower() in ['n/a', 'nan', 'none', 'pending', '-']:
+                continue
+            
+            # Success: All 3 Conditions Met! Add to dashboard.
+            buckets["handed_over"][src].append({ 
+                "Order": oid.upper(), 
+                "Date": r.get('date', 'N/A'), 
+                "Vendor": r.get('vendor', 'N/A'), 
+                "Customer": r.get('customer', 'N/A'), 
+                "Boxes": r.get('boxes', 'N/A'), 
+                "TID": ", ".join(tids), 
+                "MAWB": mawb, 
+                "Status": k_stat 
+            })
+            
     return jsonify(buckets)
 
-@app.route("/api/nexus/ops_commander", methods=["GET"])
+@app.route('/api/nexus/ops_commander', methods=['GET'])
 def api_nexus_ops_commander():
-    sd,kd=nexus_sync_db()
-    blame=[]; txt="Hi Kerry Team,\nThe following orders are Handed Over but missing TIDs. Kindly update ASAP:\n\n"; ct=1
-    for src,rows in sd.items():
+    sheets_data, kerry_data = nexus_sync_db()
+    blame_radar = []
+    missing_text = "Hi Kerry Team,\nThe following orders have been Handed Over but are missing Tracking IDs. Kindly update ASAP:\n\n"
+    count = 1
+    for src, rows in sheets_data.items():
         for r in rows:
-            dt=nexus_parse_date(r["date"])
-            if not dt or dt<NEXUS_FILTER_DATE: continue
-            oid=r["order"]; ks=str(kd.get(oid.lower(),"PENDING")).upper().replace(" ","").replace("_","")
-            has_tid=len(nexus_clean_tids(r["tid"]))>0
-            days=(datetime.now()-dt).days if dt else 0
-            if "HANDEDOVER" in ks and not has_tid and days>1:
-                blame.append({"order":oid.upper(),"source":src,"issue":"Missing TID","aging":f"{days} Days","blame":"Kerry Logistics"})
-                txt+=f"{ct}. Order: {oid.upper()} | Date: {r['date']} | Source: {src}\n"; ct+=1
-            elif ks in ["QCPENDING","CREATED","ACCEPTED"] and days>2:
-                blame.append({"order":oid.upper(),"source":src,"issue":"Stuck in QC","aging":f"{days} Days","blame":f"{src} Operations"})
-    if ct==1: txt="All good! No missing TIDs currently."
-    return jsonify({"blame_radar":sorted(blame,key=lambda x:int(x["aging"].split()[0]),reverse=True),"missing_text":txt})
+            dt_obj = nexus_parse_date(r['date'])
+            if not dt_obj or dt_obj < NEXUS_FILTER_DATE: continue
+            oid = r['order']
+            k_stat = str(kerry_data.get(oid.lower(), "PENDING")).upper()
+            k_stat_clean = k_stat.replace(" ", "").replace("_", "")
+            
+            has_tid = len(nexus_clean_tids(r['tid'])) > 0
+            days = (datetime.now() - dt_obj).days if dt_obj else 0
+            
+            if "HANDEDOVER" in k_stat_clean and not has_tid and days > 1:
+                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Missing TID", "aging": f"{days} Days", "blame": "Kerry Logistics"})
+                missing_text += f"{count}. Order: {oid.upper()} | Date: {r['date']} | Source: {src}\n"
+                count += 1
+            elif k_stat_clean in ["QCPENDING", "CREATED", "ACCEPTED"] and days > 2:
+                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Stuck in QC", "aging": f"{days} Days", "blame": f"{src} Operations"})
+    if count == 1: missing_text = "All good! No missing TIDs currently."
+    return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
 
+# ------------------------------------------------------------------------------
+# 4. FRONTEND UI
+# ------------------------------------------------------------------------------
 
-@app.route("/api/nexus/debug_sheets")
-def api_nexus_debug_sheets():
-    """Debug: see raw first 3 rows from each sheet + TID extraction"""
-    uv=session.get("username") or session.get("user") or session.get("role")
-    if not uv or str(uv).lower()!="admin":
-        return jsonify({"error":"Access denied"}),403
-    ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-    out={}
-    for name,url in NEXUS_SOURCES.items():
-        try:
-            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
-            with urllib.request.urlopen(req,timeout=10,context=ctx) as res:
-                data=list(csv.reader(res.read().decode("utf-8",errors="ignore").splitlines()))
-            col=NEXUS_SHEET_MAP.get(name,{})
-            header=data[0] if data else []
-            # Show key columns
-            key_cols={k:{"col_num":v,"header":header[v-1] if len(header)>=v else "OUT OF RANGE"} for k,v in col.items()}
-            # Show sample rows with TID column
-            samples=[]
-            for row in data[1:4]:
-                if not any(row): continue
-                p=row+[""]*60
-                tid_raw=str(p[col.get("t",1)-1]).strip() if "t" in col else ""
-                samples.append({
-                    "order": str(p[col.get("o",1)-1]).strip(),
-                    "date":  str(p[col.get("d",2)-1]).strip(),
-                    "tid_raw": tid_raw,
-                    "tid_col": col.get("t","?"),
-                    "tids_extracted": nexus_clean_tids(tid_raw),
-                    "total_cols_in_row": len(row)
-                })
-            out[name]={"total_rows":len(data),"mapped_cols":key_cols,"samples":samples}
-        except Exception as e:
-            out[name]={"error":str(e)}
-    return jsonify(out)
-
-@app.route("/nexus")
+@app.route('/nexus')
 def nexus_dashboard():
-    uv=session.get("username") or session.get("user") or session.get("role")
-    if not uv or str(uv).lower()!="admin":
-        return "<div style='text-align:center;padding:100px;background:#000;color:#fff;height:100vh'><h2>Access Denied</h2><a href='/' style='color:#8b5cf6'>Go Back</a></div>",403
-    return render_template_string(NEXUS_HTML)
+    user_val = session.get('username') or session.get('user') or session.get('role')
+    if not user_val or str(user_val).lower() != 'admin':
+        return "<div style='text-align:center; padding:100px; font-family:sans-serif; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2><p>Only Admin users can access the TID Operations Hub.</p><a href='/' style='color:#10B981;'>Go Back</a></div>", 403
 
+    return render_template_string('''
+    <!DOCTYPE html><html lang="en" data-theme="dark">
+    <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        
+        :root { 
+            --bg: #000000; --card: #0A0A0A; --border: #1A1A1A; --text: #FAFAFA; --muted: #71717A; 
+            --accent: #FFFFFF; --btn-bg: #FFFFFF; --btn-text: #000000;
+            --shadow: 0 10px 30px -10px rgba(0,0,0,0.8); --badge-bg: #1A1A1A; --badge-text: #FAFAFA; --input-bg: #050505;
+        }
+        [data-theme="light"] { 
+            --bg: #F8F9FB; --card: #FFFFFF; --border: #E5E7EB; --text: #111827; --muted: #6B7280; 
+            --accent: #111827; --btn-bg: #111827; --btn-text: #FFFFFF;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); --badge-bg: #F3F4F6; --badge-text: #111827; --input-bg: #FFFFFF;
+        }
 
-NEXUS_HTML = r"""<!DOCTYPE html>
-<html lang="en" data-theme="dark">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NEXUS Hub</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='gold' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%23f4d03f'/%3E%3Cstop offset='50%25' style='stop-color:%23d4a853'/%3E%3Cstop offset='100%25' style='stop-color:%23b8942d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='46' fill='%230a0a0f' stroke='url(%23gold)' stroke-width='4'/%3E%3Ctext x='50' y='42' text-anchor='middle' font-family='Arial Black' font-size='24' font-weight='bold' fill='url(%23gold)'%3E3P%3C/text%3E%3Ctext x='50' y='68' text-anchor='middle' font-family='Arial' font-size='16' font-weight='bold' fill='%23d4a853'%3ELOGISTICS%3C/text%3E%3Ccircle cx='50' cy='50' r='42' fill='none' stroke='%23d4a853' stroke-width='1' opacity='0.3'/%3E%3C/svg%3E">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-[data-theme="dark"]{--bg:#000;--s1:#0c0c0c;--s2:#111;--s3:#161616;--bd:#1e1e1e;--bd2:#282828;--t1:#f0f0f0;--t2:#b8b8b8;--t3:#555;--card:#0c0c0c;--sidebar:#070707;--sb-border:#1a1a1a;--sb-text:#888;--sb-active-bg:rgba(138,43,226,0.16);--sb-active-border:#7c3aed;--sb-active-text:#c4b5fd;--input:#050505;--shadow:0 2px 12px rgba(0,0,0,.9);--acc:#8b5cf6;--acc2:#7c3aed;--green:#22c55e;--purple:#a78bfa;--yellow:#fbbf24;--red:#f87171;}
-[data-theme="light"]{--bg:#f1f5f9;--s1:#fff;--s2:#f8fafc;--s3:#f1f5f9;--bd:#e2e8f0;--bd2:#cbd5e1;--t1:#0f172a;--t2:#1e293b;--t3:#475569;--card:#fff;--sidebar:#fff;--sb-border:#e2e8f0;--sb-text:#64748b;--sb-active-bg:rgba(109,40,217,.08);--sb-active-border:#7c3aed;--sb-active-text:#6d28d9;--input:#f8fafc;--shadow:0 1px 4px rgba(0,0,0,.07);--acc:#7c3aed;--acc2:#6d28d9;--green:#16a34a;--purple:#7c3aed;--yellow:#d97706;--red:#dc2626;}
-html,body{height:100%;}
-body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);overflow:hidden;}
-.app-wrap{display:flex;height:100vh;overflow:hidden;}
-.sidebar{width:240px;flex-shrink:0;border-right:1px solid var(--sb-border);display:flex;flex-direction:column;overflow:hidden;z-index:100;transition:width .2s ease;}
-[data-theme="dark"] .sidebar{background:linear-gradient(180deg,#0a0a0a,#060606);box-shadow:4px 0 20px rgba(0,0,0,.5);}
-[data-theme="light"] .sidebar{background:#fff;box-shadow:2px 0 12px rgba(0,0,0,.06);}
-.sidebar.collapsed{width:60px;}
-.sidebar.collapsed .sb-info,.sidebar.collapsed .sb-tab-label,.sidebar.collapsed .sb-tab-dot,.sidebar.collapsed .sb-section-label,.sidebar.collapsed .theme-lbl,.sidebar.collapsed .sb-foot-divider,.sidebar.collapsed .sb-user-info,.sidebar.collapsed .sb-last-update,.sidebar.collapsed .sb-back-lbl{display:none;}
-.sidebar.collapsed .sb-tab{justify-content:center;padding:10px;gap:0;}
-.sidebar.collapsed .sb-tab-icon{width:32px;height:32px;}
-.sidebar.collapsed .sb-foot{padding:10px 6px;}
-.sidebar.collapsed .theme-pill,.sidebar.collapsed .sb-back{justify-content:center;padding:9px;}
-.sidebar.collapsed .sb-nav{padding:8px 6px;}
-.sb-head{padding:18px 16px 14px;border-bottom:1px solid var(--sb-border);}
-.sb-logo-wrap{display:flex;align-items:center;gap:10px;}
-.sb-ico{width:36px;height:36px;flex-shrink:0;background:linear-gradient(135deg,#5b21b6,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 3px 12px rgba(139,92,246,.5);}
-.sb-title{font-size:13px;font-weight:800;color:#fff;letter-spacing:-.3px;white-space:nowrap;}
-[data-theme="light"] .sb-title{color:#0f172a;}
-.sb-sub{font-size:10px;color:var(--sb-text);margin-top:2px;white-space:nowrap;}
-.sb-nav{flex:1;overflow-y:auto;padding:10px 8px;display:flex;flex-direction:column;gap:2px;}
-.sb-nav::-webkit-scrollbar{width:0;}
-.sb-section-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:var(--t3);padding:8px 8px 4px;margin-top:4px;}
-.sb-tab{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;font-size:12px;font-weight:600;color:var(--sb-text);cursor:pointer;transition:.15s;border:1px solid transparent;background:transparent;font-family:inherit;text-align:left;white-space:nowrap;}
-[data-theme="dark"] .sb-tab:hover{color:#e2e2e2;background:rgba(255,255,255,.07);}
-[data-theme="light"] .sb-tab:hover{color:#0f172a;background:rgba(0,0,0,.04);}
-.sb-tab.active{color:var(--sb-active-text);background:var(--sb-active-bg);border-color:rgba(139,92,246,.25);}
-[data-theme="dark"] .sb-tab.active{box-shadow:inset 3px 0 0 var(--sb-active-border);}
-[data-theme="light"] .sb-tab.active{color:#6d28d9;}
-.sb-tab-icon{font-size:14px;flex-shrink:0;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:rgba(255,255,255,.04);}
-[data-theme="light"] .sb-tab-icon{background:rgba(0,0,0,.04);}
-.sb-tab.active .sb-tab-icon{background:rgba(139,92,246,.2);}
-[data-theme="light"] .sb-tab.active .sb-tab-icon{background:rgba(109,40,217,.1);}
-.sb-tab-label{flex:1;}
-.sb-tab-dot{width:6px;height:6px;border-radius:50%;background:var(--acc);opacity:0;flex-shrink:0;}
-.sb-tab.active .sb-tab-dot{opacity:1;box-shadow:0 0 6px var(--acc);}
-.sb-foot{padding:12px 8px;border-top:1px solid var(--sb-border);display:flex;flex-direction:column;gap:6px;}
-.sb-foot-divider{height:1px;background:var(--sb-border);margin:2px 0;}
-.theme-pill{display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,.04);border:1px solid var(--sb-border);border-radius:10px;cursor:pointer;font-size:11px;font-weight:700;color:var(--sb-text);transition:.2s;font-family:inherit;width:100%;}
-.theme-pill:hover{border-color:var(--acc);color:var(--sb-active-text);background:var(--sb-active-bg);}
-[data-theme="light"] .theme-pill{background:#f8fafc;border-color:#e2e8f0;color:#475569;}
-.sb-back{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;font-size:11px;font-weight:700;color:var(--sb-text);text-decoration:none;transition:.15s;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);}
-[data-theme="dark"] .sb-back:hover{color:#fff;background:rgba(255,255,255,.1);}
-[data-theme="light"] .sb-back{border-color:rgba(0,0,0,.08);background:rgba(0,0,0,.02);color:#475569;}
-[data-theme="light"] .sb-back:hover{color:#0f172a;background:rgba(0,0,0,.06);}
-.sb-user-card{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.12);border-radius:10px;}
-.sb-user-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0;}
-.sb-user-email{font-size:10px;font-weight:700;color:var(--t2);}
-.sb-user-role{font-size:9px;color:var(--sb-text);text-transform:uppercase;letter-spacing:.6px;}
-.sb-last-update{font-size:9px;color:var(--sb-text);padding:0 4px;}
-.main-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-.topbar{display:flex;justify-content:space-between;align-items:center;padding:0 24px;height:56px;flex-shrink:0;border-bottom:1px solid var(--bd);box-shadow:var(--shadow);}
-[data-theme="dark"] .topbar{background:#0a0a0a;border-bottom-color:#1a1a1a;}
-[data-theme="light"] .topbar{background:#fff;}
-.tb-left{display:flex;align-items:center;gap:12px;}
-.tb-page-title{font-size:16px;font-weight:800;color:var(--t1);letter-spacing:-.4px;}
-.sb-toggle-fixed{background:var(--s2);border:1px solid var(--bd);cursor:pointer;color:var(--t2);padding:7px 9px;border-radius:9px;transition:.15s;display:flex;align-items:center;justify-content:center;}
-.sb-toggle-fixed:hover{color:var(--t1);border-color:var(--acc);}
-.tbtn{padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:.15s;border:1px solid transparent;}
-.tbtn:hover{transform:translateY(-1px);}
-.tbtn-refresh{background:linear-gradient(135deg,#16a34a,#22c55e);color:#000;box-shadow:0 3px 12px rgba(34,197,94,.3);}
-.main{flex:1;overflow-y:auto;padding:22px 24px;}
-.main::-webkit-scrollbar{width:6px;}
-.main::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:3px;}
-.pane{display:none;animation:fadeIn .2s ease;}
-.pane.active{display:block;}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
-.search-wrap{background:var(--s2);border:1px solid var(--bd);border-radius:14px;padding:20px;margin-bottom:18px;}
-.fi-label{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
-textarea.fi{width:100%;background:var(--input);border:1.5px solid var(--bd);color:var(--t1);padding:14px 16px;border-radius:10px;font-family:monospace;font-size:13px;outline:none;resize:vertical;min-height:90px;transition:.2s;line-height:1.6;}
-textarea.fi:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(139,92,246,.12);}
-textarea.fi::placeholder{color:var(--t3);}
-.btn-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
-.btn{padding:9px 20px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:.15s;border:1px solid transparent;}
-.btn:hover{transform:translateY(-1px);}
-.btn-primary{background:linear-gradient(135deg,var(--acc2),var(--acc));color:#fff;box-shadow:0 3px 12px rgba(139,92,246,.3);}
-.btn-outline{background:transparent;border-color:var(--bd);color:var(--t2);}
-.btn-outline:hover{border-color:var(--acc);color:var(--t1);}
-.btn-green{background:linear-gradient(135deg,#16a34a,#22c55e);color:#000;box-shadow:0 3px 12px rgba(34,197,94,.3);}
-.track-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:var(--shadow);animation:fadeIn .25s ease;}
-[data-theme="dark"] .track-card{background:#0d0d0d;}
-.track-header{padding:16px 20px;border-bottom:1px solid var(--bd);display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px;}
-[data-theme="dark"] .track-header{background:#111;}
-[data-theme="light"] .track-header{background:#f8fafc;}
-.meta-col{display:flex;flex-direction:column;gap:4px;}
-.meta-lbl{font-size:9px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;}
-.meta-val{font-size:13px;font-weight:600;color:var(--t1);}
-.tid-area{padding:14px 18px;display:flex;flex-direction:column;gap:10px;}
-.tid-box{background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:13px 15px;display:flex;flex-direction:column;gap:10px;}
-[data-theme="dark"] .tid-box{background:#111;}
-.tid-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
-.tid-num{font-family:monospace;font-weight:800;font-size:14px;color:var(--acc);word-break:break-all;}
-.tl-box{display:none;background:var(--s1);border:1px solid var(--bd);border-radius:10px;padding:18px;margin-top:4px;animation:fadeIn .2s ease;}
-[data-theme="dark"] .tl-box{background:#060606;border-color:#1a1a1a;}
-.tl-src{font-size:10px;font-weight:700;color:var(--t3);margin-bottom:12px;display:block;text-transform:uppercase;letter-spacing:.8px;}
-.tl-wrap{border-left:2px solid var(--bd2);padding-left:20px;margin-left:6px;}
-.tl-item{position:relative;margin-bottom:20px;animation:fadeIn .3s ease;}
-.tl-item:last-child{margin-bottom:0;}
-.tl-dot{position:absolute;left:-26px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--bd2);border:2px solid var(--bg);}
-.tl-dot.active{background:var(--green);box-shadow:0 0 10px rgba(34,197,94,.5);}
-.tl-time{font-size:11px;color:var(--t3);font-weight:700;margin-bottom:3px;display:block;}
-.tl-status{font-size:13px;font-weight:600;color:var(--t1);margin-bottom:2px;display:block;}
-.tl-loc{font-size:11px;color:var(--t3);display:block;}
-.no-data{text-align:center;padding:20px;}
-.radar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;}
-.radar-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:22px;cursor:pointer;transition:.2s;display:flex;justify-content:space-between;align-items:center;}
-[data-theme="dark"] .radar-card{background:#0d0d0d;}
-.radar-card:hover{border-color:var(--green);transform:translateY(-3px);box-shadow:0 8px 32px rgba(34,197,94,.12);}
-.radar-count{font-size:38px;font-weight:900;color:var(--green);letter-spacing:-2px;line-height:1;}
-.radar-lbl{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-top:2px;}
-.radar-src{font-size:13px;font-weight:800;color:var(--t2);}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:20px;box-shadow:var(--shadow);}
-[data-theme="dark"] .card{background:#0d0d0d;}
-.ops-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
-table{width:100%;border-collapse:collapse;}
-thead th{padding:11px 14px;font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:800;border-bottom:1px solid var(--bd);letter-spacing:1px;position:sticky;top:0;}
-[data-theme="dark"] thead th{background:#0f0f0f;}
-[data-theme="light"] thead th{background:#f8fafc;}
-tbody td{padding:11px 14px;font-size:12px;border-bottom:1px solid var(--bd);font-weight:500;}
-tbody tr:last-child td{border-bottom:none;}
-.badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;border:1px solid transparent;}
-.bg{background:rgba(34,197,94,.1);color:var(--green);border-color:rgba(34,197,94,.25);}
-.bp{background:rgba(139,92,246,.1);color:var(--purple);border-color:rgba(139,92,246,.25);}
-.by{background:rgba(251,191,36,.1);color:var(--yellow);border-color:rgba(251,191,36,.25);}
-.br{background:rgba(248,113,113,.1);color:var(--red);border-color:rgba(248,113,113,.25);}
-.bd{background:var(--s3);color:var(--t3);border-color:var(--bd);}
-.tbl-wrap{max-height:380px;overflow-y:auto;border:1px solid var(--bd);border-radius:10px;}
-.loader-wrap{padding:50px;text-align:center;}
-.loader{width:28px;height:28px;border:3px solid var(--bd);border-top-color:var(--acc);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto;}
-.loader-txt{margin-top:12px;font-size:12px;color:var(--t3);font-weight:600;}
-@keyframes spin{to{transform:rotate(360deg);}}
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);z-index:200;display:none;padding:32px;overflow-y:auto;}
-.modal-box{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:30px;max-width:1200px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,.8);}
-[data-theme="dark"] .modal-box{background:#0d0d0d;}
-.empty{text-align:center;padding:50px;color:var(--t3);}
-</style>
-</head>
-<body>
-<div class="app-wrap">
-<aside class="sidebar" id="sidebar">
-  <div class="sb-head">
-    <div class="sb-logo-wrap">
-      <div class="sb-ico">🛰️</div>
-      <div class="sb-info"><div class="sb-title">NEXUS Hub</div><div class="sb-sub">TID Operations Centre</div></div>
-    </div>
-  </div>
-  <nav class="sb-nav">
-    <div class="sb-section-label">Operations</div>
-    <button class="sb-tab active" onclick="navSwitch(this,'track')"><span class="sb-tab-icon">🔍</span><span class="sb-tab-label">Global Scanner</span><span class="sb-tab-dot"></span></button>
-    <button class="sb-tab" onclick="navSwitch(this,'direct')"><span class="sb-tab-icon">🚢</span><span class="sb-tab-label">Direct Track</span><span class="sb-tab-dot"></span></button>
-    <button class="sb-tab" onclick="navSwitch(this,'radar')"><span class="sb-tab-icon">📦</span><span class="sb-tab-label">Handed Over Radar</span><span class="sb-tab-dot"></span></button>
-    <button class="sb-tab" onclick="navSwitch(this,'ops')"><span class="sb-tab-icon">⚡</span><span class="sb-tab-label">Ops Commander</span><span class="sb-tab-dot"></span></button>
-  </nav>
-  <div class="sb-foot">
-    <button class="theme-pill" onclick="toggleTheme()"><span id="thIco">☀️</span><span class="theme-lbl" id="thLbl">Light Mode</span></button>
-    <a href="/" class="sb-back">
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 11L5 7l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span class="sb-back-lbl">Main Dashboard</span>
-    </a>
-    <div class="sb-foot-divider"></div>
-    <div class="sb-user-card"><div class="sb-user-avatar">A</div><div class="sb-user-info"><div class="sb-user-email">Admin User</div><div class="sb-user-role">Administrator</div></div></div>
-    <div class="sb-last-update" id="sbSync">🕐 Last sync: —</div>
-  </div>
-</aside>
-<div class="main-wrap">
-  <div class="topbar">
-    <div class="tb-left">
-      <button class="sb-toggle-fixed" onclick="toggleSidebar()">
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="4.5" width="14" height="1.8" rx=".9" fill="currentColor"/><rect x="2" y="8.1" width="9" height="1.8" rx=".9" fill="currentColor"/><rect x="2" y="11.7" width="14" height="1.8" rx=".9" fill="currentColor"/></svg>
-      </button>
-      <div class="tb-page-title" id="tbTitle">🔍 Global Scanner</div>
-    </div>
-    <button class="tbtn tbtn-refresh" onclick="hardRefresh()">🔄 Refresh</button>
-  </div>
-  <div class="main">
-    <div class="pane active" id="pane-track">
-      <div class="search-wrap">
-        <div class="fi-label">🔍 Paste Order IDs or TIDs</div>
-        <textarea class="fi" id="searchInput" placeholder="e.g. 133325_02, 133325/02, 15503700028520..."></textarea>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="searchOrders()">⚡ Scan Matrix</button>
-          <button class="btn btn-outline" onclick="g('searchInput').value='';g('trackResults').innerHTML=''">Clear</button>
-          <button class="btn btn-green" id="bulkTrackBtn" style="display:none" onclick="bulkTrackAll('trackResults')">🚀 Bulk Track All</button>
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; overflow: hidden;}
+        * { box-sizing: border-box; }
+        
+        .app-container { display: flex; height: 100vh; width: 100vw; flex-direction: column; }
+        .topbar { height: 64px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; z-index: 10;}
+        .brand { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px;}
+        .theme-toggle { background: var(--input-bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.2s;}
+        
+        .main-wrapper { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: 260px; background: var(--bg); border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; gap: 8px;}
+        .nav-item { padding: 14px 18px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; border: none; background: transparent; text-align: left; transition: 0.2s; display: flex; align-items: center;}
+        .nav-item:hover { color: var(--text); background: var(--card); }
+        .nav-item.active { background: var(--card); color: var(--accent); border: 1px solid var(--border); }
+        
+        .viewport { flex: 1; padding: 40px 50px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: var(--shadow); }
+        .card.hoverable { cursor: pointer; transition: 0.2s; }
+        .card.hoverable:hover { transform: translateY(-4px); border-color: #10B981; box-shadow: 0 10px 40px -10px rgba(16,185,129,0.2); }
+        
+        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; transition: 0.2s;}
+        .btn:hover { opacity: 0.8; transform: translateY(-1px);}
+        .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        .btn.outline:hover { background: var(--border); }
+        
+        textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--text); font-family: monospace; font-size: 15px; outline: none; resize: vertical; min-height: 100px; transition: 0.2s;}
+        textarea:focus { border-color: #444; }
+        
+        .badge { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--badge-bg); color: var(--badge-text); text-transform: uppercase; letter-spacing: 0.5px;}
+        .badge.success { background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3);}
+        
+        .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;}
+        .stat-value { font-size: 40px; font-weight: 800; color: #10B981; margin-bottom: 4px; letter-spacing: -1px;}
+        .stat-label { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 1px;}
+        
+        .track-card { border-radius: 16px; overflow: hidden; margin-bottom: 24px; padding: 0; border: 1px solid var(--border);}
+        .track-header { padding: 24px 30px; border-bottom: 1px solid var(--border); background: var(--input-bg); display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 20px;}
+        .meta-col { display: flex; flex-direction: column; gap: 6px; }
+        .meta-lbl { font-size: 11px; color: var(--muted); font-weight: 700; display:flex; align-items:center; gap: 6px; text-transform:uppercase;}
+        .meta-val { font-size: 14px; font-weight: 600;}
+        
+        .tid-area { padding: 30px; background: var(--card);}
+        .tid-strip { display: flex; flex-direction: column; gap: 20px; padding-bottom: 8px;}
+        .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; transition: 0.3s;}
+        
+        .native-timeline-box { display: none; background: #050505; border: 1px solid #222; border-radius: 12px; padding: 30px; margin-top: 10px; }
+        .tl-container { border-left: 2px solid #222; padding-left: 25px; margin-left: 10px; }
+        .tl-item { position: relative; margin-bottom: 30px; animation: fadeIn 0.4s ease forwards; }
+        .tl-item:last-child { margin-bottom: 0; }
+        .tl-dot { position: absolute; left: -32px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: #222; border: 3px solid #000; }
+        .tl-dot.active { background: #10B981; box-shadow: 0 0 10px rgba(16,185,129,0.5); border-color: #050505; }
+        .tl-time { font-size: 12px; color: #888; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.5px; display:block;}
+        .tl-status { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; display:block;}
+        .tl-loc { font-size: 12px; color: #555; display:block;}
+        
+        .fallback-container { text-align: center; padding: 30px; background: #080808; border-radius: 12px; border: 1px dashed #222; }
+        .fallback-btn { display: inline-block; background: #fff; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none; margin-top: 15px; transition: 0.2s; }
+        .fallback-btn:hover { opacity: 0.8; transform: translateY(-2px); }
+
+        .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
+        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.8);}
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { padding: 16px 20px; font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 800; border-bottom: 1px solid var(--border); letter-spacing: 1px;}
+        td { padding: 16px 20px; font-size: 14px; border-bottom: 1px solid var(--border); font-weight: 500;}
+        tr:hover { background: #111; }
+        
+        .loader { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: auto;}
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style></head>
+    <body>
+    <div class="app-container">
+        <header class="topbar">
+            <div class="brand">🛰️ NEXUS HUB</div>
+            <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
+        </header>
+        <div class="main-wrapper">
+            <aside class="sidebar">
+                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Operations</div>
+                <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
+                <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct Track</button>
+                <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over Radar</button>
+                <button class="nav-item" onclick="navSwitch(this, 'view-ops')">⚡ Ops Commander</button>
+                <div style="flex:1"></div>
+                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
+            </aside>
+            <main class="viewport">
+                <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Global Tracking Matrix</h1>
+                
+                <div id="view-track" class="view-pane active">
+                    <div class="card" style="margin-bottom: 30px;">
+                        <textarea id="searchInput" placeholder="Paste Order IDs (e.g., 1234_12 or 1234/12) or TIDs..."></textarea>
+                        <div style="margin-top: 20px; display: flex; gap: 16px;">
+                            <button class="btn" onclick="searchOrders()">Scan Matrix</button>
+                            <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
+                            <button class="btn" id="bulkTrackBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('tracking-results')">⚡ Bulk Track All</button>
+                        </div>
+                    </div>
+                    <div id="tracking-results"></div>
+                </div>
+
+                <div id="view-direct" class="view-pane" style="display:none;">
+                    <div class="card" style="margin-bottom: 30px;">
+                        <textarea id="directInput" placeholder="Paste multiple Carrier TIDs here directly..."></textarea>
+                        <div style="margin-top: 20px; display: flex; gap: 16px;">
+                            <button class="btn" onclick="directTrackTIDs()">Extract TIDs</button>
+                            <button class="btn outline" onclick="document.getElementById('directInput').value=''; document.getElementById('direct-results').innerHTML=''; document.getElementById('bulkDirectBtn').style.display='none';">Clear</button>
+                            <button class="btn" id="bulkDirectBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('direct-results')">⚡ Bulk Track All</button>
+                        </div>
+                    </div>
+                    <div id="direct-results" style="display:flex; flex-direction:column; gap:16px;"></div>
+                </div>
+                
+                <div id="view-radar" class="view-pane" style="display:none;">
+                    <div id="loader" style="display:none; padding:60px; text-align:center;"><div class="loader"></div><div style="margin-top:15px; color:var(--muted); font-weight:600;">Scanning Valid TIDs & MAWBs...</div></div>
+                    <div id="radar-container" class="radar-grid"></div>
+                </div>
+
+                <div id="view-ops" class="view-pane" style="display:none;">
+                    <div id="ops-loader" style="display:none; padding:60px; text-align:center;"><div class="loader"></div></div>
+                    <div id="ops-content" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; display:none;">
+                        <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">🚨 Aging Blame</h3><div style="max-height:400px; overflow-y:auto"><table id="blameTable"></table></div></div>
+                        <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">📲 Follow-up Bot</h3><textarea id="followupText" style="min-height:300px; border:none; background:var(--bg);" readonly></textarea><button class="btn" style="width:100%; margin-top:16px;" onclick="copyFollowup()">Copy Text</button></div>
+                    </div>
+                </div>
+            </main>
         </div>
-      </div>
-      <div id="trackResults"></div>
     </div>
-    <div class="pane" id="pane-direct">
-      <div class="search-wrap">
-        <div class="fi-label">🚢 Paste Carrier TIDs Directly</div>
-        <textarea class="fi" id="directInput" placeholder="Paste multiple TIDs here..."></textarea>
-        <div class="btn-row">
-          <button class="btn btn-primary" onclick="directTrackTIDs()">Extract &amp; Display</button>
-          <button class="btn btn-outline" onclick="g('directInput').value='';g('directResults').innerHTML=''">Clear</button>
-          <button class="btn btn-green" id="bulkDirectBtn" style="display:none" onclick="bulkTrackAll('directResults')">🚀 Bulk Track All</button>
+
+    <div id="detailPanel" class="modal" onclick="if(event.target==this)this.style.display='none'">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:30px">
+                <div>
+                    <h2 id="modalTitle" style="margin:0; font-size:24px; font-weight: 800;">Handed Over Orders</h2>
+                    <p style="color:var(--muted); margin:5px 0 0 0; font-size:13px;">Showing orders with valid TID and MAWB</p>
+                </div>
+                <div style="display:flex; gap:16px;">
+                    <button class="btn outline" onclick="downloadCSV()">Export CSV</button>
+                    <button class="btn" style="background:#EF4444; border:none; color:white;" onclick="document.getElementById('detailPanel').style.display='none'">✖ Close View</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto; max-height: 65vh; border: 1px solid var(--border); border-radius: 12px;"><table id="detailTable"></table></div>
         </div>
-      </div>
-      <div id="directResults" style="display:flex;flex-direction:column;gap:12px"></div>
     </div>
-    <div class="pane" id="pane-radar">
-      <div id="radarLoader" class="loader-wrap" style="display:none"><div class="loader"></div><div class="loader-txt">Scanning valid TIDs &amp; MAWBs...</div></div>
-      <div id="radarGrid" class="radar-grid"></div>
-    </div>
-    <div class="pane" id="pane-ops">
-      <div id="opsLoader" class="loader-wrap" style="display:none"><div class="loader"></div><div class="loader-txt">Loading ops data...</div></div>
-      <div id="opsContent" style="display:none">
-        <div class="ops-grid">
-          <div class="card" style="margin:0"><div style="font-size:14px;font-weight:800;margin-bottom:14px">🚨 Aging Blame Radar</div><div class="tbl-wrap"><table id="blameTable"></table></div></div>
-          <div class="card" style="margin:0"><div style="font-size:14px;font-weight:800;margin-bottom:14px">📲 Follow-up Bot</div><textarea class="fi" id="followupText" style="min-height:260px" readonly></textarea><button class="btn btn-primary" style="width:100%;margin-top:12px;justify-content:center" onclick="copyFollowup()">📋 Copy</button></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-</div>
-<div class="modal" id="detailModal" onclick="if(event.target===this)this.style.display='none'">
-  <div class="modal-box">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
-      <div><div style="font-size:18px;font-weight:800" id="modalTitle">Handed Over Orders</div><div style="font-size:11px;color:var(--t3);margin-top:3px">Valid TID and MAWB confirmed</div></div>
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-outline" onclick="downloadCSV()">📥 Export CSV</button>
-        <button class="btn" style="background:var(--red);color:#fff;border:none" onclick="g('detailModal').style.display='none'">✕ Close</button>
-      </div>
-    </div>
-    <div style="overflow-x:auto;max-height:60vh;border:1px solid var(--bd);border-radius:10px"><table id="detailTable"></table></div>
-  </div>
-</div>
-<script>
-const g=id=>document.getElementById(id);
-let _radar=null,_det=[],_pane='track';
-const TITLES={track:'🔍 Global Scanner',direct:'🚢 Direct Track',radar:'📦 Handed Over Radar',ops:'⚡ Ops Commander'};
 
-// Sidebar
-function toggleSidebar(){
-  const sb=g('sidebar');sb.classList.toggle('collapsed');
-  try{localStorage.setItem('nx_sb',sb.classList.contains('collapsed')?'1':'0');}catch(e){}
-}
-(function(){try{if(localStorage.getItem('nx_sb')==='1')g('sidebar').classList.add('collapsed');}catch(e){}})();
+    <script>
+        function toggleTheme() {
+            const root = document.documentElement;
+            const isDark = root.getAttribute('data-theme') === 'dark';
+            const target = isDark ? 'light' : 'dark';
+            root.setAttribute('data-theme', target);
+            localStorage.setItem('nexus_theme', target);
+            document.getElementById('themeBtn').innerText = isDark ? '🌙 Dark Mode' : '☀️ Light Mode';
+        }
+        const savedTheme = localStorage.getItem('nexus_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
 
-// Theme
-function toggleTheme(){
-  const h=document.documentElement,dark=h.getAttribute('data-theme')==='dark';
-  h.setAttribute('data-theme',dark?'light':'dark');
-  g('thIco').textContent=dark?'🌙':'☀️';g('thLbl').textContent=dark?'Dark Mode':'Light Mode';
-  try{localStorage.setItem('nx_theme',dark?'light':'dark');}catch(e){}
-}
-(function(){
-  try{
-    const t=localStorage.getItem('nx_theme')||'dark';
-    document.documentElement.setAttribute('data-theme',t);
-    if(t==='light'){document.addEventListener('DOMContentLoaded',()=>{
-      if(g('thIco'))g('thIco').textContent='🌙';if(g('thLbl'))g('thLbl').textContent='Dark Mode';
-    });}
-  }catch(e){}
-})();
+        window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
 
-// Nav
-function navSwitch(btn,name){
-  document.querySelectorAll('.sb-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');
-  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));g('pane-'+name).classList.add('active');
-  g('tbTitle').textContent=TITLES[name]||name;_pane=name;
-  if(name==='radar'&&!_radar)loadRadar();
-  if(name==='ops')loadOps();
-}
+        let activeBucket = ''; let activeDetails = []; let radarData = null;
 
-async function hardRefresh(){
-  const btn=document.querySelector('.tbtn-refresh');
-  if(btn){btn.disabled=true;btn.textContent='⏳ Refreshing...';}
-  g('sbSync').textContent='🕐 Refreshing...'; _radar=null;
-  // Refresh each sheet sequentially to avoid Vercel timeout
-  const sheets=["Kerry","APX","ECL QC Center","ECL Zone","GE QC Center","GE Zone"];
-  for(const s of sheets){
-    g('sbSync').textContent=`🕐 Refreshing ${s}...`;
-    try{
-      await fetch('/api/nexus/refresh',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({sheet:s,force:true})});
-    }catch(e){}
-  }
-  if(btn){btn.disabled=false;btn.innerHTML='🔄 Refresh';}
-  g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
-  if(_pane==='radar')loadRadar();
-  if(_pane==='ops')loadOps();
-}
-window.onload=()=>{
-  g('sbSync').textContent='🕐 Last sync: '+new Date().toLocaleTimeString('en-GB');
-  // One background warm — uses /tmp cache, only fetches stale sheets
-  fetch('/api/nexus/refresh',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({})}).catch(()=>{});
-};
+        function navSwitch(btn, viewType) {
+            document.querySelectorAll('.nav-item').forEach(l=>l.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.view-pane').forEach(v=>v.style.display='none');
+            
+            if(viewType === 'view-track') {
+                document.getElementById('view-track').style.display = 'block';
+                document.getElementById('view-title').innerText = "Global Tracking Matrix";
+            } else if(viewType === 'view-direct') {
+                document.getElementById('view-direct').style.display = 'block';
+                document.getElementById('view-title').innerText = "Direct TID Tracker";
+            } else if(viewType === 'view-ops') {
+                document.getElementById('view-ops').style.display = 'block';
+                document.getElementById('view-title').innerText = "Ops Commander";
+                loadOps();
+            } else {
+                document.getElementById('view-radar').style.display = 'block';
+                document.getElementById('view-title').innerText = btn.innerText.replace('📦 ', '');
+                activeBucket = viewType; loadRadar();
+            }
+        }
 
-function sBadge(s){
-  const sc=(s||'').replace(/[_\s]/g,'').toLowerCase();
-  if(sc.includes('delivered'))return`<span class="badge bg">${s}</span>`;
-  if(sc.includes('handed')||sc.includes('freight'))return`<span class="badge bp">${s}</span>`;
-  if(sc.includes('qc')||sc.includes('pending'))return`<span class="badge by">${s}</span>`;
-  if(sc.includes('cancel'))return`<span class="badge br">${s}</span>`;
-  return`<span class="badge bd">${s}</span>`;
-}
+        async function searchOrders() {
+            const q = document.getElementById('searchInput').value; if(!q) return;
+            document.getElementById('tracking-results').innerHTML = '<div style="padding:60px;text-align:center"><div class="loader"></div></div>';
+            document.getElementById('bulkTrackBtn').style.display = 'none';
+            const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
+            const data = await r.json(); renderCards(data);
+        }
 
-function mkTidBox(tid){
-  const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
-  return`<div class="tid-box"><div class="tid-top"><span class="tid-num">${tid}</span><button class="btn btn-outline sync-btn" style="padding:5px 12px;font-size:11px;flex-shrink:0" onclick="trackTID('${tid}',this)">🔍 Track</button></div><div id="tl-${cid}" class="tl-box"></div></div>`;
-}
+        function renderCards(data) {
+            let h = '';
+            let hasTids = false;
+            data.forEach(item => {
+                const isDelivered = item.status.toLowerCase().includes('delivered');
+                if(item.tids.length > 0) hasTids = true;
+                h += `<div class="card track-card">
+                    <div class="track-header">
+                        <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:800; font-size: 16px; color: var(--accent);">${item.order_id}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">📅 Date</span><span class="meta-val">${item.date}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">🏢 Source</span><span class="meta-val">${item.source}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">🏭 Vendor</span><span class="meta-val">${item.vendor}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">👤 Customer</span><span class="meta-val">${item.customer}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">🌍 Country</span><span class="meta-val">${item.country}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">📦 Boxes/Wgt</span><span class="meta-val">${item.boxes} / ${item.weight}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">✈️ MAWB</span><span class="meta-val" style="font-family:monospace;">${item.mawb}</span></div>
+                        <div class="meta-col"><span class="meta-lbl">🚦 Status</span><span class="badge ${isDelivered?'success':''}">${item.status}</span></div>
+                    </div>
+                    <div class="tid-area">
+                        <div class="tid-strip">
+                            ${item.tids.map(tid => {
+                                const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
+                                return `
+                                <div class="tid-box">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
+                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
+                                    </div>
+                                    <div id="native-${cleanId}" class="native-timeline-box"></div>
+                                </div>
+                            `}).join('')}
+                        </div>
+                    </div>
+                </div>`;
+            });
+            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted); font-weight:600; padding: 40px; border: 1px dashed var(--border); border-radius: 12px;">No matching records found.</div>';
+            if(hasTids) document.getElementById('bulkTrackBtn').style.display = 'block';
+        }
 
-async function searchOrders(){
-  const q=g('searchInput').value;if(!q.trim())return;
-  g('trackResults').innerHTML='<div class="loader-wrap"><div class="loader"></div><div class="loader-txt">Scanning matrix...</div></div>';
-  g('bulkTrackBtn').style.display='none';
-  const r=await fetch('/api/nexus/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
-  const data=await r.json();
-  if(!data.length){g('trackResults').innerHTML='<div class="empty"><div style="font-size:36px">🔭</div><div style="margin-top:10px;font-weight:600">No matching records found</div></div>';return;}
-  let ht=false;
-  g('trackResults').innerHTML=data.map(it=>{
-    if(it.tids.length)ht=true;
-    const th=it.tids.length?it.tids.map(t=>mkTidBox(t)).join(''):'<div style="font-size:12px;color:var(--t3);padding:6px 0">No TIDs found</div>';
-    return`<div class="track-card"><div class="track-header">
-      <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:900;font-size:15px;color:var(--acc)">${it.order_id}</span></div>
-      <div class="meta-col"><span class="meta-lbl">📅 Date</span><span class="meta-val">${it.date}</span></div>
-      <div class="meta-col"><span class="meta-lbl">🏢 Source</span><span class="meta-val">${it.source}</span></div>
-      <div class="meta-col"><span class="meta-lbl">🏭 Vendor</span><span class="meta-val">${it.vendor}</span></div>
-      <div class="meta-col"><span class="meta-lbl">👤 Customer</span><span class="meta-val">${it.customer}</span></div>
-      <div class="meta-col"><span class="meta-lbl">🌍 Country</span><span class="meta-val" style="color:var(--green)">${it.country}</span></div>
-      <div class="meta-col"><span class="meta-lbl">📦 Boxes/Wt</span><span class="meta-val">${it.boxes} / ${it.weight}</span></div>
-      <div class="meta-col"><span class="meta-lbl">✈️ MAWB</span><span class="meta-val" style="font-family:monospace;font-size:11px">${it.mawb}</span></div>
-      <div class="meta-col"><span class="meta-lbl">🚦 Status</span>${sBadge(it.status)}</div>
-    </div><div class="tid-area">${th}</div></div>`;
-  }).join('');
-  if(ht)g('bulkTrackBtn').style.display='flex';
-}
+        async function directTrackTIDs() {
+            let val = document.getElementById('directInput').value; if(!val) return;
+            
+            // Replicate the robust cleaning for direct input
+            val = val.replace(/[^a-zA-Z0-9,\/\s;]/g, '');
+            val = val.replace(/(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})/g, ' $1 ');
+            let tids = val.split(/[,\/\s;]+/).map(t => t.trim()).filter(Boolean);
+            
+            let finalTids = [];
+            tids.forEach(t => {
+                if (t.length > 6 && !['tracking', 'number', 'pending', 'orderno'].includes(t.toLowerCase())) {
+                    if (t.startsWith('150') && t.length >= 12 && !t.startsWith('0')) {
+                        finalTids.push('0' + t);
+                    } else {
+                        finalTids.push(t);
+                    }
+                }
+            });
+            
+            let h = '';
+            [...new Set(finalTids)].forEach(tid => {
+                const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
+                h += `<div class="tid-box card" style="width:100%; border: 1px solid var(--border);">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
+                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
+                        </div>
+                        <div id="native-${cleanId}" class="native-timeline-box"></div>
+                      </div>`;
+            });
+            document.getElementById('direct-results').innerHTML = h;
+            if(finalTids.length > 0) document.getElementById('bulkDirectBtn').style.display = 'block';
+        }
 
-async function directTrackTIDs(){
-  let val=g('directInput').value;if(!val.trim())return;
-  val=val.replace(/(1[56]\d{12,14}|1Z[A-Z0-9]{15,18}|JD\d{10,18}|YT\d{10,18})/g,' $1 ');
-  const tids=[...new Set(val.split(/[\s,;\/]+/).map(t=>t.trim()).filter(t=>t.length>6&&/\d/.test(t)))];
-  if(!tids.length){g('directResults').innerHTML='<div class="empty">No valid TIDs found</div>';return;}
-  g('directResults').innerHTML=tids.map(tid=>{
-    const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
-    return`<div class="card" style="margin:0"><div class="tid-top"><span class="tid-num">${tid}</span><button class="btn btn-outline sync-btn" style="padding:5px 12px;font-size:11px;flex-shrink:0" onclick="trackTID('${tid}',this)">🔍 Track</button></div><div id="tl-${cid}" class="tl-box" style="margin-top:10px"></div></div>`;
-  }).join('');
-  g('bulkDirectBtn').style.display='flex';
-}
+        async function bulkTrackAll(containerId) {
+            const container = document.getElementById(containerId);
+            const btns = container.querySelectorAll('.sync-btn');
+            for(let btn of btns) {
+                if(btn.innerText !== '✖ Close Tracker') {
+                    btn.click();
+                    await new Promise(r => setTimeout(r, 600)); 
+                }
+            }
+        }
 
-async function bulkTrackAll(cid){
-  const btns=g(cid).querySelectorAll('.sync-btn');
-  for(let b of btns){if(!b.textContent.includes('Close')){b.click();await new Promise(r=>setTimeout(r,900));}}
-}
+        async function loadNativeTimeline(tid, btn) {
+            const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
+            const box = document.getElementById('native-' + cleanId);
 
-// ── MAIN TRACKING FUNCTION — browser-side with timeouts, server fallback ──
+            if(box.style.display === 'block') {
+                box.style.display = 'none';
+                btn.innerHTML = '🔍 Track Native';
+                btn.style.background = 'transparent';
+                btn.style.color = 'var(--text)';
+                btn.style.border = '1px solid var(--border)';
+                return;
+            }
 
-  // Helper: fetch with AbortController timeout
-  async function ftch(url, opts, ms=8000){
-    const ctrl=new AbortController();
-    const timer=setTimeout(()=>ctrl.abort(),ms);
-    try{ const r=await fetch(url,{...opts,signal:ctrl.signal}); clearTimeout(timer); return r; }
-    catch(e){ clearTimeout(timer); throw e; }
-  }
+            btn.innerHTML = '<div class="loader" style="width:14px; height:14px; border-width:2px;"></div>';
+            
+            const r = await fetch('/api/nexus/track_real', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tid:tid})});
+            const data = await r.json();
+            
+            btn.innerHTML = '✖ Close Tracker';
+            btn.style.background = '#1A1A1A';
+            btn.style.color = '#fff';
+            btn.style.border = '1px solid #333';
+            box.style.display = 'block';
 
-async function trackTID(tid,btn){
-  const cid=tid.replace(/[^a-zA-Z0-9]/g,'');
-  const box=g('tl-'+cid);
-  if(box.style.display==='block'){
-    box.style.display='none';btn.textContent='🔍 Track';
-    btn.className='btn btn-outline sync-btn';btn.style='padding:5px 12px;font-size:11px;flex-shrink:0';
-    return;
-  }
-  btn.innerHTML='<div class="loader" style="width:12px;height:12px;border-width:2px;display:inline-block;vertical-align:middle"></div>';
-  btn.disabled=true; box.style.display='block';
-  box.innerHTML='<div class="loader-wrap" style="padding:16px"><div class="loader"></div><div class="loader-txt">Fetching live data...</div></div>';
+            if(data.success && data.events.length > 0) {
+                let timelineHtml = '<div class="tl-container">';
+                data.events.forEach(e => {
+                    timelineHtml += `
+                        <div class="tl-item">
+                            <div class="tl-dot ${e.active ? 'active' : ''}"></div>
+                            <span class="tl-time">${e.time}</span>
+                            <span class="tl-status">${e.status}</span>
+                            <span class="tl-loc">${e.loc}</span>
+                        </div>
+                    `;
+                });
+                timelineHtml += '</div>';
+                box.innerHTML = timelineHtml;
+            } else {
+                box.innerHTML = `
+                    <div class="fallback-container">
+                        <div style="font-size: 30px; margin-bottom: 10px;">📦</div>
+                        <h3 style="margin: 0 0 5px 0; color: #fff;">Connect to Courier Gateway</h3>
+                        <p style="color: #666; font-size: 13px; margin: 0 0 15px 0;">To view live detailed data, open the secure tracking portal.</p>
+                        <button class="fallback-btn" onclick="window.open('https://parcelsapp.com/en/tracking/${tid}', '_blank', 'width=500,height=750,top=100,left=100,scrollbars=yes');">🚢 View on ParcelsApp ↗</button>
+                    </div>
+                `;
+            }
+        }
 
-  function sev(t,s,l,a){return{time:t||'',status:s||'Update',loc:l||'',active:a};}
-  function showTL(evs,source,carrier){
-    if(!evs||!evs.length)return false;
-    const src=`<span class="tl-src">📡 ${source}${carrier?' · '+carrier:''}</span>`;
-    const items=evs.map(e=>`<div class="tl-item"><div class="tl-dot${e.active?' active':''}"></div><span class="tl-time">${e.time}</span><span class="tl-status">${e.status}</span><span class="tl-loc">${e.loc}</span></div>`).join('');
-    box.innerHTML=src+'<div class="tl-wrap">'+items+'</div>';
-    btn.textContent='✕ Close';btn.className='btn btn-outline sync-btn';
-    btn.style='padding:5px 12px;font-size:11px;flex-shrink:0;border-color:var(--red);color:var(--red)';
-    btn.disabled=false; return true;
-  }
-  function noData(){
-    box.innerHTML='<div class="no-data"><div style="font-size:28px">📭</div><div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:10px">No tracking data yet</div><div style="font-size:11px;color:var(--t3);margin-top:6px">Shipment may not be scanned by carrier yet</div></div>';
-    btn.textContent='✕ Close';btn.className='btn btn-outline sync-btn';
-    btn.style='padding:5px 12px;font-size:11px;flex-shrink:0';btn.disabled=false;
-  }
+        // 🚨 HANDED OVER DASHBOARD LOGIC 🚨
+        async function loadRadar() {
+            const container = document.getElementById('radar-container'); container.innerHTML = ''; 
+            document.getElementById('loader').style.display = 'block';
+            const r = await fetch('/api/nexus/radar_data'); radarData = await r.json();
+            document.getElementById('loader').style.display = 'none';
+            const order = ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"];
+            order.forEach(src => {
+                const arr = radarData['handed_over'][src] || [];
+                container.innerHTML += `
+                    <div class="card hoverable" onclick="showDetails('${src}')" style="display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-weight:800; font-size:16px; text-transform:uppercase;">${src}</div>
+                        <div style="text-align:right;"><div class="stat-value">${arr.length}</div><div class="stat-label">Valid Orders</div></div>
+                    </div>
+                `;
+            });
+        }
 
-  // Backend-only tracking (server-side = no CORS issues)
-  // ParcelsApp + 17track run in parallel on the server
-  try{
-    const r=await ftch(
-      '/api/nexus/track_real',
-      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tid})},
-      9000
-    );
-    const d=await r.json();
-    if(d.success&&d.events&&d.events.length){
-      if(showTL(d.events,d.source||'Live',d.carrier||''))return;
-    }
-  }catch(e){console.log('[TRACK]',e.message);}
+        async function loadOps() {
+            document.getElementById('ops-content').style.display = 'none';
+            document.getElementById('ops-loader').style.display = 'block';
+            const r = await fetch('/api/nexus/ops_commander'); const data = await r.json();
+            document.getElementById('followupText').value = data.missing_text;
+            let t = '<thead><tr><th>Order</th><th>Source</th><th>Issue</th><th>Aging</th></tr></thead><tbody>';
+            if(!data.blame_radar.length) t += '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--muted)">All Good! 🎉</td></tr>';
+            else data.blame_radar.forEach(b => t += `<tr><td><b>${b.order}</b></td><td>${b.source}</td><td>${b.issue}</td><td style="color:#ef4444; font-weight:700">${b.aging}</td></tr>`);
+            document.getElementById('blameTable').innerHTML = t + '</tbody>';
+            document.getElementById('ops-content').style.display = 'grid';
+            document.getElementById('ops-loader').style.display = 'none';
+        }
+        
+        function copyFollowup() { navigator.clipboard.writeText(document.getElementById('followupText').value); alert("Copied to clipboard!"); }
 
-  noData();
-}
+        function showDetails(src) {
+            activeDetails = radarData['handed_over'][src]; 
+            if(!activeDetails || activeDetails.length === 0) return;
+            document.getElementById('modalTitle').innerText = src + " - Handed Over";
+            let thead = '<thead><tr>' + Object.keys(activeDetails[0]).map(k=>`<th>${k}</th>`).join('') + '</tr></thead>';
+            let tbody = '<tbody>' + activeDetails.map(r=>'<tr>' + Object.values(r).map(v=>`<td>${v}</td>`).join('') + '</tr>').join('') + '</tbody>';
+            document.getElementById('detailTable').innerHTML = thead + tbody;
+            document.getElementById('detailPanel').style.display = 'block';
+        }
 
-
-// Radar
-async function loadRadar(){
-  g('radarGrid').innerHTML='';g('radarLoader').style.display='block';
-  const r=await fetch('/api/nexus/radar_data');_radar=await r.json();
-  g('radarLoader').style.display='none';
-  const order=["ECL QC Center","ECL Zone","GE QC Center","GE Zone","APX","Kerry"];
-  const icons={"ECL QC Center":"🏭","ECL Zone":"📦","GE QC Center":"🏢","GE Zone":"🗃️","APX":"✈️","Kerry":"🚢"};
-  g('radarGrid').innerHTML=order.map(src=>{
-    const arr=_radar.handed_over[src]||[];
-    return`<div class="radar-card" onclick="showDet('${src}')"><div><div class="radar-src">${icons[src]||''} ${src}</div><div style="font-size:11px;color:var(--t3);margin-top:4px">Click to view details</div></div><div style="text-align:right"><div class="radar-count">${arr.length}</div><div class="radar-lbl">Valid Orders</div></div></div>`;
-  }).join('');
-}
-
-// Ops
-async function loadOps(){
-  g('opsContent').style.display='none';g('opsLoader').style.display='block';
-  const r=await fetch('/api/nexus/ops_commander');const d=await r.json();
-  g('followupText').value=d.missing_text;
-  let t='<thead><tr><th>Order</th><th>Source</th><th>Issue</th><th>Aging</th></tr></thead><tbody>';
-  if(!d.blame_radar.length)t+='<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--t3)">All clear! 🎉</td></tr>';
-  else d.blame_radar.forEach(b=>t+=`<tr><td><b style="font-family:monospace;color:var(--acc)">${b.order}</b></td><td>${b.source}</td><td>${b.issue}</td><td><b style="color:var(--red)">${b.aging}</b></td></tr>`);
-  g('blameTable').innerHTML=t+'</tbody>';g('opsContent').style.display='block';g('opsLoader').style.display='none';
-}
-function copyFollowup(){navigator.clipboard.writeText(g('followupText').value).then(()=>alert('Copied!'));}
-
-// Modal
-function showDet(src){
-  _det=_radar.handed_over[src]||[];if(!_det.length)return;
-  g('modalTitle').textContent=src+' — Handed Over Orders';
-  const keys=Object.keys(_det[0]);
-  let t='<thead><tr>'+keys.map(k=>`<th>${k}</th>`).join('')+'</tr></thead><tbody>';
-  t+=_det.map(r=>'<tr>'+keys.map(k=>`<td>${r[k]||'—'}</td>`).join('')+'</tr>').join('');
-  g('detailTable').innerHTML=t+'</tbody>';g('detailModal').style.display='block';
-}
-function downloadCSV(){
-  if(!_det.length)return;
-  const h=Object.keys(_det[0]).join(',');
-  const rows=_det.map(r=>Object.values(r).map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');a.href=encodeURI('data:text/csv;charset=utf-8,'+h+'\n'+rows);a.download='nexus_handed_over.csv';a.click();
-}
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape')g('detailModal').style.display='none';
-  if((e.ctrlKey||e.metaKey)&&e.key==='f'){
-    const i=_pane==='track'?g('searchInput'):_pane==='direct'?g('directInput'):null;
-    if(i){e.preventDefault();i.focus();i.select();}
-  }
-});
-</script>
-</body></html>"""
-
+        function downloadCSV() {
+            if(!activeDetails.length) return;
+            const headers = Object.keys(activeDetails[0]).join(',');
+            const rows = activeDetails.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\\n');
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + headers + "\\n" + rows));
+            link.setAttribute("download", `nexus_handed_over_export.csv`); link.click();
+        }
+    </script>
+    </body></html>
+    ''')
 # ==============================================================================
-# BUNDLING INTELLIGENCE HUB
+# END OF CODE
+# ==============================================================================
 # ==============================================================================
 # ==============================================================================
 # BUNDLING INTELLIGENCE HUB — COMPLETE FINAL VERSION
@@ -3451,7 +5040,7 @@ BUNDLING_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bundling Intelligence Hub</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='gold' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' style='stop-color:%23f4d03f'/%3E%3Cstop offset='50%25' style='stop-color:%23d4a853'/%3E%3Cstop offset='100%25' style='stop-color:%23b8942d'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='50' cy='50' r='46' fill='%230a0a0f' stroke='url(%23gold)' stroke-width='4'/%3E%3Ctext x='50' y='42' text-anchor='middle' font-family='Arial Black' font-size='24' font-weight='bold' fill='url(%23gold)'%3E3P%3C/text%3E%3Ctext x='50' y='68' text-anchor='middle' font-family='Arial' font-size='16' font-weight='bold' fill='%23d4a853'%3ELOGISTICS%3C/text%3E%3Ccircle cx='50' cy='50' r='42' fill='none' stroke='%23d4a853' stroke-width='1' opacity='0.3'/%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111827'/%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%231e1b4b'/%3E%3Ctext x='16' y='14' font-family='Arial' font-size='7' font-weight='900' fill='%23a78bfa' text-anchor='middle'%3E3PL%3C/text%3E%3Ctext x='16' y='24' font-family='Arial' font-size='6' font-weight='700' fill='%2360a5fa' text-anchor='middle'%3EDASH%3C/text%3E%3C/svg%3E">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -5012,7 +6601,7 @@ function sw(name,tab){
 // UTILS
 // ============================================================
 function g(id){return document.getElementById(id);}
-function fi(d){if(!(d instanceof Date))return d;var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return y+"-"+m+"-"+dd;}
+function fi(d){return d instanceof Date?d.toISOString().split("T")[0]:d;}
 function gMon(d){d=new Date(d);const dy=d.getDay(),diff=d.getDate()-dy+(dy===0?-6:1);return new Date(d.setDate(diff));}
 function addD(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
 
@@ -6966,5 +8555,6 @@ document.addEventListener("keydown",e=>{
 window.onload=init;
 </script></body></html>"""
 
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
