@@ -83,25 +83,24 @@ def parse_date(date_str):
             continue
     return None
 
-def fetch_sheet_data(sheet_name):
-    cache_key = f"sheet_{sheet_name}"
-    current_time = time.time()
-    if cache_key in CACHE:
-        cached_data, cache_time = CACHE[cache_key]
-        if current_time - cache_time < CACHE_DURATION:
-            return cached_data
-    try:
-        encoded_name = urllib.parse.quote(sheet_name)
-        url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=30) as response:
-            content = response.read().decode('utf-8')
-            rows = list(csv.reader(content.splitlines()))
-            CACHE[cache_key] = (rows, current_time)
-            return rows
-    except Exception as e:
-        print(f"Error fetching {sheet_name}: {e}")
-        return []
+# ========== PROVIDERS ==========
+PROVIDERS = [
+    {'name': 'GLOBAL EXPRESS (QC)', 'short': 'GE QC', 'sheet': 'GE QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#3B82F6', 'group': 'GE'},
+    
+    {'name': 'GLOBAL EXPRESS (ZONE)', 'short': 'GE ZONE', 'sheet': 'GE QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 15, 'region_col': 16, 'order_col': 9, 'start_row': 2, 'color': '#8B5CF6', 'group': 'GE'},
+    
+    # 🔥 ECL QC - GID: 0 (Columns updated from screenshot)
+    # Order: A(0), Date: C(2), Boxes: D(3), Weight: E(4)
+    {'name': 'ECL LOGISTICS (QC)', 'short': 'ECL QC', 'sheet': '0', 'date_col': 2, 'box_col': 3, 'weight_col': 4, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#10B981', 'group': 'ECL'},
+    
+    # 🔥 ECL ZONE - GID: 928309568 (Columns updated from screenshot)
+    # Order: A(0), Date: D(3), Boxes: E(4), Weight: F(5)
+    {'name': 'ECL LOGISTICS (ZONE)', 'short': 'ECL ZONE', 'sheet': '928309568', 'date_col': 3, 'box_col': 4, 'weight_col': 5, 'region_col': 16, 'order_col': 0, 'start_row': 2, 'color': '#F59E0B', 'group': 'ECL'},
+    
+    {'name': 'KERRY', 'short': 'KERRY', 'sheet': 'Kerry', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#EF4444', 'group': 'OTHER'},
+    
+    {'name': 'APX', 'short': 'APX', 'sheet': 'APX', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#EC4899', 'group': 'OTHER'}
+]
 
 def get_star_rating(boxes):
     if boxes >= 1500: return 5
