@@ -84,7 +84,6 @@ def parse_date(date_str):
     return None
 
     def fetch_sheet_data(sheet_identifier):
-    import ssl
     cache_key = f"sheet_{sheet_identifier}"
     current_time = time.time()
     
@@ -94,15 +93,14 @@ def parse_date(date_str):
             return cached_data
             
     try:
-        identifier_str = str(sheet_identifier).strip()
+        sheet_str = str(sheet_identifier).strip()
         
-        # 🔥 The Ultimate Bypass: Agar number hai tou Direct GID Export
-        if identifier_str.isdigit():
-            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={identifier_str}'
-        elif identifier_str.startswith('http'):
-            url = identifier_str
+        # Agar number hai tou Direct CSV Export (No row limit)
+        if sheet_str.isdigit():
+            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={sheet_str}'
         else:
-            encoded_name = urllib.parse.quote(identifier_str)
+            # Agar naam hai tou purana tareeqa
+            encoded_name = urllib.parse.quote(sheet_str)
             url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
         
         ctx = ssl.create_default_context()
@@ -111,21 +109,17 @@ def parse_date(date_str):
         
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         
-        # Timeout barha diya hai taake heavy sheet aaraam se download ho
-        with urllib.request.urlopen(req, timeout=60, context=ctx) as response:
-            
-            # 🔥 MAGIC FIX: Streaming decoder (Line breaks aur memory issues ka 100% ilaaj)
-            decoded_lines = (line.decode('utf-8', errors='ignore') for line in response)
-            rows = list(csv.reader(decoded_lines))
-            
-            # Aapke server logs mein print hoga ke kitni rows aayin
-            print(f"✅ SUCCESS: Fetched {len(rows)} rows for sheet {identifier_str}")
+        with urllib.request.urlopen(req, timeout=45, context=ctx) as response:
+            # Simple aur error-free reading ('replace' error aane nahi dega)
+            content = response.read().decode('utf-8', errors='replace')
+            lines = content.splitlines()
+            rows = list(csv.reader(lines))
             
             CACHE[cache_key] = (rows, current_time)
             return rows
             
     except Exception as e:
-        print(f"❌ Error fetching {sheet_identifier}: {e}")
+        print(f"Error fetching {sheet_identifier}: {e}")
         return []
 
 def get_star_rating(boxes):
