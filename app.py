@@ -83,31 +83,34 @@ def parse_date(date_str):
             continue
     return None
 
-def fetch_sheet_data(sheet_name):
-    cache_key = f"sheet_{sheet_name}"
+def fetch_sheet_data(sheet_identifier):
+    cache_key = f"sheet_{sheet_identifier}"
     current_time = time.time()
+    
     if cache_key in CACHE:
         cached_data, cache_time = CACHE[cache_key]
         if current_time - cache_time < CACHE_DURATION:
             return cached_data
+            
     try:
-        # 🔥 MAGIC FIX: Agar naam numbers mein hai tou direct GID se fast export karega!
-        if str(sheet_name).isdigit():
-            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={sheet_name}'
+        # 🔥 Agar naam ki jagah GID number ('0') diya hai tou Direct CSV Download (No Limit) 🔥
+        if str(sheet_identifier).isdigit():
+            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={sheet_identifier}'
         else:
-            encoded_name = urllib.parse.quote(sheet_name)
+            # Agar purana naam diya hai tou wahi purana gviz link
+            encoded_name = urllib.parse.quote(sheet_identifier)
             url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
         
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=45, context=ctx) as response:
+        with urllib.request.urlopen(req, timeout=45) as response:
             content = response.read().decode('utf-8', errors='ignore')
             rows = list(csv.reader(content.splitlines()))
+            
             CACHE[cache_key] = (rows, current_time)
             return rows
+    except Exception as e:
+        print(f"Error fetching {sheet_identifier}: {e}")
+        return []
     except Exception as e:
         print(f"Error fetching {sheet_name}: {e}")
         return []
