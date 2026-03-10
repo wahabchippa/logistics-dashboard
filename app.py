@@ -93,36 +93,24 @@ def fetch_sheet_data(sheet_identifier):
             return cached_data
             
     try:
-        # Agar sheet_identifier sirf numbers hain (GID), to Direct Export URL use hoga
+        # 🔥 MAGIC FIX: Agar number (GID) hai tou Direct Export, warna purana gviz API
         if str(sheet_identifier).isdigit():
             url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={sheet_identifier}'
         else:
-            # Purana Sheet Name support
-            encoded_name = urllib.parse.quote(sheet_identifier)
+            encoded_name = urllib.parse.quote(str(sheet_identifier))
             url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
-        
-        # SSL Verification bypass for stability
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
         
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         
-        # Timeout ko 60 seconds kar diya hai kyunke 23k rows heavy hoti hain
-        with urllib.request.urlopen(req, timeout=60, context=ctx) as response:
+        # Simple request, no SSL conflicts
+        with urllib.request.urlopen(req, timeout=40) as response:
             content = response.read().decode('utf-8', errors='ignore')
-            # Empty line remove karne ke liye list comprehension
-            rows = [row for row in csv.reader(io.StringIO(content)) if any(row)]
+            rows = list(csv.reader(content.splitlines()))
             
             CACHE[cache_key] = (rows, current_time)
-            print(f"[SUCCESS] Fetched {len(rows)} rows for {sheet_identifier}")
             return rows
-            
     except Exception as e:
-        print(f"[ERROR] Fetch failed for {sheet_identifier}: {e}")
-        return []
-    except Exception as e:
-        print(f"Error fetching {sheet_name}: {e}")
+        print(f"Error fetching {sheet_identifier}: {e}")
         return []
 
 def get_star_rating(boxes):
