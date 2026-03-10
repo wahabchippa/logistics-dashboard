@@ -84,6 +84,7 @@ def parse_date(date_str):
     return None
 
 def fetch_sheet_data(sheet_identifier):
+    import ssl # <-- Error fix: inline import
     cache_key = f"sheet_{sheet_identifier}"
     current_time = time.time()
     
@@ -93,17 +94,19 @@ def fetch_sheet_data(sheet_identifier):
             return cached_data
             
     try:
-        # 🔥 MAGIC FIX: Agar number (GID) hai tou Direct Export, warna purana gviz API
-        if str(sheet_identifier).isdigit():
-            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={sheet_identifier}'
+        # 🔥 Agar URL 'http' se shuru ho raha hai toh direct fetch karega (No Truncation)
+        if str(sheet_identifier).startswith('http'):
+            url = sheet_identifier
         else:
             encoded_name = urllib.parse.quote(str(sheet_identifier))
             url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
         
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
         
-        # Simple request, no SSL conflicts
-        with urllib.request.urlopen(req, timeout=40) as response:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=45, context=ctx) as response:
             content = response.read().decode('utf-8', errors='ignore')
             rows = list(csv.reader(content.splitlines()))
             
