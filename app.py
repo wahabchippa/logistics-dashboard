@@ -99,7 +99,7 @@ def fetch_sheet_data(sheet_identifier):
             url = sheet_identifier
         else:
             encoded_name = urllib.parse.quote(str(sheet_identifier))
-            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
+            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&sheet={encoded_name}'
         
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
