@@ -93,23 +93,33 @@ def fetch_sheet_data(sheet_identifier):
             return cached_data
             
     try:
-        # 🔥 Agar naam ki jagah GID number ('0') diya hai tou Direct CSV Download (No Limit) 🔥
+        # Agar sheet_identifier sirf numbers hain (GID), to Direct Export URL use hoga
         if str(sheet_identifier).isdigit():
             url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={sheet_identifier}'
         else:
-            # Agar purana naam diya hai tou wahi purana gviz link
+            # Purana Sheet Name support
             encoded_name = urllib.parse.quote(sheet_identifier)
             url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
         
+        # SSL Verification bypass for stability
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=45) as response:
+        
+        # Timeout ko 60 seconds kar diya hai kyunke 23k rows heavy hoti hain
+        with urllib.request.urlopen(req, timeout=60, context=ctx) as response:
             content = response.read().decode('utf-8', errors='ignore')
-            rows = list(csv.reader(content.splitlines()))
+            # Empty line remove karne ke liye list comprehension
+            rows = [row for row in csv.reader(io.StringIO(content)) if any(row)]
             
             CACHE[cache_key] = (rows, current_time)
+            print(f"[SUCCESS] Fetched {len(rows)} rows for {sheet_identifier}")
             return rows
+            
     except Exception as e:
-        print(f"Error fetching {sheet_identifier}: {e}")
+        print(f"[ERROR] Fetch failed for {sheet_identifier}: {e}")
         return []
     except Exception as e:
         print(f"Error fetching {sheet_name}: {e}")
