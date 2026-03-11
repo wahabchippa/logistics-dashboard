@@ -83,43 +83,24 @@ def parse_date(date_str):
             continue
     return None
 
-    def fetch_sheet_data(sheet_identifier):
-    cache_key = f"sheet_{sheet_identifier}"
+def fetch_sheet_data(sheet_name):
+    cache_key = f"sheet_{sheet_name}"
     current_time = time.time()
-    
     if cache_key in CACHE:
         cached_data, cache_time = CACHE[cache_key]
         if current_time - cache_time < CACHE_DURATION:
             return cached_data
-            
     try:
-        sheet_str = str(sheet_identifier).strip()
-        
-        # Agar number hai tou Direct CSV Export (No row limit)
-        if sheet_str.isdigit():
-            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={sheet_str}'
-        else:
-            # Agar naam hai tou purana tareeqa
-            encoded_name = urllib.parse.quote(sheet_str)
-            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
-        
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        
+        encoded_name = urllib.parse.quote(sheet_name)
+        url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        
-        with urllib.request.urlopen(req, timeout=45, context=ctx) as response:
-            # Simple aur error-free reading ('replace' error aane nahi dega)
-            content = response.read().decode('utf-8', errors='replace')
-            lines = content.splitlines()
-            rows = list(csv.reader(lines))
-            
+        with urllib.request.urlopen(req, timeout=30) as response:
+            content = response.read().decode('utf-8')
+            rows = list(csv.reader(content.splitlines()))
             CACHE[cache_key] = (rows, current_time)
             return rows
-            
     except Exception as e:
-        print(f"Error fetching {sheet_identifier}: {e}")
+        print(f"Error fetching {sheet_name}: {e}")
         return []
 
 def get_star_rating(boxes):
