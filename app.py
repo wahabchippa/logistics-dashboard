@@ -1137,9 +1137,6 @@ SIDEBAR_HTML = """
         </div>
     </div>
     <div class="nav-menu">
-        
-        
-
         <div class="nav-section">
             <div class="nav-section-title">MAIN</div>
             <a href="/" class="nav-item {active_dashboard}">
@@ -1194,7 +1191,6 @@ SIDEBAR_HTML = """
             </a>
         </div>
         <div class="nav-section">
-            <div class="nav-section">
             <div class="nav-section-title">MAPS</div>
             <a href="/world-map" class="nav-item {active_worldmap}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -1212,7 +1208,6 @@ SIDEBAR_HTML = """
             </a>
         </div>
 
-        {forecast_link}
         {forecast_link}
         {logs_link}
     </div>
@@ -4291,7 +4286,22 @@ def nexus_dashboard():
             <div class="brand">🛰️ NEXUS HUB</div>
             <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
         </header>
-        window.onload = () => { /* Removed forced refresh to use instant cache */ };
+        <div class="main-wrapper">
+            <aside class="sidebar">
+                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Operations</div>
+                <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
+                <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct Track</button>
+                <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over Radar</button>
+                <button class="nav-item" onclick="navSwitch(this, 'view-ops')">⚡ Ops Commander</button>
+                
+                <div style="font-size: 10px; font-weight: 800; color: #10b981; text-transform: uppercase; margin: 20px 0 10px 18px; letter-spacing: 1px;">Hub Command</div>
+                <a href="/bundling" class="nav-item" style="text-decoration:none; border: 1px solid var(--border); margin-bottom: 4px;">📦 Bundling Intel</a>
+                <a href="/nexus" class="nav-item" style="text-decoration:none; border: 1px solid #10b981; background: rgba(16,185,129,0.05); color: #10b981;">🛰️ TID Hub</a>
+
+                <div style="flex:1"></div>
+                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
+            </aside>
+            <main class="viewport">
                 <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Global Tracking Matrix</h1>
                 
                 <div id="view-track" class="view-pane active">
@@ -5937,31 +5947,18 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
 
 <!-- SIDEBAR -->
 <aside class="sidebar" id="sidebar">
-  <div class="sb-head">
-    <div class="sb-logo-wrap">
-      <div class="sb-ico" style="background:linear-gradient(135deg, #4f46e5, #8b5cf6); color: white; font-weight: bold; font-family: Arial;">3P</div>
-      <div class="sb-info">
-        <div class="sb-title" style="font-size: 14px;">3PL Dashboard</div>
-        <div class="sb-sub">Bundling Intel</div>
-      </div>
-    </div>
-    <a href="/" style="display:block; margin-top:15px; background:var(--s2); color:var(--t1); padding:10px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:700; border:1px solid var(--bd); text-align:center; transition: 0.2s;">⬅️ Back to Main</a>
-  </div>
+  <div class="sb-head">
+    <div class="sb-logo-wrap">
+      <div class="sb-ico">📦</div>
+      <div class="sb-info">
+        <div class="sb-title">Bundling Hub</div>
+        <div class="sb-sub">Intelligence · Analytics</div>
+      </div>
 
     </div>
   </div>
   <nav class="sb-nav">
-    <div class="sb-section-label" style="color: #10b981;">Hub Command</div>
-    <a href="/bundling" class="sb-tab" style="border: 1px solid #10b981; text-decoration: none; margin-bottom: 4px; background: rgba(16,185,129,0.05);">
-      <span class="sb-tab-icon" style="background: transparent;">📦</span>
-      <span class="sb-tab-label" style="color: #10b981; font-weight: 800;">Bundling Intel</span>
-    </a>
-    <a href="/nexus" class="sb-tab" style="border: 1px solid var(--sb-border); text-decoration: none;">
-      <span class="sb-tab-icon" style="background: transparent;">🛰️</span>
-      <span class="sb-tab-label" style="font-weight: 800;">TID Hub</span>
-    </a>
-
-    <div class="sb-section-label" style="margin-top:16px;">Workspace</div>
+    <div class="sb-section-label">Workspace</div>
     <button class="sb-tab active" data-pane="bundle" onclick="sw('bundle',this)">
       <span class="sb-tab-icon">📦</span>
       <span class="sb-tab-label">Bundle Intelligence</span>
