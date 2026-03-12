@@ -1191,12 +1191,25 @@ SIDEBAR_HTML = """
             </a>
         </div>
         <div class="nav-section">
+            <div class="nav-section">
             <div class="nav-section-title">MAPS</div>
             <a href="/world-map" class="nav-item {active_worldmap}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 <span>World Map</span>
             </a>
         </div>
+
+        <div class="nav-section">
+            <div class="nav-section-title" style="color: #10b981;">HUB COMMAND</div>
+            <a href="/bundling" class="nav-item" style="border: 1px solid #10b981; margin-bottom: 4px; background: rgba(16,185,129,0.05); color: #10b981;">
+                <span style="font-size:16px;">📦</span> <span>Bundling Intel</span>
+            </a>
+            <a href="/nexus" class="nav-item" style="border: 1px solid var(--border-color); background: rgba(255,255,255,0.05);">
+                <span style="font-size:16px;">🛰️</span> <span>TID Hub</span>
+            </a>
+        </div>
+
+        {forecast_link}
         {forecast_link}
         {logs_link}
     </div>
@@ -4282,6 +4295,11 @@ def nexus_dashboard():
                 <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct Track</button>
                 <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over Radar</button>
                 <button class="nav-item" onclick="navSwitch(this, 'view-ops')">⚡ Ops Commander</button>
+                
+                <div style="font-size: 10px; font-weight: 800; color: #10b981; text-transform: uppercase; margin: 20px 0 10px 18px; letter-spacing: 1px;">Hub Command</div>
+                <a href="/bundling" class="nav-item" style="text-decoration:none; border: 1px solid var(--border); margin-bottom: 4px;">📦 Bundling Intel</a>
+                <a href="/nexus" class="nav-item" style="text-decoration:none; border: 1px solid #10b981; background: rgba(16,185,129,0.05); color: #10b981;">🛰️ TID Hub</a>
+
                 <div style="flex:1"></div>
                 <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
             </aside>
@@ -5017,23 +5035,7 @@ def bundling_spa():
     html=BUNDLING_HTML.replace("window.onload=init;","const GUEST="+gflag+";\nconst USER_EMAIL='"+email+"';\n"+rm_js+"\nwindow.onload=init;")
     return render_template_string(html)
 
-@app.after_request
-def add_float_btns(response):
-    if request.path=="/" and response.content_type and "text/html" in response.content_type:
-        mode=user_mode()
-        html=response.get_data(as_text=True)
-        if mode=="full":
-            btn='''<div style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:99999">
-<a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
-<a href="/nexus" style="background:#fff;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.4)">🛰️ TID Hub</a>
-</div>'''
-            if "</body>" in html: response.set_data(html.replace("</body>",btn+"</body>"))
-        elif mode=="guest":
-            btn='''<div style="position:fixed;bottom:24px;right:24px;z-index:99999">
-<a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
-</div>'''
-            if "</body>" in html: response.set_data(html.replace("</body>",btn+"</body>"))
-    return response
+
 
 BUNDLING_HTML = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -6022,6 +6024,16 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
       <span class="sb-tab-label">Savings Certificate</span>
       <span class="sb-tab-dot"></span>
     </button>
+
+    <div class="sb-section-label" style="margin-top:16px; color: #10b981;">Hub Command</div>
+    <a href="/bundling" class="sb-tab" style="border: 1px solid #10b981; text-decoration: none; margin-bottom: 4px; background: rgba(16,185,129,0.05);">
+      <span class="sb-tab-icon" style="background: transparent;">📦</span>
+      <span class="sb-tab-label" style="color: #10b981; font-weight: 800;">Bundling Intel</span>
+    </a>
+    <a href="/nexus" class="sb-tab" style="border: 1px solid var(--sb-border); text-decoration: none;">
+      <span class="sb-tab-icon" style="background: transparent;">🛰️</span>
+      <span class="sb-tab-label" style="font-weight: 800;">TID Hub</span>
+    </a>
   </nav>
   <div class="sb-foot">
     <button class="theme-pill" onclick="toggleTheme()" id="themePill">
