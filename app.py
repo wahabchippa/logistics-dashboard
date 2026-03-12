@@ -83,10 +83,6 @@ def parse_date(date_str):
             continue
     return None
 
-# ECL sheet bahut bari hai (23k+ rows) — published URL use karo (no row limit)
-# Bundling tool bhi yahi URL use karta hai
-ECL_PUBLISHED_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv'
-
 def fetch_sheet_data(sheet_name):
     cache_key = f"sheet_{sheet_name}"
     current_time = time.time()
@@ -95,13 +91,8 @@ def fetch_sheet_data(sheet_name):
         if current_time - cache_time < CACHE_DURATION:
             return cached_data
     try:
-        # ECL ke liye published URL — no row limit
-        if sheet_name == 'ECL QC Center & Zone':
-            url = ECL_PUBLISHED_URL
-        else:
-            # GE, Kerry, APX — gviz (chhoti sheets, 10k limit issue nahi)
-            encoded_name = urllib.parse.quote(sheet_name)
-            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
+        encoded_name = urllib.parse.quote(sheet_name)
+        url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=30) as response:
             content = response.read().decode('utf-8')
@@ -145,7 +136,7 @@ def process_provider_data(provider, week_start, week_end):
         if row_idx < provider['start_row'] - 1:
             continue
         try:
-            if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col']):
+            if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
                 continue
             date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
             parsed_date = parse_date(date_val)
@@ -3327,7 +3318,7 @@ def api_daily_region_summary():
             if row_idx < provider['start_row'] - 1:
                 continue
             try:
-                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col']):
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
                     continue
                 date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                 parsed_date = parse_date(date_val)
@@ -3385,7 +3376,7 @@ def api_analytics_data():
             if row_idx < provider['start_row'] - 1:
                 continue
             try:
-                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col']):
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
                     continue
                 date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                 parsed_date = parse_date(date_val)
@@ -3556,7 +3547,7 @@ def api_daily_summary():
             if row_idx < provider['start_row'] - 1:
                 continue
             try:
-                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col']):
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
                     continue
                 date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                 parsed_date = parse_date(date_val)
@@ -3685,7 +3676,7 @@ def order_details():
                 if row_idx < provider['start_row'] - 1:
                     continue
                 try:
-                    if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider.get('order_col', 0)):
+                    if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
                         continue
                     date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                     parsed_date = parse_date(date_val)
@@ -3733,7 +3724,7 @@ def order_details():
             if row_idx < provider['start_row'] - 1:
                 continue
             try:
-                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider.get('order_col', 0)):
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
                     continue
                 
                 date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
