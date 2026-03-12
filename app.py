@@ -3318,7 +3318,7 @@ def api_daily_region_summary():
             if row_idx < provider['start_row'] - 1:
                 continue
             try:
-                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col']):
                     continue
                 date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                 parsed_date = parse_date(date_val)
@@ -3376,7 +3376,7 @@ def api_analytics_data():
             if row_idx < provider['start_row'] - 1:
                 continue
             try:
-                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col']):
                     continue
                 date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                 parsed_date = parse_date(date_val)
@@ -3547,7 +3547,7 @@ def api_daily_summary():
             if row_idx < provider['start_row'] - 1:
                 continue
             try:
-                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col']):
                     continue
                 date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                 parsed_date = parse_date(date_val)
@@ -3676,7 +3676,7 @@ def order_details():
                 if row_idx < provider['start_row'] - 1:
                     continue
                 try:
-                    if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
+                    if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider.get('order_col', 0)):
                         continue
                     date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
                     parsed_date = parse_date(date_val)
@@ -3724,7 +3724,7 @@ def order_details():
             if row_idx < provider['start_row'] - 1:
                 continue
             try:
-                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)):
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider.get('order_col', 0)):
                     continue
                 
                 date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
