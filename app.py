@@ -1138,15 +1138,7 @@ SIDEBAR_HTML = """
     </div>
     <div class="nav-menu">
         
-        <div class="nav-section">
-            <div class="nav-section-title" style="color: #10b981;">HUB COMMAND</div>
-            <a href="/bundling" class="nav-item" style="border: 1px solid #10b981; margin-bottom: 4px; background: rgba(16,185,129,0.05); color: #10b981;">
-                <span style="font-size:16px;">📦</span> <span>Bundling Intel</span>
-            </a>
-            <a href="/nexus" class="nav-item" style="border: 1px solid var(--border-color); background: rgba(255,255,255,0.05);">
-                <span style="font-size:16px;">🛰️</span> <span>TID Hub</span>
-            </a>
-        </div>
+        
 
         <div class="nav-section">
             <div class="nav-section-title">MAIN</div>
@@ -4299,26 +4291,7 @@ def nexus_dashboard():
             <div class="brand">🛰️ NEXUS HUB</div>
             <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
         </header>
-        <div class="main-wrapper">
-            <aside class="sidebar">
-                <div style="font-size: 10px; font-weight: 800; color: #10b981; text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Hub Command</div>
-                <a href="/bundling" class="nav-item" style="text-decoration:none; border: 1px solid var(--border); margin-bottom: 4px;">📦 Bundling Intel</a>
-                <a href="/nexus" class="nav-item" style="text-decoration:none; border: 1px solid #10b981; background: rgba(16,185,129,0.05); color: #10b981;">🛰️ TID Hub</a>
-
-                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 20px 0 10px 18px; letter-spacing: 1px;">Operations</div>
-                <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
-                <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct Track</button>
-                <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over Radar</button>
-                <button class="nav-item" onclick="navSwitch(this, 'view-ops')">⚡ Ops Commander</button>
-                
-                <div style="font-size: 10px; font-weight: 800; color: #10b981; text-transform: uppercase; margin: 20px 0 10px 18px; letter-spacing: 1px;">Hub Command</div>
-                <a href="/bundling" class="nav-item" style="text-decoration:none; border: 1px solid var(--border); margin-bottom: 4px;">📦 Bundling Intel</a>
-                <a href="/nexus" class="nav-item" style="text-decoration:none; border: 1px solid #10b981; background: rgba(16,185,129,0.05); color: #10b981;">🛰️ TID Hub</a>
-
-                <div style="flex:1"></div>
-                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
-            </aside>
-            <main class="viewport">
+        window.onload = () => { /* Removed forced refresh to use instant cache */ };
                 <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Global Tracking Matrix</h1>
                 
                 <div id="view-track" class="view-pane active">
@@ -5964,13 +5937,16 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
 
 <!-- SIDEBAR -->
 <aside class="sidebar" id="sidebar">
-  <div class="sb-head">
-    <div class="sb-logo-wrap">
-      <div class="sb-ico">📦</div>
-      <div class="sb-info">
-        <div class="sb-title">Bundling Hub</div>
-        <div class="sb-sub">Intelligence · Analytics</div>
-      </div>
+  <div class="sb-head">
+    <div class="sb-logo-wrap">
+      <div class="sb-ico" style="background:linear-gradient(135deg, #4f46e5, #8b5cf6); color: white; font-weight: bold; font-family: Arial;">3P</div>
+      <div class="sb-info">
+        <div class="sb-title" style="font-size: 14px;">3PL Dashboard</div>
+        <div class="sb-sub">Bundling Intel</div>
+      </div>
+    </div>
+    <a href="/" style="display:block; margin-top:15px; background:var(--s2); color:var(--t1); padding:10px; border-radius:8px; text-decoration:none; font-size:12px; font-weight:700; border:1px solid var(--bd); text-align:center; transition: 0.2s;">⬅️ Back to Main</a>
+  </div>
 
     </div>
   </div>
