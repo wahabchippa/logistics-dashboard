@@ -83,6 +83,12 @@ def parse_date(date_str):
             continue
     return None
 
+# Published CSV URLs — no row limit (used for large sheets)
+PUBLISHED_URLS = {
+    'ECL QC Center & Zone': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv',
+    'GE QC Center & Zone':  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=0&single=true&output=csv',
+}
+
 def fetch_sheet_data(sheet_name):
     cache_key = f"sheet_{sheet_name}"
     current_time = time.time()
@@ -91,29 +97,18 @@ def fetch_sheet_data(sheet_name):
         if current_time - cache_time < CACHE_DURATION:
             return cached_data
     try:
-        encoded_name = urllib.parse.quote(sheet_name)
-        all_rows = []
-        offset = 0
-        BATCH = 9999
-        while True:
-            tq = urllib.parse.quote(f'select * limit {BATCH} offset {offset}')
-            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}&tq={tq}'
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                batch_content = response.read().decode('utf-8')
-                batch_rows = list(csv.reader(batch_content.splitlines()))
-            if not batch_rows:
-                break
-            if offset == 0:
-                all_rows.extend(batch_rows)
-            else:
-                # gviz returns header row for every batch — skip it
-                all_rows.extend(batch_rows[1:] if len(batch_rows) > 1 else [])
-            if len(batch_rows) < BATCH:
-                break
-            offset += BATCH
-        CACHE[cache_key] = (all_rows, current_time)
-        return all_rows
+        # Published URL use karo agar available ho (no row limit)
+        if sheet_name in PUBLISHED_URLS:
+            url = PUBLISHED_URLS[sheet_name]
+        else:
+            encoded_name = urllib.parse.quote(sheet_name)
+            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=30) as response:
+            content = response.read().decode('utf-8')
+            rows = list(csv.reader(content.splitlines()))
+            CACHE[cache_key] = (rows, current_time)
+            return rows
     except Exception as e:
         print(f"Error fetching {sheet_name}: {e}")
         return []
