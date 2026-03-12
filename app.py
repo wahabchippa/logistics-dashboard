@@ -1207,15 +1207,7 @@ SIDEBAR_HTML = """
             </a>
         </div>
 
-        <div class="nav-section">
-            <div class="nav-section-title" style="color: #10b981;">HUB COMMAND</div>
-            <a href="/bundling" class="nav-item" style="border: 1px solid #10b981; margin-bottom: 4px; background: rgba(16,185,129,0.05); color: #10b981;">
-                <span style="font-size:16px;">📦</span> <span>Bundling Intel</span>
-            </a>
-            <a href="/nexus" class="nav-item" style="border: 1px solid var(--border-color); background: rgba(255,255,255,0.05);">
-                <span style="font-size:16px;">🛰️</span> <span>TID Hub</span>
-            </a>
-        </div>
+        
 
         {forecast_link}
         {logs_link}
@@ -4307,9 +4299,7 @@ def nexus_dashboard():
                 <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over Radar</button>
                 <button class="nav-item" onclick="navSwitch(this, 'view-ops')">⚡ Ops Commander</button>
                 
-                <div style="font-size: 10px; font-weight: 800; color: #10b981; text-transform: uppercase; margin: 20px 0 10px 18px; letter-spacing: 1px;">Hub Command</div>
-                <a href="/bundling" class="nav-item" style="text-decoration:none; border: 1px solid var(--border); margin-bottom: 4px;">📦 Bundling Intel</a>
-                <a href="/nexus" class="nav-item" style="text-decoration:none; border: 1px solid #10b981; background: rgba(16,185,129,0.05); color: #10b981;">🛰️ TID Hub</a>
+                
 
                 <div style="flex:1"></div>
                 <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
@@ -6046,15 +6036,7 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
       <span class="sb-tab-dot"></span>
     </button>
 
-    <div class="sb-section-label" style="margin-top:16px; color: #10b981;">Hub Command</div>
-    <a href="/bundling" class="sb-tab" style="border: 1px solid #10b981; text-decoration: none; margin-bottom: 4px; background: rgba(16,185,129,0.05);">
-      <span class="sb-tab-icon" style="background: transparent;">📦</span>
-      <span class="sb-tab-label" style="color: #10b981; font-weight: 800;">Bundling Intel</span>
-    </a>
-    <a href="/nexus" class="sb-tab" style="border: 1px solid var(--sb-border); text-decoration: none;">
-      <span class="sb-tab-icon" style="background: transparent;">🛰️</span>
-      <span class="sb-tab-label" style="font-weight: 800;">TID Hub</span>
-    </a>
+    
   </nav>
   <div class="sb-foot">
     <button class="theme-pill" onclick="toggleTheme()" id="themePill">
