@@ -1138,14 +1138,14 @@ SIDEBAR_HTML = """
     </div>
     <div class="nav-menu">
         <div class="nav-section">
-            <div class="nav-section-title" style="color: #10b981;">HUB COMMAND</div>
-            <a href="/bundling" class="nav-item" style="border: 1px solid #10b981; margin-bottom: 4px; background: rgba(16,185,129,0.05); color: #10b981;">
-                <span style="font-size:16px;">📦</span> <span>Bundling Intel</span>
-            </a>
-            <a href="/nexus" class="nav-item" style="border: 1px solid var(--border-color); background: rgba(255,255,255,0.05);">
-                <span style="font-size:16px;">🛰️</span> <span>TID Hub</span>
-            </a>
-        </div>
+            <div class="nav-section-title" style="color: #10b981;">HUB COMMAND</div>
+            <a href="/bundling" class="nav-item" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; border: 1px solid #10b981; margin-bottom: 4px; background: rgba(16,185,129,0.05); color: #10b981; white-space: nowrap;">
+                <span style="font-size: 15px; line-height: 1;">📦</span> <span style="font-weight: 600;">Bundling Intel</span>
+            </a>
+            <a href="/nexus" class="nav-item" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); white-space: nowrap;">
+                <span style="font-size: 15px; line-height: 1;">🛰️</span> <span style="font-weight: 600;">TID Hub</span>
+            </a>
+        </div>
         <div class="nav-section">
             <div class="nav-section-title">MAIN</div>
             <a href="/" class="nav-item {active_dashboard}">
@@ -4289,9 +4289,13 @@ def nexus_dashboard():
         </header>
         <div class="main-wrapper">
             <aside class="sidebar">
-                <div style="font-size: 10px; font-weight: 800; color: #10b981; text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Hub Command</div>
-                <a href="/bundling" class="nav-item" style="text-decoration:none; border: 1px solid var(--border); margin-bottom: 4px;">📦 Bundling Intel</a>
-                <a href="/nexus" class="nav-item" style="text-decoration:none; border: 1px solid #10b981; background: rgba(16,185,129,0.05); color: #10b981;">🛰️ TID Hub</a>
+                <div style="font-size: 10px; font-weight: 800; color: #10b981; text-transform: uppercase; margin: 10px 0 10px 0px; letter-spacing: 1px;">Hub Command</div>
+                <a href="/bundling" class="nav-item" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; text-decoration:none; border: 1px solid var(--border); margin-bottom: 4px; white-space: nowrap;">
+                    <span style="font-size: 15px; line-height: 1;">📦</span> <span style="font-weight: 600;">Bundling Intel</span>
+                </a>
+                <a href="/nexus" class="nav-item" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; text-decoration:none; border: 1px solid #10b981; background: rgba(16,185,129,0.05); color: #10b981; white-space: nowrap;">
+                    <span style="font-size: 15px; line-height: 1;">🛰️</span> <span style="font-weight: 600;">TID Hub</span>
+                </a>
 
                 <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 20px 0 10px 18px; letter-spacing: 1px;">Operations</div>
                 <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
@@ -5961,15 +5965,15 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     </div>
   </div>
   <nav class="sb-nav">
-    <div class="sb-section-label" style="color: #10b981;">Hub Command</div>
-    <a href="/bundling" class="sb-tab" style="border: 1px solid #10b981; text-decoration: none; margin-bottom: 4px; background: rgba(16,185,129,0.05);">
-      <span class="sb-tab-icon" style="background: transparent;">📦</span>
-      <span class="sb-tab-label" style="color: #10b981; font-weight: 800;">Bundling Intel</span>
-    </a>
-    <a href="/nexus" class="sb-tab" style="border: 1px solid var(--sb-border); text-decoration: none;">
-      <span class="sb-tab-icon" style="background: transparent;">🛰️</span>
-      <span class="sb-tab-label" style="font-weight: 800;">TID Hub</span>
-    </a>
+    <div class="sb-section-label" style="color: #10b981; margin-top: 0;">Hub Command</div>
+    <a href="/bundling" class="sb-tab" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; border: 1px solid #10b981; text-decoration: none; margin-bottom: 4px; background: rgba(16,185,129,0.05); white-space: nowrap;">
+      <span style="font-size: 15px; line-height: 1;">📦</span>
+      <span style="color: #10b981; font-weight: 800;">Bundling Intel</span>
+    </a>
+    <a href="/nexus" class="sb-tab" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; border: 1px solid var(--sb-border); text-decoration: none; white-space: nowrap;">
+      <span style="font-size: 15px; line-height: 1;">🛰️</span>
+      <span style="font-weight: 800; color: var(--sb-text);">TID Hub</span>
+    </a>
 
     <div class="sb-section-label" style="margin-top:16px;">Workspace</div>
     <button class="sb-tab active" data-pane="bundle" onclick="sw('bundle',this)">
