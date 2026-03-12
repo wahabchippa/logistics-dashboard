@@ -23,8 +23,8 @@ SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 PROVIDERS = [
     {'name': 'GLOBAL EXPRESS (QC)', 'short': 'GE QC', 'sheet': 'GE QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#3B82F6', 'group': 'GE'},
     {'name': 'GLOBAL EXPRESS (ZONE)', 'short': 'GE ZONE', 'sheet': 'GE QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 15, 'region_col': 16, 'order_col': 9, 'start_row': 2, 'color': '#8B5CF6', 'group': 'GE'},
-    {'name': 'ECL LOGISTICS (QC)', 'short': 'ECL QC', 'sheet': 'Address and Tracking QC Center', 'date_col': 1, 'box_col': 3, 'weight_col': 6, 'region_col': 13, 'order_col': 0, 'start_row': 2, 'color': '#10B981', 'group': 'ECL'},
-    {'name': 'ECL LOGISTICS (ZONE)', 'short': 'ECL ZONE', 'sheet': 'Address and Tracking Zone', 'date_col': 1, 'box_col': 4, 'weight_col': 8, 'region_col': 16, 'order_col': 0, 'start_row': 3, 'color': '#F59E0B', 'group': 'ECL'},
+    {'name': 'ECL LOGISTICS (QC)', 'short': 'ECL QC', 'sheet': 'Address and Tracking QC Center', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 3, 'color': '#10B981', 'group': 'ECL'},
+    {'name': 'ECL LOGISTICS (ZONE)', 'short': 'ECL ZONE', 'sheet': 'Address and Tracking Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 14, 'region_col': 16, 'order_col': 9, 'start_row': 3, 'color': '#F59E0B', 'group': 'ECL'},
     {'name': 'KERRY', 'short': 'KERRY', 'sheet': 'Kerry', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#EF4444', 'group': 'OTHER'},
     {'name': 'APX', 'short': 'APX', 'sheet': 'APX', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#EC4899', 'group': 'OTHER'}
 ]
@@ -83,7 +83,6 @@ def parse_date(date_str):
             continue
     return None
 
-# ECL alag spreadsheet - published URLs (user ne share kiye, no row limit)
 ECL_PUBLISHED = {
     'Address and Tracking QC Center': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv',
     'Address and Tracking Zone':      'https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv',
