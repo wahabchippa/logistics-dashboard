@@ -1137,8 +1137,17 @@ SIDEBAR_HTML = """
         </div>
     </div>
     <div class="nav-menu">
-        <div class="nav-section">
-            <div class="nav-section-title">MAIN</div>
+        <div class="nav-section">
+            <div class="nav-section-title" style="color: #10b981;">HUB COMMAND</div>
+            <a href="/bundling" class="nav-item" style="border: 1px solid #10b981; margin-bottom: 4px; background: rgba(16,185,129,0.05); color: #10b981;">
+                <span style="font-size:16px;">📦</span> <span>Bundling Intel</span>
+            </a>
+            <a href="/nexus" class="nav-item" style="border: 1px solid var(--border-color); background: rgba(255,255,255,0.05);">
+                <span style="font-size:16px;">🛰️</span> <span>TID Hub</span>
+            </a>
+        </div>
+        <div class="nav-section">
+            <div class="nav-section-title">MAIN</div>
             <a href="/" class="nav-item {active_dashboard}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                 <span>Dashboard</span>
@@ -4288,7 +4297,11 @@ def nexus_dashboard():
         </header>
         <div class="main-wrapper">
             <aside class="sidebar">
-                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Operations</div>
+                <div style="font-size: 10px; font-weight: 800; color: #10b981; text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Hub Command</div>
+                <a href="/bundling" class="nav-item" style="text-decoration:none; border: 1px solid var(--border); margin-bottom: 4px;">📦 Bundling Intel</a>
+                <a href="/nexus" class="nav-item" style="text-decoration:none; border: 1px solid #10b981; background: rgba(16,185,129,0.05); color: #10b981;">🛰️ TID Hub</a>
+
+                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 20px 0 10px 18px; letter-spacing: 1px;">Operations</div>
                 <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
                 <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct Track</button>
                 <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over Radar</button>
@@ -5958,7 +5971,17 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     </div>
   </div>
   <nav class="sb-nav">
-    <div class="sb-section-label">Workspace</div>
+    <div class="sb-section-label" style="color: #10b981;">Hub Command</div>
+    <a href="/bundling" class="sb-tab" style="border: 1px solid #10b981; text-decoration: none; margin-bottom: 4px; background: rgba(16,185,129,0.05);">
+      <span class="sb-tab-icon" style="background: transparent;">📦</span>
+      <span class="sb-tab-label" style="color: #10b981; font-weight: 800;">Bundling Intel</span>
+    </a>
+    <a href="/nexus" class="sb-tab" style="border: 1px solid var(--sb-border); text-decoration: none;">
+      <span class="sb-tab-icon" style="background: transparent;">🛰️</span>
+      <span class="sb-tab-label" style="font-weight: 800;">TID Hub</span>
+    </a>
+
+    <div class="sb-section-label" style="margin-top:16px;">Workspace</div>
     <button class="sb-tab active" data-pane="bundle" onclick="sw('bundle',this)">
       <span class="sb-tab-icon">📦</span>
       <span class="sb-tab-label">Bundle Intelligence</span>
