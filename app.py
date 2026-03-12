@@ -83,6 +83,10 @@ def parse_date(date_str):
             continue
     return None
 
+# ECL sheet bahut bari hai (23k+ rows) — published URL use karo (no row limit)
+# Bundling tool bhi yahi URL use karta hai
+ECL_PUBLISHED_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv'
+
 def fetch_sheet_data(sheet_name):
     cache_key = f"sheet_{sheet_name}"
     current_time = time.time()
@@ -91,34 +95,19 @@ def fetch_sheet_data(sheet_name):
         if current_time - cache_time < CACHE_DURATION:
             return cached_data
     try:
-        encoded_name = urllib.parse.quote(sheet_name)
-        all_rows = []
-        offset = 0
-        BATCH = 9000
-        header_row = None
-        while True:
-            tq = urllib.parse.quote(f'select * limit {BATCH} offset {offset}')
-            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}&tq={tq}'
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=30) as response:
-                batch_content = response.read().decode('utf-8')
-            batch_rows = list(csv.reader(batch_content.splitlines()))
-            if not batch_rows:
-                break
-            if offset == 0:
-                header_row = batch_rows[0] if batch_rows else []
-                all_rows.extend(batch_rows)
-                data_count = len(batch_rows) - 1
-            else:
-                # Skip header row gviz returns on every batch
-                data_rows = batch_rows[1:] if len(batch_rows) > 1 else []
-                all_rows.extend(data_rows)
-                data_count = len(data_rows)
-            if data_count < BATCH:
-                break
-            offset += BATCH
-        CACHE[cache_key] = (all_rows, current_time)
-        return all_rows
+        # ECL ke liye published URL — no row limit
+        if sheet_name == 'ECL QC Center & Zone':
+            url = ECL_PUBLISHED_URL
+        else:
+            # GE, Kerry, APX — gviz (chhoti sheets, 10k limit issue nahi)
+            encoded_name = urllib.parse.quote(sheet_name)
+            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=30) as response:
+            content = response.read().decode('utf-8')
+            rows = list(csv.reader(content.splitlines()))
+            CACHE[cache_key] = (rows, current_time)
+            return rows
     except Exception as e:
         print(f"Error fetching {sheet_name}: {e}")
         return []
