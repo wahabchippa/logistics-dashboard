@@ -92,13 +92,28 @@ def fetch_sheet_data(sheet_name):
             return cached_data
     try:
         encoded_name = urllib.parse.quote(sheet_name)
-        url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=30) as response:
-            content = response.read().decode('utf-8')
-            rows = list(csv.reader(content.splitlines()))
-            CACHE[cache_key] = (rows, current_time)
-            return rows
+        all_rows = []
+        offset = 0
+        BATCH = 9999
+        while True:
+            tq = urllib.parse.quote(f'select * limit {BATCH} offset {offset}')
+            url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}&tq={tq}'
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=30) as response:
+                batch_content = response.read().decode('utf-8')
+                batch_rows = list(csv.reader(batch_content.splitlines()))
+            if not batch_rows:
+                break
+            if offset == 0:
+                all_rows.extend(batch_rows)
+            else:
+                # gviz returns header row for every batch — skip it
+                all_rows.extend(batch_rows[1:] if len(batch_rows) > 1 else [])
+            if len(batch_rows) < BATCH:
+                break
+            offset += BATCH
+        CACHE[cache_key] = (all_rows, current_time)
+        return all_rows
     except Exception as e:
         print(f"Error fetching {sheet_name}: {e}")
         return []
