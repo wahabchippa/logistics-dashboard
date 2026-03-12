@@ -92,7 +92,7 @@ def fetch_sheet_data(sheet_name):
             return cached_data
     try:
         encoded_name = urllib.parse.quote(sheet_name)
-        url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
+        url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&sheet={encoded_name}'
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=30) as response:
             content = response.read().decode('utf-8')
@@ -136,7 +136,7 @@ def process_provider_data(provider, week_start, week_end):
         if row_idx < provider['start_row'] - 1:
             continue
         try:
-            if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+            if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col']):
                 continue
             date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
             parsed_date = parse_date(date_val)
