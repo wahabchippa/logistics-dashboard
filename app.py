@@ -4921,16 +4921,6 @@ def fetch_all():
     if "RATES" in res and not isinstance(res["RATES"],tuple):
         res["RATES"]=({},{})
     _bc["data"]=res; _bc["time"]=now; return res
-    import threading as _threading
-def _warm_cache():
-    time.sleep(3)
-    try:
-        print("[CACHE] Pre-warming...")
-        fetch_all(); fetch_status(); fetch_journey()
-        print("[CACHE] Done.")
-    except Exception as e:
-        print(f"[CACHE] Error: {e}")
-_threading.Thread(target=_warm_cache, daemon=True).start()
 
 # --- API ---
 @app.route("/api/nexus/debug_rates")
@@ -4944,12 +4934,8 @@ def api_debug_rates():
     out={k:[{"min":mn,"max":mx,"rate":r} for mn,mx,r in v] for k,v in rm_brackets.items()}
     return jsonify({"countries":len(rm_brackets),"brackets":out,"averages":rm_avg})
 
-_adc={"data":None,"time":0}
 @app.route("/api/nexus/app_data")
 def api_app_data():
-    now=time.time()
-    if _adc["data"] and (now-_adc["time"])<300:
-        return jsonify(_adc["data"])
     sheets=fetch_all(); sm=fetch_status()
     rates_data=sheets.get("RATES",({},{}))
     if isinstance(rates_data,tuple): rm_brackets,rm_avg=rates_data
@@ -5014,12 +5000,10 @@ def api_app_data():
         b["rate_gbp"]=round(pr,2); b["indiv_cost"]=round(isc,2); b["bundle_cost"]=round(bc,2)
         tsav+=b["savings_gbp"]
     bundles.sort(key=lambda x:x["date_std"],reverse=True)
-    result={"success":True,
+    return jsonify({"success":True,
         "kpi":{"total_bundles":tb,"total_orders_bundled":to2,
                "saved_shipments":to2-tb if tb>0 else 0,"total_savings_gbp":round(tsav,2)},
-        "source_stats":ss,"bundles":bundles}
-    _adc["data"]=result; _adc["time"]=time.time()
-    return jsonify(result)
+        "source_stats":ss,"bundles":bundles})
 
 @app.route("/api/nexus/order_journey/<oid>")
 def api_order_journey(oid):
@@ -5983,7 +5967,7 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     </div>
   </div>
   <nav class="sb-nav">
-    <div class="sb-section-label" style="color: #10b981; margin-top: 0;">Hub Command</div>
+    <div class="sb-section-label" style="color: #10b981; margin-top: 0;">Hub Command</div>
     <a href="/bundling" class="sb-tab" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; border: 1px solid #10b981; text-decoration: none; margin-bottom: 4px; background: rgba(16,185,129,0.05); white-space: nowrap;">
       <span style="font-size: 15px; line-height: 1;">📦</span>
       <span style="color: #10b981; font-weight: 800;">Bundling Intel</span>
@@ -5993,7 +5977,7 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
       <span style="font-weight: 800; color: var(--sb-text);">TID Hub</span>
     </a>
 
-    <div class="sb-section-label" style="margin-top:16px;">Workspace</div>
+    <div class="sb-section-label" style="margin-top:16px;">Workspace</div>
     <button class="sb-tab active" data-pane="bundle" onclick="sw('bundle',this)">
       <span class="sb-tab-icon">📦</span>
       <span class="sb-tab-label">Bundle Intelligence</span>
@@ -6564,34 +6548,11 @@ const SRCS=["ECL QC Center","ECL Zone","GE Zone"];
 // ============================================================
 async function init(){
   const ls=g("lStat");
-  // Pehle localStorage se instant dikhao
-  try{
-    const cached=localStorage.getItem('bih_d');
-    if(cached){
-      D=JSON.parse(cached);
-      g("gLoad").style.display="none";
-      g("pane-bundle").classList.add("active");
-      _rendered.bundle=true;
-      cacheRates(); initUserCard(); updateLastUpdate();
-      if(GUEST){const hideIds=["sbPredict","sbCertificate","sbToolsLabel"];hideIds.forEach(id=>{const el=g(id);if(el)el.style.display="none";});}
-      const _now=new Date();const _qm=_now.getMonth();const _q=_qm<3?"Q1":_qm<6?"Q2":_qm<9?"Q3":"Q4";
-      const _qs=g("certQuarter");if(_qs)_qs.value=_q;const _ys=g("certYear");if(_ys)_ys.value=_now.getFullYear();
-      rBundle();
-      // Background mein fresh data bhi fetch karo
-      fetch("/api/nexus/app_data").then(r=>r.json()).then(fresh=>{
-        D=fresh; try{localStorage.setItem('bih_d',JSON.stringify(fresh));}catch(e){}
-        rBundle();
-      }).catch(()=>{});
-      return;
-    }
-  }catch(e){}
-  // Koi cache nahi — normal load
   try{
     ls.textContent="Fetching from 3 sources simultaneously...";
     const r=await fetch("/api/nexus/app_data");
     if(!r.ok) throw new Error("HTTP "+r.status);
     D=await r.json();
-    try{localStorage.setItem('bih_d',JSON.stringify(D));}catch(e){}
     const mon=gMon(new Date());
     g("ws").value=fi(mon); g("w4e").value=fi(mon); g("rws").value=fi(mon);
     g("gLoad").style.display="none";
