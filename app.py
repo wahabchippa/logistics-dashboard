@@ -4964,43 +4964,6 @@ def fetch_sheet(name,url,col,start,cx):
             print(f"[WARN] {name} attempt {attempt+1}: {e}")
             if attempt==0: time.sleep(0.5)  # shorter retry delay
     return name,[]
-                data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
-            rows=[]; lo=ld=lv=lc=lcn=lt=""
-            for row in data[start:]:
-                if not row: continue
-                p=row+[""]*60
-                ro=str(p[col["o"]]).strip(); rw=str(p[col["w"]]).strip(); rti=str(p[col["title"]]).strip()
-                rw_clean=rw.replace("0","").replace(".","").strip()
-                if not ro and not rw_clean and not rti: continue
-                if ro: lo=ro
-                co=ro if ro else lo
-                if not co or not re.search(r"\d",co): continue
-                try:
-                    rw_float=float(rw or 0)
-                except: rw_float=0
-                if not ro and not rti and rw_float==0: continue
-                if co.lower() in ["n/a","nan","order","orderid","order id"]: continue
-                dv=str(p[col["d"]]).strip(); vv=str(p[col["v"]]).strip()
-                cv=str(p[col["c"]]).strip(); cnv=str(p[col["cn"]]).strip(); tv=str(p[col["t"]]).strip()
-                if dv: ld=dv
-                if vv: lv=vv
-                if cv: lc=cv
-                if cnv: lcn=cnv
-                if tv: lt=tv
-                bxv=str(p[col["b"]]).strip()
-                # For QC Center also check alternate box col
-                if not bxv and col.get("b2") is not None:
-                    bxv2=str(p[col["b2"]]).strip()
-                    # Only use b2 if it looks like a box number (numeric)
-                    if bxv2 and re.match(r"^[0-9]+$",bxv2): bxv=bxv2
-                rows.append({"order":co,"date":dv or ld,"date_std":sd(dv or ld),
-                    "boxes":bxv,"weight":rw,
-                    "vendor":vv or lv,"title":rti or "N/A","item_count":str(p[col["ic"]]).strip() or "0",
-                    "customer":cv or lc,"country":cnv or lcn,"tid":tv or lt})
-            print(f"[OK] {name}: {len(rows)} rows"); return name,rows
-        except Exception as e:
-            print(f"[WARN] {name} attempt {attempt+1}: {e}"); time.sleep(1)
-    return name,[]
 
 def fetch_all():
     global _bc
