@@ -9,11 +9,8 @@ import time
 import os
 import random
 
-from flask_compress import Compress
-
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
-Compress(app)
 
 
 
