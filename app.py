@@ -4578,7 +4578,7 @@ def nexus_dashboard():
         }
     </script>
     </body></html>
-    ''')
+    ''', favicon=FAVICON)
 # ==============================================================================
 # END OF CODE
 # ==============================================================================
@@ -4869,33 +4869,50 @@ def fetch_sheet(name,url,col,start,cx):
 
 def fetch_all():
     global _bc
-    now=time.time()
-    if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
-    # ⚠️ CORRECT MAPPINGS — GE Zone weight=col 6 (H is index 7 but user confirmed col 6)
-    SOURCES={
-        "ECL QC Center":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o":0,"d":1,"b":3,"b2":2,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
-        "ECL Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28},2),
-        "GE Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28},2),
+    now = time.time()
+    # Cache timeout check (returns cached data instantly if valid)
+    if _bc["data"] and (now - _bc["time"]) < CD: return _bc["data"]
+    
+    # ⚠️ CORRECT MAPPINGS
+    SOURCES = {
+        "ECL QC Center": ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+            {"o": 0, "d": 1, "b": 3, "b2": 2, "w": 6, "v": 10, "title": 11, "ic": 12, "c": 13, "cn": 17, "t": 25}, 1),
+        "ECL Zone": ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+            {"o": 0, "d": 1, "b": 4, "w": 8, "v": 13, "title": 14, "ic": 15, "c": 16, "cn": 20, "t": 28}, 2),
+        "GE Zone": ("https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+            {"o": 0, "d": 1, "b": 3, "w": 6, "v": 12, "title": 13, "ic": 14, "c": 15, "cn": 19, "t": 28}, 2),
     }
-    cx=ctx(); res={}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-        futs={ex.submit(fetch_sheet,n,u,c,s,cx):n for n,(u,c,s) in SOURCES.items()}
-        futs[ex.submit(fetch_rates,cx)]="RATES"
+    cx = ctx()
+    res = {}
+    
+    # 🔥 THREADS BARHA DIYE (From 4 to 12) FOR MAXIMUM SPEED!
+    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+        futs = {ex.submit(fetch_sheet, n, u, c, s, cx): n for n, (u, c, s) in SOURCES.items()}
+        futs[ex.submit(fetch_rates, cx)] = "RATES"
+        
         try:
-            for f in concurrent.futures.as_completed(futs,timeout=45):
-                n=futs[f]
-                try: k,d=f.result(); res[k]=d
-                except: res[n]=[] if n!="RATES" else {}
+            for f in concurrent.futures.as_completed(futs, timeout=20):  # 🔥 Timeout reduced so it doesn't hang!
+                n = futs[f]
+                try: 
+                    k, d = f.result()
+                    res[k] = d
+                except Exception as e:
+                    print(f"[ERROR] Fetching {n}: {e}")
+                    res[n] = [] if n != "RATES" else {}
         except concurrent.futures.TimeoutError:
+            print("[TIMEOUT] Fetching took too long!")
             for f in futs:
-                if not f.done(): f.cancel(); res[futs[f]]=[] if futs[f]!="RATES" else {}
+                if not f.done(): 
+                    f.cancel()
+                    res[futs[f]] = [] if futs[f] != "RATES" else {}
+                    
     # Ensure RATES is always (brackets_dict, avg_dict)
-    if "RATES" in res and not isinstance(res["RATES"],tuple):
-        res["RATES"]=({},{})
-    _bc["data"]=res; _bc["time"]=now; return res
+    if "RATES" in res and not isinstance(res["RATES"], tuple):
+        res["RATES"] = ({}, {})
+        
+    _bc["data"] = res
+    _bc["time"] = now
+    return res
 
 # --- API ---
 @app.route("/api/nexus/debug_rates")
