@@ -4196,10 +4196,10 @@ def nexus_dashboard():
         return "<div style='text-align:center; padding:100px; font-family:sans-serif; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2><p>Only Admin users can access the TID Operations Hub.</p><a href='/' style='color:#10B981;'>Go Back</a></div>", 403
 
     return render_template_string('''
-    <!DOCTYPE html><html lang="en" data-theme="dark">
-    <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">
-    <style>
+    <!DOCTYPE html><html lang="en" data-theme="dark">
+    <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
+    {{ favicon|safe }}
+    <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
         :root { 
@@ -4602,8 +4602,9 @@ def nexus_dashboard():
         }
     </script>
     </body></html>
-    ''')
+    ''', favicon=FAVICON)
 # ==============================================================================
+# END OF CODE
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
@@ -4905,7 +4906,7 @@ def fetch_all():
             {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28},2),
     }
     cx=ctx(); res={}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
         futs={ex.submit(fetch_sheet,n,u,c,s,cx):n for n,(u,c,s) in SOURCES.items()}
         futs[ex.submit(fetch_rates,cx)]="RATES"
         try:
