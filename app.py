@@ -16,7 +16,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-product
 
 # ========== CACHE ==========
 CACHE = {}
-CACHE_DURATION = 600  # 10 منٹ
+CACHE_DURATION = 900  # 15 منٹ
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
 # ========== PROVIDERS ==========
@@ -71,27 +71,16 @@ def parse_date_range(request):
         start, end = get_week_range()
     return start, end
 
-_DATE_PARSE_CACHE = {}
-
 def parse_date(date_str):
-    if not date_str or str(date_str).strip() in ('', '#N/A', 'N/A', 'DATE'):
+    if not date_str or str(date_str).strip() in ['', '#N/A', 'N/A', 'DATE']:
         return None
     date_str = str(date_str).strip()
-    
-    # Check cache first
-    if date_str in _DATE_PARSE_CACHE:
-        return _DATE_PARSE_CACHE[date_str]
-    
     formats = ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%d/%m/%y', '%m/%d/%Y', '%Y/%m/%d', '%d.%m.%Y', '%d-%b-%Y']
     for fmt in formats:
         try:
-            result = datetime.strptime(date_str, fmt)
-            _DATE_PARSE_CACHE[date_str] = result
-            return result
+            return datetime.strptime(date_str, fmt)
         except ValueError:
             continue
-    
-    _DATE_PARSE_CACHE[date_str] = None
     return None
 
 def fetch_sheet_data(sheet_name):
@@ -104,20 +93,14 @@ def fetch_sheet_data(sheet_name):
     try:
         encoded_name = urllib.parse.quote(sheet_name)
         url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
-        req = urllib.request.Request(url, headers={
-            'User-Agent': 'Mozilla/5.0',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive'
-        })
-        with urllib.request.urlopen(req, timeout=15) as response:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=30) as response:
             content = response.read().decode('utf-8')
             rows = list(csv.reader(content.splitlines()))
             CACHE[cache_key] = (rows, current_time)
             return rows
     except Exception as e:
         print(f"Error fetching {sheet_name}: {e}")
-        if cache_key in CACHE:
-            return CACHE[cache_key][0]
         return []
 
 def get_star_rating(boxes):
@@ -149,70 +132,55 @@ def process_provider_data(provider, week_start, week_end):
         'active_days': set()
     }
     day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    
-    # Pre-calculate these ONCE outside loop
-    date_col = provider['date_col']
-    box_col = provider['box_col']
-    weight_col = provider['weight_col']
-    region_col = provider['region_col']
-    min_cols_needed = max(date_col, box_col, weight_col, region_col) + 1
-    start_idx = provider['start_row'] - 1
-    
-    for row_idx in range(start_idx, len(rows)):
-        row = rows[row_idx]
+    for row_idx, row in enumerate(rows):
+        if row_idx < provider['start_row'] - 1:
+            continue
         try:
-            if len(row) < min_cols_needed:
+            if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
                 continue
-            date_val = row[date_col].strip()
-            if not date_val or date_val in ('#N/A', 'N/A', 'DATE'):
-                continue
+            date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
             parsed_date = parse_date(date_val)
             if not parsed_date:
                 continue
-            if parsed_date < week_start or parsed_date > week_end:
+            if not (week_start <= parsed_date <= week_end):
                 continue
-            region = row[region_col].strip().upper()
-            if not region or region in INVALID_REGIONS:
+            region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+            if region in INVALID_REGIONS or not region:
                 continue
-            box_val = row[box_col].strip()
-            boxes = int(float(box_val)) if box_val else 0
-            
-            weight_val = row[weight_col].strip()
-            weight = float(weight_val.replace(',', '')) if weight_val else 0.0
-            
+            try:
+                boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+            except:
+                boxes = 0
+            try:
+                weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
+            except:
+                weight = 0.0
             day_name = day_names[parsed_date.weekday()]
-            is_under20 = weight < 20
-            
             data['total_orders'] += 1
             data['total_boxes'] += boxes
             data['total_weight'] += weight
             data['active_days'].add(day_name)
-            
-            if is_under20:
+            if weight < 20:
                 data['total_under20'] += 1
             else:
                 data['total_over20'] += 1
-            
-            dt = data['daily_totals'][day_name]
-            dt['orders'] += 1
-            dt['boxes'] += boxes
-            dt['weight'] += weight
-            if is_under20:
-                dt['under20'] += 1
+            data['daily_totals'][day_name]['orders'] += 1
+            data['daily_totals'][day_name]['boxes'] += boxes
+            data['daily_totals'][day_name]['weight'] += weight
+            if weight < 20:
+                data['daily_totals'][day_name]['under20'] += 1
             else:
-                dt['over20'] += 1
-            
-            rd = data['regions'][region]['days'][day_name]
-            rd['orders'] += 1
-            rd['boxes'] += boxes
-            rd['weight'] += weight
-            if is_under20:
-                rd['under20'] += 1
+                data['daily_totals'][day_name]['over20'] += 1
+            region_data = data['regions'][region]['days'][day_name]
+            region_data['orders'] += 1
+            region_data['boxes'] += boxes
+            region_data['weight'] += weight
+            if weight < 20:
+                region_data['under20'] += 1
             else:
-                rd['over20'] += 1
-        except (ValueError, IndexError, TypeError):
+                region_data['over20'] += 1
+        except Exception as e:
             continue
-    
     data['stars'] = get_star_rating(data['total_boxes'])
     data['active_days'] = list(data['active_days'])
     data['regions'] = dict(data['regions'])
@@ -3263,19 +3231,6 @@ def api_dashboard():
     start_date, end_date = parse_date_range(request)
     prev_start = start_date - (end_date - start_date) - timedelta(seconds=1)
     prev_end = start_date - timedelta(seconds=1)
-    
-    # Pre-fetch ALL unique sheets in parallel FIRST
-    unique_sheets = list(set(p['sheet'] for p in PROVIDERS))
-    import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(unique_sheets)) as executor:
-        futures = {executor.submit(fetch_sheet_data, sheet): sheet for sheet in unique_sheets}
-        for f in concurrent.futures.as_completed(futures):
-            try:
-                f.result()  # This populates the CACHE
-            except:
-                pass
-    
-    # Now process — all data is cached, no network calls
     providers_data = []
     max_boxes = 0
     winner_idx = 0
@@ -3935,7 +3890,6 @@ NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLy
 # ------------------------------------------------------------------------------
 NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
 NEXUS_FILTER_DATE = datetime(2026, 1, 1)
-NEXUS_CACHE_DURATION = 600  # 10 minutes instead of 5
 
 NEXUS_SHEET_MAP = {
     "Kerry":         {"o": 1, "b": 5, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
@@ -4048,7 +4002,7 @@ def nexus_parse_date(date_str):
 def nexus_sync_db(force=False):
     global NEXUS_GLOBAL_CACHE
     now = time.time()
-    if not force and now - NEXUS_GLOBAL_CACHE['time'] < NEXUS_CACHE_DURATION and NEXUS_GLOBAL_CACHE['sheets']:
+    if not force and now - NEXUS_GLOBAL_CACHE['time'] < 300 and NEXUS_GLOBAL_CACHE['sheets']:
         return NEXUS_GLOBAL_CACHE['sheets'], NEXUS_GLOBAL_CACHE['kerry']
 
     res = {}
@@ -4637,10 +4591,7 @@ from datetime import datetime, timedelta
 from flask import jsonify, request, session, render_template_string
 
 _bc={"data":None,"time":0}; _jc={"data":None,"time":0}; _sc={"data":None,"time":0}
-_rc={"data":None,"time":0}  # Separate rates cache
-_src_cache={}  # Per-source stale fallback: {"ECL QC Center": {"data":[], "time":0}, ...}
 CD=600
-RATES_CD=86400  # 24 hours — rates rarely change
 
 FULL_ACCESS = {
     "husaain@joinfleek.com",
@@ -4766,89 +4717,45 @@ def lookup_rate(rm_brackets, country, billed_kg, default=4.50):
     Returns the matching per-kg rate.
     """
     ctry=str(country).strip().lower()
-    # Pre-build country alias lookup (add this BEFORE lookup_rate function)
-COUNTRY_ALIASES_MAP = {}
-_ALIASES_RAW = {
-    "united kingdom":["uk","gb","england","britain","u.k","u.k."],
-    "united states":["usa","us","america","u.s","u.s.a"],
-    "united arab emirates":["uae","dubai","u.a.e"],
-    "saudi arabia":["saudia arabia","ksa","saudi"],
-    "south korea":["korea"],
-    "new zealand":["nz"],
-    "netherlands":["holland"],
-}
-for canon, alts in _ALIASES_RAW.items():
-    COUNTRY_ALIASES_MAP[canon] = canon
-    for a in alts:
-        COUNTRY_ALIASES_MAP[a] = canon
-
-def lookup_rate(rm_brackets, country, billed_kg, default=4.50):
-    ctry=str(country).strip().lower()
-    if not ctry or ctry in ["","n/a","nan","none"]:
-        return default
-    
-    # Fast O(1) lookup via pre-built alias map
-    candidates=rm_brackets.get(ctry)
-    if not candidates:
-        canon=COUNTRY_ALIASES_MAP.get(ctry)
-        if canon:
-            candidates=rm_brackets.get(canon)
+    # Try exact country match, then aliases
+    ALIASES={
+        "united kingdom":["uk","gb","england","britain","u.k","u.k."],
+        "united states":["usa","us","america","u.s","u.s.a"],
+        "united arab emirates":["uae","dubai","u.a.e"],
+        "saudi arabia":["saudia arabia","ksa","saudi"],
+        "south korea":["korea"],
+        "new zealand":["nz"],
+        "netherlands":["holland"],
+    }
+    candidates=[]
+    if ctry in rm_brackets:
+        candidates=rm_brackets[ctry]
+    else:
+        for canon,alts in ALIASES.items():
+            if ctry in alts or ctry==canon:
+                key=canon if canon in rm_brackets else next((a for a in alts if a in rm_brackets),None)
+                if key: candidates=rm_brackets[key]; break
         if not candidates:
-            # Partial match as last resort
+            # partial match
             for k,v in rm_brackets.items():
                 if k in ctry or ctry in k:
                     candidates=v; break
     if not candidates:
         return default
-    
-    # Find bracket where billed_kg falls
-    sorted_brackets=sorted(candidates,key=lambda x:x[0])
-    for (mn,mx,rate) in sorted_brackets:
+    # Find bracket where billed_kg falls: min < billed <= max
+    for (mn,mx,rate) in sorted(candidates,key=lambda x:x[0]):
         if mn < billed_kg <= mx:
             return rate
-    if billed_kg<=sorted_brackets[0][1]: return sorted_brackets[0][2]
-    return sorted_brackets[-1][2]
+    # Fallback: nearest bracket (for edge cases like billed=0)
+    if billed_kg<=candidates[0][1]: return candidates[0][2]
+    return candidates[-1][2]  # heaviest bracket
 
 def fetch_rates(cx):
-    global _rc
-    now=time.time()
-    if _rc["data"] and (now-_rc["time"])<RATES_CD:
-        return "RATES",_rc["data"]
     try:
         url="https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
-        req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Accept-Encoding":"gzip, deflate"})
-        with urllib.request.urlopen(req,timeout=15,context=cx) as r:
+        req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+        with urllib.request.urlopen(req,timeout=20,context=cx) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
-        COUNTRY_COL=7; BRACKET_COL=9; RATE_COL=12
-        rm_brackets={}
-        rm_flat={}
-        for row in data[1:]:
-            p=row+[""]*20
-            ctry=str(p[COUNTRY_COL]).strip().lower()
-            bracket_raw=str(p[BRACKET_COL]).strip()
-            rate_raw=str(p[RATE_COL]).strip()
-            if not ctry or ctry in ["country","shipping_address_country","","nan","#n/a"]: continue
-            if not rate_raw: continue
-            try:
-                rate_val=float(re.sub(r"[^0-9.]","",rate_raw))
-                if not (0.01<rate_val<500): continue
-            except: continue
-            bracket=parse_weight_bracket(bracket_raw)
-            if ctry not in rm_brackets: rm_brackets[ctry]=[]
-            if bracket:
-                rm_brackets[ctry].append((bracket[0],bracket[1],rate_val))
-            if ctry not in rm_flat: rm_flat[ctry]=[]
-            rm_flat[ctry].append(rate_val)
-        rm_avg={k:round(sum(v)/len(v),4) for k,v in rm_flat.items() if v}
-        result=(rm_brackets,rm_avg)
-        _rc["data"]=result; _rc["time"]=now
-        print(f"[RATES] Loaded {len(rm_brackets)} countries with weight-bracket rates.")
-        return "RATES",result
-    except Exception as e:
-        print(f"[RATES] ERROR: {e}")
-        if _rc["data"]:
-            return "RATES",_rc["data"]
-        return "RATES",({},{})
         # Col H=7: country, Col J=9: weight bracket, Col M=12: per kg rate
         COUNTRY_COL=7; BRACKET_COL=9; RATE_COL=12
         rm_brackets={}   # country_lower -> [(min,max,rate), ...]
@@ -4884,21 +4791,18 @@ def fetch_rates(cx):
 def fetch_status():
     global _sc
     now=time.time()
-    if _sc["data"] and (now-_sc["time"])<CD: return "STATUS_INLINE",_sc["data"]
+    if _sc["data"] and (now-_sc["time"])<CD: return _sc["data"]
     try:
-        req=urllib.request.Request(SS,headers={"User-Agent":"Mozilla/5.0","Accept-Encoding":"gzip, deflate"})
-        with urllib.request.urlopen(req,timeout=15,context=ctx()) as r:
+        req=urllib.request.Request(SS,headers={"User-Agent":"Mozilla/5.0"})
+        with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
         sm={}
         for row in data[1:]:
             p=row+[""]*10; fid=str(p[0]).strip()
             if fid and fid.lower() not in ["","nan","fleek_id","fleek id","order"]:
                 sm[fid.upper()]=str(p[1]).strip() or "—"
-        _sc["data"]=sm; _sc["time"]=now; return "STATUS_INLINE",sm
-    except: 
-        if _sc["data"]:
-            return "STATUS_INLINE",_sc["data"]
-        return "STATUS_INLINE",{}
+        _sc["data"]=sm; _sc["time"]=now; return sm
+    except: return {}
 
 def fetch_journey():
     global _jc
@@ -4921,15 +4825,10 @@ def fetch_journey():
     except: return {}
 
 def fetch_sheet(name,url,col,start,cx):
-    global _src_cache
-    for attempt in range(3):
+    for attempt in range(2):
         try:
-            req=urllib.request.Request(url,headers={
-                "User-Agent":"Mozilla/5.0",
-                "Accept-Encoding":"gzip, deflate",
-                "Connection":"keep-alive"
-            })
-            with urllib.request.urlopen(req,timeout=20,context=cx) as r:
+            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(req,timeout=25,context=cx) as r:
                 data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
             rows=[]; lo=ld=lv=lc=lcn=lt=""
             for row in data[start:]:
@@ -4954,31 +4853,25 @@ def fetch_sheet(name,url,col,start,cx):
                 if cnv: lcn=cnv
                 if tv: lt=tv
                 bxv=str(p[col["b"]]).strip()
+                # For QC Center also check alternate box col
                 if not bxv and col.get("b2") is not None:
                     bxv2=str(p[col["b2"]]).strip()
+                    # Only use b2 if it looks like a box number (numeric)
                     if bxv2 and re.match(r"^[0-9]+$",bxv2): bxv=bxv2
                 rows.append({"order":co,"date":dv or ld,"date_std":sd(dv or ld),
                     "boxes":bxv,"weight":rw,
                     "vendor":vv or lv,"title":rti or "N/A","item_count":str(p[col["ic"]]).strip() or "0",
                     "customer":cv or lc,"country":cnv or lcn,"tid":tv or lt})
-            print(f"[OK] {name}: {len(rows)} rows")
-            # Save to per-source stale cache on success
-            _src_cache[name]={"data":rows,"time":time.time()}
-            return name,rows
+            print(f"[OK] {name}: {len(rows)} rows"); return name,rows
         except Exception as e:
-            print(f"[WARN] {name} attempt {attempt+1}: {e}")
-            if attempt<2: time.sleep(0.5*(attempt+1))
-    # All attempts failed — return stale data if available, else empty
-    stale=_src_cache.get(name)
-    if stale and stale.get("data"):
-        print(f"[STALE] {name}: using cached {len(stale['data'])} rows")
-        return name,stale["data"]
+            print(f"[WARN] {name} attempt {attempt+1}: {e}"); time.sleep(1)
     return name,[]
 
 def fetch_all():
     global _bc
     now=time.time()
     if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
+    # ⚠️ CORRECT MAPPINGS — GE Zone weight=col 6 (H is index 7 but user confirmed col 6)
     SOURCES={
         "ECL QC Center":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
             {"o":0,"d":1,"b":3,"b2":2,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
@@ -4988,49 +4881,20 @@ def fetch_all():
             {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28},2),
     }
     cx=ctx(); res={}
-    
-    # Check if rates are already cached — skip if so
-    rates_cached = _rc["data"] and (now - _rc["time"]) < RATES_CD
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
         futs={ex.submit(fetch_sheet,n,u,c,s,cx):n for n,(u,c,s) in SOURCES.items()}
-        # Also fetch status in parallel
-        futs[ex.submit(fetch_status)]="STATUS_INLINE"
-        if not rates_cached:
-            futs[ex.submit(fetch_rates,cx)]="RATES"
+        futs[ex.submit(fetch_rates,cx)]="RATES"
         try:
             for f in concurrent.futures.as_completed(futs,timeout=45):
                 n=futs[f]
-                try:
-                    k,d=f.result()
-                    if k=="STATUS_INLINE":
-                        pass  # status is stored in _sc by fetch_status itself
-                    else:
-                        res[k]=d
-                except: 
-                    if n not in ("RATES","STATUS_INLINE"):
-                        # Use stale per-source data if available
-                        stale=_src_cache.get(n)
-                        res[n]=stale["data"] if stale and stale.get("data") else []
+                try: k,d=f.result(); res[k]=d
+                except: res[n]=[] if n!="RATES" else {}
         except concurrent.futures.TimeoutError:
             for f in futs:
-                if not f.done():
-                    f.cancel()
-                    n=futs[f]
-                    if n not in ("RATES","STATUS_INLINE"):
-                        stale=_src_cache.get(n)
-                        res[n]=stale["data"] if stale and stale.get("data") else []
-                        if stale: print(f"[TIMEOUT-STALE] {n}: using {len(stale['data'])} cached rows")
-    
-    # Use cached rates if not freshly fetched
-    if "RATES" not in res:
-        if _rc["data"]:
-            res["RATES"]=_rc["data"]
-        else:
-            res["RATES"]=({},{})
+                if not f.done(): f.cancel(); res[futs[f]]=[] if futs[f]!="RATES" else {}
+    # Ensure RATES is always (brackets_dict, avg_dict)
     if "RATES" in res and not isinstance(res["RATES"],tuple):
         res["RATES"]=({},{})
-    
     _bc["data"]=res; _bc["time"]=now; return res
 
 # --- API ---
@@ -5047,18 +4911,11 @@ def api_debug_rates():
 
 @app.route("/api/nexus/app_data")
 def api_app_data():
-    sheets=fetch_all()
-    # Status is now fetched inside fetch_all() in parallel
-    sm=_sc.get("data") or {}
+    sheets=fetch_all(); sm=fetch_status()
     rates_data=sheets.get("RATES",({},{}))
     if isinstance(rates_data,tuple): rm_brackets,rm_avg=rates_data
     else: rm_brackets,rm_avg={},{}
     DR=4.50
-    
-    # Date filter — only process last N days (default 60)
-    max_days=int(request.args.get('days', 60))
-    cutoff_date=(datetime.now()-timedelta(days=max_days)).strftime("%Y-%m-%d")
-    
     bundles=[]; tb=to2=0; tsav=0.0
     ss={"ECL QC Center":{"orders":0,"boxes":0},"PK Zone":{"orders":0,"boxes":0}}
     NA_VALS={"n/a","#n/a","not applicable","na","none","null","-","nan",""}
@@ -5066,12 +4923,11 @@ def api_app_data():
         rows=sheets.get(src,[]); cb=None
         pk="PK Zone" if src in ["ECL Zone","GE Zone"] else src
         for r in rows:
-            # SKIP old rows early
-            if r.get("date_std","1970-01-01") < cutoff_date:
-                continue
             oid=r["order"].upper(); bx=r["boxes"]
+            # Skip N/A orders
             if oid.lower().replace(" ","") in NA_VALS or "#n/a" in oid.lower(): continue
             ttl=r["title"]; ctry=r["country"]
+            # Skip N/A titles or countries that break data
             if not oid or not re.search(r"\d",oid): continue
             od={"order_id":oid,"weight":r["weight"],"title":ttl,
                 "item_count":r["item_count"],"country":ctry,"status":sm.get(oid,"—")}
@@ -5096,12 +4952,14 @@ def api_app_data():
     for b in bundles:
         tq=0; bw=0.0; isc=0.0
         raw_ctry=str(b.get("country","")).strip()
+        # rate set per-order and per-bundle using weight brackets below
         for o in b["orders"]:
             try: ic_raw=int(float(re.sub(r"[^0-9.]","",str(o["item_count"])) or 1)); tq+=ic_raw
             except: ic_raw=1
             try: wt=float(re.sub(r"[^0-9.]","",str(o["weight"])) or 0)
             except: wt=0.0
             bw+=wt
+            # For individual cost: use actual weight if available, else estimate from category+pieces
             if wt>0:
                 indiv_wt=wt
             else:
@@ -6671,7 +6529,7 @@ async function init(){
   const ls=g("lStat");
   try{
     ls.textContent="Fetching from 3 sources simultaneously...";
-    const r=await fetch("/api/nexus/app_data?days=60");
+    const r=await fetch("/api/nexus/app_data");
     if(!r.ok) throw new Error("HTTP "+r.status);
     D=await r.json();
     const mon=gMon(new Date());
@@ -6701,8 +6559,6 @@ async function init(){
 function hardRefresh(){
   D=null;
   Object.keys(_rendered).forEach(k=>_rendered[k]=false);
-  // Clear server cache too
-  fetch("/api/nexus/refresh",{method:"POST"}).catch(()=>{});
   g("gLoad").style.display="block";
   document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".sb-tab").forEach(t=>t.classList.remove("active"));
