@@ -1137,17 +1137,8 @@ SIDEBAR_HTML = """
         </div>
     </div>
     <div class="nav-menu">
-        <div class="nav-section">
-            <div class="nav-section-title" style="color: #10b981;">HUB COMMAND</div>
-            <a href="/bundling" class="nav-item" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; border: 1px solid #10b981; margin-bottom: 4px; background: rgba(16,185,129,0.05); color: #10b981; white-space: nowrap;">
-                <span style="font-size: 15px; line-height: 1;">📦</span> <span style="font-weight: 600;">Bundling Intel</span>
-            </a>
-            <a href="/nexus" class="nav-item" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); white-space: nowrap;">
-                <span style="font-size: 15px; line-height: 1;">🛰️</span> <span style="font-weight: 600;">TID Hub</span>
-            </a>
-        </div>
-        <div class="nav-section">
-            <div class="nav-section-title">MAIN</div>
+        <div class="nav-section">
+            <div class="nav-section-title">MAIN</div>
             <a href="/" class="nav-item {active_dashboard}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                 <span>Dashboard</span>
@@ -1206,9 +1197,6 @@ SIDEBAR_HTML = """
                 <span>World Map</span>
             </a>
         </div>
-
-        
-
         {forecast_link}
         {logs_link}
     </div>
@@ -4198,7 +4186,6 @@ def nexus_dashboard():
     return render_template_string('''
     <!DOCTYPE html><html lang="en" data-theme="dark">
     <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
-    {{ favicon|safe }}
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
@@ -4290,22 +4277,11 @@ def nexus_dashboard():
         </header>
         <div class="main-wrapper">
             <aside class="sidebar">
-                <div style="font-size: 10px; font-weight: 800; color: #10b981; text-transform: uppercase; margin: 10px 0 10px 0px; letter-spacing: 1px;">Hub Command</div>
-                <a href="/bundling" class="nav-item" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; text-decoration:none; border: 1px solid var(--border); margin-bottom: 4px; white-space: nowrap;">
-                    <span style="font-size: 15px; line-height: 1;">📦</span> <span style="font-weight: 600;">Bundling Intel</span>
-                </a>
-                <a href="/nexus" class="nav-item" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; text-decoration:none; border: 1px solid #10b981; background: rgba(16,185,129,0.05); color: #10b981; white-space: nowrap;">
-                    <span style="font-size: 15px; line-height: 1;">🛰️</span> <span style="font-weight: 600;">TID Hub</span>
-                </a>
-
-                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 20px 0 10px 18px; letter-spacing: 1px;">Operations</div>
+                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Operations</div>
                 <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
                 <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct Track</button>
                 <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over Radar</button>
                 <button class="nav-item" onclick="navSwitch(this, 'view-ops')">⚡ Ops Commander</button>
-                
-                
-
                 <div style="flex:1"></div>
                 <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
             </aside>
@@ -4602,9 +4578,8 @@ def nexus_dashboard():
         }
     </script>
     </body></html>
-    ''', favicon=FAVICON)
+    ''')
 # ==============================================================================
-# END OF CODE
 # END OF CODE
 # ==============================================================================
 # ==============================================================================
@@ -4906,7 +4881,7 @@ def fetch_all():
             {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28},2),
     }
     cx=ctx(); res={}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as ex:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
         futs={ex.submit(fetch_sheet,n,u,c,s,cx):n for n,(u,c,s) in SOURCES.items()}
         futs[ex.submit(fetch_rates,cx)]="RATES"
         try:
@@ -5042,14 +5017,30 @@ def bundling_spa():
     html=BUNDLING_HTML.replace("window.onload=init;","const GUEST="+gflag+";\nconst USER_EMAIL='"+email+"';\n"+rm_js+"\nwindow.onload=init;")
     return render_template_string(html)
 
-
+@app.after_request
+def add_float_btns(response):
+    if request.path=="/" and response.content_type and "text/html" in response.content_type:
+        mode=user_mode()
+        html=response.get_data(as_text=True)
+        if mode=="full":
+            btn='''<div style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:99999">
+<a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
+<a href="/nexus" style="background:#fff;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.4)">🛰️ TID Hub</a>
+</div>'''
+            if "</body>" in html: response.set_data(html.replace("</body>",btn+"</body>"))
+        elif mode=="guest":
+            btn='''<div style="position:fixed;bottom:24px;right:24px;z-index:99999">
+<a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
+</div>'''
+            if "</body>" in html: response.set_data(html.replace("</body>",btn+"</body>"))
+    return response
 
 BUNDLING_HTML = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bundling Intelligence Hub</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111827'/%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%231e1b4b'/%3E%3Ctext x='16' y='14' font-family='Arial' font-size='7' font-weight='900' fill='%23a78bfa' text-anchor='middle'%3E3PL%3C/text%3E%3Ctext x='16' y='24' font-family='Arial' font-size='6' font-weight='700' fill='%2360a5fa' text-anchor='middle'%3EDASH%3C/text%3E%3C/svg%3E">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -5967,17 +5958,7 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     </div>
   </div>
   <nav class="sb-nav">
-    <div class="sb-section-label" style="color: #10b981; margin-top: 0;">Hub Command</div>
-    <a href="/bundling" class="sb-tab" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; border: 1px solid #10b981; text-decoration: none; margin-bottom: 4px; background: rgba(16,185,129,0.05); white-space: nowrap;">
-      <span style="font-size: 15px; line-height: 1;">📦</span>
-      <span style="color: #10b981; font-weight: 800;">Bundling Intel</span>
-    </a>
-    <a href="/nexus" class="sb-tab" style="display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; padding: 8px 10px; border: 1px solid var(--sb-border); text-decoration: none; white-space: nowrap;">
-      <span style="font-size: 15px; line-height: 1;">🛰️</span>
-      <span style="font-weight: 800; color: var(--sb-text);">TID Hub</span>
-    </a>
-
-    <div class="sb-section-label" style="margin-top:16px;">Workspace</div>
+    <div class="sb-section-label">Workspace</div>
     <button class="sb-tab active" data-pane="bundle" onclick="sw('bundle',this)">
       <span class="sb-tab-icon">📦</span>
       <span class="sb-tab-label">Bundle Intelligence</span>
@@ -6041,8 +6022,6 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
       <span class="sb-tab-label">Savings Certificate</span>
       <span class="sb-tab-dot"></span>
     </button>
-
-    
   </nav>
   <div class="sb-foot">
     <button class="theme-pill" onclick="toggleTheme()" id="themePill">
