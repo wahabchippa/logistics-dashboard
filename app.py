@@ -16,7 +16,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-product
 
 # ========== CACHE ==========
 CACHE = {}
-CACHE_DURATION = 900  # 15 منٹ
+CACHE_DURATION = 600  # 10 منٹ
 SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY'
 
 # ========== PROVIDERS ==========
@@ -71,16 +71,27 @@ def parse_date_range(request):
         start, end = get_week_range()
     return start, end
 
+_DATE_PARSE_CACHE = {}
+
 def parse_date(date_str):
-    if not date_str or str(date_str).strip() in ['', '#N/A', 'N/A', 'DATE']:
+    if not date_str or str(date_str).strip() in ('', '#N/A', 'N/A', 'DATE'):
         return None
     date_str = str(date_str).strip()
+    
+    # Check cache first
+    if date_str in _DATE_PARSE_CACHE:
+        return _DATE_PARSE_CACHE[date_str]
+    
     formats = ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%d/%m/%y', '%m/%d/%Y', '%Y/%m/%d', '%d.%m.%Y', '%d-%b-%Y']
     for fmt in formats:
         try:
-            return datetime.strptime(date_str, fmt)
+            result = datetime.strptime(date_str, fmt)
+            _DATE_PARSE_CACHE[date_str] = result
+            return result
         except ValueError:
             continue
+    
+    _DATE_PARSE_CACHE[date_str] = None
     return None
 
 def fetch_sheet_data(sheet_name):
@@ -93,14 +104,20 @@ def fetch_sheet_data(sheet_name):
     try:
         encoded_name = urllib.parse.quote(sheet_name)
         url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=30) as response:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive'
+        })
+        with urllib.request.urlopen(req, timeout=15) as response:
             content = response.read().decode('utf-8')
             rows = list(csv.reader(content.splitlines()))
             CACHE[cache_key] = (rows, current_time)
             return rows
     except Exception as e:
         print(f"Error fetching {sheet_name}: {e}")
+        if cache_key in CACHE:
+            return CACHE[cache_key][0]
         return []
 
 def get_star_rating(boxes):
@@ -132,55 +149,70 @@ def process_provider_data(provider, week_start, week_end):
         'active_days': set()
     }
     day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    for row_idx, row in enumerate(rows):
-        if row_idx < provider['start_row'] - 1:
-            continue
+    
+    # Pre-calculate these ONCE outside loop
+    date_col = provider['date_col']
+    box_col = provider['box_col']
+    weight_col = provider['weight_col']
+    region_col = provider['region_col']
+    min_cols_needed = max(date_col, box_col, weight_col, region_col) + 1
+    start_idx = provider['start_row'] - 1
+    
+    for row_idx in range(start_idx, len(rows)):
+        row = rows[row_idx]
         try:
-            if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col']):
+            if len(row) < min_cols_needed:
                 continue
-            date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+            date_val = row[date_col].strip()
+            if not date_val or date_val in ('#N/A', 'N/A', 'DATE'):
+                continue
             parsed_date = parse_date(date_val)
             if not parsed_date:
                 continue
-            if not (week_start <= parsed_date <= week_end):
+            if parsed_date < week_start or parsed_date > week_end:
                 continue
-            region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
-            if region in INVALID_REGIONS or not region:
+            region = row[region_col].strip().upper()
+            if not region or region in INVALID_REGIONS:
                 continue
-            try:
-                boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
-            except:
-                boxes = 0
-            try:
-                weight = float(row[provider['weight_col']].replace(',', '')) if row[provider['weight_col']].strip() else 0.0
-            except:
-                weight = 0.0
+            box_val = row[box_col].strip()
+            boxes = int(float(box_val)) if box_val else 0
+            
+            weight_val = row[weight_col].strip()
+            weight = float(weight_val.replace(',', '')) if weight_val else 0.0
+            
             day_name = day_names[parsed_date.weekday()]
+            is_under20 = weight < 20
+            
             data['total_orders'] += 1
             data['total_boxes'] += boxes
             data['total_weight'] += weight
             data['active_days'].add(day_name)
-            if weight < 20:
+            
+            if is_under20:
                 data['total_under20'] += 1
             else:
                 data['total_over20'] += 1
-            data['daily_totals'][day_name]['orders'] += 1
-            data['daily_totals'][day_name]['boxes'] += boxes
-            data['daily_totals'][day_name]['weight'] += weight
-            if weight < 20:
-                data['daily_totals'][day_name]['under20'] += 1
+            
+            dt = data['daily_totals'][day_name]
+            dt['orders'] += 1
+            dt['boxes'] += boxes
+            dt['weight'] += weight
+            if is_under20:
+                dt['under20'] += 1
             else:
-                data['daily_totals'][day_name]['over20'] += 1
-            region_data = data['regions'][region]['days'][day_name]
-            region_data['orders'] += 1
-            region_data['boxes'] += boxes
-            region_data['weight'] += weight
-            if weight < 20:
-                region_data['under20'] += 1
+                dt['over20'] += 1
+            
+            rd = data['regions'][region]['days'][day_name]
+            rd['orders'] += 1
+            rd['boxes'] += boxes
+            rd['weight'] += weight
+            if is_under20:
+                rd['under20'] += 1
             else:
-                region_data['over20'] += 1
-        except Exception as e:
+                rd['over20'] += 1
+        except (ValueError, IndexError, TypeError):
             continue
+    
     data['stars'] = get_star_rating(data['total_boxes'])
     data['active_days'] = list(data['active_days'])
     data['regions'] = dict(data['regions'])
@@ -1197,6 +1229,13 @@ SIDEBAR_HTML = """
                 <span>World Map</span>
             </a>
         </div>
+        <div class="nav-section">
+            <div class="nav-section-title">OPERATIONS</div>
+            <a href="/order-aging" class="nav-item {active_aging}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>⏳ Order Aging</span>
+            </a>
+        </div>
         {forecast_link}
         {logs_link}
     </div>
@@ -1235,7 +1274,7 @@ document.addEventListener('DOMContentLoaded', function() {
 """
 
 def sidebar(active, role='guest'):
-    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','whatsapp','achievements','worldmap']
+    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','whatsapp','achievements','worldmap','aging']
     kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
     
     if role == 'admin':
@@ -3231,6 +3270,19 @@ def api_dashboard():
     start_date, end_date = parse_date_range(request)
     prev_start = start_date - (end_date - start_date) - timedelta(seconds=1)
     prev_end = start_date - timedelta(seconds=1)
+    
+    # Pre-fetch ALL unique sheets in parallel FIRST
+    unique_sheets = list(set(p['sheet'] for p in PROVIDERS))
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(unique_sheets)) as executor:
+        futures = {executor.submit(fetch_sheet_data, sheet): sheet for sheet in unique_sheets}
+        for f in concurrent.futures.as_completed(futures):
+            try:
+                f.result()  # This populates the CACHE
+            except:
+                pass
+    
+    # Now process — all data is cached, no network calls
     providers_data = []
     max_boxes = 0
     winner_idx = 0
@@ -3850,6 +3902,343 @@ def order_details():
 </body>
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
+# ==============================================================================
+
+# ===== ORDER AGING =====
+@app.route('/order-aging')
+@login_required
+def order_aging():
+    role = session.get('role', 'guest')
+    if role != 'admin':
+        return "<div style='text-align:center;padding:100px;font-family:sans-serif'>⛔ Admin access required</div>", 403
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Order Aging - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''
+<style>
+.ag-breach-row td{background:rgba(239,68,68,.04)!important;}
+.ag-warn-row td{background:rgba(245,158,11,.03)!important;}
+.ag-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+.ag-pill-breach{background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.3);}
+.ag-pill-warn{background:rgba(245,158,11,.12);color:#f59e0b;border:1px solid rgba(245,158,11,.3);}
+.ag-pill-ok{background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.3);}
+.ag-tbl{width:100%;border-collapse:collapse;font-size:12px;min-width:1000px;}
+.ag-tbl th{background:var(--table-hdr);padding:10px 12px;text-align:left;font-weight:700;color:var(--text-muted);font-size:10px;text-transform:uppercase;border-bottom:2px solid var(--brand-color);white-space:nowrap;}
+.ag-tbl td{padding:10px 12px;border-bottom:1px solid var(--border-color);vertical-align:middle;}
+.ag-tbl tr:hover td{background:var(--hover-bg);cursor:pointer;}
+.ag-qc-th{color:#f59e0b!important;background:rgba(245,158,11,.06)!important;}
+.ag-qc-td{background:rgba(245,158,11,.04)!important;text-align:center;}
+.ag-big{font-size:18px;font-weight:900;line-height:1.1;}
+.ag-sub{font-size:10px;color:var(--text-muted);margin-top:2px;}
+.oid-lnk{color:var(--brand-color);font-weight:800;font-family:monospace;text-decoration:underline;}
+.jmov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;backdrop-filter:blur(14px);justify-content:center;align-items:center;padding:20px;}
+.jmov.open{display:flex;}
+.jmdl{background:var(--bg-card);border:1px solid var(--border-color);border-radius:20px;padding:28px;width:100%;max-width:680px;max-height:88vh;overflow-y:auto;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.7);}
+.jcls{position:absolute;top:14px;right:14px;background:var(--hover-bg);border:1px solid var(--border-color);color:var(--text-main);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+.jcls:hover{background:#ef4444;border-color:#ef4444;color:#fff;}
+.tl-wrap{position:relative;padding-left:28px;margin-top:14px;}
+.tl-wrap::before{content:'';position:absolute;left:9px;top:4px;bottom:4px;width:2px;background:linear-gradient(180deg,#10b981,rgba(79,70,229,.2));border-radius:2px;}
+.tl-item{position:relative;margin-bottom:14px;}
+.tl-dot{position:absolute;left:-21px;top:3px;width:11px;height:11px;border-radius:50%;border:2px solid var(--border-color);background:var(--bg-card);}
+.tl-dot.done{background:#10b981;border-color:#10b981;box-shadow:0 0 6px rgba(16,185,129,.4);}
+.tl-dot.canc{background:#ef4444;border-color:#ef4444;}
+.tl-lbl{font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
+.tl-val{font-size:13px;font-weight:600;margin-top:2px;}
+.tl-val.pend{color:var(--text-muted);font-style:italic;}
+.tl-val.cv{color:#ef4444;}
+.km-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+.km-card{background:var(--hover-bg);border:1px solid var(--border-color);border-radius:12px;padding:14px;text-align:center;}
+.km-val{font-size:20px;font-weight:900;}
+.km-lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-top:4px;}
+.stp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
+.stp-card{background:var(--hover-bg);border:1px solid var(--border-color);border-radius:10px;padding:10px;text-align:center;}
+.stp-lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;}
+.stp-val{font-size:13px;font-weight:700;}
+.shd{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--brand-color);margin:16px 0 10px;padding-bottom:7px;border-bottom:1px solid var(--border-color);}
+.cb-banner{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:10px 14px;margin-bottom:14px;color:#ef4444;font-weight:700;font-size:12px;}
+.mld{width:24px;height:24px;border:3px solid var(--border-color);border-top-color:#10b981;border-radius:50%;animation:spin 0.7s linear infinite;margin:28px auto;}
+</style>
+</head><body>
+''' + sidebar('aging', role) + '''
+<main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
+<div class="page-header">
+    <h1 class="page-title">Order <span>Aging</span></h1>
+</div>
+<div class="date-range-picker" style="margin-bottom:20px">
+  <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+    <div>
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">SLA Filter</div>
+      <div class="qbtns-row" style="margin:0">
+        <button class="qbtn active" onclick="agFilter(this,'all')">All</button>
+        <button class="qbtn" onclick="agFilter(this,'breach')">🔴 Breach</button>
+        <button class="qbtn" onclick="agFilter(this,'warn')">🟡 Warning</button>
+        <button class="qbtn" onclick="agFilter(this,'ok')">🟢 On Time</button>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">Provider</div>
+      <select id="agSrc" class="range-input" onchange="agApply()">
+        <option value="all">All Providers</option>
+        <option value="GE QC">GE QC</option>
+        <option value="GE ZONE">GE ZONE</option>
+        <option value="ECL QC">ECL QC</option>
+        <option value="ECL ZONE">ECL ZONE</option>
+        <option value="KERRY">KERRY</option>
+        <option value="APX">APX</option>
+      </select>
+    </div>
+    <div style="flex:1;min-width:200px">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">Search</div>
+      <input type="text" id="agQ" class="range-input" style="width:100%" placeholder="Order ID..." oninput="agApply()">
+    </div>
+    <button class="apply-btn" onclick="loadAging()">🔄 Refresh</button>
+  </div>
+</div>
+<div class="stats-row" id="agKpi"></div>
+<div id="agBody"><div class="loading"><div class="spinner"></div></div></div>
+<div class="jmov" id="jMov" onclick="if(event.target===this)closeJ()">
+  <div class="jmdl">
+    <button class="jcls" onclick="closeJ()">✕</button>
+    <div id="jBody"><div class="mld"></div></div>
+  </div>
+</div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+let _agAll=[],_agSla='all',_agPage=0,_agFilt=[];
+const AG_PG=100;
+
+async function loadAging(){
+  document.getElementById('agBody').innerHTML='<div class="loading"><div class="spinner"></div></div>';
+  document.getElementById('agKpi').innerHTML='';
+  try{
+    const r=await fetch('/api/main_aging_data');
+    const d=await r.json();
+    if(!d.success) throw new Error('API error');
+    _agAll=d.rows||[];
+    agApply();
+  }catch(e){
+    document.getElementById('agBody').innerHTML='<p style="color:#ef4444;padding:20px">Error: '+e.message+'</p>';
+  }
+}
+function agFilter(btn,val){
+  document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  _agSla=val;_agPage=0;agApply();
+}
+function agApply(){
+  const q=(document.getElementById('agQ')?.value||'').toLowerCase().trim();
+  const src=document.getElementById('agSrc')?.value||'all';
+  _agFilt=_agAll.filter(r=>{
+    if(_agSla!=='all'&&r.sla!==_agSla) return false;
+    if(src!=='all'&&r.source!==src) return false;
+    if(q) return r.order_id.toLowerCase().includes(q);
+    return true;
+  });
+  const breach=_agFilt.filter(r=>r.sla==='breach').length;
+  const warn=_agFilt.filter(r=>r.sla==='warn').length;
+  const ok=_agFilt.filter(r=>r.sla==='ok').length;
+  const ages=_agFilt.filter(r=>r.qc_age_days!=null).map(r=>r.qc_age_days);
+  const avg=ages.length?(ages.reduce((a,b)=>a+b,0)/ages.length).toFixed(1):'—';
+  document.getElementById('agKpi').innerHTML=`
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,.1)">🔴</div>
+      <div class="stat-content"><div class="stat-value" style="color:#ef4444">${breach}</div><div class="stat-label">SLA Breach &gt;3d</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,.1)">🟡</div>
+      <div class="stat-content"><div class="stat-value" style="color:#f59e0b">${warn}</div><div class="stat-label">Warning 2-3d</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,.1)">🟢</div>
+      <div class="stat-content"><div class="stat-value" style="color:#10b981">${ok}</div><div class="stat-label">On Time</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(79,70,229,.1)">⏱️</div>
+      <div class="stat-content"><div class="stat-value">${avg}${avg!=='—'?'d':''}</div><div class="stat-label">Avg QC→Handover</div></div></div>`;
+  _agPage=0;
+  document.getElementById('agBody').innerHTML='';
+  agRenderPage();
+}
+function agRenderPage(){
+  const start=_agPage*AG_PG;
+  const slice=_agFilt.slice(start,start+AG_PG);
+  const cont=document.getElementById('agBody');
+  const old=document.getElementById('agMore');if(old)old.remove();
+  if(!_agFilt.length){
+    cont.innerHTML='<div class="provider-card" style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:48px;margin-bottom:16px">⏳</div><p>No orders found</p></div>';
+    return;
+  }
+  const dur=v=>v&&v!=='—'?`<b>${v}</b>`:'<span style="color:var(--text-muted)">—</span>';
+  let h=`<div class="provider-card" style="overflow:hidden"><div style="overflow-x:auto">
+  <table class="ag-tbl"><thead><tr>
+    <th>Order ID</th><th>Provider</th><th>Region</th><th>Date</th>
+    <th style="text-align:center">QC Approved</th>
+    <th class="ag-qc-th" style="text-align:center">⚠️ QC→Handover</th>
+    <th style="text-align:center">Handover Date</th>
+    <th style="text-align:center">Hand→Freight</th>
+    <th style="text-align:center">Freight→Courier</th>
+    <th style="text-align:center">Total Age</th>
+    <th style="text-align:center">SLA</th>
+  </tr></thead><tbody>`;
+  slice.forEach(r=>{
+    const trCls=r.sla==='breach'?'ag-breach-row':r.sla==='warn'?'ag-warn-row':'';
+    const qcCol=r.sla==='breach'?'#ef4444':r.sla==='warn'?'#f59e0b':'#10b981';
+    const pill=r.sla==='breach'?'<span class="ag-pill ag-pill-breach">🔴 BREACH</span>':
+               r.sla==='warn'?'<span class="ag-pill ag-pill-warn">🟡 WARN</span>':
+               '<span class="ag-pill ag-pill-ok">🟢 OK</span>';
+    h+=`<tr class="${trCls}" onclick="openJ('${r.order_id}')">
+      <td><span class="oid-lnk">${r.order_id}</span>${r.is_cancelled?'<br><span style="font-size:9px;color:#ef4444;font-weight:700">❌ CANCELLED</span>':''}</td>
+      <td><span style="font-size:10px;padding:2px 8px;background:var(--hover-bg);border:1px solid var(--border-color);border-radius:20px">${r.source}</span></td>
+      <td style="color:var(--text-muted);font-size:11px">${r.region||'—'}</td>
+      <td style="color:var(--text-muted);font-size:11px">${r.date||'—'}</td>
+      <td style="text-align:center;font-size:10px;color:var(--text-muted)">${r.qc_approved_at||'—'}</td>
+      <td class="ag-qc-td">
+        ${r.qc_age_days!=null?`<div class="ag-big" style="color:${qcCol}">${r.qc_age_days}d</div><div class="ag-sub">${r.qc_to_handover||'pending'}</div>`:'<span style="color:var(--text-muted);font-size:10px">no QC date</span>'}
+      </td>
+      <td style="text-align:center;font-size:10px;color:var(--text-muted)">${r.handedover_at||'—'}</td>
+      <td style="text-align:center">${dur(r.handover_to_freight)}</td>
+      <td style="text-align:center">${dur(r.freight_to_courier)}</td>
+      <td style="text-align:center">${dur(r.total_aging)}</td>
+      <td style="text-align:center">${pill}</td>
+    </tr>`;
+  });
+  h+=`</tbody></table></div></div>`;
+  const tmp=document.createElement('div');tmp.innerHTML=h;
+  cont.appendChild(tmp.firstChild);
+  const shown=start+slice.length;
+  if(shown<_agFilt.length){
+    const btn=document.createElement('div');btn.id='agMore';
+    btn.innerHTML=`<div style="text-align:center;padding:20px"><button class="apply-btn" onclick="_agPage++;agRenderPage()">Load More (${shown} of ${_agFilt.length})</button></div>`;
+    cont.appendChild(btn);
+  }
+}
+function closeJ(){document.getElementById('jMov').classList.remove('open');}
+function colFor(v){
+  if(!v||v==='N/A') return '#94a3b8';
+  const n=parseFloat(v);
+  if(isNaN(n)) return '#94a3b8';
+  return n<=1?'#10b981':n<=3?'#f59e0b':'#ef4444';
+}
+async function openJ(oid){
+  document.getElementById('jMov').classList.add('open');
+  document.getElementById('jBody').innerHTML='<div class="mld"></div>';
+  try{
+    const r=await fetch('/api/nexus/order_journey/'+encodeURIComponent(oid));
+    const d=await r.json();
+    if(!d.success){document.getElementById('jBody').innerHTML=`<div style="text-align:center;padding:30px;color:var(--text-muted)">${d.message}</div>`;return;}
+    const tl=d.timeline,km=d.key_metrics,steps=d.step_metrics||[];
+    const cb=d.is_cancelled?`<div class="cb-banner">⚠️ CANCELLED — ${tl.cancelled_at||'N/A'}</div>`:'';
+    const qcN=parseFloat(km.qc_to_handover);
+    let slaBadge='';
+    if(!isNaN(qcN)){
+      if(qcN>3) slaBadge=`<span class="ag-pill ag-pill-breach" style="display:inline-block;margin-bottom:14px">⚠️ ${km.qc_to_handover} — SLA Breach</span>`;
+      else if(qcN>2) slaBadge=`<span class="ag-pill ag-pill-warn" style="display:inline-block;margin-bottom:14px">⏳ ${km.qc_to_handover}</span>`;
+      else slaBadge=`<span class="ag-pill ag-pill-ok" style="display:inline-block;margin-bottom:14px">✅ ${km.qc_to_handover}</span>`;
+    }
+    let sh='';
+    if(steps.length){
+      sh='<div class="shd">⏱️ Step Durations</div><div class="stp-grid">';
+      steps.forEach(s=>{sh+=`<div class="stp-card"><div class="stp-lbl">${s.label}</div><div class="stp-val" style="color:${s.duration?'var(--text-main)':'var(--text-muted)'}">${s.duration||'—'}</div></div>`;});
+      sh+='</div>';
+    }
+    const ti=(lb,v,type)=>{
+      const dotCls=v?(type==='c'?'canc':'done'):'';
+      const valCls=v?'':(type==='c'?'cv':'pend');
+      return `<div class="tl-item"><div class="tl-dot ${dotCls}"></div><div class="tl-lbl">${lb}</div><div class="tl-val ${valCls}">${v||'— Not yet'}</div></div>`;
+    };
+    document.getElementById('jBody').innerHTML=`
+      <div style="font-size:16px;font-weight:800;margin-bottom:3px">📦 Order Journey</div>
+      <div style="font-family:monospace;color:#10b981;margin-bottom:14px;font-size:14px">${oid}</div>
+      ${cb}${slaBadge}
+      <div class="shd">⭐ Key Metrics</div>
+      <div class="km-grid">
+        <div class="km-card"><div class="km-val" style="color:${colFor(km.qc_to_handover)}">${km.qc_to_handover||'N/A'}</div><div class="km-lbl">QC → Handover</div></div>
+        <div class="km-card"><div class="km-val" style="color:${colFor(km.handover_to_freight)}">${km.handover_to_freight||'N/A'}</div><div class="km-lbl">Handover → Freight</div></div>
+        <div class="km-card"><div class="km-val" style="color:${colFor(km.total_journey)}">${km.total_journey||'N/A'}</div><div class="km-lbl">Total Journey</div></div>
+      </div>
+      ${sh}
+      <div class="shd">🗺️ Full Timeline</div>
+      <div class="tl-wrap">
+        ${ti('📋 Created',tl.created_at,'n')}
+        ${ti('✅ Accepted',tl.accepted_at,'n')}
+        ${ti('🚚 Pickup Ready',tl.pickup_ready_at,'n')}
+        ${ti('🔍 QC Pending',tl.qc_pending_at,'n')}
+        ${ti('✅ QC Approved',tl.qc_approved_at,'n')}
+        ${ti('🤝 Handed Over',tl.handedover_at,'n')}
+        ${ti('✈️ Freight',tl.freight_at,'n')}
+        ${ti('🚁 Courier',tl.courier_at,'n')}
+        ${ti('📬 Delivered',tl.delivered_at,'n')}
+        ${tl.cancelled_at?ti('❌ Cancelled',tl.cancelled_at,'c'):''}
+      </div>`;
+  }catch(e){document.getElementById('jBody').innerHTML=`<div style="color:#ef4444;padding:20px">Error: ${e.message}</div>`;}
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeJ();});
+loadAging();
+</script></body></html>''', role=role, favicon=FAVICON)
+
+@app.route('/api/main_aging_data')
+@login_required
+def api_main_aging_data():
+    jm  = fetch_journey()
+    now = datetime.now()
+    rows = []
+    seen = set()
+    for provider in PROVIDERS:
+        sheet_rows = fetch_sheet_data(provider['sheet'])
+        if not sheet_rows:
+            continue
+        o_col = provider.get('order_col', 0)
+        d_col = provider['date_col']
+        r_col = provider['region_col']
+        start = provider['start_row'] - 1
+        for row in sheet_rows[start:]:
+            if not row or len(row) <= max(o_col, d_col, r_col):
+                continue
+            oid = str(row[o_col]).strip().upper()
+            if not oid or oid in seen:
+                continue
+            if oid.lower() in ['','nan','order','orderid','fleek id','fleek_id']:
+                continue
+            seen.add(oid)
+            j = jm.get(oid)
+            if not j:
+                continue
+            dc  = pdt(j['created_at'])
+            dqa = pdt(j['qc_approved_at'])
+            dh  = pdt(j['handedover_at'])
+            dfr = pdt(j['freight_at'])
+            dco = pdt(j['courier_at'])
+            dd  = pdt(j['delivered_at'])
+            dca = pdt(j['cancelled_at'])
+            qc_age_days = None
+            sla = 'ok'
+            if dqa:
+                end  = dh or now
+                diff = (end - dqa).total_seconds() / 86400
+                qc_age_days = round(diff, 1)
+                if qc_age_days > 3:   sla = 'breach'
+                elif qc_age_days > 2: sla = 'warn'
+            region   = str(row[r_col]).strip() if r_col < len(row) else ''
+            date_val = str(row[d_col]).strip() if d_col < len(row) else ''
+            rows.append({
+                'order_id':             oid,
+                'source':               provider['short'],
+                'region':               region,
+                'date':                 date_val,
+                'is_cancelled':         bool(dca),
+                'qc_approved_at':       fdt(dqa),
+                'handedover_at':        fdt(dh),
+                'freight_at':           fdt(dfr),
+                'courier_at':           fdt(dco),
+                'delivered_at':         fdt(dd),
+                'qc_to_handover':       dayb(dqa, dh),
+                'handover_to_freight':  dayb(dh, dfr),
+                'freight_to_courier':   dayb(dfr, dco),
+                'courier_to_delivered': dayb(dco, dd),
+                'total_aging':          dayb(dc, dd or dco or dfr or dh or dqa or now),
+                'qc_age_days':          qc_age_days,
+                'sla':                  sla,
+            })
+    rows.sort(key=lambda x: (x['sla']=='breach', x['qc_age_days'] or 0), reverse=True)
+    return jsonify({'success': True, 'rows': rows, 'total': len(rows)})
+
+# ==============================================================================
+         3pl end
+# ==============================================================================    
 # ==============================================================================
 # 🛰️ TID OPERATIONS HUB (NEXUS) - STRICT 150 ZERO + RADAR + SECURE NATIVE
 # ==============================================================================
