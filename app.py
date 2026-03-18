@@ -3324,6 +3324,7 @@ def order_aging():
 <div class="page-header">
     <h1 class="page-title">Order <span>Aging</span></h1>
 </div>
+
 <div class="date-range-picker" style="margin-bottom:20px">
   <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
     <div>
@@ -3347,15 +3348,18 @@ def order_aging():
         <option value="APX">APX</option>
       </select>
     </div>
-    <div style="flex:1;min-width:200px">
-      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">Search</div>
-      <input type="text" id="agQ" class="range-input" style="width:100%" placeholder="Order ID..." oninput="agApply()">
+    <div style="flex:2;min-width:300px">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">🔍 Search Order ID</div>
+      <input type="text" id="agQ" class="range-input" style="width:100%;font-size:14px;padding:10px 16px;border-radius:10px" placeholder="Type Order ID to search..." oninput="agApply()">
     </div>
-    <button class="apply-btn" onclick="loadAging()">🔄 Refresh</button>
+    <button class="apply-btn" onclick="loadAging()" style="padding:10px 20px">🔄 Refresh</button>
   </div>
 </div>
+
 <div class="stats-row" id="agKpi"></div>
 <div id="agBody"><div class="loading"><div class="spinner"></div></div></div>
+
+<!-- JOURNEY MODAL -->
 <div class="jmov" id="jMov" onclick="if(event.target===this)closeJ()">
   <div class="jmdl">
     <button class="jcls" onclick="closeJ()">✕</button>
@@ -3367,24 +3371,27 @@ def order_aging():
 <script>
 let _agAll=[],_agSla='all',_agPage=0,_agFilt=[];
 const AG_PG=100;
+
 async function loadAging(){
   document.getElementById('agBody').innerHTML='<div class="loading"><div class="spinner"></div></div>';
   document.getElementById('agKpi').innerHTML='';
   try{
     const r=await fetch('/api/main_aging_data');
     const d=await r.json();
-    if(!d.success) throw new Error('API error');
+    if(!d.success) throw new Error(d.error||'API error');
     _agAll=d.rows||[];
     agApply();
   }catch(e){
     document.getElementById('agBody').innerHTML='<p style="color:#ef4444;padding:20px">Error: '+e.message+'</p>';
   }
 }
+
 function agFilter(btn,val){
   document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  _agSla=val;_agPage=0;agApply();
+  _agSla=val; _agPage=0; agApply();
 }
+
 function agApply(){
   const q=(document.getElementById('agQ')?.value||'').toLowerCase().trim();
   const src=document.getElementById('agSrc')?.value||'all';
@@ -3412,11 +3419,12 @@ function agApply(){
   document.getElementById('agBody').innerHTML='';
   agRenderPage();
 }
+
 function agRenderPage(){
   const start=_agPage*AG_PG;
   const slice=_agFilt.slice(start,start+AG_PG);
   const cont=document.getElementById('agBody');
-  const old=document.getElementById('agMore');if(old)old.remove();
+  const old=document.getElementById('agMore'); if(old) old.remove();
   if(!_agFilt.length){
     cont.innerHTML='<div class="provider-card" style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:48px;margin-bottom:16px">⏳</div><p>No orders found</p></div>';
     return;
@@ -3439,14 +3447,14 @@ function agRenderPage(){
     const pill=r.sla==='breach'?'<span class="ag-pill ag-pill-breach">🔴 BREACH</span>':
                r.sla==='warn'?'<span class="ag-pill ag-pill-warn">🟡 WARN</span>':
                '<span class="ag-pill ag-pill-ok">🟢 OK</span>';
-    h+=`<tr class="${trCls}" onclick="openJ('${r.order_id}')">
+    h+=`<tr class="${trCls}" style="cursor:pointer" onclick="openJ('${r.order_id}')">
       <td><span class="oid-lnk">${r.order_id}</span>${r.is_cancelled?'<br><span style="font-size:9px;color:#ef4444;font-weight:700">❌ CANCELLED</span>':''}</td>
       <td><span style="font-size:10px;padding:2px 8px;background:var(--hover-bg);border:1px solid var(--border-color);border-radius:20px">${r.source}</span></td>
       <td style="color:var(--text-muted);font-size:11px">${r.region||'—'}</td>
       <td style="color:var(--text-muted);font-size:11px">${r.date||'—'}</td>
       <td style="text-align:center;font-size:10px;color:var(--text-muted)">${r.qc_approved_at||'—'}</td>
       <td class="ag-qc-td">
-        ${r.qc_age_days!=null?`<div class="ag-big" style="color:${qcCol}">${r.qc_age_days}d</div><div class="ag-sub">${r.qc_to_handover||'pending'}</div>`:'<span style="color:var(--text-muted);font-size:10px">no QC date</span>'}
+        ${r.qc_age_days!=null?`<div class="ag-big" style="color:${qcCol}">${r.qc_age_days}d</div><div class="ag-sub">${r.qc_to_handover||'pending'}</div>`:'<span style="color:var(--text-muted);font-size:10px">—</span>'}
       </td>
       <td style="text-align:center;font-size:10px;color:var(--text-muted)">${r.handedover_at||'—'}</td>
       <td style="text-align:center">${dur(r.handover_to_freight)}</td>
@@ -3456,30 +3464,40 @@ function agRenderPage(){
     </tr>`;
   });
   h+=`</tbody></table></div></div>`;
-  const tmp=document.createElement('div');tmp.innerHTML=h;
+  const tmp=document.createElement('div'); tmp.innerHTML=h;
   cont.appendChild(tmp.firstChild);
   const shown=start+slice.length;
   if(shown<_agFilt.length){
-    const btn=document.createElement('div');btn.id='agMore';
-    btn.innerHTML=`<div style="text-align:center;padding:20px"><button class="apply-btn" onclick="_agPage++;agRenderPage()">Load More (${shown} of ${_agFilt.length})</button></div>`;
+    const btn=document.createElement('div'); btn.id='agMore';
+    btn.innerHTML=`<div style="text-align:center;padding:20px">
+      <button class="apply-btn" onclick="_agPage++;agRenderPage()">Load More (${shown} of ${_agFilt.length})</button></div>`;
     cont.appendChild(btn);
   }
 }
-function closeJ(){document.getElementById('jMov').classList.remove('open');}
+
+function closeJ(){ document.getElementById('jMov').classList.remove('open'); }
+
 function colFor(v){
   if(!v||v==='N/A') return '#94a3b8';
-  const n=parseFloat(v);
-  if(isNaN(n)) return '#94a3b8';
+  const n=parseFloat(v); if(isNaN(n)) return '#94a3b8';
   return n<=1?'#10b981':n<=3?'#f59e0b':'#ef4444';
 }
+
 async function openJ(oid){
   document.getElementById('jMov').classList.add('open');
   document.getElementById('jBody').innerHTML='<div class="mld"></div>';
   try{
     const r=await fetch('/api/nexus/order_journey/'+encodeURIComponent(oid));
     const d=await r.json();
-    if(!d.success){document.getElementById('jBody').innerHTML=`<div style="text-align:center;padding:30px;color:var(--text-muted)">${d.message}</div>`;return;}
-    const tl=d.timeline,km=d.key_metrics,steps=d.step_metrics||[];
+    if(!d.success){
+      document.getElementById('jBody').innerHTML=`<div style="text-align:center;padding:40px">
+        <div style="font-size:40px;margin-bottom:12px">📋</div>
+        <div style="font-size:15px;font-weight:800;margin-bottom:8px">${oid}</div>
+        <div style="color:var(--text-muted);font-size:13px">${d.message||'Journey data not available'}</div>
+      </div>`;
+      return;
+    }
+    const tl=d.timeline, km=d.key_metrics, steps=d.step_metrics||[];
     const cb=d.is_cancelled?`<div class="cb-banner">⚠️ CANCELLED — ${tl.cancelled_at||'N/A'}</div>`:'';
     const qcN=parseFloat(km.qc_to_handover);
     let slaBadge='';
@@ -3523,9 +3541,12 @@ async function openJ(oid){
         ${ti('📬 Delivered',tl.delivered_at,'n')}
         ${tl.cancelled_at?ti('❌ Cancelled',tl.cancelled_at,'c'):''}
       </div>`;
-  }catch(e){document.getElementById('jBody').innerHTML=`<div style="color:#ef4444;padding:20px">Error: ${e.message}</div>`;}
+  }catch(e){
+    document.getElementById('jBody').innerHTML=`<div style="color:#ef4444;padding:20px">Error: ${e.message}</div>`;
+  }
 }
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeJ();});
+
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeJ(); });
 loadAging();
 </script></body></html>''', role=role, favicon=FAVICON)
 
@@ -3540,39 +3561,42 @@ def api_main_aging_data():
         sheet_rows = fetch_sheet_data(provider['sheet'])
         if not sheet_rows:
             continue
-        o_col = provider.get('order_col', 0)
-        d_col = provider['date_col']
-        r_col = provider['region_col']
-        start = provider['start_row'] - 1
+        o_col  = provider.get('order_col', 0)
+        d_col  = provider['date_col']
+        r_col  = provider['region_col']
+        start  = provider['start_row'] - 1
         for row in sheet_rows[start:]:
             if not row or len(row) <= max(o_col, d_col, r_col):
                 continue
             oid = str(row[o_col]).strip().upper()
             if not oid or oid in seen:
                 continue
-            if oid.lower() in ['','nan','order','orderid','fleek id','fleek_id']:
+            if oid.lower() in ['','nan','order','orderid','fleek id','fleek_id','#n/a']:
+                continue
+            if not any(c.isdigit() for c in oid):
                 continue
             seen.add(oid)
-            j = jm.get(oid)
-            if not j:
-                continue
-            dc  = pdt(j['created_at'])
-            dqa = pdt(j['qc_approved_at'])
-            dh  = pdt(j['handedover_at'])
-            dfr = pdt(j['freight_at'])
-            dco = pdt(j['courier_at'])
-            dd  = pdt(j['delivered_at'])
-            dca = pdt(j['cancelled_at'])
+            region   = str(row[r_col]).strip() if r_col < len(row) else ''
+            date_val = str(row[d_col]).strip() if d_col < len(row) else ''
+            if region.upper() in {'N/A','#N/A','COUNTRY','REGION','DESTINATION','ZONE',''}:
+                region = ''
+            # Journey — show all orders, aging only if journey exists
+            j   = jm.get(oid)
+            dc  = pdt(j['created_at'])     if j else None
+            dqa = pdt(j['qc_approved_at']) if j else None
+            dh  = pdt(j['handedover_at'])  if j else None
+            dfr = pdt(j['freight_at'])     if j else None
+            dco = pdt(j['courier_at'])     if j else None
+            dd  = pdt(j['delivered_at'])   if j else None
+            dca = pdt(j['cancelled_at'])   if j else None
             qc_age_days = None
             sla = 'ok'
             if dqa:
                 end  = dh or now
                 diff = (end - dqa).total_seconds() / 86400
                 qc_age_days = round(diff, 1)
-                if qc_age_days > 3:   sla = 'breach'
+                if   qc_age_days > 3: sla = 'breach'
                 elif qc_age_days > 2: sla = 'warn'
-            region   = str(row[r_col]).strip() if r_col < len(row) else ''
-            date_val = str(row[d_col]).strip() if d_col < len(row) else ''
             rows.append({
                 'order_id':             oid,
                 'source':               provider['short'],
@@ -4567,7 +4591,6 @@ def fetch_sheet(name,url,col,start,cx):
         except Exception as e:
             print(f"[WARN] {name} attempt {attempt+1}: {e}")
             if attempt==0: time.sleep(0.5)  # shorter retry delay
-    return name,[]
     return name,[]
 
 def fetch_all():
