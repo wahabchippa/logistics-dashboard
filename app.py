@@ -3264,6 +3264,337 @@ loadData();
 </html>
 ''', role=role, favicon=FAVICON)
 
+# ===== ORDER AGING =====
+@app.route('/order-aging')
+@login_required
+def order_aging():
+    role = session.get('role', 'guest')
+    if role != 'admin':
+        return "<div style='text-align:center;padding:100px;font-family:sans-serif'>⛔ Admin access required</div>", 403
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Order Aging - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''
+<style>
+.ag-breach-row td{background:rgba(239,68,68,.04)!important;}
+.ag-warn-row td{background:rgba(245,158,11,.03)!important;}
+.ag-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+.ag-pill-breach{background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.3);}
+.ag-pill-warn{background:rgba(245,158,11,.12);color:#f59e0b;border:1px solid rgba(245,158,11,.3);}
+.ag-pill-ok{background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.3);}
+.ag-tbl{width:100%;border-collapse:collapse;font-size:12px;min-width:1000px;}
+.ag-tbl th{background:var(--table-hdr);padding:10px 12px;text-align:left;font-weight:700;color:var(--text-muted);font-size:10px;text-transform:uppercase;border-bottom:2px solid var(--brand-color);white-space:nowrap;}
+.ag-tbl td{padding:10px 12px;border-bottom:1px solid var(--border-color);vertical-align:middle;}
+.ag-tbl tr:hover td{background:var(--hover-bg);cursor:pointer;}
+.ag-qc-th{color:#f59e0b!important;background:rgba(245,158,11,.06)!important;}
+.ag-qc-td{background:rgba(245,158,11,.04)!important;text-align:center;}
+.ag-big{font-size:18px;font-weight:900;line-height:1.1;}
+.ag-sub{font-size:10px;color:var(--text-muted);margin-top:2px;}
+.oid-lnk{color:var(--brand-color);font-weight:800;font-family:monospace;text-decoration:underline;}
+.jmov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;backdrop-filter:blur(14px);justify-content:center;align-items:center;padding:20px;}
+.jmov.open{display:flex;}
+.jmdl{background:var(--bg-card);border:1px solid var(--border-color);border-radius:20px;padding:28px;width:100%;max-width:680px;max-height:88vh;overflow-y:auto;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.7);}
+.jcls{position:absolute;top:14px;right:14px;background:var(--hover-bg);border:1px solid var(--border-color);color:var(--text-main);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+.jcls:hover{background:#ef4444;border-color:#ef4444;color:#fff;}
+.tl-wrap{position:relative;padding-left:28px;margin-top:14px;}
+.tl-wrap::before{content:'';position:absolute;left:9px;top:4px;bottom:4px;width:2px;background:linear-gradient(180deg,#10b981,rgba(79,70,229,.2));border-radius:2px;}
+.tl-item{position:relative;margin-bottom:14px;}
+.tl-dot{position:absolute;left:-21px;top:3px;width:11px;height:11px;border-radius:50%;border:2px solid var(--border-color);background:var(--bg-card);}
+.tl-dot.done{background:#10b981;border-color:#10b981;box-shadow:0 0 6px rgba(16,185,129,.4);}
+.tl-dot.canc{background:#ef4444;border-color:#ef4444;}
+.tl-lbl{font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
+.tl-val{font-size:13px;font-weight:600;margin-top:2px;}
+.tl-val.pend{color:var(--text-muted);font-style:italic;}
+.tl-val.cv{color:#ef4444;}
+.km-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+.km-card{background:var(--hover-bg);border:1px solid var(--border-color);border-radius:12px;padding:14px;text-align:center;}
+.km-val{font-size:20px;font-weight:900;}
+.km-lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-top:4px;}
+.stp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
+.stp-card{background:var(--hover-bg);border:1px solid var(--border-color);border-radius:10px;padding:10px;text-align:center;}
+.stp-lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;}
+.stp-val{font-size:13px;font-weight:700;}
+.shd{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--brand-color);margin:16px 0 10px;padding-bottom:7px;border-bottom:1px solid var(--border-color);}
+.cb-banner{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:10px 14px;margin-bottom:14px;color:#ef4444;font-weight:700;font-size:12px;}
+.mld{width:24px;height:24px;border:3px solid var(--border-color);border-top-color:#10b981;border-radius:50%;animation:spin 0.7s linear infinite;margin:28px auto;}
+</style>
+</head><body>
+''' + sidebar('aging', role) + '''
+<main class="main-content" id="main-content">
+''' + ACTION_BAR_HTML(role) + '''
+<div class="page-header">
+    <h1 class="page-title">Order <span>Aging</span></h1>
+</div>
+<div class="date-range-picker" style="margin-bottom:20px">
+  <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+    <div>
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">SLA Filter</div>
+      <div class="qbtns-row" style="margin:0">
+        <button class="qbtn active" onclick="agFilter(this,'all')">All</button>
+        <button class="qbtn" onclick="agFilter(this,'breach')">🔴 Breach</button>
+        <button class="qbtn" onclick="agFilter(this,'warn')">🟡 Warning</button>
+        <button class="qbtn" onclick="agFilter(this,'ok')">🟢 On Time</button>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">Provider</div>
+      <select id="agSrc" class="range-input" onchange="agApply()">
+        <option value="all">All Providers</option>
+        <option value="GE QC">GE QC</option>
+        <option value="GE ZONE">GE ZONE</option>
+        <option value="ECL QC">ECL QC</option>
+        <option value="ECL ZONE">ECL ZONE</option>
+        <option value="KERRY">KERRY</option>
+        <option value="APX">APX</option>
+      </select>
+    </div>
+    <div style="flex:1;min-width:200px">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">Search</div>
+      <input type="text" id="agQ" class="range-input" style="width:100%" placeholder="Order ID..." oninput="agApply()">
+    </div>
+    <button class="apply-btn" onclick="loadAging()">🔄 Refresh</button>
+  </div>
+</div>
+<div class="stats-row" id="agKpi"></div>
+<div id="agBody"><div class="loading"><div class="spinner"></div></div></div>
+<div class="jmov" id="jMov" onclick="if(event.target===this)closeJ()">
+  <div class="jmdl">
+    <button class="jcls" onclick="closeJ()">✕</button>
+    <div id="jBody"><div class="mld"></div></div>
+  </div>
+</div>
+</main>
+''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+<script>
+let _agAll=[],_agSla='all',_agPage=0,_agFilt=[];
+const AG_PG=100;
+async function loadAging(){
+  document.getElementById('agBody').innerHTML='<div class="loading"><div class="spinner"></div></div>';
+  document.getElementById('agKpi').innerHTML='';
+  try{
+    const r=await fetch('/api/main_aging_data');
+    const d=await r.json();
+    if(!d.success) throw new Error('API error');
+    _agAll=d.rows||[];
+    agApply();
+  }catch(e){
+    document.getElementById('agBody').innerHTML='<p style="color:#ef4444;padding:20px">Error: '+e.message+'</p>';
+  }
+}
+function agFilter(btn,val){
+  document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  _agSla=val;_agPage=0;agApply();
+}
+function agApply(){
+  const q=(document.getElementById('agQ')?.value||'').toLowerCase().trim();
+  const src=document.getElementById('agSrc')?.value||'all';
+  _agFilt=_agAll.filter(r=>{
+    if(_agSla!=='all'&&r.sla!==_agSla) return false;
+    if(src!=='all'&&r.source!==src) return false;
+    if(q) return r.order_id.toLowerCase().includes(q);
+    return true;
+  });
+  const breach=_agFilt.filter(r=>r.sla==='breach').length;
+  const warn=_agFilt.filter(r=>r.sla==='warn').length;
+  const ok=_agFilt.filter(r=>r.sla==='ok').length;
+  const ages=_agFilt.filter(r=>r.qc_age_days!=null).map(r=>r.qc_age_days);
+  const avg=ages.length?(ages.reduce((a,b)=>a+b,0)/ages.length).toFixed(1):'—';
+  document.getElementById('agKpi').innerHTML=`
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,.1)">🔴</div>
+      <div class="stat-content"><div class="stat-value" style="color:#ef4444">${breach}</div><div class="stat-label">SLA Breach &gt;3d</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,.1)">🟡</div>
+      <div class="stat-content"><div class="stat-value" style="color:#f59e0b">${warn}</div><div class="stat-label">Warning 2-3d</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,.1)">🟢</div>
+      <div class="stat-content"><div class="stat-value" style="color:#10b981">${ok}</div><div class="stat-label">On Time</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:rgba(79,70,229,.1)">⏱️</div>
+      <div class="stat-content"><div class="stat-value">${avg}${avg!=='—'?'d':''}</div><div class="stat-label">Avg QC→Handover</div></div></div>`;
+  _agPage=0;
+  document.getElementById('agBody').innerHTML='';
+  agRenderPage();
+}
+function agRenderPage(){
+  const start=_agPage*AG_PG;
+  const slice=_agFilt.slice(start,start+AG_PG);
+  const cont=document.getElementById('agBody');
+  const old=document.getElementById('agMore');if(old)old.remove();
+  if(!_agFilt.length){
+    cont.innerHTML='<div class="provider-card" style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:48px;margin-bottom:16px">⏳</div><p>No orders found</p></div>';
+    return;
+  }
+  const dur=v=>v&&v!=='—'?`<b>${v}</b>`:'<span style="color:var(--text-muted)">—</span>';
+  let h=`<div class="provider-card" style="overflow:hidden"><div style="overflow-x:auto">
+  <table class="ag-tbl"><thead><tr>
+    <th>Order ID</th><th>Provider</th><th>Region</th><th>Date</th>
+    <th style="text-align:center">QC Approved</th>
+    <th class="ag-qc-th" style="text-align:center">⚠️ QC→Handover</th>
+    <th style="text-align:center">Handover Date</th>
+    <th style="text-align:center">Hand→Freight</th>
+    <th style="text-align:center">Freight→Courier</th>
+    <th style="text-align:center">Total Age</th>
+    <th style="text-align:center">SLA</th>
+  </tr></thead><tbody>`;
+  slice.forEach(r=>{
+    const trCls=r.sla==='breach'?'ag-breach-row':r.sla==='warn'?'ag-warn-row':'';
+    const qcCol=r.sla==='breach'?'#ef4444':r.sla==='warn'?'#f59e0b':'#10b981';
+    const pill=r.sla==='breach'?'<span class="ag-pill ag-pill-breach">🔴 BREACH</span>':
+               r.sla==='warn'?'<span class="ag-pill ag-pill-warn">🟡 WARN</span>':
+               '<span class="ag-pill ag-pill-ok">🟢 OK</span>';
+    h+=`<tr class="${trCls}" onclick="openJ('${r.order_id}')">
+      <td><span class="oid-lnk">${r.order_id}</span>${r.is_cancelled?'<br><span style="font-size:9px;color:#ef4444;font-weight:700">❌ CANCELLED</span>':''}</td>
+      <td><span style="font-size:10px;padding:2px 8px;background:var(--hover-bg);border:1px solid var(--border-color);border-radius:20px">${r.source}</span></td>
+      <td style="color:var(--text-muted);font-size:11px">${r.region||'—'}</td>
+      <td style="color:var(--text-muted);font-size:11px">${r.date||'—'}</td>
+      <td style="text-align:center;font-size:10px;color:var(--text-muted)">${r.qc_approved_at||'—'}</td>
+      <td class="ag-qc-td">
+        ${r.qc_age_days!=null?`<div class="ag-big" style="color:${qcCol}">${r.qc_age_days}d</div><div class="ag-sub">${r.qc_to_handover||'pending'}</div>`:'<span style="color:var(--text-muted);font-size:10px">no QC date</span>'}
+      </td>
+      <td style="text-align:center;font-size:10px;color:var(--text-muted)">${r.handedover_at||'—'}</td>
+      <td style="text-align:center">${dur(r.handover_to_freight)}</td>
+      <td style="text-align:center">${dur(r.freight_to_courier)}</td>
+      <td style="text-align:center">${dur(r.total_aging)}</td>
+      <td style="text-align:center">${pill}</td>
+    </tr>`;
+  });
+  h+=`</tbody></table></div></div>`;
+  const tmp=document.createElement('div');tmp.innerHTML=h;
+  cont.appendChild(tmp.firstChild);
+  const shown=start+slice.length;
+  if(shown<_agFilt.length){
+    const btn=document.createElement('div');btn.id='agMore';
+    btn.innerHTML=`<div style="text-align:center;padding:20px"><button class="apply-btn" onclick="_agPage++;agRenderPage()">Load More (${shown} of ${_agFilt.length})</button></div>`;
+    cont.appendChild(btn);
+  }
+}
+function closeJ(){document.getElementById('jMov').classList.remove('open');}
+function colFor(v){
+  if(!v||v==='N/A') return '#94a3b8';
+  const n=parseFloat(v);
+  if(isNaN(n)) return '#94a3b8';
+  return n<=1?'#10b981':n<=3?'#f59e0b':'#ef4444';
+}
+async function openJ(oid){
+  document.getElementById('jMov').classList.add('open');
+  document.getElementById('jBody').innerHTML='<div class="mld"></div>';
+  try{
+    const r=await fetch('/api/nexus/order_journey/'+encodeURIComponent(oid));
+    const d=await r.json();
+    if(!d.success){document.getElementById('jBody').innerHTML=`<div style="text-align:center;padding:30px;color:var(--text-muted)">${d.message}</div>`;return;}
+    const tl=d.timeline,km=d.key_metrics,steps=d.step_metrics||[];
+    const cb=d.is_cancelled?`<div class="cb-banner">⚠️ CANCELLED — ${tl.cancelled_at||'N/A'}</div>`:'';
+    const qcN=parseFloat(km.qc_to_handover);
+    let slaBadge='';
+    if(!isNaN(qcN)){
+      if(qcN>3) slaBadge=`<span class="ag-pill ag-pill-breach" style="display:inline-block;margin-bottom:14px">⚠️ ${km.qc_to_handover} — SLA Breach</span>`;
+      else if(qcN>2) slaBadge=`<span class="ag-pill ag-pill-warn" style="display:inline-block;margin-bottom:14px">⏳ ${km.qc_to_handover}</span>`;
+      else slaBadge=`<span class="ag-pill ag-pill-ok" style="display:inline-block;margin-bottom:14px">✅ ${km.qc_to_handover}</span>`;
+    }
+    let sh='';
+    if(steps.length){
+      sh='<div class="shd">⏱️ Step Durations</div><div class="stp-grid">';
+      steps.forEach(s=>{sh+=`<div class="stp-card"><div class="stp-lbl">${s.label}</div><div class="stp-val" style="color:${s.duration?'var(--text-main)':'var(--text-muted)'}">${s.duration||'—'}</div></div>`;});
+      sh+='</div>';
+    }
+    const ti=(lb,v,type)=>{
+      const dotCls=v?(type==='c'?'canc':'done'):'';
+      const valCls=v?'':(type==='c'?'cv':'pend');
+      return `<div class="tl-item"><div class="tl-dot ${dotCls}"></div><div class="tl-lbl">${lb}</div><div class="tl-val ${valCls}">${v||'— Not yet'}</div></div>`;
+    };
+    document.getElementById('jBody').innerHTML=`
+      <div style="font-size:16px;font-weight:800;margin-bottom:3px">📦 Order Journey</div>
+      <div style="font-family:monospace;color:#10b981;margin-bottom:14px;font-size:14px">${oid}</div>
+      ${cb}${slaBadge}
+      <div class="shd">⭐ Key Metrics</div>
+      <div class="km-grid">
+        <div class="km-card"><div class="km-val" style="color:${colFor(km.qc_to_handover)}">${km.qc_to_handover||'N/A'}</div><div class="km-lbl">QC → Handover</div></div>
+        <div class="km-card"><div class="km-val" style="color:${colFor(km.handover_to_freight)}">${km.handover_to_freight||'N/A'}</div><div class="km-lbl">Handover → Freight</div></div>
+        <div class="km-card"><div class="km-val" style="color:${colFor(km.total_journey)}">${km.total_journey||'N/A'}</div><div class="km-lbl">Total Journey</div></div>
+      </div>
+      ${sh}
+      <div class="shd">🗺️ Full Timeline</div>
+      <div class="tl-wrap">
+        ${ti('📋 Created',tl.created_at,'n')}
+        ${ti('✅ Accepted',tl.accepted_at,'n')}
+        ${ti('🚚 Pickup Ready',tl.pickup_ready_at,'n')}
+        ${ti('🔍 QC Pending',tl.qc_pending_at,'n')}
+        ${ti('✅ QC Approved',tl.qc_approved_at,'n')}
+        ${ti('🤝 Handed Over',tl.handedover_at,'n')}
+        ${ti('✈️ Freight',tl.freight_at,'n')}
+        ${ti('🚁 Courier',tl.courier_at,'n')}
+        ${ti('📬 Delivered',tl.delivered_at,'n')}
+        ${tl.cancelled_at?ti('❌ Cancelled',tl.cancelled_at,'c'):''}
+      </div>`;
+  }catch(e){document.getElementById('jBody').innerHTML=`<div style="color:#ef4444;padding:20px">Error: ${e.message}</div>`;}
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeJ();});
+loadAging();
+</script></body></html>''', role=role, favicon=FAVICON)
+
+@app.route('/api/main_aging_data')
+@login_required
+def api_main_aging_data():
+    jm  = fetch_journey()
+    now = datetime.now()
+    rows = []
+    seen = set()
+    for provider in PROVIDERS:
+        sheet_rows = fetch_sheet_data(provider['sheet'])
+        if not sheet_rows:
+            continue
+        o_col = provider.get('order_col', 0)
+        d_col = provider['date_col']
+        r_col = provider['region_col']
+        start = provider['start_row'] - 1
+        for row in sheet_rows[start:]:
+            if not row or len(row) <= max(o_col, d_col, r_col):
+                continue
+            oid = str(row[o_col]).strip().upper()
+            if not oid or oid in seen:
+                continue
+            if oid.lower() in ['','nan','order','orderid','fleek id','fleek_id']:
+                continue
+            seen.add(oid)
+            j = jm.get(oid)
+            if not j:
+                continue
+            dc  = pdt(j['created_at'])
+            dqa = pdt(j['qc_approved_at'])
+            dh  = pdt(j['handedover_at'])
+            dfr = pdt(j['freight_at'])
+            dco = pdt(j['courier_at'])
+            dd  = pdt(j['delivered_at'])
+            dca = pdt(j['cancelled_at'])
+            qc_age_days = None
+            sla = 'ok'
+            if dqa:
+                end  = dh or now
+                diff = (end - dqa).total_seconds() / 86400
+                qc_age_days = round(diff, 1)
+                if qc_age_days > 3:   sla = 'breach'
+                elif qc_age_days > 2: sla = 'warn'
+            region   = str(row[r_col]).strip() if r_col < len(row) else ''
+            date_val = str(row[d_col]).strip() if d_col < len(row) else ''
+            rows.append({
+                'order_id':             oid,
+                'source':               provider['short'],
+                'region':               region,
+                'date':                 date_val,
+                'is_cancelled':         bool(dca),
+                'qc_approved_at':       fdt(dqa),
+                'handedover_at':        fdt(dh),
+                'freight_at':           fdt(dfr),
+                'courier_at':           fdt(dco),
+                'delivered_at':         fdt(dd),
+                'qc_to_handover':       dayb(dqa, dh),
+                'handover_to_freight':  dayb(dh, dfr),
+                'freight_to_courier':   dayb(dfr, dco),
+                'courier_to_delivered': dayb(dco, dd),
+                'total_aging':          dayb(dc, dd or dco or dfr or dh or dqa or now),
+                'qc_age_days':          qc_age_days,
+                'sla':                  sla,
+            })
+    rows.sort(key=lambda x: (x['sla']=='breach', x['qc_age_days'] or 0), reverse=True)
+    return jsonify({'success': True, 'rows': rows, 'total': len(rows)})
+
 # ===== API ENDPOINTS =====
 @app.route('/api/dashboard')
 def api_dashboard():
@@ -3903,1076 +4234,6 @@ def order_details():
 </html>
     ''', orders=orders, provider_short=provider_short_display, region=region, day=day, favicon=FAVICON)
 # ==============================================================================
-
-# ===== ORDER AGING =====
-@app.route('/order-aging')
-@login_required
-def order_aging():
-    role = session.get('role', 'guest')
-    if role != 'admin':
-        return "<div style='text-align:center;padding:100px;font-family:sans-serif'>⛔ Admin access required</div>", 403
-    return render_template_string('''<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Order Aging - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''
-<style>
-.ag-breach-row td{background:rgba(239,68,68,.04)!important;}
-.ag-warn-row td{background:rgba(245,158,11,.03)!important;}
-.ag-pill{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
-.ag-pill-breach{background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.3);}
-.ag-pill-warn{background:rgba(245,158,11,.12);color:#f59e0b;border:1px solid rgba(245,158,11,.3);}
-.ag-pill-ok{background:rgba(16,185,129,.12);color:#10b981;border:1px solid rgba(16,185,129,.3);}
-.ag-tbl{width:100%;border-collapse:collapse;font-size:12px;min-width:1000px;}
-.ag-tbl th{background:var(--table-hdr);padding:10px 12px;text-align:left;font-weight:700;color:var(--text-muted);font-size:10px;text-transform:uppercase;border-bottom:2px solid var(--brand-color);white-space:nowrap;}
-.ag-tbl td{padding:10px 12px;border-bottom:1px solid var(--border-color);vertical-align:middle;}
-.ag-tbl tr:hover td{background:var(--hover-bg);cursor:pointer;}
-.ag-qc-th{color:#f59e0b!important;background:rgba(245,158,11,.06)!important;}
-.ag-qc-td{background:rgba(245,158,11,.04)!important;text-align:center;}
-.ag-big{font-size:18px;font-weight:900;line-height:1.1;}
-.ag-sub{font-size:10px;color:var(--text-muted);margin-top:2px;}
-.oid-lnk{color:var(--brand-color);font-weight:800;font-family:monospace;text-decoration:underline;}
-.jmov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9999;backdrop-filter:blur(14px);justify-content:center;align-items:center;padding:20px;}
-.jmov.open{display:flex;}
-.jmdl{background:var(--bg-card);border:1px solid var(--border-color);border-radius:20px;padding:28px;width:100%;max-width:680px;max-height:88vh;overflow-y:auto;position:relative;box-shadow:0 24px 80px rgba(0,0,0,.7);}
-.jcls{position:absolute;top:14px;right:14px;background:var(--hover-bg);border:1px solid var(--border-color);color:var(--text-main);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
-.jcls:hover{background:#ef4444;border-color:#ef4444;color:#fff;}
-.tl-wrap{position:relative;padding-left:28px;margin-top:14px;}
-.tl-wrap::before{content:'';position:absolute;left:9px;top:4px;bottom:4px;width:2px;background:linear-gradient(180deg,#10b981,rgba(79,70,229,.2));border-radius:2px;}
-.tl-item{position:relative;margin-bottom:14px;}
-.tl-dot{position:absolute;left:-21px;top:3px;width:11px;height:11px;border-radius:50%;border:2px solid var(--border-color);background:var(--bg-card);}
-.tl-dot.done{background:#10b981;border-color:#10b981;box-shadow:0 0 6px rgba(16,185,129,.4);}
-.tl-dot.canc{background:#ef4444;border-color:#ef4444;}
-.tl-lbl{font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.8px;}
-.tl-val{font-size:13px;font-weight:600;margin-top:2px;}
-.tl-val.pend{color:var(--text-muted);font-style:italic;}
-.tl-val.cv{color:#ef4444;}
-.km-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
-.km-card{background:var(--hover-bg);border:1px solid var(--border-color);border-radius:12px;padding:14px;text-align:center;}
-.km-val{font-size:20px;font-weight:900;}
-.km-lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-top:4px;}
-.stp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
-.stp-card{background:var(--hover-bg);border:1px solid var(--border-color);border-radius:10px;padding:10px;text-align:center;}
-.stp-lbl{font-size:9px;color:var(--text-muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;}
-.stp-val{font-size:13px;font-weight:700;}
-.shd{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--brand-color);margin:16px 0 10px;padding-bottom:7px;border-bottom:1px solid var(--border-color);}
-.cb-banner{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:10px 14px;margin-bottom:14px;color:#ef4444;font-weight:700;font-size:12px;}
-.mld{width:24px;height:24px;border:3px solid var(--border-color);border-top-color:#10b981;border-radius:50%;animation:spin 0.7s linear infinite;margin:28px auto;}
-</style>
-</head><body>
-''' + sidebar('aging', role) + '''
-<main class="main-content" id="main-content">
-''' + ACTION_BAR_HTML(role) + '''
-<div class="page-header">
-    <h1 class="page-title">Order <span>Aging</span></h1>
-</div>
-<div class="date-range-picker" style="margin-bottom:20px">
-  <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-    <div>
-      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">SLA Filter</div>
-      <div class="qbtns-row" style="margin:0">
-        <button class="qbtn active" onclick="agFilter(this,'all')">All</button>
-        <button class="qbtn" onclick="agFilter(this,'breach')">🔴 Breach</button>
-        <button class="qbtn" onclick="agFilter(this,'warn')">🟡 Warning</button>
-        <button class="qbtn" onclick="agFilter(this,'ok')">🟢 On Time</button>
-      </div>
-    </div>
-    <div>
-      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">Provider</div>
-      <select id="agSrc" class="range-input" onchange="agApply()">
-        <option value="all">All Providers</option>
-        <option value="GE QC">GE QC</option>
-        <option value="GE ZONE">GE ZONE</option>
-        <option value="ECL QC">ECL QC</option>
-        <option value="ECL ZONE">ECL ZONE</option>
-        <option value="KERRY">KERRY</option>
-        <option value="APX">APX</option>
-      </select>
-    </div>
-    <div style="flex:1;min-width:200px">
-      <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:700;text-transform:uppercase">Search</div>
-      <input type="text" id="agQ" class="range-input" style="width:100%" placeholder="Order ID..." oninput="agApply()">
-    </div>
-    <button class="apply-btn" onclick="loadAging()">🔄 Refresh</button>
-  </div>
-</div>
-<div class="stats-row" id="agKpi"></div>
-<div id="agBody"><div class="loading"><div class="spinner"></div></div></div>
-<div class="jmov" id="jMov" onclick="if(event.target===this)closeJ()">
-  <div class="jmdl">
-    <button class="jcls" onclick="closeJ()">✕</button>
-    <div id="jBody"><div class="mld"></div></div>
-  </div>
-</div>
-</main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
-<script>
-let _agAll=[],_agSla='all',_agPage=0,_agFilt=[];
-const AG_PG=100;
-
-async function loadAging(){
-  document.getElementById('agBody').innerHTML='<div class="loading"><div class="spinner"></div></div>';
-  document.getElementById('agKpi').innerHTML='';
-  try{
-    const r=await fetch('/api/main_aging_data');
-    const d=await r.json();
-    if(!d.success) throw new Error('API error');
-    _agAll=d.rows||[];
-    agApply();
-  }catch(e){
-    document.getElementById('agBody').innerHTML='<p style="color:#ef4444;padding:20px">Error: '+e.message+'</p>';
-  }
-}
-function agFilter(btn,val){
-  document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  _agSla=val;_agPage=0;agApply();
-}
-function agApply(){
-  const q=(document.getElementById('agQ')?.value||'').toLowerCase().trim();
-  const src=document.getElementById('agSrc')?.value||'all';
-  _agFilt=_agAll.filter(r=>{
-    if(_agSla!=='all'&&r.sla!==_agSla) return false;
-    if(src!=='all'&&r.source!==src) return false;
-    if(q) return r.order_id.toLowerCase().includes(q);
-    return true;
-  });
-  const breach=_agFilt.filter(r=>r.sla==='breach').length;
-  const warn=_agFilt.filter(r=>r.sla==='warn').length;
-  const ok=_agFilt.filter(r=>r.sla==='ok').length;
-  const ages=_agFilt.filter(r=>r.qc_age_days!=null).map(r=>r.qc_age_days);
-  const avg=ages.length?(ages.reduce((a,b)=>a+b,0)/ages.length).toFixed(1):'—';
-  document.getElementById('agKpi').innerHTML=`
-    <div class="stat-card"><div class="stat-icon" style="background:rgba(239,68,68,.1)">🔴</div>
-      <div class="stat-content"><div class="stat-value" style="color:#ef4444">${breach}</div><div class="stat-label">SLA Breach &gt;3d</div></div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:rgba(245,158,11,.1)">🟡</div>
-      <div class="stat-content"><div class="stat-value" style="color:#f59e0b">${warn}</div><div class="stat-label">Warning 2-3d</div></div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:rgba(16,185,129,.1)">🟢</div>
-      <div class="stat-content"><div class="stat-value" style="color:#10b981">${ok}</div><div class="stat-label">On Time</div></div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:rgba(79,70,229,.1)">⏱️</div>
-      <div class="stat-content"><div class="stat-value">${avg}${avg!=='—'?'d':''}</div><div class="stat-label">Avg QC→Handover</div></div></div>`;
-  _agPage=0;
-  document.getElementById('agBody').innerHTML='';
-  agRenderPage();
-}
-function agRenderPage(){
-  const start=_agPage*AG_PG;
-  const slice=_agFilt.slice(start,start+AG_PG);
-  const cont=document.getElementById('agBody');
-  const old=document.getElementById('agMore');if(old)old.remove();
-  if(!_agFilt.length){
-    cont.innerHTML='<div class="provider-card" style="text-align:center;padding:60px;color:var(--text-muted)"><div style="font-size:48px;margin-bottom:16px">⏳</div><p>No orders found</p></div>';
-    return;
-  }
-  const dur=v=>v&&v!=='—'?`<b>${v}</b>`:'<span style="color:var(--text-muted)">—</span>';
-  let h=`<div class="provider-card" style="overflow:hidden"><div style="overflow-x:auto">
-  <table class="ag-tbl"><thead><tr>
-    <th>Order ID</th><th>Provider</th><th>Region</th><th>Date</th>
-    <th style="text-align:center">QC Approved</th>
-    <th class="ag-qc-th" style="text-align:center">⚠️ QC→Handover</th>
-    <th style="text-align:center">Handover Date</th>
-    <th style="text-align:center">Hand→Freight</th>
-    <th style="text-align:center">Freight→Courier</th>
-    <th style="text-align:center">Total Age</th>
-    <th style="text-align:center">SLA</th>
-  </tr></thead><tbody>`;
-  slice.forEach(r=>{
-    const trCls=r.sla==='breach'?'ag-breach-row':r.sla==='warn'?'ag-warn-row':'';
-    const qcCol=r.sla==='breach'?'#ef4444':r.sla==='warn'?'#f59e0b':'#10b981';
-    const pill=r.sla==='breach'?'<span class="ag-pill ag-pill-breach">🔴 BREACH</span>':
-               r.sla==='warn'?'<span class="ag-pill ag-pill-warn">🟡 WARN</span>':
-               '<span class="ag-pill ag-pill-ok">🟢 OK</span>';
-    h+=`<tr class="${trCls}" onclick="openJ('${r.order_id}')">
-      <td><span class="oid-lnk">${r.order_id}</span>${r.is_cancelled?'<br><span style="font-size:9px;color:#ef4444;font-weight:700">❌ CANCELLED</span>':''}</td>
-      <td><span style="font-size:10px;padding:2px 8px;background:var(--hover-bg);border:1px solid var(--border-color);border-radius:20px">${r.source}</span></td>
-      <td style="color:var(--text-muted);font-size:11px">${r.region||'—'}</td>
-      <td style="color:var(--text-muted);font-size:11px">${r.date||'—'}</td>
-      <td style="text-align:center;font-size:10px;color:var(--text-muted)">${r.qc_approved_at||'—'}</td>
-      <td class="ag-qc-td">
-        ${r.qc_age_days!=null?`<div class="ag-big" style="color:${qcCol}">${r.qc_age_days}d</div><div class="ag-sub">${r.qc_to_handover||'pending'}</div>`:'<span style="color:var(--text-muted);font-size:10px">no QC date</span>'}
-      </td>
-      <td style="text-align:center;font-size:10px;color:var(--text-muted)">${r.handedover_at||'—'}</td>
-      <td style="text-align:center">${dur(r.handover_to_freight)}</td>
-      <td style="text-align:center">${dur(r.freight_to_courier)}</td>
-      <td style="text-align:center">${dur(r.total_aging)}</td>
-      <td style="text-align:center">${pill}</td>
-    </tr>`;
-  });
-  h+=`</tbody></table></div></div>`;
-  const tmp=document.createElement('div');tmp.innerHTML=h;
-  cont.appendChild(tmp.firstChild);
-  const shown=start+slice.length;
-  if(shown<_agFilt.length){
-    const btn=document.createElement('div');btn.id='agMore';
-    btn.innerHTML=`<div style="text-align:center;padding:20px"><button class="apply-btn" onclick="_agPage++;agRenderPage()">Load More (${shown} of ${_agFilt.length})</button></div>`;
-    cont.appendChild(btn);
-  }
-}
-function closeJ(){document.getElementById('jMov').classList.remove('open');}
-function colFor(v){
-  if(!v||v==='N/A') return '#94a3b8';
-  const n=parseFloat(v);
-  if(isNaN(n)) return '#94a3b8';
-  return n<=1?'#10b981':n<=3?'#f59e0b':'#ef4444';
-}
-async function openJ(oid){
-  document.getElementById('jMov').classList.add('open');
-  document.getElementById('jBody').innerHTML='<div class="mld"></div>';
-  try{
-    const r=await fetch('/api/nexus/order_journey/'+encodeURIComponent(oid));
-    const d=await r.json();
-    if(!d.success){document.getElementById('jBody').innerHTML=`<div style="text-align:center;padding:30px;color:var(--text-muted)">${d.message}</div>`;return;}
-    const tl=d.timeline,km=d.key_metrics,steps=d.step_metrics||[];
-    const cb=d.is_cancelled?`<div class="cb-banner">⚠️ CANCELLED — ${tl.cancelled_at||'N/A'}</div>`:'';
-    const qcN=parseFloat(km.qc_to_handover);
-    let slaBadge='';
-    if(!isNaN(qcN)){
-      if(qcN>3) slaBadge=`<span class="ag-pill ag-pill-breach" style="display:inline-block;margin-bottom:14px">⚠️ ${km.qc_to_handover} — SLA Breach</span>`;
-      else if(qcN>2) slaBadge=`<span class="ag-pill ag-pill-warn" style="display:inline-block;margin-bottom:14px">⏳ ${km.qc_to_handover}</span>`;
-      else slaBadge=`<span class="ag-pill ag-pill-ok" style="display:inline-block;margin-bottom:14px">✅ ${km.qc_to_handover}</span>`;
-    }
-    let sh='';
-    if(steps.length){
-      sh='<div class="shd">⏱️ Step Durations</div><div class="stp-grid">';
-      steps.forEach(s=>{sh+=`<div class="stp-card"><div class="stp-lbl">${s.label}</div><div class="stp-val" style="color:${s.duration?'var(--text-main)':'var(--text-muted)'}">${s.duration||'—'}</div></div>`;});
-      sh+='</div>';
-    }
-    const ti=(lb,v,type)=>{
-      const dotCls=v?(type==='c'?'canc':'done'):'';
-      const valCls=v?'':(type==='c'?'cv':'pend');
-      return `<div class="tl-item"><div class="tl-dot ${dotCls}"></div><div class="tl-lbl">${lb}</div><div class="tl-val ${valCls}">${v||'— Not yet'}</div></div>`;
-    };
-    document.getElementById('jBody').innerHTML=`
-      <div style="font-size:16px;font-weight:800;margin-bottom:3px">📦 Order Journey</div>
-      <div style="font-family:monospace;color:#10b981;margin-bottom:14px;font-size:14px">${oid}</div>
-      ${cb}${slaBadge}
-      <div class="shd">⭐ Key Metrics</div>
-      <div class="km-grid">
-        <div class="km-card"><div class="km-val" style="color:${colFor(km.qc_to_handover)}">${km.qc_to_handover||'N/A'}</div><div class="km-lbl">QC → Handover</div></div>
-        <div class="km-card"><div class="km-val" style="color:${colFor(km.handover_to_freight)}">${km.handover_to_freight||'N/A'}</div><div class="km-lbl">Handover → Freight</div></div>
-        <div class="km-card"><div class="km-val" style="color:${colFor(km.total_journey)}">${km.total_journey||'N/A'}</div><div class="km-lbl">Total Journey</div></div>
-      </div>
-      ${sh}
-      <div class="shd">🗺️ Full Timeline</div>
-      <div class="tl-wrap">
-        ${ti('📋 Created',tl.created_at,'n')}
-        ${ti('✅ Accepted',tl.accepted_at,'n')}
-        ${ti('🚚 Pickup Ready',tl.pickup_ready_at,'n')}
-        ${ti('🔍 QC Pending',tl.qc_pending_at,'n')}
-        ${ti('✅ QC Approved',tl.qc_approved_at,'n')}
-        ${ti('🤝 Handed Over',tl.handedover_at,'n')}
-        ${ti('✈️ Freight',tl.freight_at,'n')}
-        ${ti('🚁 Courier',tl.courier_at,'n')}
-        ${ti('📬 Delivered',tl.delivered_at,'n')}
-        ${tl.cancelled_at?ti('❌ Cancelled',tl.cancelled_at,'c'):''}
-      </div>`;
-  }catch(e){document.getElementById('jBody').innerHTML=`<div style="color:#ef4444;padding:20px">Error: ${e.message}</div>`;}
-}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeJ();});
-loadAging();
-</script></body></html>''', role=role, favicon=FAVICON)
-
-@app.route('/api/main_aging_data')
-@login_required
-def api_main_aging_data():
-    jm  = fetch_journey()
-    now = datetime.now()
-    rows = []
-    seen = set()
-    for provider in PROVIDERS:
-        sheet_rows = fetch_sheet_data(provider['sheet'])
-        if not sheet_rows:
-            continue
-        o_col = provider.get('order_col', 0)
-        d_col = provider['date_col']
-        r_col = provider['region_col']
-        start = provider['start_row'] - 1
-        for row in sheet_rows[start:]:
-            if not row or len(row) <= max(o_col, d_col, r_col):
-                continue
-            oid = str(row[o_col]).strip().upper()
-            if not oid or oid in seen:
-                continue
-            if oid.lower() in ['','nan','order','orderid','fleek id','fleek_id']:
-                continue
-            seen.add(oid)
-            j = jm.get(oid)
-            if not j:
-                continue
-            dc  = pdt(j['created_at'])
-            dqa = pdt(j['qc_approved_at'])
-            dh  = pdt(j['handedover_at'])
-            dfr = pdt(j['freight_at'])
-            dco = pdt(j['courier_at'])
-            dd  = pdt(j['delivered_at'])
-            dca = pdt(j['cancelled_at'])
-            qc_age_days = None
-            sla = 'ok'
-            if dqa:
-                end  = dh or now
-                diff = (end - dqa).total_seconds() / 86400
-                qc_age_days = round(diff, 1)
-                if qc_age_days > 3:   sla = 'breach'
-                elif qc_age_days > 2: sla = 'warn'
-            region   = str(row[r_col]).strip() if r_col < len(row) else ''
-            date_val = str(row[d_col]).strip() if d_col < len(row) else ''
-            rows.append({
-                'order_id':             oid,
-                'source':               provider['short'],
-                'region':               region,
-                'date':                 date_val,
-                'is_cancelled':         bool(dca),
-                'qc_approved_at':       fdt(dqa),
-                'handedover_at':        fdt(dh),
-                'freight_at':           fdt(dfr),
-                'courier_at':           fdt(dco),
-                'delivered_at':         fdt(dd),
-                'qc_to_handover':       dayb(dqa, dh),
-                'handover_to_freight':  dayb(dh, dfr),
-                'freight_to_courier':   dayb(dfr, dco),
-                'courier_to_delivered': dayb(dco, dd),
-                'total_aging':          dayb(dc, dd or dco or dfr or dh or dqa or now),
-                'qc_age_days':          qc_age_days,
-                'sla':                  sla,
-            })
-    rows.sort(key=lambda x: (x['sla']=='breach', x['qc_age_days'] or 0), reverse=True)
-    return jsonify({'success': True, 'rows': rows, 'total': len(rows)})
-
-# ==============================================================================
-         3pl end
-# ==============================================================================    
-# ==============================================================================
-# 🛰️ TID OPERATIONS HUB (NEXUS) - STRICT 150 ZERO + RADAR + SECURE NATIVE
-# ==============================================================================
-import urllib.request
-import urllib.parse
-import csv
-import re
-import json
-import time
-import concurrent.futures
-from datetime import datetime
-import ssl
-from flask import jsonify, request, session, render_template_string
-
-# 🛠️ ANTI-DROP FIX FOR LOCAL VS CODE
-try:
-    _create_unverified_https_context = ssl._create_unverified_context
-except AttributeError:
-    pass
-else:
-    ssl._create_default_https_context = _create_unverified_https_context
-
-# ------------------------------------------------------------------------------
-# 1. CORE DATA SOURCES
-# ------------------------------------------------------------------------------
-NEXUS_SOURCES = {
-    "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-    "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-    "GE QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=710036753&single=true&output=csv",
-    "GE Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-    "APX": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRDEzAMUwnFZ7aoThGoMERtxxsll2kfEaSpa9ksXIx6sqbdMncts6Go2d5mKKabepbNXDSoeaUlk-mP/pub?gid=0&single=true&output=csv",
-    "Kerry": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=0&single=true&output=csv"
-}
-NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
-
-# ------------------------------------------------------------------------------
-# 2. EXACT COLUMNS MAP & DATA ENGINE
-# ------------------------------------------------------------------------------
-NEXUS_GLOBAL_CACHE = {'time': 0, 'sheets': {}, 'kerry': {}}
-NEXUS_FILTER_DATE = datetime(2026, 1, 1)
-
-NEXUS_SHEET_MAP = {
-    "Kerry":         {"o": 1, "b": 5, "d": 2, "w": 8, "v": 15, "c": 18, "cn": 22, "ma": 31, "t": 32},
-    "APX":           {"o": 1, "b": 4, "d": 2, "w": 7, "v": 12, "c": 15, "cn": 19, "ma": 33, "t": 28},
-    "ECL QC Center": {"o": 1, "b": 4, "d": 2, "w": 7, "v": 11, "c": 14, "cn": 18, "ma": 28, "t": 26},
-    "ECL Zone":      {"o": 1, "b": 4, "d": 2, "w": 9, "v": 14, "c": 17, "cn": 21, "ma": 33, "t": 29},
-    "GE QC Center":  {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29},
-    "GE Zone":       {"o": 1, "b": 4, "d": 2, "w": 7, "v": 13, "c": 16, "cn": 20, "ma": 32, "t": 29}
-}
-
-def nexus_fetch_sheet_data(url, name):
-    try:
-        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
-        with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
-            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
-            data = list(csv.reader(raw_data))
-            col = NEXUS_SHEET_MAP.get(name)
-            if not col or not data: return []
-
-            processed = []
-            for row in data:
-                if not row: continue
-                p = row + [''] * 60 
-                o_val = str(p[col['o'] - 1]).strip()
-                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
-                def get_v(col_num):
-                    v = str(p[col_num - 1]).strip()
-                    return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
-                processed.append({
-                    'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
-                    'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
-                    'country': get_v(col['cn']), 'tid': get_v(col['t']), 'mawb': get_v(col['ma'])
-                })
-            return processed
-    except: return []
-
-def nexus_clean_tids(raw):
-    """
-    🚨 AI SMART SPLITTER & STRICT 150 ZERO RESTORER 🚨
-    Ensures text like "Pending" is ignored, adds missing zeros STRICTLY to 150, and splits concatenated TIDs.
-    """
-    raw = str(raw).strip()
-    if not raw or raw.lower() in ['pending', 'none', 'n/a', '-', 'tbd', 'tba', 'update soon']: return []
-    
-    # Pre-process: insert spaces around known tracking patterns to break them apart safely
-    raw = re.sub(r'(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})', r' \1 ', raw)
-    
-    # Split by spaces, commas, slashes, semicolons
-    parts = [t.strip() for t in re.split(r'[,\/\s;]+', raw) if t.strip()]
-
-    cleaned = []
-    for t in parts:
-        t = re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', t)
-        
-        # Validation: Must be >6 chars AND contain digits AND not be a common text word
-        if len(t) > 6 and re.search(r'\d', t) and t.lower() not in ['tracking', 'number', 'pending', 'orderno']:
-            # 🚨 STRICT ZERO RESTORER (ONLY FOR 150) 🚨
-            if t.startswith('150') and len(t) >= 12 and not t.startswith('0'):
-                cleaned.append('0' + t)
-            else:
-                cleaned.append(t) # 155 aur baqi sab waise hi jayenge
-                
-    return list(dict.fromkeys(cleaned))
-
-def nexus_fetch_kerry_status(url):
-    try:
-        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
-            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
-            data = list(csv.reader(raw_data))
-            if not data: return {}
-            
-            o_idx, s_idx, h_idx = -1, -1, -1
-            
-            # Exact Header Matching for strict accuracy
-            for i, row in enumerate(data[:20]):
-                c = [str(x).lower().replace(' ', '').replace('_', '') for x in row]
-                for j, col_name in enumerate(c):
-                    if col_name in ['order', 'orderid', 'fleekid', 'shipmentid', 'orderno']: o_idx = j; break
-                for j, col_name in enumerate(c):
-                    if col_name in ['lateststatus', 'status', 'currentstatus', 'trackingstatus', 'orderstatus']: s_idx = j; break
-                if o_idx != -1 and s_idx != -1: h_idx = i; break
-                
-            s_map = {}
-            if h_idx != -1 and o_idx != -1 and s_idx != -1:
-                for row in data[h_idx+1:]:
-                    p = row + [''] * 40
-                    o = str(p[o_idx]).strip().lower()
-                    if o: 
-                        stat_val = str(p[s_idx]).strip().upper()
-                        if not stat_val: stat_val = "PENDING"
-                        s_map[o] = stat_val
-                        s_map[o.replace('_', '/')] = stat_val
-                        s_map[o.replace('/', '_')] = stat_val
-                        if o.startswith('0'):
-                            s_map[o[1:]] = stat_val
-            return s_map
-    except: return {}
-
-def nexus_parse_date(date_str):
-    try:
-        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%d-%b-%y', '%Y/%m/%d'):
-            try: return datetime.strptime(date_str.split(' ')[0], fmt)
-            except: continue
-    except: pass
-    return None
-
-def nexus_sync_db(force=False):
-    global NEXUS_GLOBAL_CACHE
-    now = time.time()
-    if not force and now - NEXUS_GLOBAL_CACHE['time'] < 300 and NEXUS_GLOBAL_CACHE['sheets']:
-        return NEXUS_GLOBAL_CACHE['sheets'], NEXUS_GLOBAL_CACHE['kerry']
-
-    res = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as exe:
-        f_sheets = {exe.submit(nexus_fetch_sheet_data, url, name): name for name, url in NEXUS_SOURCES.items()}
-        f_kerry = exe.submit(nexus_fetch_kerry_status, NEXUS_KERRY_STATUS_URL)
-        for f in concurrent.futures.as_completed(f_sheets):
-            res[f_sheets[f]] = f.result()
-        try: k_map = f_kerry.result()
-        except: k_map = {}
-        
-    NEXUS_GLOBAL_CACHE['time'] = now
-    NEXUS_GLOBAL_CACHE['sheets'] = res
-    NEXUS_GLOBAL_CACHE['kerry'] = k_map
-    return res, k_map
-
-
-
-
-
-# ------------------------------------------------------------------------------
-# 3. BACKEND API ROUTES
-# ------------------------------------------------------------------------------
-
-@app.route('/api/nexus/refresh', methods=['POST'])
-def api_nexus_refresh():
-    nexus_sync_db(force=True)
-    return jsonify({"success": True})
-
-@app.route('/api/nexus/search', methods=['POST'])
-def api_nexus_search():
-    order_ids = [x.strip().lower() for x in re.split(r'[\n,\t\s]+', request.json.get('query', '')) if x.strip()]
-    results = []
-    sheets_data, kerry_data = nexus_sync_db()
-    
-    for q in order_ids:
-        q_slash = q.replace('_', '/')
-        q_under = q.replace('/', '_')
-        # Smart search match exclusively for 150
-        q_with_zero = '0' + q if q.startswith('150') else q
-        q_no_zero = q[1:] if q.startswith('0150') else q
-        
-        found = False
-        for src, rows in sheets_data.items():
-            for r in rows:
-                oid, tid_raw = r['order'].lower(), r['tid'].lower()
-                if (q in oid or q_slash in oid or q_under in oid or 
-                    q in tid_raw or q_with_zero in tid_raw or q_no_zero in tid_raw):
-                    k_stat = kerry_data.get(oid, "N/A")
-                    results.append({
-                        "order_id": r['order'].upper(), "source": src, "status": k_stat, 
-                        "date": r['date'], "boxes": r['boxes'], "weight": r['weight'], 
-                        "vendor": r['vendor'], "customer": r['customer'], "country": r['country'], 
-                        "tids": nexus_clean_tids(r['tid']), "mawb": r['mawb']
-                    })
-                    found = True; break
-            if found: break
-    return jsonify(results)
-
-@app.route('/api/nexus/track_real', methods=['POST'])
-def api_track_real():
-    tid = request.json.get('tid', '')
-    if not tid: return jsonify({"success": False})
-
-    api_key = "8cbba2461aa13856fbaa27f4c26be113" 
-    target_url = f"https://www.ordertracker.com/track/{tid}"
-    scraper_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}"
-
-    try:
-        req = urllib.request.Request(scraper_url, headers={'User-Agent': 'Mozilla/5.0'})
-        html = urllib.request.urlopen(req, timeout=25).read().decode('utf-8')
-        match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html)
-        if match:
-            data = json.loads(match.group(1))
-            def find_events(node):
-                if isinstance(node, dict):
-                    if 'events' in node and isinstance(node['events'], list) and len(node['events']) > 0:
-                        if 'description' in node['events'][0] or 'status' in node['events'][0]:
-                            return node['events']
-                    for k, v in node.items():
-                        found = find_events(v)
-                        if found: return found
-                elif isinstance(node, list):
-                    for item in node:
-                        found = find_events(item)
-                        if found: return found
-                return None
-            
-            raw_events = find_events(data)
-            if raw_events:
-                events = []
-                for i, ev in enumerate(raw_events):
-                    events.append({
-                        "time": ev.get("date", "Unknown Time"),
-                        "status": ev.get("description", ev.get("status", "Update")),
-                        "loc": ev.get("location", ""),
-                        "active": i == 0 
-                    })
-                return jsonify({"success": True, "events": events})
-    except Exception as e: pass
-    return jsonify({"success": False, "tid": tid})
-
-# 🚨 THE ULTIMATE HANDED OVER RADAR ENGINE 🚨
-@app.route('/api/nexus/radar_data', methods=['GET'])
-def api_nexus_radar_data():
-    sheets_data, kerry_data = nexus_sync_db()
-    buckets = { "handed_over": {s: [] for s in NEXUS_SOURCES} }
-    
-    for src, rows in sheets_data.items():
-        for r in rows:
-            oid = str(r.get('order', '')).strip()
-            if not oid or oid.lower() in ['n/a', 'nan']: continue
-            
-            k_stat = str(kerry_data.get(oid.lower(), "PENDING")).upper()
-            
-            # CONDITION 1: Kerry Status must contain HANDED OVER (Flexible spacing checker)
-            k_stat_clean = k_stat.replace(" ", "").replace("_", "")
-            if "HANDEDOVER" not in k_stat_clean:
-                continue
-                
-            # CONDITION 2: Must have a Real Valid TID (Not "Pending")
-            tids = nexus_clean_tids(r.get('tid', ''))
-            if len(tids) == 0:
-                continue
-                
-            # CONDITION 3: Must have MAWB updated
-            mawb = str(r.get('mawb', '')).strip()
-            if not mawb or mawb.lower() in ['n/a', 'nan', 'none', 'pending', '-']:
-                continue
-            
-            # Success: All 3 Conditions Met! Add to dashboard.
-            buckets["handed_over"][src].append({ 
-                "Order": oid.upper(), 
-                "Date": r.get('date', 'N/A'), 
-                "Vendor": r.get('vendor', 'N/A'), 
-                "Customer": r.get('customer', 'N/A'), 
-                "Boxes": r.get('boxes', 'N/A'), 
-                "TID": ", ".join(tids), 
-                "MAWB": mawb, 
-                "Status": k_stat 
-            })
-            
-    return jsonify(buckets)
-
-@app.route('/api/nexus/ops_commander', methods=['GET'])
-def api_nexus_ops_commander():
-    sheets_data, kerry_data = nexus_sync_db()
-    blame_radar = []
-    missing_text = "Hi Kerry Team,\nThe following orders have been Handed Over but are missing Tracking IDs. Kindly update ASAP:\n\n"
-    count = 1
-    for src, rows in sheets_data.items():
-        for r in rows:
-            dt_obj = nexus_parse_date(r['date'])
-            if not dt_obj or dt_obj < NEXUS_FILTER_DATE: continue
-            oid = r['order']
-            k_stat = str(kerry_data.get(oid.lower(), "PENDING")).upper()
-            k_stat_clean = k_stat.replace(" ", "").replace("_", "")
-            
-            has_tid = len(nexus_clean_tids(r['tid'])) > 0
-            days = (datetime.now() - dt_obj).days if dt_obj else 0
-            
-            if "HANDEDOVER" in k_stat_clean and not has_tid and days > 1:
-                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Missing TID", "aging": f"{days} Days", "blame": "Kerry Logistics"})
-                missing_text += f"{count}. Order: {oid.upper()} | Date: {r['date']} | Source: {src}\n"
-                count += 1
-            elif k_stat_clean in ["QCPENDING", "CREATED", "ACCEPTED"] and days > 2:
-                blame_radar.append({"order": oid.upper(), "source": src, "issue": "Stuck in QC", "aging": f"{days} Days", "blame": f"{src} Operations"})
-    if count == 1: missing_text = "All good! No missing TIDs currently."
-    return jsonify({"blame_radar": sorted(blame_radar, key=lambda x: int(x['aging'].split()[0]), reverse=True), "missing_text": missing_text})
-
-# ------------------------------------------------------------------------------
-# 4. FRONTEND UI
-# ------------------------------------------------------------------------------
-
-@app.route('/nexus')
-def nexus_dashboard():
-    user_val = session.get('username') or session.get('user') or session.get('role')
-    if not user_val or str(user_val).lower() != 'admin':
-        return "<div style='text-align:center; padding:100px; font-family:sans-serif; background:#000; color:#fff; height:100vh;'><h2>⛔ Access Denied</h2><p>Only Admin users can access the TID Operations Hub.</p><a href='/' style='color:#10B981;'>Go Back</a></div>", 403
-
-    return render_template_string('''
-    <!DOCTYPE html><html lang="en" data-theme="dark">
-    <head><meta charset="UTF-8"><title>NEXUS - TID Operations Hub</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        
-        :root { 
-            --bg: #000000; --card: #0A0A0A; --border: #1A1A1A; --text: #FAFAFA; --muted: #71717A; 
-            --accent: #FFFFFF; --btn-bg: #FFFFFF; --btn-text: #000000;
-            --shadow: 0 10px 30px -10px rgba(0,0,0,0.8); --badge-bg: #1A1A1A; --badge-text: #FAFAFA; --input-bg: #050505;
-        }
-        [data-theme="light"] { 
-            --bg: #F8F9FB; --card: #FFFFFF; --border: #E5E7EB; --text: #111827; --muted: #6B7280; 
-            --accent: #111827; --btn-bg: #111827; --btn-text: #FFFFFF;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); --badge-bg: #F3F4F6; --badge-text: #111827; --input-bg: #FFFFFF;
-        }
-
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; overflow: hidden;}
-        * { box-sizing: border-box; }
-        
-        .app-container { display: flex; height: 100vh; width: 100vw; flex-direction: column; }
-        .topbar { height: 64px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; z-index: 10;}
-        .brand { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px;}
-        .theme-toggle { background: var(--input-bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: 0.2s;}
-        
-        .main-wrapper { display: flex; flex: 1; overflow: hidden; }
-        .sidebar { width: 260px; background: var(--bg); border-right: 1px solid var(--border); padding: 30px 20px; display: flex; flex-direction: column; gap: 8px;}
-        .nav-item { padding: 14px 18px; border-radius: 10px; color: var(--muted); font-weight: 600; font-size: 14px; cursor: pointer; border: none; background: transparent; text-align: left; transition: 0.2s; display: flex; align-items: center;}
-        .nav-item:hover { color: var(--text); background: var(--card); }
-        .nav-item.active { background: var(--card); color: var(--accent); border: 1px solid var(--border); }
-        
-        .viewport { flex: 1; padding: 40px 50px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; }
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 30px; box-shadow: var(--shadow); }
-        .card.hoverable { cursor: pointer; transition: 0.2s; }
-        .card.hoverable:hover { transform: translateY(-4px); border-color: #10B981; box-shadow: 0 10px 40px -10px rgba(16,185,129,0.2); }
-        
-        .btn { background: var(--btn-bg); color: var(--btn-text); border: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; transition: 0.2s;}
-        .btn:hover { opacity: 0.8; transform: translateY(-1px);}
-        .btn.outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-        .btn.outline:hover { background: var(--border); }
-        
-        textarea { width: 100%; background: var(--input-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--text); font-family: monospace; font-size: 15px; outline: none; resize: vertical; min-height: 100px; transition: 0.2s;}
-        textarea:focus { border-color: #444; }
-        
-        .badge { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; background: var(--badge-bg); color: var(--badge-text); text-transform: uppercase; letter-spacing: 0.5px;}
-        .badge.success { background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3);}
-        
-        .radar-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;}
-        .stat-value { font-size: 40px; font-weight: 800; color: #10B981; margin-bottom: 4px; letter-spacing: -1px;}
-        .stat-label { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 1px;}
-        
-        .track-card { border-radius: 16px; overflow: hidden; margin-bottom: 24px; padding: 0; border: 1px solid var(--border);}
-        .track-header { padding: 24px 30px; border-bottom: 1px solid var(--border); background: var(--input-bg); display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 20px;}
-        .meta-col { display: flex; flex-direction: column; gap: 6px; }
-        .meta-lbl { font-size: 11px; color: var(--muted); font-weight: 700; display:flex; align-items:center; gap: 6px; text-transform:uppercase;}
-        .meta-val { font-size: 14px; font-weight: 600;}
-        
-        .tid-area { padding: 30px; background: var(--card);}
-        .tid-strip { display: flex; flex-direction: column; gap: 20px; padding-bottom: 8px;}
-        .tid-box { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; transition: 0.3s;}
-        
-        .native-timeline-box { display: none; background: #050505; border: 1px solid #222; border-radius: 12px; padding: 30px; margin-top: 10px; }
-        .tl-container { border-left: 2px solid #222; padding-left: 25px; margin-left: 10px; }
-        .tl-item { position: relative; margin-bottom: 30px; animation: fadeIn 0.4s ease forwards; }
-        .tl-item:last-child { margin-bottom: 0; }
-        .tl-dot { position: absolute; left: -32px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: #222; border: 3px solid #000; }
-        .tl-dot.active { background: #10B981; box-shadow: 0 0 10px rgba(16,185,129,0.5); border-color: #050505; }
-        .tl-time { font-size: 12px; color: #888; font-weight: 700; margin-bottom: 6px; letter-spacing: 0.5px; display:block;}
-        .tl-status { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; display:block;}
-        .tl-loc { font-size: 12px; color: #555; display:block;}
-        
-        .fallback-container { text-align: center; padding: 30px; background: #080808; border-radius: 12px; border: 1px dashed #222; }
-        .fallback-btn { display: inline-block; background: #fff; color: #000; padding: 10px 24px; border-radius: 8px; font-weight: 700; font-size: 13px; text-decoration: none; margin-top: 15px; transition: 0.2s; }
-        .fallback-btn:hover { opacity: 0.8; transform: translateY(-2px); }
-
-        .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(10px); z-index: 100; display: none; padding: 40px; overflow-y: auto; }
-        .modal-content { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 1400px; margin: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.8);}
-        table { width: 100%; border-collapse: collapse; text-align: left; }
-        th { padding: 16px 20px; font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 800; border-bottom: 1px solid var(--border); letter-spacing: 1px;}
-        td { padding: 16px 20px; font-size: 14px; border-bottom: 1px solid var(--border); font-weight: 500;}
-        tr:hover { background: #111; }
-        
-        .loader { width: 30px; height: 30px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: auto;}
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    </style></head>
-    <body>
-    <div class="app-container">
-        <header class="topbar">
-            <div class="brand">🛰️ NEXUS HUB</div>
-            <button class="theme-toggle" id="themeBtn" onclick="toggleTheme()">☀️ Light Mode</button>
-        </header>
-        <div class="main-wrapper">
-            <aside class="sidebar">
-                <div style="font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; margin: 10px 0 10px 18px; letter-spacing: 1px;">Operations</div>
-                <button class="nav-item active" onclick="navSwitch(this, 'view-track')">🔍 Global Scanner</button>
-                <button class="nav-item" onclick="navSwitch(this, 'view-direct')">🚢 Direct Track</button>
-                <button class="nav-item" onclick="navSwitch(this, 'handed_over')">📦 Handed Over Radar</button>
-                <button class="nav-item" onclick="navSwitch(this, 'view-ops')">⚡ Ops Commander</button>
-                <div style="flex:1"></div>
-                <a href="/" class="nav-item" style="color: #EF4444; text-decoration:none; margin-bottom: 20px;">⬅️ Back to Dashboard</a>
-            </aside>
-            <main class="viewport">
-                <h1 id="view-title" style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -1px;">Global Tracking Matrix</h1>
-                
-                <div id="view-track" class="view-pane active">
-                    <div class="card" style="margin-bottom: 30px;">
-                        <textarea id="searchInput" placeholder="Paste Order IDs (e.g., 1234_12 or 1234/12) or TIDs..."></textarea>
-                        <div style="margin-top: 20px; display: flex; gap: 16px;">
-                            <button class="btn" onclick="searchOrders()">Scan Matrix</button>
-                            <button class="btn outline" onclick="document.getElementById('searchInput').value=''; document.getElementById('tracking-results').innerHTML=''; document.getElementById('bulkTrackBtn').style.display='none';">Clear</button>
-                            <button class="btn" id="bulkTrackBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('tracking-results')">⚡ Bulk Track All</button>
-                        </div>
-                    </div>
-                    <div id="tracking-results"></div>
-                </div>
-
-                <div id="view-direct" class="view-pane" style="display:none;">
-                    <div class="card" style="margin-bottom: 30px;">
-                        <textarea id="directInput" placeholder="Paste multiple Carrier TIDs here directly..."></textarea>
-                        <div style="margin-top: 20px; display: flex; gap: 16px;">
-                            <button class="btn" onclick="directTrackTIDs()">Extract TIDs</button>
-                            <button class="btn outline" onclick="document.getElementById('directInput').value=''; document.getElementById('direct-results').innerHTML=''; document.getElementById('bulkDirectBtn').style.display='none';">Clear</button>
-                            <button class="btn" id="bulkDirectBtn" style="background:#10B981; color:#fff; display:none;" onclick="bulkTrackAll('direct-results')">⚡ Bulk Track All</button>
-                        </div>
-                    </div>
-                    <div id="direct-results" style="display:flex; flex-direction:column; gap:16px;"></div>
-                </div>
-                
-                <div id="view-radar" class="view-pane" style="display:none;">
-                    <div id="loader" style="display:none; padding:60px; text-align:center;"><div class="loader"></div><div style="margin-top:15px; color:var(--muted); font-weight:600;">Scanning Valid TIDs & MAWBs...</div></div>
-                    <div id="radar-container" class="radar-grid"></div>
-                </div>
-
-                <div id="view-ops" class="view-pane" style="display:none;">
-                    <div id="ops-loader" style="display:none; padding:60px; text-align:center;"><div class="loader"></div></div>
-                    <div id="ops-content" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; display:none;">
-                        <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">🚨 Aging Blame</h3><div style="max-height:400px; overflow-y:auto"><table id="blameTable"></table></div></div>
-                        <div class="card" style="margin:0"><h3 style="margin-top:0; color:var(--text); font-size:18px;">📲 Follow-up Bot</h3><textarea id="followupText" style="min-height:300px; border:none; background:var(--bg);" readonly></textarea><button class="btn" style="width:100%; margin-top:16px;" onclick="copyFollowup()">Copy Text</button></div>
-                    </div>
-                </div>
-            </main>
-        </div>
-    </div>
-
-    <div id="detailPanel" class="modal" onclick="if(event.target==this)this.style.display='none'">
-        <div class="modal-content">
-            <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:30px">
-                <div>
-                    <h2 id="modalTitle" style="margin:0; font-size:24px; font-weight: 800;">Handed Over Orders</h2>
-                    <p style="color:var(--muted); margin:5px 0 0 0; font-size:13px;">Showing orders with valid TID and MAWB</p>
-                </div>
-                <div style="display:flex; gap:16px;">
-                    <button class="btn outline" onclick="downloadCSV()">Export CSV</button>
-                    <button class="btn" style="background:#EF4444; border:none; color:white;" onclick="document.getElementById('detailPanel').style.display='none'">✖ Close View</button>
-                </div>
-            </div>
-            <div style="overflow-x:auto; max-height: 65vh; border: 1px solid var(--border); border-radius: 12px;"><table id="detailTable"></table></div>
-        </div>
-    </div>
-
-    <script>
-        function toggleTheme() {
-            const root = document.documentElement;
-            const isDark = root.getAttribute('data-theme') === 'dark';
-            const target = isDark ? 'light' : 'dark';
-            root.setAttribute('data-theme', target);
-            localStorage.setItem('nexus_theme', target);
-            document.getElementById('themeBtn').innerText = isDark ? '🌙 Dark Mode' : '☀️ Light Mode';
-        }
-        const savedTheme = localStorage.getItem('nexus_theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
-
-        window.onload = () => fetch('/api/nexus/refresh', {method: 'POST'});
-
-        let activeBucket = ''; let activeDetails = []; let radarData = null;
-
-        function navSwitch(btn, viewType) {
-            document.querySelectorAll('.nav-item').forEach(l=>l.classList.remove('active'));
-            btn.classList.add('active');
-            document.querySelectorAll('.view-pane').forEach(v=>v.style.display='none');
-            
-            if(viewType === 'view-track') {
-                document.getElementById('view-track').style.display = 'block';
-                document.getElementById('view-title').innerText = "Global Tracking Matrix";
-            } else if(viewType === 'view-direct') {
-                document.getElementById('view-direct').style.display = 'block';
-                document.getElementById('view-title').innerText = "Direct TID Tracker";
-            } else if(viewType === 'view-ops') {
-                document.getElementById('view-ops').style.display = 'block';
-                document.getElementById('view-title').innerText = "Ops Commander";
-                loadOps();
-            } else {
-                document.getElementById('view-radar').style.display = 'block';
-                document.getElementById('view-title').innerText = btn.innerText.replace('📦 ', '');
-                activeBucket = viewType; loadRadar();
-            }
-        }
-
-        async function searchOrders() {
-            const q = document.getElementById('searchInput').value; if(!q) return;
-            document.getElementById('tracking-results').innerHTML = '<div style="padding:60px;text-align:center"><div class="loader"></div></div>';
-            document.getElementById('bulkTrackBtn').style.display = 'none';
-            const r = await fetch('/api/nexus/search', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:q})});
-            const data = await r.json(); renderCards(data);
-        }
-
-        function renderCards(data) {
-            let h = '';
-            let hasTids = false;
-            data.forEach(item => {
-                const isDelivered = item.status.toLowerCase().includes('delivered');
-                if(item.tids.length > 0) hasTids = true;
-                h += `<div class="card track-card">
-                    <div class="track-header">
-                        <div class="meta-col"><span class="meta-lbl">🏷️ Order</span><span class="meta-val" style="font-weight:800; font-size: 16px; color: var(--accent);">${item.order_id}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">📅 Date</span><span class="meta-val">${item.date}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">🏢 Source</span><span class="meta-val">${item.source}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">🏭 Vendor</span><span class="meta-val">${item.vendor}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">👤 Customer</span><span class="meta-val">${item.customer}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">🌍 Country</span><span class="meta-val">${item.country}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">📦 Boxes/Wgt</span><span class="meta-val">${item.boxes} / ${item.weight}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">✈️ MAWB</span><span class="meta-val" style="font-family:monospace;">${item.mawb}</span></div>
-                        <div class="meta-col"><span class="meta-lbl">🚦 Status</span><span class="badge ${isDelivered?'success':''}">${item.status}</span></div>
-                    </div>
-                    <div class="tid-area">
-                        <div class="tid-strip">
-                            ${item.tids.map(tid => {
-                                const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
-                                return `
-                                <div class="tid-box">
-                                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                                        <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                                        <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
-                                    </div>
-                                    <div id="native-${cleanId}" class="native-timeline-box"></div>
-                                </div>
-                            `}).join('')}
-                        </div>
-                    </div>
-                </div>`;
-            });
-            document.getElementById('tracking-results').innerHTML = h || '<div style="text-align:center; color:var(--muted); font-weight:600; padding: 40px; border: 1px dashed var(--border); border-radius: 12px;">No matching records found.</div>';
-            if(hasTids) document.getElementById('bulkTrackBtn').style.display = 'block';
-        }
-
-        async function directTrackTIDs() {
-            let val = document.getElementById('directInput').value; if(!val) return;
-            
-            // Replicate the robust cleaning for direct input
-            val = val.replace(/[^a-zA-Z0-9,\/\s;]/g, '');
-            val = val.replace(/(15[05]\d{10,}|1Z[A-Z0-9]{15,}|JD\d{10,}|YT\d{10,}|015[05]\d{10,})/g, ' $1 ');
-            let tids = val.split(/[,\/\s;]+/).map(t => t.trim()).filter(Boolean);
-            
-            let finalTids = [];
-            tids.forEach(t => {
-                if (t.length > 6 && !['tracking', 'number', 'pending', 'orderno'].includes(t.toLowerCase())) {
-                    if (t.startsWith('150') && t.length >= 12 && !t.startsWith('0')) {
-                        finalTids.push('0' + t);
-                    } else {
-                        finalTids.push(t);
-                    }
-                }
-            });
-            
-            let h = '';
-            [...new Set(finalTids)].forEach(tid => {
-                const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
-                h += `<div class="tid-box card" style="width:100%; border: 1px solid var(--border);">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-family:monospace; font-weight:800; font-size:16px;">${tid}</span>
-                            <button class="btn outline sync-btn" style="padding:6px 14px; font-size:11px;" onclick="loadNativeTimeline('${tid}', this)">🔍 Track Native</button>
-                        </div>
-                        <div id="native-${cleanId}" class="native-timeline-box"></div>
-                      </div>`;
-            });
-            document.getElementById('direct-results').innerHTML = h;
-            if(finalTids.length > 0) document.getElementById('bulkDirectBtn').style.display = 'block';
-        }
-
-        async function bulkTrackAll(containerId) {
-            const container = document.getElementById(containerId);
-            const btns = container.querySelectorAll('.sync-btn');
-            for(let btn of btns) {
-                if(btn.innerText !== '✖ Close Tracker') {
-                    btn.click();
-                    await new Promise(r => setTimeout(r, 600)); 
-                }
-            }
-        }
-
-        async function loadNativeTimeline(tid, btn) {
-            const cleanId = tid.replace(/[^a-zA-Z0-9]/g,'');
-            const box = document.getElementById('native-' + cleanId);
-
-            if(box.style.display === 'block') {
-                box.style.display = 'none';
-                btn.innerHTML = '🔍 Track Native';
-                btn.style.background = 'transparent';
-                btn.style.color = 'var(--text)';
-                btn.style.border = '1px solid var(--border)';
-                return;
-            }
-
-            btn.innerHTML = '<div class="loader" style="width:14px; height:14px; border-width:2px;"></div>';
-            
-            const r = await fetch('/api/nexus/track_real', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tid:tid})});
-            const data = await r.json();
-            
-            btn.innerHTML = '✖ Close Tracker';
-            btn.style.background = '#1A1A1A';
-            btn.style.color = '#fff';
-            btn.style.border = '1px solid #333';
-            box.style.display = 'block';
-
-            if(data.success && data.events.length > 0) {
-                let timelineHtml = '<div class="tl-container">';
-                data.events.forEach(e => {
-                    timelineHtml += `
-                        <div class="tl-item">
-                            <div class="tl-dot ${e.active ? 'active' : ''}"></div>
-                            <span class="tl-time">${e.time}</span>
-                            <span class="tl-status">${e.status}</span>
-                            <span class="tl-loc">${e.loc}</span>
-                        </div>
-                    `;
-                });
-                timelineHtml += '</div>';
-                box.innerHTML = timelineHtml;
-            } else {
-                box.innerHTML = `
-                    <div class="fallback-container">
-                        <div style="font-size: 30px; margin-bottom: 10px;">📦</div>
-                        <h3 style="margin: 0 0 5px 0; color: #fff;">Connect to Courier Gateway</h3>
-                        <p style="color: #666; font-size: 13px; margin: 0 0 15px 0;">To view live detailed data, open the secure tracking portal.</p>
-                        <button class="fallback-btn" onclick="window.open('https://parcelsapp.com/en/tracking/${tid}', '_blank', 'width=500,height=750,top=100,left=100,scrollbars=yes');">🚢 View on ParcelsApp ↗</button>
-                    </div>
-                `;
-            }
-        }
-
-        // 🚨 HANDED OVER DASHBOARD LOGIC 🚨
-        async function loadRadar() {
-            const container = document.getElementById('radar-container'); container.innerHTML = ''; 
-            document.getElementById('loader').style.display = 'block';
-            const r = await fetch('/api/nexus/radar_data'); radarData = await r.json();
-            document.getElementById('loader').style.display = 'none';
-            const order = ["ECL QC Center", "ECL Zone", "GE QC Center", "GE Zone", "APX", "Kerry"];
-            order.forEach(src => {
-                const arr = radarData['handed_over'][src] || [];
-                container.innerHTML += `
-                    <div class="card hoverable" onclick="showDetails('${src}')" style="display:flex; justify-content:space-between; align-items:center;">
-                        <div style="font-weight:800; font-size:16px; text-transform:uppercase;">${src}</div>
-                        <div style="text-align:right;"><div class="stat-value">${arr.length}</div><div class="stat-label">Valid Orders</div></div>
-                    </div>
-                `;
-            });
-        }
-
-        async function loadOps() {
-            document.getElementById('ops-content').style.display = 'none';
-            document.getElementById('ops-loader').style.display = 'block';
-            const r = await fetch('/api/nexus/ops_commander'); const data = await r.json();
-            document.getElementById('followupText').value = data.missing_text;
-            let t = '<thead><tr><th>Order</th><th>Source</th><th>Issue</th><th>Aging</th></tr></thead><tbody>';
-            if(!data.blame_radar.length) t += '<tr><td colspan="4" style="text-align:center; padding:20px; color:var(--muted)">All Good! 🎉</td></tr>';
-            else data.blame_radar.forEach(b => t += `<tr><td><b>${b.order}</b></td><td>${b.source}</td><td>${b.issue}</td><td style="color:#ef4444; font-weight:700">${b.aging}</td></tr>`);
-            document.getElementById('blameTable').innerHTML = t + '</tbody>';
-            document.getElementById('ops-content').style.display = 'grid';
-            document.getElementById('ops-loader').style.display = 'none';
-        }
-        
-        function copyFollowup() { navigator.clipboard.writeText(document.getElementById('followupText').value); alert("Copied to clipboard!"); }
-
-        function showDetails(src) {
-            activeDetails = radarData['handed_over'][src]; 
-            if(!activeDetails || activeDetails.length === 0) return;
-            document.getElementById('modalTitle').innerText = src + " - Handed Over";
-            let thead = '<thead><tr>' + Object.keys(activeDetails[0]).map(k=>`<th>${k}</th>`).join('') + '</tr></thead>';
-            let tbody = '<tbody>' + activeDetails.map(r=>'<tr>' + Object.values(r).map(v=>`<td>${v}</td>`).join('') + '</tr>').join('') + '</tbody>';
-            document.getElementById('detailTable').innerHTML = thead + tbody;
-            document.getElementById('detailPanel').style.display = 'block';
-        }
-
-        function downloadCSV() {
-            if(!activeDetails.length) return;
-            const headers = Object.keys(activeDetails[0]).join(',');
-            const rows = activeDetails.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\\n');
-            const link = document.createElement("a");
-            link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + headers + "\\n" + rows));
-            link.setAttribute("download", `nexus_handed_over_export.csv`); link.click();
-        }
-    </script>
-    </body></html>
-    ''')
-# ==============================================================================
-# END OF CODE
-# ==============================================================================
-# ==============================================================================
-# ==============================================================================
 # BUNDLING INTELLIGENCE HUB — COMPLETE FINAL VERSION
 # ==============================================================================
 import urllib.request, csv, re, ssl, time, math, concurrent.futures
@@ -4980,7 +4241,9 @@ from datetime import datetime, timedelta
 from flask import jsonify, request, session, render_template_string
 
 _bc={"data":None,"time":0}; _jc={"data":None,"time":0}; _sc={"data":None,"time":0}
+_rc={"data":None,"time":0}  # Separate rates cache
 CD=600
+RATES_CD=86400  # 24 hours — rates rarely change
 
 FULL_ACCESS = {
     "husaain@joinfleek.com",
@@ -5106,45 +4369,89 @@ def lookup_rate(rm_brackets, country, billed_kg, default=4.50):
     Returns the matching per-kg rate.
     """
     ctry=str(country).strip().lower()
-    # Try exact country match, then aliases
-    ALIASES={
-        "united kingdom":["uk","gb","england","britain","u.k","u.k."],
-        "united states":["usa","us","america","u.s","u.s.a"],
-        "united arab emirates":["uae","dubai","u.a.e"],
-        "saudi arabia":["saudia arabia","ksa","saudi"],
-        "south korea":["korea"],
-        "new zealand":["nz"],
-        "netherlands":["holland"],
-    }
-    candidates=[]
-    if ctry in rm_brackets:
-        candidates=rm_brackets[ctry]
-    else:
-        for canon,alts in ALIASES.items():
-            if ctry in alts or ctry==canon:
-                key=canon if canon in rm_brackets else next((a for a in alts if a in rm_brackets),None)
-                if key: candidates=rm_brackets[key]; break
+    # Pre-build country alias lookup (add this BEFORE lookup_rate function)
+COUNTRY_ALIASES_MAP = {}
+_ALIASES_RAW = {
+    "united kingdom":["uk","gb","england","britain","u.k","u.k."],
+    "united states":["usa","us","america","u.s","u.s.a"],
+    "united arab emirates":["uae","dubai","u.a.e"],
+    "saudi arabia":["saudia arabia","ksa","saudi"],
+    "south korea":["korea"],
+    "new zealand":["nz"],
+    "netherlands":["holland"],
+}
+for canon, alts in _ALIASES_RAW.items():
+    COUNTRY_ALIASES_MAP[canon] = canon
+    for a in alts:
+        COUNTRY_ALIASES_MAP[a] = canon
+
+def lookup_rate(rm_brackets, country, billed_kg, default=4.50):
+    ctry=str(country).strip().lower()
+    if not ctry or ctry in ["","n/a","nan","none"]:
+        return default
+    
+    # Fast O(1) lookup via pre-built alias map
+    candidates=rm_brackets.get(ctry)
+    if not candidates:
+        canon=COUNTRY_ALIASES_MAP.get(ctry)
+        if canon:
+            candidates=rm_brackets.get(canon)
         if not candidates:
-            # partial match
+            # Partial match as last resort
             for k,v in rm_brackets.items():
                 if k in ctry or ctry in k:
                     candidates=v; break
     if not candidates:
         return default
-    # Find bracket where billed_kg falls: min < billed <= max
-    for (mn,mx,rate) in sorted(candidates,key=lambda x:x[0]):
+    
+    # Find bracket where billed_kg falls
+    sorted_brackets=sorted(candidates,key=lambda x:x[0])
+    for (mn,mx,rate) in sorted_brackets:
         if mn < billed_kg <= mx:
             return rate
-    # Fallback: nearest bracket (for edge cases like billed=0)
-    if billed_kg<=candidates[0][1]: return candidates[0][2]
-    return candidates[-1][2]  # heaviest bracket
+    if billed_kg<=sorted_brackets[0][1]: return sorted_brackets[0][2]
+    return sorted_brackets[-1][2]
 
 def fetch_rates(cx):
+    global _rc
+    now=time.time()
+    if _rc["data"] and (now-_rc["time"])<RATES_CD:
+        return "RATES",_rc["data"]
     try:
         url="https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
-        req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req,timeout=20,context=cx) as r:
+        req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Accept-Encoding":"gzip, deflate"})
+        with urllib.request.urlopen(req,timeout=15,context=cx) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
+        COUNTRY_COL=7; BRACKET_COL=9; RATE_COL=12
+        rm_brackets={}
+        rm_flat={}
+        for row in data[1:]:
+            p=row+[""]*20
+            ctry=str(p[COUNTRY_COL]).strip().lower()
+            bracket_raw=str(p[BRACKET_COL]).strip()
+            rate_raw=str(p[RATE_COL]).strip()
+            if not ctry or ctry in ["country","shipping_address_country","","nan","#n/a"]: continue
+            if not rate_raw: continue
+            try:
+                rate_val=float(re.sub(r"[^0-9.]","",rate_raw))
+                if not (0.01<rate_val<500): continue
+            except: continue
+            bracket=parse_weight_bracket(bracket_raw)
+            if ctry not in rm_brackets: rm_brackets[ctry]=[]
+            if bracket:
+                rm_brackets[ctry].append((bracket[0],bracket[1],rate_val))
+            if ctry not in rm_flat: rm_flat[ctry]=[]
+            rm_flat[ctry].append(rate_val)
+        rm_avg={k:round(sum(v)/len(v),4) for k,v in rm_flat.items() if v}
+        result=(rm_brackets,rm_avg)
+        _rc["data"]=result; _rc["time"]=now
+        print(f"[RATES] Loaded {len(rm_brackets)} countries with weight-bracket rates.")
+        return "RATES",result
+    except Exception as e:
+        print(f"[RATES] ERROR: {e}")
+        if _rc["data"]:
+            return "RATES",_rc["data"]
+        return "RATES",({},{})
         # Col H=7: country, Col J=9: weight bracket, Col M=12: per kg rate
         COUNTRY_COL=7; BRACKET_COL=9; RATE_COL=12
         rm_brackets={}   # country_lower -> [(min,max,rate), ...]
@@ -5180,18 +4487,21 @@ def fetch_rates(cx):
 def fetch_status():
     global _sc
     now=time.time()
-    if _sc["data"] and (now-_sc["time"])<CD: return _sc["data"]
+    if _sc["data"] and (now-_sc["time"])<CD: return "STATUS_INLINE",_sc["data"]
     try:
-        req=urllib.request.Request(SS,headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
+        req=urllib.request.Request(SS,headers={"User-Agent":"Mozilla/5.0","Accept-Encoding":"gzip, deflate"})
+        with urllib.request.urlopen(req,timeout=15,context=ctx()) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
         sm={}
         for row in data[1:]:
             p=row+[""]*10; fid=str(p[0]).strip()
             if fid and fid.lower() not in ["","nan","fleek_id","fleek id","order"]:
                 sm[fid.upper()]=str(p[1]).strip() or "—"
-        _sc["data"]=sm; _sc["time"]=now; return sm
-    except: return {}
+        _sc["data"]=sm; _sc["time"]=now; return "STATUS_INLINE",sm
+    except: 
+        if _sc["data"]:
+            return "STATUS_INLINE",_sc["data"]
+        return "STATUS_INLINE",{}
 
 def fetch_journey():
     global _jc
@@ -5216,8 +4526,12 @@ def fetch_journey():
 def fetch_sheet(name,url,col,start,cx):
     for attempt in range(2):
         try:
-            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
-            with urllib.request.urlopen(req,timeout=25,context=cx) as r:
+            req=urllib.request.Request(url,headers={
+                "User-Agent":"Mozilla/5.0",
+                "Accept-Encoding":"gzip, deflate",
+                "Connection":"keep-alive"
+            })
+            with urllib.request.urlopen(req,timeout=15,context=cx) as r:
                 data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
             rows=[]; lo=ld=lv=lc=lcn=lt=""
             for row in data[start:]:
@@ -5242,10 +4556,8 @@ def fetch_sheet(name,url,col,start,cx):
                 if cnv: lcn=cnv
                 if tv: lt=tv
                 bxv=str(p[col["b"]]).strip()
-                # For QC Center also check alternate box col
                 if not bxv and col.get("b2") is not None:
                     bxv2=str(p[col["b2"]]).strip()
-                    # Only use b2 if it looks like a box number (numeric)
                     if bxv2 and re.match(r"^[0-9]+$",bxv2): bxv=bxv2
                 rows.append({"order":co,"date":dv or ld,"date_std":sd(dv or ld),
                     "boxes":bxv,"weight":rw,
@@ -5253,14 +4565,15 @@ def fetch_sheet(name,url,col,start,cx):
                     "customer":cv or lc,"country":cnv or lcn,"tid":tv or lt})
             print(f"[OK] {name}: {len(rows)} rows"); return name,rows
         except Exception as e:
-            print(f"[WARN] {name} attempt {attempt+1}: {e}"); time.sleep(1)
+            print(f"[WARN] {name} attempt {attempt+1}: {e}")
+            if attempt==0: time.sleep(0.5)  # shorter retry delay
+    return name,[]
     return name,[]
 
 def fetch_all():
     global _bc
     now=time.time()
     if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
-    # ⚠️ CORRECT MAPPINGS — GE Zone weight=col 6 (H is index 7 but user confirmed col 6)
     SOURCES={
         "ECL QC Center":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
             {"o":0,"d":1,"b":3,"b2":2,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
@@ -5270,20 +4583,45 @@ def fetch_all():
             {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28},2),
     }
     cx=ctx(); res={}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+    
+    # Check if rates are already cached — skip if so
+    rates_cached = _rc["data"] and (now - _rc["time"]) < RATES_CD
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
         futs={ex.submit(fetch_sheet,n,u,c,s,cx):n for n,(u,c,s) in SOURCES.items()}
-        futs[ex.submit(fetch_rates,cx)]="RATES"
+        # Also fetch status in parallel
+        futs[ex.submit(fetch_status)]="STATUS_INLINE"
+        if not rates_cached:
+            futs[ex.submit(fetch_rates,cx)]="RATES"
         try:
-            for f in concurrent.futures.as_completed(futs,timeout=45):
+            for f in concurrent.futures.as_completed(futs,timeout=30):
                 n=futs[f]
-                try: k,d=f.result(); res[k]=d
-                except: res[n]=[] if n!="RATES" else {}
+                try:
+                    k,d=f.result()
+                    if k=="STATUS_INLINE":
+                        pass  # status is stored in _sc by fetch_status itself
+                    else:
+                        res[k]=d
+                except: 
+                    if n not in ("RATES","STATUS_INLINE"):
+                        res[n]=[]
         except concurrent.futures.TimeoutError:
             for f in futs:
-                if not f.done(): f.cancel(); res[futs[f]]=[] if futs[f]!="RATES" else {}
-    # Ensure RATES is always (brackets_dict, avg_dict)
+                if not f.done():
+                    f.cancel()
+                    n=futs[f]
+                    if n not in ("RATES","STATUS_INLINE"):
+                        res[n]=[]
+    
+    # Use cached rates if not freshly fetched
+    if "RATES" not in res:
+        if _rc["data"]:
+            res["RATES"]=_rc["data"]
+        else:
+            res["RATES"]=({},{})
     if "RATES" in res and not isinstance(res["RATES"],tuple):
         res["RATES"]=({},{})
+    
     _bc["data"]=res; _bc["time"]=now; return res
 
 # --- API ---
@@ -5300,8 +4638,80 @@ def api_debug_rates():
 
 @app.route("/api/nexus/app_data")
 def api_app_data():
-    sheets=fetch_all(); sm=fetch_status()
+    sheets=fetch_all()
+    # Status is now fetched inside fetch_all() in parallel
+    sm=_sc.get("data") or {}
     rates_data=sheets.get("RATES",({},{}))
+    if isinstance(rates_data,tuple): rm_brackets,rm_avg=rates_data
+    else: rm_brackets,rm_avg={},{}
+    DR=4.50
+    
+    # Date filter — only process last N days (default 60)
+    max_days=int(request.args.get('days', 60))
+    cutoff_date=(datetime.now()-timedelta(days=max_days)).strftime("%Y-%m-%d")
+    
+    bundles=[]; tb=to2=0; tsav=0.0
+    ss={"ECL QC Center":{"orders":0,"boxes":0},"PK Zone":{"orders":0,"boxes":0}}
+    NA_VALS={"n/a","#n/a","not applicable","na","none","null","-","nan",""}
+    for src in ["ECL QC Center","ECL Zone","GE Zone"]:
+        rows=sheets.get(src,[]); cb=None
+        pk="PK Zone" if src in ["ECL Zone","GE Zone"] else src
+        for r in rows:
+            # SKIP old rows early
+            if r.get("date_std","1970-01-01") < cutoff_date:
+                continue
+            oid=r["order"].upper(); bx=r["boxes"]
+            if oid.lower().replace(" ","") in NA_VALS or "#n/a" in oid.lower(): continue
+            ttl=r["title"]; ctry=r["country"]
+            if not oid or not re.search(r"\d",oid): continue
+            od={"order_id":oid,"weight":r["weight"],"title":ttl,
+                "item_count":r["item_count"],"country":ctry,"status":sm.get(oid,"—")}
+            if bx!="":
+                if cb and len(cb["orders"])>1:
+                    bundles.append(cb); tb+=1; to2+=len(cb["orders"])
+                    ss[pk]["orders"]+=len(cb["orders"]); ss[pk]["boxes"]+=1
+                tids=ctids(r["tid"])
+                cb={"orders":[od],"date":r["date"],"date_std":r["date_std"],
+                    "customer":r["customer"],"vendor":r["vendor"],"country":ctry,
+                    "source":src,"region":grg(ctry),"boxes_val":bx,
+                    "tid":", ".join(tids) if tids else ""}
+            else:
+                if cb:
+                    cb["orders"].append(od)
+                    if r["tid"] not in ["N/A",""] and cb["tid"]=="Pending Tracking":
+                        t2=ctids(r["tid"])
+                        if t2: cb["tid"]=", ".join(t2)
+        if cb and len(cb["orders"])>1:
+            bundles.append(cb); tb+=1; to2+=len(cb["orders"])
+            ss[pk]["orders"]+=len(cb["orders"]); ss[pk]["boxes"]+=1
+    for b in bundles:
+        tq=0; bw=0.0; isc=0.0
+        raw_ctry=str(b.get("country","")).strip()
+        for o in b["orders"]:
+            try: ic_raw=int(float(re.sub(r"[^0-9.]","",str(o["item_count"])) or 1)); tq+=ic_raw
+            except: ic_raw=1
+            try: wt=float(re.sub(r"[^0-9.]","",str(o["weight"])) or 0)
+            except: wt=0.0
+            bw+=wt
+            if wt>0:
+                indiv_wt=wt
+            else:
+                indiv_wt=estimate_item_weight(o["title"], ic_raw)
+            indiv_billed=max(math.ceil(indiv_wt),1)
+            o_rate=lookup_rate(rm_brackets, raw_ctry, indiv_billed, DR)
+            isc+=indiv_billed*o_rate
+        b["total_items"]=tq; b["weight_kg"]=round(bw,2)
+        bundle_billed=max(math.ceil(bw),1)
+        pr=lookup_rate(rm_brackets, raw_ctry, bundle_billed, DR)
+        bc=bundle_billed*pr
+        sv=isc-bc; b["savings_gbp"]=round(sv if sv>0 else 0,2)
+        b["rate_gbp"]=round(pr,2); b["indiv_cost"]=round(isc,2); b["bundle_cost"]=round(bc,2)
+        tsav+=b["savings_gbp"]
+    bundles.sort(key=lambda x:x["date_std"],reverse=True)
+    return jsonify({"success":True,
+        "kpi":{"total_bundles":tb,"total_orders_bundled":to2,
+               "saved_shipments":to2-tb if tb>0 else 0,"total_savings_gbp":round(tsav,2)},
+        "source_stats":ss,"bundles":bundles})
     if isinstance(rates_data,tuple): rm_brackets,rm_avg=rates_data
     else: rm_brackets,rm_avg={},{}
     DR=4.50
@@ -6918,7 +6328,7 @@ async function init(){
   const ls=g("lStat");
   try{
     ls.textContent="Fetching from 3 sources simultaneously...";
-    const r=await fetch("/api/nexus/app_data");
+    const r=await fetch("/api/nexus/app_data?days=60");
     if(!r.ok) throw new Error("HTTP "+r.status);
     D=await r.json();
     const mon=gMon(new Date());
@@ -6948,6 +6358,8 @@ async function init(){
 function hardRefresh(){
   D=null;
   Object.keys(_rendered).forEach(k=>_rendered[k]=false);
+  // Clear server cache too
+  fetch("/api/nexus/refresh",{method:"POST"}).catch(()=>{});
   g("gLoad").style.display="block";
   document.querySelectorAll(".pane").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".sb-tab").forEach(t=>t.classList.remove("active"));
