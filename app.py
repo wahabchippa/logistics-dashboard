@@ -11,7 +11,24 @@ import random
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
-
+# ========== VIP TOKEN GENERATOR ==========
+import json
+VIP_TOKEN_CACHE = {"token": None, "expires": 0}
+def get_auth_headers():
+    global VIP_TOKEN_CACHE
+    import time
+    if time.time() >= VIP_TOKEN_CACHE["expires"]:
+        try:
+            req = urllib.request.Request('https://oauth2.googleapis.com/token', data=urllib.parse.urlencode({
+                'client_id': '320772774106-fpv7td9vqdcb9eg37utn6th5iihsl753.apps.googleusercontent.com',
+                'client_secret': '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',
+                'refresh_token': '1//04Om55oY1FH6rCgYIARAAGAQSNwF-L9Ir3d-HLOMyj3jMy8bh0s3C0dqHSVMMZtV33MT4e6EhnUD4bSMxOf-ouB-v-LL4KSMTGWI',
+                'grant_type': 'refresh_token'
+            }).encode('utf-8'))
+            res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
+            VIP_TOKEN_CACHE = {"token": res['access_token'], "expires": time.time() + 3000}
+        except Exception as e: print("Token Error:", e)
+    return {'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache', 'Authorization': f'Bearer {VIP_TOKEN_CACHE.get("token", "")}'}
 
 
 # ========== CACHE ==========
@@ -92,8 +109,8 @@ def fetch_sheet_data(sheet_name):
             return cached_data
     try:
         encoded_name = urllib.parse.quote(sheet_name)
-        url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={encoded_name}'
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&sheet={encoded_name}'&sheet={encoded_name}'
+        req = urllib.request.Request(url, headers=get_auth_headers())
         with urllib.request.urlopen(req, timeout=30) as response:
             content = response.read().decode('utf-8')
             rows = list(csv.reader(content.splitlines()))
@@ -3876,14 +3893,14 @@ else:
 # 1. CORE DATA SOURCES
 # ------------------------------------------------------------------------------
 NEXUS_SOURCES = {
-    "ECL QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-    "ECL Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-    "GE QC Center": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=710036753&single=true&output=csv",
-    "GE Zone": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-    "APX": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRDEzAMUwnFZ7aoThGoMERtxxsll2kfEaSpa9ksXIx6sqbdMncts6Go2d5mKKabepbNXDSoeaUlk-mP/pub?gid=0&single=true&output=csv",
-    "Kerry": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=0&single=true&output=csv"
+    "ECL QC Center": "https://docs.google.com/spreadsheets/d/1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA/export?format=csv&gid=0",
+    "ECL Zone": "https://docs.google.com/spreadsheets/d/1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA/export?format=csv&gid=928309568",
+    "GE QC Center": "https://docs.google.com/spreadsheets/d/1Bt8od4x1xim2CO0vHcpYPR8eoA7L0XWqNsXqBsl9FBI/export?format=csv&gid=710036753",
+    "GE Zone": "https://docs.google.com/spreadsheets/d/1Bt8od4x1xim2CO0vHcpYPR8eoA7L0XWqNsXqBsl9FBI/export?format=csv&gid=10726393",
+    "APX": "https://docs.google.com/spreadsheets/d/1WrrM_ewt0IcdG9ysKtXfIiSbSla52tsjq6FXP4rRlDo/export?format=csv&gid=0",
+    "Kerry": "https://docs.google.com/spreadsheets/d/12p1mTHfQKrmbekNK2H9IROyBxPaaBg1C0T6EDSyioko/export?format=csv&gid=0"
 }
-NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZyLyZpVJz9sV5eT4Srwo_KZGnYggpRZkm2ILLYPQKSpTKkWfP9G5759h247O4QEflKCzlQauYsLKI/pub?gid=2121564686&single=true&output=csv"
+NEXUS_KERRY_STATUS_URL = "https://docs.google.com/spreadsheets/d/12p1mTHfQKrmbekNK2H9IROyBxPaaBg1C0T6EDSyioko/export?format=csv&gid=2121564686"
 
 # ------------------------------------------------------------------------------
 # 2. EXACT COLUMNS MAP & DATA ENGINE
@@ -3903,7 +3920,7 @@ NEXUS_SHEET_MAP = {
 def nexus_fetch_sheet_data(url, name):
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
+        req = urllib.request.Request(url, headers=get_auth_headers())
         with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
             raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
             data = list(csv.reader(raw_data))
@@ -3958,7 +3975,7 @@ def nexus_clean_tids(raw):
 def nexus_fetch_kerry_status(url):
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'})
+        req = urllib.request.Request(url, headers=get_auth_headers())
         with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
             raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
             data = list(csv.reader(raw_data))
@@ -4072,7 +4089,7 @@ def api_track_real():
     scraper_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}"
 
     try:
-        req = urllib.request.Request(scraper_url, headers={'User-Agent': 'Mozilla/5.0'})
+        req = urllib.request.Request(scraper_url, headers=get_auth_headers())
         html = urllib.request.urlopen(req, timeout=25).read().decode('utf-8')
         match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html)
         if match:
@@ -4753,7 +4770,7 @@ def lookup_rate(rm_brackets, country, billed_kg, default=4.50):
 def fetch_rates(cx):
     try:
         url="https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
-        req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+        req=urllib.request.Request(url,headers=get_auth_headers())
         with urllib.request.urlopen(req,timeout=20,context=cx) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
         # Col H=7: country, Col J=9: weight bracket, Col M=12: per kg rate
@@ -4793,7 +4810,7 @@ def fetch_status():
     now=time.time()
     if _sc["data"] and (now-_sc["time"])<CD: return _sc["data"]
     try:
-        req=urllib.request.Request(SS,headers={"User-Agent":"Mozilla/5.0"})
+        req=urllib.request.Request(SS,headers=get_auth_headers())
         with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
         sm={}
@@ -4809,7 +4826,7 @@ def fetch_journey():
     now=time.time()
     if _jc["data"] and (now-_jc["time"])<CD: return _jc["data"]
     try:
-        req=urllib.request.Request(JS,headers={"User-Agent":"Mozilla/5.0"})
+        req=urllib.request.Request(JS,headers=get_auth_headers())
         with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
         jm={}
@@ -4827,7 +4844,7 @@ def fetch_journey():
 def fetch_sheet(name,url,col,start,cx):
     for attempt in range(2):
         try:
-            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            req=urllib.request.Request(url,headers=get_auth_headers())
             with urllib.request.urlopen(req,timeout=25,context=cx) as r:
                 data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
             rows=[]; lo=ld=lv=lc=lcn=lt=""
@@ -4873,11 +4890,11 @@ def fetch_all():
     if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
     # ⚠️ CORRECT MAPPINGS — GE Zone weight=col 6 (H is index 7 but user confirmed col 6)
     SOURCES={
-        "ECL QC Center":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+        "ECL QC Center":("https://docs.google.com/spreadsheets/d/1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA/export?format=csv&gid=0",
             {"o":0,"d":1,"b":3,"b2":2,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
-        "ECL Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+        "ECL Zone":("https://docs.google.com/spreadsheets/d/1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA/export?format=csv&gid=928309568",
             {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28},2),
-        "GE Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+        "GE Zone":("https://docs.google.com/spreadsheets/d/1Bt8od4x1xim2CO0vHcpYPR8eoA7L0XWqNsXqBsl9FBI/export?format=csv&gid=10726393",
             {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28},2),
     }
     cx=ctx(); res={}
