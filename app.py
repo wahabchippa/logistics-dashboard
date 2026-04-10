@@ -7914,7 +7914,8 @@ def debug_sheet():
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        return f"<h1>❌ ERROR PAKRA GAYA:</h1> <h2>{str(e)}</h2> <p><b>Details:</b></p> <pre>{error_details}</pre> <p><b>Token Headers Sent:</b></p> <pre>{headers}</pre>"
+        # Masla yahan tha! Maine {headers} hata diya hai taake NameError na aaye
+        return f"<h1>❌ ERROR PAKRA GAYA:</h1> <h2>{str(e)}</h2> <p><b>Details:</b></p> <pre>{error_details}</pre>"
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
