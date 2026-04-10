@@ -8587,6 +8587,20 @@ document.addEventListener("keydown",e=>{
 window.onload=init;
 </script></body></html>"""
 
+@app.route('/debug')
+def debug_sheet():
+    try:
+        headers = get_auth_headers()
+        clean_id = SHEET_ID.strip()
+        url = f'https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&gid=1603070499'
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=15) as response:
+            data = response.read().decode('utf-8')
+            return f"<h1>✅ SUCCESS!</h1> <p>Data length: {len(data)} characters</p> <p>First 200 chars:</p> <pre>{data[:200]}</pre>"
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return f"<h1>❌ ERROR PAKRA GAYA:</h1> <h2>{str(e)}</h2> <p><b>Details:</b></p> <pre>{error_details}</pre> <p><b>Token Headers Sent:</b></p> <pre>{headers}</pre>"
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
