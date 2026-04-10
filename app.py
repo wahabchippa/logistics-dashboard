@@ -4340,18 +4340,47 @@ def bundling_spa():
     html=BUNDLING_HTML.replace("window.onload=init;","const GUEST="+gflag+";\nconst USER_EMAIL='"+email+"';\n"+rm_js+"\nwindow.onload=init;")
     return render_template_string(html)
 
-@app.after_request
-def add_float_btns(response):
-    if request.path=="/" and response.content_type and "text/html" in response.content_type:
-        mode=user_mode()
-        html=response.get_data(as_text=True)
-        # Ab Nexus wala button puri tarah se khatam kar diya hai
-        if mode=="full" or mode=="guest":
-            btn='''<div style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:99999">
-<a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
-</div>'''
-            if "</body>" in html: response.set_data(html.replace("</body>",btn+"</body>"))
-    return response
+def fetch_sheet(name,url,col,start,cx):
+    for attempt in range(2):
+        try:
+            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(req,timeout=30,context=cx) as r:
+                data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
+            rows=[]; lo=ld=lv=lc=lcn=lt=""
+            for row in data[start:]:
+                if not row: continue
+                p=row+[""]*60
+                ro=str(p[col["o"]]).strip(); rw=str(p[col["w"]]).strip(); rti=str(p[col["title"]]).strip()
+                rw_clean=rw.replace("0","").replace(".","").strip()
+                if not ro and not rw_clean and not rti: continue
+                if ro: lo=ro
+                co=ro if ro else lo
+                if not co or not re.search(r"\d",co): continue
+                try:
+                    rw_float=float(rw or 0)
+                except: rw_float=0
+                if not ro and not rti and rw_float==0: continue
+                if co.lower() in ["n/a","nan","order","orderid","order id"]: continue
+                dv=str(p[col["d"]]).strip(); vv=str(p[col["v"]]).strip()
+                cv=str(p[col["c"]]).strip(); cnv=str(p[col["cn"]]).strip(); tv=str(p[col["t"]]).strip()
+                if dv: ld=dv
+                if vv: lv=vv
+                if cv: lc=cv
+                if cnv: lcn=cnv
+                if tv: lt=tv
+                bxv=str(p[col["b"]]).strip()
+                if not bxv and col.get("b2") is not None:
+                    bxv2=str(p[col["b2"]]).strip()
+                    if bxv2 and re.match(r"^[0-9]+$",bxv2): bxv=bxv2
+                rows.append({"order":co,"date":dv or ld,"date_std":sd(dv or ld),
+                    "boxes":bxv,"weight":rw,
+                    "vendor":vv or lv,"title":rti or "N/A","item_count":str(p[col["ic"]]).strip() or "0",
+                    "customer":cv or lc,"country":cnv or lcn,"tid":tv or lt})
+            print(f"[OK] {name}: {len(rows)} rows"); return name,rows
+        except Exception as e:
+            print(f"[WARN] {name} attempt {attempt+1}: {e}")
+            if attempt==0: time.sleep(0.5)  # shorter retry delay
+    return name,[]
 
 BUNDLING_HTML = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
