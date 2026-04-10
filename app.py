@@ -3929,30 +3929,60 @@ NEXUS_SHEET_MAP = {
 
 def nexus_fetch_sheet_data(url, name):
     try:
+        import json, re
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(url, headers=get_auth_headers())
-        with urllib.request.urlopen(req, timeout=20, context=ctx) as res:
-            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
-            data = list(csv.reader(raw_data))
-            col = NEXUS_SHEET_MAP.get(name)
-            if not col or not data: return []
+        
+        # 1. URL se Sheet ID aur GID nikalna
+        match = re.search(r'/d/([a-zA-Z0-9-_]+)', url)
+        if not match: return []
+        sheet_id = match.group(1)
+        gid_match = re.search(r'gid=([0-9]+)', url)
+        gid = int(gid_match.group(1)) if gid_match else 0
+        
+        # 2. Metadata API se Tab ka naam dhoondna
+        meta_url = f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}'
+        req_meta = urllib.request.Request(meta_url, headers=get_auth_headers())
+        with urllib.request.urlopen(req_meta, timeout=20, context=ctx) as res:
+            meta = json.loads(res.read().decode('utf-8'))
+            
+        tab_name = None
+        for sheet in meta.get('sheets', []):
+            if sheet.get('properties', {}).get('sheetId') == gid:
+                tab_name = sheet['properties']['title']
+                break
+                
+        if not tab_name: return []
+        
+        # 3. Official API se JSON data nikalna
+        encoded_name = urllib.parse.quote(tab_name)
+        data_url = f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{encoded_name}'
+        req_data = urllib.request.Request(data_url, headers=get_auth_headers())
+        with urllib.request.urlopen(req_data, timeout=20, context=ctx) as res:
+            data_json = json.loads(res.read().decode('utf-8'))
+            raw_rows = data_json.get('values', [])
+            data = [[str(cell) for cell in row] for row in raw_rows]
+            
+        col = NEXUS_SHEET_MAP.get(name)
+        if not col or not data: return []
 
-            processed = []
-            for row in data:
-                if not row: continue
-                p = row + [''] * 60 
-                o_val = str(p[col['o'] - 1]).strip()
-                if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
-                def get_v(col_num):
-                    v = str(p[col_num - 1]).strip()
-                    return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
-                processed.append({
-                    'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
-                    'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
-                    'country': get_v(col['cn']), 'tid': get_v(col['t']), 'mawb': get_v(col['ma'])
-                })
-            return processed
-    except: return []
+        processed = []
+        for row in data:
+            if not row: continue
+            p = row + [''] * 60 
+            o_val = str(p[col['o'] - 1]).strip()
+            if not re.search(r'\d', o_val) or o_val.lower() in ['n/a', 'nan', 'order', 'orderid']: continue
+            def get_v(col_num):
+                v = str(p[col_num - 1]).strip()
+                return v if v and v.lower() not in ['n/a', 'nan', '-', ''] else "N/A"
+            processed.append({
+                'order': o_val, 'date': get_v(col['d']), 'boxes': get_v(col['b']),
+                'weight': get_v(col['w']), 'vendor': get_v(col['v']), 'customer': get_v(col['c']),
+                'country': get_v(col['cn']), 'tid': get_v(col['t']), 'mawb': get_v(col['ma'])
+            })
+        return processed
+    except Exception as e:
+        print(f"Nexus Fetch Error: {e}")
+        return []
 
 def nexus_clean_tids(raw):
     """
@@ -3984,39 +4014,69 @@ def nexus_clean_tids(raw):
 
 def nexus_fetch_kerry_status(url):
     try:
+        import json, re
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(url, headers=get_auth_headers())
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as res:
-            raw_data = res.read().decode('utf-8', errors='ignore').splitlines()
-            data = list(csv.reader(raw_data))
-            if not data: return {}
+        
+        # 1. URL se Sheet ID aur GID nikalna
+        match = re.search(r'/d/([a-zA-Z0-9-_]+)', url)
+        if not match: return {}
+        sheet_id = match.group(1)
+        gid_match = re.search(r'gid=([0-9]+)', url)
+        gid = int(gid_match.group(1)) if gid_match else 0
+        
+        # 2. Metadata API se Tab ka naam dhoondna
+        meta_url = f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}'
+        req_meta = urllib.request.Request(meta_url, headers=get_auth_headers())
+        with urllib.request.urlopen(req_meta, timeout=20, context=ctx) as res:
+            meta = json.loads(res.read().decode('utf-8'))
             
-            o_idx, s_idx, h_idx = -1, -1, -1
-            
-            # Exact Header Matching for strict accuracy
-            for i, row in enumerate(data[:20]):
-                c = [str(x).lower().replace(' ', '').replace('_', '') for x in row]
-                for j, col_name in enumerate(c):
-                    if col_name in ['order', 'orderid', 'fleekid', 'shipmentid', 'orderno']: o_idx = j; break
-                for j, col_name in enumerate(c):
-                    if col_name in ['lateststatus', 'status', 'currentstatus', 'trackingstatus', 'orderstatus']: s_idx = j; break
-                if o_idx != -1 and s_idx != -1: h_idx = i; break
+        tab_name = None
+        for sheet in meta.get('sheets', []):
+            if sheet.get('properties', {}).get('sheetId') == gid:
+                tab_name = sheet['properties']['title']
+                break
                 
-            s_map = {}
-            if h_idx != -1 and o_idx != -1 and s_idx != -1:
-                for row in data[h_idx+1:]:
-                    p = row + [''] * 40
-                    o = str(p[o_idx]).strip().lower()
-                    if o: 
-                        stat_val = str(p[s_idx]).strip().upper()
-                        if not stat_val: stat_val = "PENDING"
-                        s_map[o] = stat_val
-                        s_map[o.replace('_', '/')] = stat_val
-                        s_map[o.replace('/', '_')] = stat_val
-                        if o.startswith('0'):
-                            s_map[o[1:]] = stat_val
-            return s_map
-    except: return {}
+        if not tab_name: return {}
+        
+        # 3. Official API se JSON data nikalna
+        encoded_name = urllib.parse.quote(tab_name)
+        data_url = f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{encoded_name}'
+        req_data = urllib.request.Request(data_url, headers=get_auth_headers())
+        with urllib.request.urlopen(req_data, timeout=20, context=ctx) as res:
+            data_json = json.loads(res.read().decode('utf-8'))
+            raw_rows = data_json.get('values', [])
+            data = [[str(cell) for cell in row] for row in raw_rows]
+            
+        if not data: return {}
+        
+        o_idx, s_idx, h_idx = -1, -1, -1
+        
+        # Exact Header Matching for strict accuracy
+        for i, row in enumerate(data[:20]):
+            c = [str(x).lower().replace(' ', '').replace('_', '') for x in row]
+            for j, col_name in enumerate(c):
+                if col_name in ['order', 'orderid', 'fleekid', 'shipmentid', 'orderno']: o_idx = j; break
+            for j, col_name in enumerate(c):
+                if col_name in ['lateststatus', 'status', 'currentstatus', 'trackingstatus', 'orderstatus']: s_idx = j; break
+            if o_idx != -1 and s_idx != -1: h_idx = i; break
+            
+        s_map = {}
+        if h_idx != -1 and o_idx != -1 and s_idx != -1:
+            for row in data[h_idx+1:]:
+                p = row + [''] * 40
+                o = str(p[o_idx]).strip().lower()
+                if o: 
+                    stat_val = str(p[s_idx]).strip().upper()
+                    if not stat_val: stat_val = "PENDING"
+                    s_map[o] = stat_val
+                    s_map[o.replace('_', '/')] = stat_val
+                    s_map[o.replace('/', '_')] = stat_val
+                    if o.startswith('0'):
+                        s_map[o[1:]] = stat_val
+        return s_map
+    except Exception as e:
+        print(f"Kerry Status Error: {e}")
+        return {}
 
 def nexus_parse_date(date_str):
     try:
