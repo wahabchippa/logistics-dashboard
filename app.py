@@ -4103,115 +4103,130 @@ def fetch_status():
 
 def fetch_journey():
     global _jc
-    now=time.time()
-    if _jc["data"] and (now-_jc["time"])<CD: return _jc["data"]
+    now = time.time()
+    if _jc["data"] and (now - _jc["time"]) < CD: return _jc["data"]
     try:
-        req=urllib.request.Request(JS,headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
-            data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
-        jm={}
+        # Aapki Journey Sheet ID (VIP Token ke sath secure fetch)
+        sheet_id = "1493mgOui4QYrJ9hXGKaFHm2Bj21cqW51BkeX6gzWccg"
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=1409345116"
+        req = urllib.request.Request(url, headers=get_auth_headers())
+        with urllib.request.urlopen(req, timeout=20, context=ctx()) as r:
+            data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
+        jm = {}
         for row in data[1:]:
-            p=row+[""]*100; fid=str(p[4]).strip()
-            if not fid or fid.lower() in ["","nan","fleek_id","fleek id"]: continue
-            jm[fid.upper()]={"created_at":str(p[0]).strip(),"accepted_at":str(p[8]).strip(),
-                "pickup_ready_at":str(p[9]).strip(),"cancelled_at":str(p[12]).strip(),
-                "qc_pending_at":str(p[13]).strip(),"qc_approved_at":str(p[14]).strip(),
-                "handedover_at":str(p[30]).strip(),"freight_at":str(p[31]).strip(),
-                "courier_at":str(p[34]).strip(),"delivered_at":str(p[36]).strip()}
-        _jc["data"]=jm; _jc["time"]=now; return jm
-    except: return {}
+            p = row + [""] * 100
+            fid = str(p[4]).strip()
+            if not fid or fid.lower() in ["", "nan", "fleek_id", "fleek id"]: continue
+            jm[fid.upper()] = {
+                "created_at": str(p[0]).strip(), "accepted_at": str(p[8]).strip(),
+                "pickup_ready_at": str(p[9]).strip(), "cancelled_at": str(p[12]).strip(),
+                "qc_pending_at": str(p[13]).strip(), "qc_approved_at": str(p[14]).strip(),
+                "handedover_at": str(p[30]).strip(), "freight_at": str(p[31]).strip(),
+                "courier_at": str(p[34]).strip(), "delivered_at": str(p[36]).strip()
+            }
+        _jc["data"] = jm; _jc["time"] = now
+        return jm
+    except Exception as e:
+        print("Journey Fetch Error:", e)
+        return {}
 
-def fetch_sheet(name,url,col,start,cx):
+def fetch_sheet(name, url, col, start, cx):
     for attempt in range(2):
         try:
-            # Gzip hata diya aur timeout 30 kar diya taake data pura load ho
-            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
-            with urllib.request.urlopen(req,timeout=30,context=cx) as r:
-                data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
-            rows=[]; lo=ld=lv=lc=lcn=lt=""
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=30, context=cx) as r:
+                data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
+            rows = []; lo = ld = lv = lc = lcn = lt = ""
             for row in data[start:]:
                 if not row: continue
-                p=row+[""]*60
-                ro=str(p[col["o"]]).strip(); rw=str(p[col["w"]]).strip(); rti=str(p[col["title"]]).strip()
-                rw_clean=rw.replace("0","").replace(".","").strip()
+                p = row + [""] * 60
+                ro = str(p[col["o"]]).strip(); rw = str(p[col["w"]]).strip(); rti = str(p[col["title"]]).strip()
+                rw_clean = rw.replace("0", "").replace(".", "").strip()
                 if not ro and not rw_clean and not rti: continue
-                if ro: lo=ro
-                co=ro if ro else lo
-                if not co or not re.search(r"\d",co): continue
-                try:
-                    rw_float=float(rw or 0)
-                except: rw_float=0
-                if not ro and not rti and rw_float==0: continue
-                if co.lower() in ["n/a","nan","order","orderid","order id"]: continue
-                dv=str(p[col["d"]]).strip(); vv=str(p[col["v"]]).strip()
-                cv=str(p[col["c"]]).strip(); cnv=str(p[col["cn"]]).strip(); tv=str(p[col["t"]]).strip()
-                if dv: ld=dv
-                if vv: lv=vv
-                if cv: lc=cv
-                if cnv: lcn=cnv
-                if tv: lt=tv
-                bxv=str(p[col["b"]]).strip()
+                if ro: lo = ro
+                co = ro if ro else lo
+                if not co or not re.search(r"\d", co): continue
+                try: rw_float = float(rw or 0)
+                except: rw_float = 0
+                if not ro and not rti and rw_float == 0: continue
+                if co.lower() in ["n/a", "nan", "order", "orderid", "order id"]: continue
+                
+                dv = str(p[col["d"]]).strip()
+                vv = str(p[col["v"]]).strip()
+                cv = str(p[col["c"]]).strip()
+                cnv = str(p[col["cn"]]).strip()
+                tv = str(p[col["t"]]).strip()
+                
+                if dv: ld = dv
+                if vv: lv = vv
+                if cv: lc = cv
+                if cnv: lcn = cnv
+                if tv: lt = tv
+                
+                bxv = str(p[col["b"]]).strip()
                 if not bxv and col.get("b2") is not None:
-                    bxv2=str(p[col["b2"]]).strip()
-                    if bxv2 and re.match(r"^[0-9]+$",bxv2): bxv=bxv2
-                rows.append({"order":co,"date":dv or ld,"date_std":sd(dv or ld),
-                    "boxes":bxv,"weight":rw,
-                    "vendor":vv or lv,"title":rti or "N/A","item_count":str(p[col["ic"]]).strip() or "0",
-                    "customer":cv or lc,"country":cnv or lcn,"tid":tv or lt})
-            print(f"[OK] {name}: {len(rows)} rows"); return name,rows
+                    bxv2 = str(p[col["b2"]]).strip()
+                    if bxv2 and re.match(r"^[0-9]+$", bxv2): bxv = bxv2
+                    
+                rows.append({
+                    "order": co, "date": dv or ld, "date_std": sd(dv or ld),
+                    "boxes": bxv, "weight": rw,
+                    "vendor": vv or lv, "title": rti or "N/A", "item_count": str(p[col["ic"]]).strip() or "1",
+                    "customer": cv or lc, "country": cnv or lcn, "tid": tv or lt
+                })
+            print(f"[OK] {name}: {len(rows)} rows")
+            return name, rows
         except Exception as e:
             print(f"[WARN] {name} attempt {attempt+1}: {e}")
-            if attempt==0: time.sleep(0.5)  # shorter retry delay
-    return name,[]
+            if attempt == 0: time.sleep(0.5)
+    return name, []
 
 def fetch_all():
     global _bc
-    now=time.time()
-    if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
+    now = time.time()
+    if _bc["data"] and (now - _bc["time"]) < CD: return _bc["data"]
     
+    # AAPKI EXACT COLUMN MAPPING YAHAN ADD KAR DI GAYI HAI
+    SOURCES = {
+        "ECL QC Center": ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+            {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1),
+        "ECL Zone": ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+            {"o":0, "d":1, "b":4, "w":8, "v":13, "title":14, "ic":15, "c":16, "cn":20, "t":28}, 2),
+        "GE Zone": ("https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+            {"o":0, "d":1, "b":3, "w":6, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2),
+    }
+    
+    cx = ctx()
     res = {}
+    rates_cached = _rc["data"] and (now - _rc["time"]) < RATES_CD
     
-    # VIP Token wala tarika use kar rahe hain taake 401 Unauthorized Error na aaye
-    ecl_rows = fetch_sheet_data("ECL QC Center & Zone")
-    ge_rows = fetch_sheet_data("GE QC Center & Zone")
-    
-    def parse_bundling(rows, o, d, b, w, cn, start_idx):
-        out = []
-        for r in rows[start_idx:]:
-            if not r: continue
-            p = r + [""] * 60
-            co = str(p[o]).strip()
-            dv = str(p[d]).strip()
-            bx = str(p[b]).strip()
-            wt = str(p[w]).strip()
-            ctry = str(p[cn]).strip()
-            
-            if not co or not re.search(r"\d", co): continue
-            if co.lower() in ["n/a", "nan", "order", "orderid", "order id"]: continue
-            
-            out.append({
-                "order": co, "date": dv, "date_std": sd(dv),
-                "boxes": bx, "weight": wt,
-                "vendor": "", "title": "Item", "item_count": "1",
-                "customer": "", "country": ctry, "tid": ""
-            })
-        return out
-
-    if ecl_rows:
-        res["ECL QC Center"] = parse_bundling(ecl_rows, 0, 1, 2, 5, 7, 2)
-        res["ECL Zone"] = parse_bundling(ecl_rows, 9, 10, 11, 14, 16, 2)
-    else:
-        res["ECL QC Center"] = []
-        res["ECL Zone"] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+        futs = {ex.submit(fetch_sheet, n, u, c, s, cx): n for n, (u, c, s) in SOURCES.items()}
+        futs[ex.submit(fetch_status)] = "STATUS_INLINE"
+        if not rates_cached:
+            futs[ex.submit(fetch_rates, cx)] = "RATES"
+        try:
+            for f in concurrent.futures.as_completed(futs, timeout=30):
+                n = futs[f]
+                try:
+                    k, d = f.result()
+                    if k == "STATUS_INLINE": pass
+                    else: res[k] = d
+                except: 
+                    if n not in ("RATES", "STATUS_INLINE"): res[n] = []
+        except concurrent.futures.TimeoutError:
+            for f in futs:
+                if not f.done(): f.cancel()
+                n = futs[f]
+                if n not in ("RATES", "STATUS_INLINE"): res[n] = []
+                
+    if "RATES" not in res:
+        if _rc["data"]: res["RATES"] = _rc["data"]
+        else: res["RATES"] = ({}, {})
+    if "RATES" in res and not isinstance(res["RATES"], tuple):
+        res["RATES"] = ({}, {})
         
-    if ge_rows:
-        res["GE Zone"] = parse_bundling(ge_rows, 9, 10, 11, 15, 16, 1)
-    else:
-        res["GE Zone"] = []
-        
-    res["RATES"] = ({}, {})
-    _bc["data"] = res; _bc["time"] = now
-    return res
+    _bc["data"] = res; _bc["time"] = now; return res
 
 # --- API ---
 @app.route("/api/nexus/debug_rates")
