@@ -3891,6 +3891,8 @@ CD=600
 RATES_CD=3600
 
 FULL_ACCESS = {
+
+FULL_ACCESS = {
     "husaain@joinfleek.com",
     "wahab.chippa@joinfleek.com",
     "albash@joinfleek.com",
@@ -4346,14 +4348,8 @@ def add_float_btns(response):
     if request.path=="/" and response.content_type and "text/html" in response.content_type:
         mode=user_mode()
         html=response.get_data(as_text=True)
-        if mode=="full":
+        if mode=="full" or mode=="guest":
             btn='''<div style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:99999">
-<a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
-<a href="/nexus" style="background:#fff;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.4)">🛰️ TID Hub</a>
-</div>'''
-            if "</body>" in html: response.set_data(html.replace("</body>",btn+"</body>"))
-        elif mode=="guest":
-            btn='''<div style="position:fixed;bottom:24px;right:24px;z-index:99999">
 <a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
 </div>'''
             if "</body>" in html: response.set_data(html.replace("</body>",btn+"</body>"))
