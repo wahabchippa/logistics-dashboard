@@ -108,8 +108,23 @@ def fetch_sheet_data(sheet_name):
         if current_time - cache_time < CACHE_DURATION:
             return cached_data
     try:
-        encoded_name = urllib.parse.quote(sheet_name)
-        url = f'https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&sheet={encoded_name}'
+        # GID Mapping for 3PL Dashboard
+        gid_map = {
+            'GE QC Center & Zone': '1603070499',
+            'ECL QC Center & Zone': '2030625660',
+            'Kerry': '1183925662',
+            'APX': '1587028628'
+        }
+        
+        gid = gid_map.get(sheet_name)
+        clean_id = SHEET_ID.strip() # Remove any accidental spaces
+        
+        if gid:
+            url = f'https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&gid={gid}'
+        else:
+            encoded_name = urllib.parse.quote(sheet_name)
+            url = f'https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&sheet={encoded_name}'
+            
         req = urllib.request.Request(url, headers=get_auth_headers())
         with urllib.request.urlopen(req, timeout=30) as response:
             content = response.read().decode('utf-8')
