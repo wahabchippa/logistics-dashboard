@@ -4968,7 +4968,7 @@ def fetch_all():
     # ✅ ORIGINAL MAPPINGS LAGA DI GAYI HAIN
     SOURCES={
         "ECL QC Center":("ECL QC Center & Zone",
-            {"o":0,"d":1,"b":3,"b2":2,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
+            {"o":0,"d":1,"b":3,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
         "ECL Zone":("ECL QC Center & Zone",
             {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28},2),
         "GE Zone":("GE QC Center & Zone",
