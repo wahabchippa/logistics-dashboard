@@ -4965,7 +4965,7 @@ def fetch_all():
     now=time.time()
     if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
     
-    # ⚠️ CORRECT EXACT TAB NAMES (NO LINKS)
+    # ✅ ORIGINAL MAPPINGS LAGA DI GAYI HAIN
     SOURCES={
         "ECL QC Center":("ECL QC Center & Zone",
             {"o":0,"d":1,"b":3,"b2":2,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
@@ -4986,6 +4986,7 @@ def fetch_all():
         except concurrent.futures.TimeoutError:
             for f in futs:
                 if not f.done(): f.cancel(); res[futs[f]]=[] if futs[f]!="RATES" else {}
+    
     if "RATES" in res and not isinstance(res["RATES"],tuple):
         res["RATES"]=({},{})
     _bc["data"]=res; _bc["time"]=now; return res
