@@ -4087,12 +4087,14 @@ def fetch_rates(cx):
 
 def fetch_status():
     global _sc
-    now=time.time()
-    if _sc["data"] and (now-_sc["time"])<CD: return _sc["data"]
+    now = time.time()
+    if _sc["data"] and (now - _sc["time"]) < CD: return _sc["data"]
     try:
-        req=urllib.request.Request(SS,headers={"User-Agent":"Mozilla/5.0"})
-        with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
-            data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
+        clean_id = SHEET_ID.strip()
+        url = f"https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&gid=1570463436"
+        req = urllib.request.Request(url, headers=get_auth_headers())
+        with urllib.request.urlopen(req, timeout=20, context=ctx()) as r:
+            data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
         sm={}
         for row in data[1:]:
             p=row+[""]*10; fid=str(p[0]).strip()
@@ -4106,7 +4108,7 @@ def fetch_journey():
     now = time.time()
     if _jc["data"] and (now - _jc["time"]) < CD: return _jc["data"]
     try:
-        # Aapki Journey Sheet ID (VIP Token ke sath secure fetch)
+        # Secure VIP Token journey fetch
         sheet_id = "1493mgOui4QYrJ9hXGKaFHm2Bj21cqW51BkeX6gzWccg"
         url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=1409345116"
         req = urllib.request.Request(url, headers=get_auth_headers())
@@ -4127,7 +4129,7 @@ def fetch_journey():
         _jc["data"] = jm; _jc["time"] = now
         return jm
     except Exception as e:
-        print("Journey Fetch Error:", e)
+        print("Fetch Journey Error:", e)
         return {}
 
 def fetch_sheet(name, url, col, start, cx):
@@ -4186,7 +4188,7 @@ def fetch_all():
     now = time.time()
     if _bc["data"] and (now - _bc["time"]) < CD: return _bc["data"]
     
-    # AAPKI EXACT COLUMN MAPPING YAHAN ADD KAR DI GAYI HAI
+    # AAPKI EXACT COLUMN MAPPING
     SOURCES = {
         "ECL QC Center": ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
             {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1),
