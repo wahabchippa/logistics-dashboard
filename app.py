@@ -4120,20 +4120,16 @@ def fetch_journey():
         _jc["data"]=jm; _jc["time"]=now; return jm
     except: return {}
 
-def fetch_sheet(name, tab_name, col, start, cx):
-    import json
+def fetch_sheet(name,url,col,start,cx):
     for attempt in range(2):
         try:
-            clean_id = SHEET_ID.strip()
-            encoded_tab = urllib.parse.quote(tab_name)
-            api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{clean_id}/values/{encoded_tab}'
-            
-            req=urllib.request.Request(api_url,headers=get_auth_headers())
-            with urllib.request.urlopen(req,timeout=25,context=cx) as r:
-                raw_json = json.loads(r.read().decode('utf-8'))
-                raw_rows = raw_json.get('values', [])
-                data = [[str(cell) for cell in row] for row in raw_rows]
-
+            req=urllib.request.Request(url,headers={
+                "User-Agent":"Mozilla/5.0",
+                "Accept-Encoding":"gzip, deflate",
+                "Connection":"keep-alive"
+            })
+            with urllib.request.urlopen(req,timeout=15,context=cx) as r:
+                data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
             rows=[]; lo=ld=lv=lc=lcn=lt=""
             for row in data[start:]:
                 if not row: continue
@@ -4166,38 +4162,62 @@ def fetch_sheet(name, tab_name, col, start, cx):
                     "customer":cv or lc,"country":cnv or lcn,"tid":tv or lt})
             print(f"[OK] {name}: {len(rows)} rows"); return name,rows
         except Exception as e:
-            print(f"[WARN] {name} attempt {attempt+1}: {e}"); time.sleep(1)
+            print(f"[WARN] {name} attempt {attempt+1}: {e}")
+            if attempt==0: time.sleep(0.5)  # shorter retry delay
     return name,[]
 
 def fetch_all():
     global _bc
     now=time.time()
     if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
-    
-    # ✅ ORIGINAL MAPPINGS LAGA DI GAYI HAIN
     SOURCES={
-        "ECL QC Center":("ECL QC Center & Zone",
-            {"o":0,"d":1,"b":3,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
-        "ECL Zone":("ECL QC Center & Zone",
+        "ECL QC Center":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+            {"o":0,"d":1,"b":3,"b2":2,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
+        "ECL Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
             {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28},2),
-        "GE Zone":("GE QC Center & Zone",
+        "GE Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
             {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28},2),
     }
     cx=ctx(); res={}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-        futs={ex.submit(fetch_sheet,n,tab,c,s,cx):n for n,(tab,c,s) in SOURCES.items()}
-        futs[ex.submit(fetch_rates,cx)]="RATES"
+    
+    # Check if rates are already cached — skip if so
+    rates_cached = _rc["data"] and (now - _rc["time"]) < RATES_CD
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+        futs={ex.submit(fetch_sheet,n,u,c,s,cx):n for n,(u,c,s) in SOURCES.items()}
+        # Also fetch status in parallel
+        futs[ex.submit(fetch_status)]="STATUS_INLINE"
+        if not rates_cached:
+            futs[ex.submit(fetch_rates,cx)]="RATES"
         try:
-            for f in concurrent.futures.as_completed(futs,timeout=45):
+            for f in concurrent.futures.as_completed(futs,timeout=30):
                 n=futs[f]
-                try: k,d=f.result(); res[k]=d
-                except: res[n]=[] if n!="RATES" else {}
+                try:
+                    k,d=f.result()
+                    if k=="STATUS_INLINE":
+                        pass  # status is stored in _sc by fetch_status itself
+                    else:
+                        res[k]=d
+                except: 
+                    if n not in ("RATES","STATUS_INLINE"):
+                        res[n]=[]
         except concurrent.futures.TimeoutError:
             for f in futs:
-                if not f.done(): f.cancel(); res[futs[f]]=[] if futs[f]!="RATES" else {}
+                if not f.done():
+                    f.cancel()
+                    n=futs[f]
+                    if n not in ("RATES","STATUS_INLINE"):
+                        res[n]=[]
     
+    # Use cached rates if not freshly fetched
+    if "RATES" not in res:
+        if _rc["data"]:
+            res["RATES"]=_rc["data"]
+        else:
+            res["RATES"]=({},{})
     if "RATES" in res and not isinstance(res["RATES"],tuple):
         res["RATES"]=({},{})
+    
     _bc["data"]=res; _bc["time"]=now; return res
 
 # --- API ---
