@@ -7899,7 +7899,19 @@ document.addEventListener("keydown",e=>{
 });
 window.onload=init;
 </script></body></html>"""
-
+@app.after_request
+def add_float_btns(response):
+    if request.path == "/" and response.content_type and "text/html" in response.content_type:
+        html = response.get_data(as_text=True)
+        
+        # Sirf Bundling Intel ka button (TID Hub hata diya hai)
+        btn = '''<div style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:99999">
+<a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
+</div>'''
+        
+        if "</body>" in html: 
+            response.set_data(html.replace("</body>", btn + "</body>"))
+    return response
 @app.route('/debug')
 def debug_sheet():
     try:
