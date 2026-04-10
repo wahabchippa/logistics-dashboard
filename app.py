@@ -3891,8 +3891,6 @@ CD=600
 RATES_CD=3600
 
 FULL_ACCESS = {
-
-FULL_ACCESS = {
     "husaain@joinfleek.com",
     "wahab.chippa@joinfleek.com",
     "albash@joinfleek.com",
