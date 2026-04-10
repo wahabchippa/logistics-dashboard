@@ -4168,55 +4168,50 @@ def fetch_all():
     global _bc
     now=time.time()
     if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
-    SOURCES={
-        "ECL QC Center":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-            {"o":0,"d":1,"b":3,"b2":2,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
-        "ECL Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-            {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28},2),
-        "GE Zone":("https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-            {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28},2),
-    }
-    cx=ctx(); res={}
     
-    # Check if rates are already cached — skip if so
-    rates_cached = _rc["data"] and (now - _rc["time"]) < RATES_CD
+    res = {}
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
-        futs={ex.submit(fetch_sheet,n,u,c,s,cx):n for n,(u,c,s) in SOURCES.items()}
-        # Also fetch status in parallel
-        futs[ex.submit(fetch_status)]="STATUS_INLINE"
-        if not rates_cached:
-            futs[ex.submit(fetch_rates,cx)]="RATES"
-        try:
-            for f in concurrent.futures.as_completed(futs,timeout=30):
-                n=futs[f]
-                try:
-                    k,d=f.result()
-                    if k=="STATUS_INLINE":
-                        pass  # status is stored in _sc by fetch_status itself
-                    else:
-                        res[k]=d
-                except: 
-                    if n not in ("RATES","STATUS_INLINE"):
-                        res[n]=[]
-        except concurrent.futures.TimeoutError:
-            for f in futs:
-                if not f.done():
-                    f.cancel()
-                    n=futs[f]
-                    if n not in ("RATES","STATUS_INLINE"):
-                        res[n]=[]
+    # VIP Token wala tarika use kar rahe hain taake 401 Unauthorized Error na aaye
+    ecl_rows = fetch_sheet_data("ECL QC Center & Zone")
+    ge_rows = fetch_sheet_data("GE QC Center & Zone")
     
-    # Use cached rates if not freshly fetched
-    if "RATES" not in res:
-        if _rc["data"]:
-            res["RATES"]=_rc["data"]
-        else:
-            res["RATES"]=({},{})
-    if "RATES" in res and not isinstance(res["RATES"],tuple):
-        res["RATES"]=({},{})
-    
-    _bc["data"]=res; _bc["time"]=now; return res
+    def parse_bundling(rows, o, d, b, w, cn, start_idx):
+        out = []
+        for r in rows[start_idx:]:
+            if not r: continue
+            p = r + [""] * 60
+            co = str(p[o]).strip()
+            dv = str(p[d]).strip()
+            bx = str(p[b]).strip()
+            wt = str(p[w]).strip()
+            ctry = str(p[cn]).strip()
+            
+            if not co or not re.search(r"\d", co): continue
+            if co.lower() in ["n/a", "nan", "order", "orderid", "order id"]: continue
+            
+            out.append({
+                "order": co, "date": dv, "date_std": sd(dv),
+                "boxes": bx, "weight": wt,
+                "vendor": "", "title": "Item", "item_count": "1",
+                "customer": "", "country": ctry, "tid": ""
+            })
+        return out
+
+    if ecl_rows:
+        res["ECL QC Center"] = parse_bundling(ecl_rows, 0, 1, 2, 5, 7, 2)
+        res["ECL Zone"] = parse_bundling(ecl_rows, 9, 10, 11, 14, 16, 2)
+    else:
+        res["ECL QC Center"] = []
+        res["ECL Zone"] = []
+        
+    if ge_rows:
+        res["GE Zone"] = parse_bundling(ge_rows, 9, 10, 11, 15, 16, 1)
+    else:
+        res["GE Zone"] = []
+        
+    res["RATES"] = ({}, {})
+    _bc["data"] = res; _bc["time"] = now
+    return res
 
 # --- API ---
 @app.route("/api/nexus/debug_rates")
@@ -7903,28 +7898,27 @@ window.onload=init;
 def add_float_btns(response):
     if request.path == "/" and response.content_type and "text/html" in response.content_type:
         html = response.get_data(as_text=True)
-        
-        # Sirf Bundling Intel ka button (TID Hub hata diya hai)
+        # Bulletproof Button Logic
         btn = '''<div style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:99999">
 <a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
 </div>'''
-        
         if "</body>" in html: 
             response.set_data(html.replace("</body>", btn + "</body>"))
     return response
 @app.route('/debug')
 def debug_sheet():
     try:
+        # Token wapas add kar diya hai taake sheet access ho sakay
+        headers = get_auth_headers()
         clean_id = SHEET_ID.strip()
         url = f'https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&gid=1603070499'
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as response:
             data = response.read().decode('utf-8')
             return f"<h1>✅ SUCCESS!</h1> <p>Data length: {len(data)} characters</p> <p>First 200 chars:</p> <pre>{data[:200]}</pre>"
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        # Masla yahan tha! Maine {headers} hata diya hai taake NameError na aaye
         return f"<h1>❌ ERROR PAKRA GAYA:</h1> <h2>{str(e)}</h2> <p><b>Details:</b></p> <pre>{error_details}</pre>"
 
 if __name__ == '__main__':
