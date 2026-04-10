@@ -4049,7 +4049,7 @@ def lookup_rate(rm_brackets, country, billed_kg, default=4.50):
 def fetch_rates(cx):
     try:
         url="https://docs.google.com/spreadsheets/d/e/2PACX-1vRiyUpVH_MmkslyY7VvaltDXF5Gmj8GrE6i3YNmyOGEIsRh0QcEzmcYWT7HUSNLnB165H6yeZvPzgpH/pub?gid=1463817545&single=true&output=csv"
-        req=urllib.request.Request(url,headers=get_auth_headers())
+        req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
         with urllib.request.urlopen(req,timeout=20,context=cx) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
         # Col H=7: country, Col J=9: weight bracket, Col M=12: per kg rate
@@ -4089,7 +4089,7 @@ def fetch_status():
     now=time.time()
     if _sc["data"] and (now-_sc["time"])<CD: return _sc["data"]
     try:
-        req=urllib.request.Request(SS,headers=get_auth_headers())
+        req=urllib.request.Request(SS,headers={"User-Agent":"Mozilla/5.0"})
         with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
         sm={}
@@ -4105,7 +4105,7 @@ def fetch_journey():
     now=time.time()
     if _jc["data"] and (now-_jc["time"])<CD: return _jc["data"]
     try:
-        req=urllib.request.Request(JS,headers=get_auth_headers())
+        req=urllib.request.Request(JS,headers={"User-Agent":"Mozilla/5.0"})
         with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
             data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
         jm={}
