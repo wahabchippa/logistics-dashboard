@@ -108,29 +108,24 @@ def fetch_sheet_data(sheet_name):
         if current_time - cache_time < CACHE_DURATION:
             return cached_data
     try:
-        # GID Mapping for 3PL Dashboard
-        gid_map = {
-            'GE QC Center & Zone': '1603070499',
-            'ECL QC Center & Zone': '2030625660',
-            'Kerry': '1183925662',
-            'APX': '1587028628'
-        }
+        import json
+        clean_id = SHEET_ID.strip()
+        encoded_name = urllib.parse.quote(sheet_name)
         
-        gid = gid_map.get(sheet_name)
-        clean_id = SHEET_ID.strip() # Remove any accidental spaces
+        # 100% OFFICIAL GOOGLE SHEETS API LINK (No 401 Error)
+        url = f'https://sheets.googleapis.com/v4/spreadsheets/{clean_id}/values/{encoded_name}'
         
-        if gid:
-            url = f'https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&gid={gid}'
-        else:
-            encoded_name = urllib.parse.quote(sheet_name)
-            url = f'https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&sheet={encoded_name}'
-            
         req = urllib.request.Request(url, headers=get_auth_headers())
         with urllib.request.urlopen(req, timeout=30) as response:
-            content = response.read().decode('utf-8')
-            rows = list(csv.reader(content.splitlines()))
-            CACHE[cache_key] = (rows, current_time)
-            return rows
+            data = json.loads(response.read().decode('utf-8'))
+            # API se data JSON format mein aata hai, usay nikalna
+            rows = data.get('values', [])
+            
+            # Puranay CSV ki tarah saare cells ko text bana dena
+            str_rows = [[str(cell) for cell in row] for row in rows]
+            
+            CACHE[cache_key] = (str_rows, current_time)
+            return str_rows
     except Exception as e:
         print(f"Error fetching {sheet_name}: {e}")
         return []
