@@ -4852,11 +4852,43 @@ def fetch_journey():
     except: return {}
 
 def fetch_sheet(name,url,col,start,cx):
+    import json
     for attempt in range(2):
         try:
-            req=urllib.request.Request(url,headers=get_auth_headers())
+            # URL ko official API format mein convert karna
+            clean_id = SHEET_ID.strip()
+            gid_map = {
+                "ECL QC Center": "2030625660",
+                "ECL Zone": "2030625660",
+                "GE Zone": "1603070499"
+            }
+            
+            gid = gid_map.get(name)
+            
+            if gid:
+                api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{clean_id}/values/{name.replace(" ", "%20")}'
+            else:
+                 api_url = url
+                 
+            # Agar URL pehle se theek nahi hai toh badal lo (Nexus waghera handle karne ke liye)
+            if "export?format=csv" in url and gid:
+                # Agar tab ka asal naam maloom ho toh yahan replace kar saktay hain, par fallback ke liye GID use karte hain
+                # Lekin Google API JSON format `values/{SheetName}` mangta hai. 
+                # Hum safety ke liye V4 api string use kareingay
+                sheet_names = {
+                    "1603070499": "GE",
+                    "2030625660": "ECL"
+                }
+                real_sheet_name = sheet_names.get(gid, name)
+                encoded_real_name = urllib.parse.quote(real_sheet_name)
+                api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{clean_id}/values/{encoded_real_name}'
+
+            req=urllib.request.Request(api_url,headers=get_auth_headers())
             with urllib.request.urlopen(req,timeout=25,context=cx) as r:
-                data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
+                raw_json = json.loads(r.read().decode('utf-8'))
+                raw_rows = raw_json.get('values', [])
+                data = [[str(cell) for cell in row] for row in raw_rows]
+
             rows=[]; lo=ld=lv=lc=lcn=lt=""
             for row in data[start:]:
                 if not row: continue
