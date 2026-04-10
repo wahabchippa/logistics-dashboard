@@ -3886,8 +3886,9 @@ import urllib.request, csv, re, ssl, time, math, concurrent.futures
 from datetime import datetime, timedelta
 from flask import jsonify, request, session, render_template_string
 
-_bc={"data":None,"time":0}; _jc={"data":None,"time":0}; _sc={"data":None,"time":0}
+_bc={"data":None,"time":0}; _jc={"data":None,"time":0}; _sc={"data":None,"time":0}; _rc={"data":None,"time":0}
 CD=600
+RATES_CD=3600
 
 FULL_ACCESS = {
     "husaain@joinfleek.com",
