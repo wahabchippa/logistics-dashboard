@@ -4911,38 +4911,14 @@ def fetch_journey():
         _jc["data"]=jm; _jc["time"]=now; return jm
     except: return {}
 
-def fetch_sheet(name,url,col,start,cx):
+def fetch_sheet(name,tab_name,col,start,cx):
     import json
     for attempt in range(2):
         try:
-            # URL ko official API format mein convert karna
             clean_id = SHEET_ID.strip()
-            gid_map = {
-                "ECL QC Center": "2030625660",
-                "ECL Zone": "2030625660",
-                "GE Zone": "1603070499"
-            }
+            encoded_tab = urllib.parse.quote(tab_name)
+            api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{clean_id}/values/{encoded_tab}'
             
-            gid = gid_map.get(name)
-            
-            if gid:
-                api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{clean_id}/values/{name.replace(" ", "%20")}'
-            else:
-                 api_url = url
-                 
-            # Agar URL pehle se theek nahi hai toh badal lo (Nexus waghera handle karne ke liye)
-            if "export?format=csv" in url and gid:
-                # Agar tab ka asal naam maloom ho toh yahan replace kar saktay hain, par fallback ke liye GID use karte hain
-                # Lekin Google API JSON format `values/{SheetName}` mangta hai. 
-                # Hum safety ke liye V4 api string use kareingay
-                sheet_names = {
-                    "1603070499": "GE",
-                    "2030625660": "ECL"
-                }
-                real_sheet_name = sheet_names.get(gid, name)
-                encoded_real_name = urllib.parse.quote(real_sheet_name)
-                api_url = f'https://sheets.googleapis.com/v4/spreadsheets/{clean_id}/values/{encoded_real_name}'
-
             req=urllib.request.Request(api_url,headers=get_auth_headers())
             with urllib.request.urlopen(req,timeout=25,context=cx) as r:
                 raw_json = json.loads(r.read().decode('utf-8'))
@@ -4972,10 +4948,8 @@ def fetch_sheet(name,url,col,start,cx):
                 if cnv: lcn=cnv
                 if tv: lt=tv
                 bxv=str(p[col["b"]]).strip()
-                # For QC Center also check alternate box col
                 if not bxv and col.get("b2") is not None:
                     bxv2=str(p[col["b2"]]).strip()
-                    # Only use b2 if it looks like a box number (numeric)
                     if bxv2 and re.match(r"^[0-9]+$",bxv2): bxv=bxv2
                 rows.append({"order":co,"date":dv or ld,"date_std":sd(dv or ld),
                     "boxes":bxv,"weight":rw,
@@ -4990,18 +4964,19 @@ def fetch_all():
     global _bc
     now=time.time()
     if _bc["data"] and (now-_bc["time"])<CD: return _bc["data"]
-    # ⚠️ CORRECT MAPPINGS — GE Zone weight=col 6 (H is index 7 but user confirmed col 6)
+    
+    # Naye Tabs ke naam ("ECL" aur "GE") se mapping
     SOURCES={
-        "ECL QC Center":("https://docs.google.com/spreadsheets/d/1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA/export?format=csv&gid=0",
+        "ECL QC Center":("ECL",
             {"o":0,"d":1,"b":3,"b2":2,"w":6,"v":10,"title":11,"ic":12,"c":13,"cn":17,"t":25},1),
-        "ECL Zone":("https://docs.google.com/spreadsheets/d/1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA/export?format=csv&gid=928309568",
+        "ECL Zone":("ECL",
             {"o":0,"d":1,"b":4,"w":8,"v":13,"title":14,"ic":15,"c":16,"cn":20,"t":28},2),
-        "GE Zone":("https://docs.google.com/spreadsheets/d/1Bt8od4x1xim2CO0vHcpYPR8eoA7L0XWqNsXqBsl9FBI/export?format=csv&gid=10726393",
+        "GE Zone":("GE",
             {"o":0,"d":1,"b":3,"w":6,"v":12,"title":13,"ic":14,"c":15,"cn":19,"t":28},2),
     }
     cx=ctx(); res={}
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-        futs={ex.submit(fetch_sheet,n,u,c,s,cx):n for n,(u,c,s) in SOURCES.items()}
+        futs={ex.submit(fetch_sheet,n,tab,c,s,cx):n for n,(tab,c,s) in SOURCES.items()}
         futs[ex.submit(fetch_rates,cx)]="RATES"
         try:
             for f in concurrent.futures.as_completed(futs,timeout=45):
@@ -5011,7 +4986,6 @@ def fetch_all():
         except concurrent.futures.TimeoutError:
             for f in futs:
                 if not f.done(): f.cancel(); res[futs[f]]=[] if futs[f]!="RATES" else {}
-    # Ensure RATES is always (brackets_dict, avg_dict)
     if "RATES" in res and not isinstance(res["RATES"],tuple):
         res["RATES"]=({},{})
     _bc["data"]=res; _bc["time"]=now; return res
