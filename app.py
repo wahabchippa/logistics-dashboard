@@ -4126,12 +4126,9 @@ def fetch_journey():
 def fetch_sheet(name,url,col,start,cx):
     for attempt in range(2):
         try:
-            req=urllib.request.Request(url,headers={
-                "User-Agent":"Mozilla/5.0",
-                "Accept-Encoding":"gzip, deflate",
-                "Connection":"keep-alive"
-            })
-            with urllib.request.urlopen(req,timeout=15,context=cx) as r:
+            # Gzip hata diya aur timeout 30 kar diya taake data pura load ho
+            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(req,timeout=30,context=cx) as r:
                 data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
             rows=[]; lo=ld=lv=lc=lcn=lt=""
             for row in data[start:]:
@@ -4348,6 +4345,7 @@ def add_float_btns(response):
     if request.path=="/" and response.content_type and "text/html" in response.content_type:
         mode=user_mode()
         html=response.get_data(as_text=True)
+        # Ab Nexus wala button puri tarah se khatam kar diya hai
         if mode=="full" or mode=="guest":
             btn='''<div style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:99999">
 <a href="/bundling" style="background:#10b981;color:#000;padding:10px 20px;border-radius:50px;text-decoration:none;font-weight:800;font-family:sans-serif;text-align:center;box-shadow:0 6px 18px rgba(16,185,129,.4)">📦 Bundling Intel</a>
