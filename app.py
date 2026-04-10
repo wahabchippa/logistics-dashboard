@@ -7881,10 +7881,9 @@ window.onload=init;
 @app.route('/debug')
 def debug_sheet():
     try:
-        headers = get_auth_headers()
         clean_id = SHEET_ID.strip()
         url = f'https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&gid=1603070499'
-        req = urllib.request.Request(url, headers=headers)
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=15) as response:
             data = response.read().decode('utf-8')
             return f"<h1>✅ SUCCESS!</h1> <p>Data length: {len(data)} characters</p> <p>First 200 chars:</p> <pre>{data[:200]}</pre>"
