@@ -4190,13 +4190,14 @@ def fetch_all():
     if _bc["data"] and (now - _bc["time"]) < CD: return _bc["data"]
     
     # AAPKI EXACT COLUMN MAPPING
-    _sid = SHEET_ID.strip()
+    ECL_ID = "1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA"
+    GE_ID  = "1Bt8od4x1xim2CO0vHcpYPR8eoA7L0XWqNsXqBsl9FBI"
     SOURCES = {
-        "ECL QC Center": (f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=0",
+        "ECL QC Center": (f"https://docs.google.com/spreadsheets/d/{ECL_ID}/export?format=csv&gid=0",
             {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1),
-        "ECL Zone": (f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=928309568",
+        "ECL Zone": (f"https://docs.google.com/spreadsheets/d/{ECL_ID}/export?format=csv&gid=928309568",
             {"o":0, "d":1, "b":4, "w":8, "v":13, "title":14, "ic":15, "c":16, "cn":20, "t":28}, 2),
-        "GE Zone": (f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=10726393",
+        "GE Zone": (f"https://docs.google.com/spreadsheets/d/{GE_ID}/export?format=csv&gid=10726393",
             {"o":0, "d":1, "b":3, "w":6, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2),
     }
     
@@ -4264,11 +4265,13 @@ def api_debug_data():
         result["oauth_token"]={"status":"error","error":str(e)}
         token=""
     # 2. Test sheet URLs with OAuth
+    ECL_ID="1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA"
+    GE_ID="1Bt8od4x1xim2CO0vHcpYPR8eoA7L0XWqNsXqBsl9FBI"
     _sid=SHEET_ID.strip()
     SOURCES={
-        "ECL QC Center":f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=0",
-        "ECL Zone":f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=928309568",
-        "GE Zone":f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=10726393",
+        "ECL QC Center":f"https://docs.google.com/spreadsheets/d/{ECL_ID}/export?format=csv&gid=0",
+        "ECL Zone":f"https://docs.google.com/spreadsheets/d/{ECL_ID}/export?format=csv&gid=928309568",
+        "GE Zone":f"https://docs.google.com/spreadsheets/d/{GE_ID}/export?format=csv&gid=10726393",
         "Status":f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=1570463436",
     }
     headers={'User-Agent':'Mozilla/5.0','Authorization':f'Bearer {token}'}
