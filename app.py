@@ -4090,9 +4090,7 @@ def fetch_status():
     now = time.time()
     if _sc["data"] and (now - _sc["time"]) < CD: return _sc["data"]
     try:
-        clean_id = SHEET_ID.strip()
-        url = f"https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&gid=1570463436"
-        req = urllib.request.Request(url, headers=get_auth_headers())
+        req = urllib.request.Request(SS, headers={"User-Agent":"Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=20, context=ctx()) as r:
             data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
         sm={}
@@ -4101,17 +4099,15 @@ def fetch_status():
             if fid and fid.lower() not in ["","nan","fleek_id","fleek id","order"]:
                 sm[fid.upper()]=str(p[1]).strip() or "—"
         _sc["data"]=sm; _sc["time"]=now; return sm
-    except: return {}
+    except Exception as e:
+        print(f"[STATUS] fetch error: {e}"); return {}
 
 def fetch_journey():
     global _jc
     now = time.time()
     if _jc["data"] and (now - _jc["time"]) < CD: return _jc["data"]
     try:
-        # Secure VIP Token journey fetch
-        sheet_id = "1493mgOui4QYrJ9hXGKaFHm2Bj21cqW51BkeX6gzWccg"
-        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=1409345116"
-        req = urllib.request.Request(url, headers=get_auth_headers())
+        req = urllib.request.Request(JS, headers={"User-Agent":"Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=20, context=ctx()) as r:
             data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
         jm = {}
@@ -4129,7 +4125,7 @@ def fetch_journey():
         _jc["data"] = jm; _jc["time"] = now
         return jm
     except Exception as e:
-        print("Fetch Journey Error:", e)
+        print(f"[JOURNEY] fetch error: {e}")
         return {}
 
 def fetch_sheet(name, url, col, start, cx):
@@ -4244,6 +4240,13 @@ def api_debug_rates():
 
 @app.route("/api/nexus/app_data")
 def api_app_data():
+    try:
+        return _api_app_data_inner()
+    except Exception as e:
+        import traceback; print("[API ERROR]", traceback.format_exc())
+        return jsonify({"success":False,"error":str(e),"kpi":{},"source_stats":{},"bundles":[]}),500
+
+def _api_app_data_inner():
     sheets=fetch_all(); sm=fetch_status()
     rates_data=sheets.get("RATES",({},{}))
     if isinstance(rates_data,tuple): rm_brackets,rm_avg=rates_data
@@ -4311,7 +4314,7 @@ def api_app_data():
     return jsonify({"success":True,
         "kpi":{"total_bundles":tb,"total_orders_bundled":to2,
                "saved_shipments":to2-tb if tb>0 else 0,"total_savings_gbp":round(tsav,2)},
-        "source_stats":ss,"bundles":bundles})
+        "source_stats":ss,"bundles":bundles,"total_rows":{s:len(sheets.get(s,[])) for s in ["ECL QC Center","ECL Zone","GE Zone"]}})
 
 @app.route("/api/nexus/order_journey/<oid>")
 def api_order_journey(oid):
@@ -4494,8 +4497,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-hei
 .sidebar{
   width:240px;flex-shrink:0;
   background:var(--sidebar);
-  transition:width 0.2s ease;
-  border-right:1px solid var(--sb-border);
+  border-right:none;
   display:flex;flex-direction:column;
   overflow:hidden;
   position:relative;z-index:100;
@@ -5306,12 +5308,11 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
 <aside class="sidebar" id="sidebar">
   <div class="sb-head">
     <div class="sb-logo-wrap">
-      <div class="sb-ico">📦</div>
+      <div class="sb-ico">3P</div>
       <div class="sb-info">
-        <div class="sb-title">Bundling Hub</div>
-        <div class="sb-sub">Intelligence · Analytics</div>
+        <div class="sb-title">3PL Dashboard</div>
+        <div class="sb-sub">Bundling Intelligence Hub</div>
       </div>
-
     </div>
   </div>
   <nav class="sb-nav">
@@ -5418,7 +5419,7 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     </div>
     <div class="tb-actions">
       <button class="tbtn tbtn-refresh" onclick="hardRefresh()">🔄 Refresh</button>
-      <button class="tbtn tbtn-theme-inline" id="themeInlineBtn" onclick="toggleTheme()" title="Toggle theme" style="display:none">☀️</button>
+      <button class="tbtn tbtn-theme-inline" id="themeInlineBtn" onclick="toggleTheme()" title="Toggle theme">☀️</button>
     </div>
   </div>
 
@@ -5846,27 +5847,31 @@ function toggleTheme(){
   html.setAttribute('data-theme',isDark?'light':'dark');
   const pill=document.getElementById('themePill');
   const lbl=document.getElementById('themeLabel');
+  const inlineBtn=document.getElementById('themeInlineBtn');
   if(isDark){
-    pill.querySelector('.icon').textContent='🌙';
-    lbl.textContent='Dark Mode';
+    if(pill){pill.querySelector('.icon').textContent='🌙'; lbl.textContent='Dark Mode';}
+    if(inlineBtn) inlineBtn.textContent='🌙';
   } else {
-    pill.querySelector('.icon').textContent='☀️';
-    lbl.textContent='Light Mode';
+    if(pill){pill.querySelector('.icon').textContent='☀️'; lbl.textContent='Light Mode';}
+    if(inlineBtn) inlineBtn.textContent='☀️';
   }
   try{localStorage.setItem('bih_theme',isDark?'light':'dark');}catch(e){}
-  // re-render status if active (theme affects sStyle colors)
   if(_rendered.status) setTimeout(rStatus,0);
 }
 // Load saved theme
 (function(){
   try{
     const saved=localStorage.getItem('bih_theme');
+    const inlineBtn=document.getElementById('themeInlineBtn');
     if(saved==='light'){
       document.documentElement.setAttribute('data-theme','light');
       document.addEventListener('DOMContentLoaded',function(){
         const pill=document.getElementById('themePill');
         if(pill){pill.querySelector('.icon').textContent='🌙';document.getElementById('themeLabel').textContent='Dark Mode';}
+        if(inlineBtn) inlineBtn.textContent='🌙';
       });
+    } else {
+      if(inlineBtn) inlineBtn.textContent='☀️';
     }
   }catch(e){}
 })();
