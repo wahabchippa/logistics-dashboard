@@ -4247,26 +4247,40 @@ def api_debug_rates():
 def api_debug_data():
     mode=user_mode()
     if not mode: return jsonify({"error":"Access denied"}),403
-    import traceback
     result={}
-    SOURCES={
-        "ECL QC Center":"https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
-        "ECL Zone":"https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
-        "GE Zone":"https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
-        "Status":SS,"Journey":JS
-    }
     cx=ctx()
+    # 1. Test OAuth token
+    try:
+        req=urllib.request.Request('https://oauth2.googleapis.com/token',data=urllib.parse.urlencode({
+            'client_id':'320772774106-fpv7td9vqdcb9eg37utn6th5iihsl753.apps.googleusercontent.com',
+            'client_secret':'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',
+            'refresh_token':'1//04Om55oY1FH6rCgYIARAAGAQSNwF-L9Ir3d-HLOMyj3jMy8bh0s3C0dqHSVMMZtV33MT4e6EhnUD4bSMxOf-ouB-v-LL4KSMTGWI',
+            'grant_type':'refresh_token'
+        }).encode('utf-8'))
+        tres=json.loads(urllib.request.urlopen(req,timeout=10).read().decode('utf-8'))
+        token=tres.get('access_token','')
+        result["oauth_token"]={"status":"ok","token_preview":token[:20]+"..." if token else "EMPTY"}
+    except Exception as e:
+        result["oauth_token"]={"status":"error","error":str(e)}
+        token=""
+    # 2. Test sheet URLs with OAuth
+    _sid=SHEET_ID.strip()
+    SOURCES={
+        "ECL QC Center":f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=0",
+        "ECL Zone":f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=928309568",
+        "GE Zone":f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=10726393",
+        "Status":f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=1570463436",
+    }
+    headers={'User-Agent':'Mozilla/5.0','Authorization':f'Bearer {token}'}
     for name,url in SOURCES.items():
         try:
-            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            req=urllib.request.Request(url,headers=headers)
             with urllib.request.urlopen(req,timeout=15,context=cx) as r:
                 raw=r.read().decode("utf-8",errors="ignore")
             rows=list(csv.reader(raw.splitlines()))
-            result[name]={"status":"ok","total_rows":len(rows),"first_3_rows":rows[:3]}
+            result[name]={"status":"ok","total_rows":len(rows),"first_row":rows[0] if rows else [],"second_row":rows[1] if len(rows)>1 else []}
         except Exception as e:
             result[name]={"status":"error","error":str(e)}
-    sheets=fetch_all()
-    result["parsed_rows"]={s:len(sheets.get(s,[])) for s in ["ECL QC Center","ECL Zone","GE Zone"]}
     return jsonify(result)
 
 @app.route("/api/nexus/app_data")
