@@ -4234,9 +4234,34 @@ def api_debug_rates():
     sheets=fetch_all()
     rates_data=sheets.get("RATES",({},{}))
     rm_brackets,rm_avg=rates_data if isinstance(rates_data,tuple) else ({},{})
-    # Convert for JSON: {country: [(min,max,rate),...]}
     out={k:[{"min":mn,"max":mx,"rate":r} for mn,mx,r in v] for k,v in rm_brackets.items()}
     return jsonify({"countries":len(rm_brackets),"brackets":out,"averages":rm_avg})
+
+@app.route("/api/nexus/debug_data")
+def api_debug_data():
+    mode=user_mode()
+    if not mode: return jsonify({"error":"Access denied"}),403
+    import traceback
+    result={}
+    SOURCES={
+        "ECL QC Center":"https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+        "ECL Zone":"https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+        "GE Zone":"https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+        "Status":SS,"Journey":JS
+    }
+    cx=ctx()
+    for name,url in SOURCES.items():
+        try:
+            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(req,timeout=15,context=cx) as r:
+                raw=r.read().decode("utf-8",errors="ignore")
+            rows=list(csv.reader(raw.splitlines()))
+            result[name]={"status":"ok","total_rows":len(rows),"first_3_rows":rows[:3]}
+        except Exception as e:
+            result[name]={"status":"error","error":str(e)}
+    sheets=fetch_all()
+    result["parsed_rows"]={s:len(sheets.get(s,[])) for s in ["ECL QC Center","ECL Zone","GE Zone"]}
+    return jsonify(result)
 
 @app.route("/api/nexus/app_data")
 def api_app_data():
