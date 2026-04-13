@@ -390,6 +390,7 @@ BASE_STYLES = """
         width: 220px;
         background: var(--bg-sidebar);
         border-right: none;
+        box-shadow: 2px 0 8px rgba(0,0,0,0.15);
         padding: 16px 12px;
         transition: all 0.2s ease;
         z-index: 100;
@@ -4090,7 +4091,9 @@ def fetch_status():
     now = time.time()
     if _sc["data"] and (now - _sc["time"]) < CD: return _sc["data"]
     try:
-        req = urllib.request.Request(SS, headers={"User-Agent":"Mozilla/5.0"})
+        clean_id = SHEET_ID.strip()
+        url = f"https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&gid=1570463436"
+        req = urllib.request.Request(url, headers=get_auth_headers())
         with urllib.request.urlopen(req, timeout=20, context=ctx()) as r:
             data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
         sm={}
@@ -4107,7 +4110,9 @@ def fetch_journey():
     now = time.time()
     if _jc["data"] and (now - _jc["time"]) < CD: return _jc["data"]
     try:
-        req = urllib.request.Request(JS, headers={"User-Agent":"Mozilla/5.0"})
+        sheet_id = "1493mgOui4QYrJ9hXGKaFHm2Bj21cqW51BkeX6gzWccg"
+        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=1409345116"
+        req = urllib.request.Request(url, headers=get_auth_headers())
         with urllib.request.urlopen(req, timeout=20, context=ctx()) as r:
             data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
         jm = {}
@@ -4131,7 +4136,7 @@ def fetch_journey():
 def fetch_sheet(name, url, col, start, cx):
     for attempt in range(2):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            req = urllib.request.Request(url, headers=get_auth_headers())
             with urllib.request.urlopen(req, timeout=30, context=cx) as r:
                 data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
             rows = []; lo = ld = lv = lc = lcn = lt = ""
@@ -4185,12 +4190,13 @@ def fetch_all():
     if _bc["data"] and (now - _bc["time"]) < CD: return _bc["data"]
     
     # AAPKI EXACT COLUMN MAPPING
+    _sid = SHEET_ID.strip()
     SOURCES = {
-        "ECL QC Center": ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=0&single=true&output=csv",
+        "ECL QC Center": (f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=0",
             {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1),
-        "ECL Zone": ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSCiZ1MdPMyVAzBqmBmp3Ch8sfefOp_kfPk2RSfMv3bxRD_qccuwaoM7WTVsieKJbA3y3DF41tUxb3T/pub?gid=928309568&single=true&output=csv",
+        "ECL Zone": (f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=928309568",
             {"o":0, "d":1, "b":4, "w":8, "v":13, "title":14, "ic":15, "c":16, "cn":20, "t":28}, 2),
-        "GE Zone": ("https://docs.google.com/spreadsheets/d/e/2PACX-1vQjCPd8bUpx59Sit8gMMXjVKhIFA_f-W9Q4mkBSWulOTg4RGahcVXSD4xZiYBAcAH6eO40aEQ9IEEXj/pub?gid=10726393&single=true&output=csv",
+        "GE Zone": (f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=10726393",
             {"o":0, "d":1, "b":3, "w":6, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2),
     }
     
@@ -4381,7 +4387,7 @@ def bundling_spa():
 def fetch_sheet(name,url,col,start,cx):
     for attempt in range(2):
         try:
-            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
+            req=urllib.request.Request(url,headers=get_auth_headers())
             with urllib.request.urlopen(req,timeout=30,context=cx) as r:
                 data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
             rows=[]; lo=ld=lv=lc=lcn=lt=""
