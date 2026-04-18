@@ -4581,7 +4581,8 @@ def _api_app_data_inner():
     return jsonify({"success":True,
         "kpi":{"total_bundles":tb,"total_orders_bundled":to2,
                "saved_shipments":to2-tb if tb>0 else 0,"total_savings_gbp":round(tsav,2)},
-        "source_stats":ss,"bundles":bundles,"total_rows":{s:len(sheets.get(s,[])) for s in ["ECL QC Center","ECL Zone","GE Zone"]}})
+        "source_stats":ss,"bundles":bundles,"rates_map":rm_avg,
+        "total_rows":{s:len(sheets.get(s,[])) for s in ["ECL QC Center","ECL Zone","GE Zone"]}})
 
 @app.route("/api/nexus/order_journey/<oid>")
 def api_order_journey(oid):
@@ -4611,12 +4612,9 @@ def bundling_spa():
         return "<div style='text-align:center;padding:100px;background:#05050f;color:#fff;height:100vh'><h2>⛔ Access Denied</h2></div>",403
     gflag="true" if mode=="guest" else "false"
     email=(session.get("email") or session.get("user_email") or session.get("username") or "").lower().strip()
-    # inject rates for client-side savings calc
     import json as _json
-    sheets=fetch_all()
-    rates_data=sheets.get("RATES",({},{}))
-    rm_brackets,rm_avg=rates_data if isinstance(rates_data,tuple) else ({},{})
-    rm_js="const RATES_MAP="+_json.dumps(rm_avg)+";"
+    # Don't block page render on sheet fetching — rates loaded async via app_data API
+    rm_js="const RATES_MAP={};"
     html=BUNDLING_HTML.replace("window.onload=init;","const GUEST="+gflag+";\nconst USER_EMAIL='"+email+"';\n"+rm_js+"\nwindow.onload=init;")
     return render_template_string(html)
 
@@ -7759,8 +7757,8 @@ function _buildRoute(cont){
 // CACHE RATES for client-side use
 // ============================================================
 function cacheRates(){
-  // Use server-injected RATES_MAP (country_lower -> rate)
-  window._ratesCache=(typeof RATES_MAP!=="undefined")?RATES_MAP:{};
+  // Use rates from API response (D.rates_map), fallback to server-injected RATES_MAP
+  window._ratesCache=(D&&D.rates_map&&Object.keys(D.rates_map).length)?D.rates_map:((typeof RATES_MAP!=="undefined")?RATES_MAP:{});
 }
 
 // ============================================================
