@@ -473,8 +473,8 @@ BASE_STYLES = """
     .nav-item.active { background: rgba(79,70,229,0.1); color: var(--brand-color); border-left: 3px solid var(--brand-color); }
     .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; color: currentColor; }
     .sidebar.collapsed .nav-item span { opacity: 0; width: 0; }
-    .sidebar-toggle { position: absolute; right: -12px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 2px solid var(--bg-body); color: #ffffff; font-size: 12px; z-index: 101; }
-    .sidebar.collapsed .sidebar-toggle { transform: translateY(-50%) rotate(180deg); }
+    .sidebar-toggle { position: absolute; right: -12px; top: 20px; transform: none; width: 24px; height: 24px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 2px solid var(--bg-body); color: #ffffff; font-size: 12px; z-index: 101; }
+    .sidebar.collapsed .sidebar-toggle { transform: rotate(180deg); }
     .sidebar-footer { border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: auto; }
     .admin-info { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: var(--hover-bg); border-radius: 8px; margin-bottom: 8px; }
     .admin-avatar { width: 28px; height: 28px; background: var(--brand-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 14px; }
