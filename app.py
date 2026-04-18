@@ -889,26 +889,6 @@ BASE_STYLES = """
     @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5 { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
     @media (max-width: 768px) { .sidebar { width: 60px; } .main-content { margin-left: 60px; } .sidebar-toggle { width: 22px; height: 22px; right: -10px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
 
-    /* ===== ORDERS POPUP MODAL ===== */
-    #ordersModal { display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px); align-items:center; justify-content:center; }
-    #ordersModal.open { display:flex; }
-    #ordersModalBox { background:var(--bg-card,#fff); border-radius:16px; width:92%; max-width:900px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.35); overflow:hidden; animation:modalIn .2s ease; }
-    @keyframes modalIn { from{transform:scale(.95);opacity:0} to{transform:scale(1);opacity:1} }
-    #ordersModalHead { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border-color,#e2e8f0); flex-shrink:0; }
-    #ordersModalTitle { font-size:16px; font-weight:700; color:var(--text-primary,#1e293b); }
-    #ordersModalStats { display:flex; gap:16px; font-size:13px; color:var(--text-secondary,#64748b); }
-    #ordersModalStats span b { color:var(--brand-color,#4f46e5); }
-    #ordersModalClose { width:32px; height:32px; border-radius:50%; border:1px solid var(--border-color,#e2e8f0); background:none; cursor:pointer; font-size:18px; color:var(--text-secondary,#64748b); display:flex; align-items:center; justify-content:center; }
-    #ordersModalClose:hover { background:var(--bg-hover,#f1f5f9); }
-    #ordersModalBody { overflow-y:auto; flex:1; padding:0; }
-    #ordersModalLoader { text-align:center; padding:60px; color:var(--text-secondary,#64748b); font-size:14px; }
-    #ordersModalTable { width:100%; border-collapse:collapse; font-size:13px; }
-    #ordersModalTable th { background:var(--bg-secondary,#f8fafc); color:var(--text-secondary,#64748b); padding:10px 16px; text-align:left; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.5px; position:sticky; top:0; }
-    #ordersModalTable td { padding:9px 16px; border-bottom:1px solid var(--border-color,#e2e8f0); color:var(--text-primary,#1e293b); }
-    #ordersModalTable tr:hover td { background:var(--bg-hover,#f8fafc); }
-    #ordersModalFoot { padding:12px 22px; border-top:1px solid var(--border-color,#e2e8f0); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
-    #ordersModalCsv { padding:7px 14px; border-radius:8px; border:1px solid var(--border-color,#e2e8f0); background:none; cursor:pointer; font-size:12px; color:var(--text-secondary,#64748b); display:flex; align-items:center; gap:5px; }
-    #ordersModalCsv:hover { background:var(--brand-color,#4f46e5); color:#fff; border-color:var(--brand-color,#4f46e5); }
 </style>
 """
 
@@ -1137,83 +1117,91 @@ if (Notification && Notification.permission === 'default') {
 setInterval(checkNotifications, 30000);
 </script>
 
-<!-- ===== ORDERS POPUP MODAL ===== -->
-<div id="ordersModal">
-  <div id="ordersModalBox">
-    <div id="ordersModalHead">
+"""
+
+# Orders modal injected separately into each page via ORDERS_MODAL_HTML
+ORDERS_MODAL_HTML = """
+<div id="ordersModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+  <div id="ordersModalBox" style="background:var(--bg-card,#fff);border-radius:16px;width:92%;max-width:900px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.35);overflow:hidden;animation:modalIn .2s ease;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border-color,#e2e8f0);flex-shrink:0;">
       <div>
-        <div id="ordersModalTitle">Orders</div>
-        <div id="ordersModalStats"></div>
+        <div id="ordersModalTitle" style="font-size:16px;font-weight:700;color:var(--text-primary,#1e293b);">Orders</div>
+        <div id="ordersModalStats" style="display:flex;gap:16px;font-size:13px;color:var(--text-secondary,#64748b);margin-top:4px;"></div>
       </div>
-      <button id="ordersModalClose" onclick="closeOrdersModal()">×</button>
+      <button onclick="closeOrdersModal()" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border-color,#e2e8f0);background:none;cursor:pointer;font-size:20px;color:#64748b;line-height:1;">×</button>
     </div>
-    <div id="ordersModalBody"><div id="ordersModalLoader">⏳ Loading orders...</div></div>
-    <div id="ordersModalFoot">
-      <button id="ordersModalCsv" onclick="exportOrdersCSV()">📥 Export CSV</button>
-      <span id="ordersModalCount" style="font-size:12px;color:var(--text-secondary,#64748b)"></span>
+    <div id="ordersModalBody" style="overflow-y:auto;flex:1;padding:0;"></div>
+    <div style="padding:12px 22px;border-top:1px solid var(--border-color,#e2e8f0);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <button onclick="exportOrdersCSV()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border-color,#e2e8f0);background:none;cursor:pointer;font-size:12px;color:#64748b;">📥 Export CSV</button>
+      <span id="ordersModalCount" style="font-size:12px;color:#64748b;"></span>
     </div>
   </div>
 </div>
+<style>@keyframes modalIn{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+#ordersModalTable{width:100%;border-collapse:collapse;font-size:13px;}
+#ordersModalTable th{background:var(--bg-secondary,#f8fafc);color:#64748b;padding:10px 16px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;}
+#ordersModalTable td{padding:9px 16px;border-bottom:1px solid var(--border-color,#e2e8f0);}
+#ordersModalTable tr:hover td{background:var(--bg-hover,#f8fafc);}
+</style>
 <script>
-// ===== ORDERS MODAL =====
-let _ordersData = [];
-function openOrdersModal(url) {
-    const modal = document.getElementById('ordersModal');
-    modal.classList.add('open');
-    document.body.style.overflow = 'hidden';
-    document.getElementById('ordersModalBody').innerHTML = '<div id="ordersModalLoader">⏳ Loading orders...</div>';
-    document.getElementById('ordersModalStats').innerHTML = '';
-    document.getElementById('ordersModalCount').textContent = '';
-    _ordersData = [];
-    // Parse URL params and call /api/orders
-    const params = new URL(url, location.origin).searchParams;
-    const apiUrl = '/api/orders?' + params.toString();
-    fetch(apiUrl).then(r => r.json()).then(data => {
-        _ordersData = data.orders || [];
-        const title = (data.provider || 'Orders') + (data.region ? ' — ' + data.region : '') + (data.date_range ? ' · ' + data.date_range : '');
-        document.getElementById('ordersModalTitle').textContent = title;
-        document.getElementById('ordersModalStats').innerHTML =
-            `<span>Orders: <b>${data.total_orders||0}</b></span>` +
-            `<span>Boxes: <b>${data.total_boxes||0}</b></span>` +
-            `<span>Weight: <b>${data.total_weight||0} kg</b></span>`;
-        document.getElementById('ordersModalCount').textContent = _ordersData.length + ' rows';
-        if (!_ordersData.length) {
-            document.getElementById('ordersModalBody').innerHTML = '<div style="text-align:center;padding:60px;color:#64748b">No orders found</div>';
-            return;
-        }
-        let html = '<table id="ordersModalTable"><thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Region</th><th>Boxes</th><th>Weight (kg)</th></tr></thead><tbody>';
-        _ordersData.forEach((o, i) => {
-            html += `<tr><td style="color:#94a3b8">${i+1}</td><td style="font-weight:600;font-family:monospace">${o.order_id}</td><td>${o.date}</td><td>${o.region||'-'}</td><td>${o.boxes}</td><td>${o.weight}</td></tr>`;
-        });
-        html += '</tbody></table>';
-        document.getElementById('ordersModalBody').innerHTML = html;
-    }).catch(e => {
-        document.getElementById('ordersModalBody').innerHTML = '<div style="text-align:center;padding:60px;color:#ef4444">Failed to load orders</div>';
-    });
+(function(){
+var _od=[];
+window._ordersData=_od;
+window.openOrdersModal=function(url){
+  var m=document.getElementById('ordersModal');
+  if(!m)return;
+  m.style.display='flex';
+  document.body.style.overflow='hidden';
+  document.getElementById('ordersModalBody').innerHTML='<div style="text-align:center;padding:60px;color:#64748b;">⏳ Loading orders...</div>';
+  document.getElementById('ordersModalStats').innerHTML='';
+  document.getElementById('ordersModalCount').textContent='';
+  _od.length=0;
+  var params=new URL(url,location.origin).searchParams;
+  fetch('/api/orders?'+params.toString()).then(function(r){return r.json();}).then(function(data){
+    _od.push.apply(_od,data.orders||[]);
+    var title=(data.provider||'Orders')+(data.region?' — '+data.region:'')+(data.date_range?' · '+data.date_range:'');
+    document.getElementById('ordersModalTitle').textContent=title;
+    document.getElementById('ordersModalStats').innerHTML='<span>Orders: <b style="color:var(--brand-color,#4f46e5)">'+(data.total_orders||0)+'</b></span> <span>Boxes: <b style="color:var(--brand-color,#4f46e5)">'+(data.total_boxes||0)+'</b></span> <span>Weight: <b style="color:var(--brand-color,#4f46e5)">'+(data.total_weight||0)+' kg</b></span>';
+    document.getElementById('ordersModalCount').textContent=_od.length+' rows';
+    if(!_od.length){document.getElementById('ordersModalBody').innerHTML='<div style="text-align:center;padding:60px;color:#64748b">No orders found</div>';return;}
+    var h='<table id="ordersModalTable"><thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Region</th><th>Boxes</th><th>Weight (kg)</th></tr></thead><tbody>';
+    for(var i=0;i<_od.length;i++){var o=_od[i];h+='<tr><td style="color:#94a3b8">'+(i+1)+'</td><td style="font-weight:600;font-family:monospace">'+o.order_id+'</td><td>'+o.date+'</td><td>'+(o.region||'-')+'</td><td>'+o.boxes+'</td><td>'+o.weight+'</td></tr>';}
+    h+='</tbody></table>';
+    document.getElementById('ordersModalBody').innerHTML=h;
+  }).catch(function(){document.getElementById('ordersModalBody').innerHTML='<div style="text-align:center;padding:60px;color:#ef4444">Failed to load orders</div>';});
+};
+window.closeOrdersModal=function(){
+  var m=document.getElementById('ordersModal');
+  if(m)m.style.display='none';
+  document.body.style.overflow='';
+};
+window.exportOrdersCSV=function(){
+  if(!_od.length)return;
+  var rows=[['#','Order ID','Date','Region','Boxes','Weight']];
+  for(var i=0;i<_od.length;i++){var o=_od[i];rows.push([i+1,o.order_id,o.date,o.region||'',o.boxes,o.weight]);}
+  var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\\n');
+  var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\\uFEFF'+encodeURIComponent(csv);a.download='orders.csv';a.click();
+};
+// Backdrop click
+document.getElementById('ordersModal').onclick=function(e){if(e.target===this)closeOrdersModal();};
+// Escape key
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeOrdersModal();});
+// Intercept all order links — use onclick on each link for reliability
+function _attachOrderLinks(){
+  document.querySelectorAll('a.orders-link,a.boxes-link,a.weight-link,a.under20-link,a.over20-link').forEach(function(a){
+    if(a.dataset.omAttached)return;
+    a.dataset.omAttached='1';
+    a.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openOrdersModal(a.href);});
+  });
 }
-function closeOrdersModal() {
-    document.getElementById('ordersModal').classList.remove('open');
-    document.body.style.overflow = '';
+// Run on DOM changes (covers dynamically generated links)
+if(window.MutationObserver){
+  new MutationObserver(function(){_attachOrderLinks();}).observe(document.body,{childList:true,subtree:true});
 }
-function exportOrdersCSV() {
-    if (!_ordersData.length) return;
-    const rows = [['#','Order ID','Date','Region','Boxes','Weight']];
-    _ordersData.forEach((o,i) => rows.push([i+1, o.order_id, o.date, o.region||'', o.boxes, o.weight]));
-    const csv = rows.map(r => r.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
-    const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
-    a.download = 'orders.csv'; a.click();
-}
-// Close on backdrop click
-document.getElementById('ordersModal').addEventListener('click', function(e){ if(e.target===this) closeOrdersModal(); });
-// Close on Escape
-document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeOrdersModal(); });
-// Intercept ALL order links
-document.addEventListener('click', function(e) {
-    const a = e.target.closest('a.orders-link, a.boxes-link, a.weight-link, a.under20-link, a.over20-link');
-    if (!a) return;
-    e.preventDefault();
-    openOrdersModal(a.href);
-}, true);
+// Also run immediately and after load
+_attachOrderLinks();
+window.addEventListener('load',_attachOrderLinks);
+})();
 </script>
 """
 
@@ -1718,7 +1706,7 @@ def dashboard():
 </div>
 <div id="dashboard-content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 async function loadData() {
     document.getElementById('dashboard-content').innerHTML = renderDashboardSkeleton();
