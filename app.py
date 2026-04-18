@@ -4189,24 +4189,25 @@ def fetch_all():
     now = time.time()
     if _bc["data"] and (now - _bc["time"]) < CD: return _bc["data"]
     
-    # AAPKI EXACT COLUMN MAPPING
+    # AAPKI EXACT COLUMN MAPPING — using Sheets API v4 (no redirect/401)
     ECL_ID = "1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA"
     GE_ID  = "1Bt8od4x1xim2CO0vHcpYPR8eoA7L0XWqNsXqBsl9FBI"
+    # format: (sheet_id, gid, col_map, start_row)
     SOURCES = {
-        "ECL QC Center": (f"https://docs.google.com/spreadsheets/d/{ECL_ID}/export?format=csv&gid=0",
+        "ECL QC Center": (ECL_ID, 0,
             {"o":0, "d":1, "b":3, "w":6, "v":10, "title":11, "ic":12, "c":13, "cn":17, "t":25}, 1),
-        "ECL Zone": (f"https://docs.google.com/spreadsheets/d/{ECL_ID}/export?format=csv&gid=928309568",
+        "ECL Zone": (ECL_ID, 928309568,
             {"o":0, "d":1, "b":4, "w":8, "v":13, "title":14, "ic":15, "c":16, "cn":20, "t":28}, 2),
-        "GE Zone": (f"https://docs.google.com/spreadsheets/d/{GE_ID}/export?format=csv&gid=10726393",
+        "GE Zone": (GE_ID, 10726393,
             {"o":0, "d":1, "b":3, "w":6, "v":12, "title":13, "ic":14, "c":15, "cn":19, "t":28}, 2),
     }
-    
+
     cx = ctx()
     res = {}
     rates_cached = _rc["data"] and (now - _rc["time"]) < RATES_CD
-    
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
-        futs = {ex.submit(fetch_sheet, n, u, c, s, cx): n for n, (u, c, s) in SOURCES.items()}
+        futs = {ex.submit(fetch_sheet, n, sid, gid, c, s, cx): n for n, (sid, gid, c, s) in SOURCES.items()}
         futs[ex.submit(fetch_status)] = "STATUS_INLINE"
         if not rates_cached:
             futs[ex.submit(fetch_rates, cx)] = "RATES"
@@ -4264,26 +4265,61 @@ def api_debug_data():
     except Exception as e:
         result["oauth_token"]={"status":"error","error":str(e)}
         token=""
-    # 2. Test sheet URLs with OAuth
+    # 2. Test sheet URLs with Sheets API v4 (no redirect, no 401)
     ECL_ID="1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA"
     GE_ID="1Bt8od4x1xim2CO0vHcpYPR8eoA7L0XWqNsXqBsl9FBI"
     _sid=SHEET_ID.strip()
-    SOURCES={
-        "ECL QC Center":f"https://docs.google.com/spreadsheets/d/{ECL_ID}/export?format=csv&gid=0",
-        "ECL Zone":f"https://docs.google.com/spreadsheets/d/{ECL_ID}/export?format=csv&gid=928309568",
-        "GE Zone":f"https://docs.google.com/spreadsheets/d/{GE_ID}/export?format=csv&gid=10726393",
-        "Status":f"https://docs.google.com/spreadsheets/d/{_sid}/export?format=csv&gid=1570463436",
-    }
     headers={'User-Agent':'Mozilla/5.0','Authorization':f'Bearer {token}'}
-    for name,url in SOURCES.items():
+    # Test metadata + values for each sheet
+    TEST_SHEETS=[
+        ("ECL QC Center", ECL_ID, 0),
+        ("ECL Zone", ECL_ID, 928309568),
+        ("GE Zone", GE_ID, 10726393),
+    ]
+    for name, sid, gid in TEST_SHEETS:
         try:
-            req=urllib.request.Request(url,headers=headers)
-            with urllib.request.urlopen(req,timeout=15,context=cx) as r:
-                raw=r.read().decode("utf-8",errors="ignore")
-            rows=list(csv.reader(raw.splitlines()))
-            result[name]={"status":"ok","total_rows":len(rows),"first_row":rows[0] if rows else [],"second_row":rows[1] if len(rows)>1 else []}
+            # Step 1: resolve gid → sheet name
+            meta_url=f"https://sheets.googleapis.com/v4/spreadsheets/{sid}?fields=sheets.properties"
+            req=urllib.request.Request(meta_url,headers=headers)
+            with urllib.request.urlopen(req,timeout=15) as r:
+                meta=json.loads(r.read().decode("utf-8"))
+            sheet_name=None
+            for s in meta.get("sheets",[]):
+                if str(s.get("properties",{}).get("sheetId",""))==str(gid):
+                    sheet_name=s["properties"]["title"]; break
+            if not sheet_name:
+                result[name]={"status":"error","error":f"gid {gid} not found in spreadsheet"}
+                continue
+            # Step 2: fetch values
+            val_url=f"https://sheets.googleapis.com/v4/spreadsheets/{sid}/values/{urllib.parse.quote(sheet_name)}"
+            req=urllib.request.Request(val_url,headers=headers)
+            with urllib.request.urlopen(req,timeout=15) as r:
+                raw=json.loads(r.read().decode("utf-8"))
+            rows=raw.get("values",[])
+            result[name]={"status":"ok","sheet_name":sheet_name,"total_rows":len(rows),"first_row":rows[0] if rows else [],"second_row":rows[1] if len(rows)>1 else []}
         except Exception as e:
             result[name]={"status":"error","error":str(e)}
+    # Also test status sheet
+    try:
+        st_url=f"https://sheets.googleapis.com/v4/spreadsheets/{_sid}?fields=sheets.properties"
+        req=urllib.request.Request(st_url,headers=headers)
+        with urllib.request.urlopen(req,timeout=15) as r:
+            meta=json.loads(r.read().decode("utf-8"))
+        sheet_name=None
+        for s in meta.get("sheets",[]):
+            if str(s.get("properties",{}).get("sheetId",""))=="1570463436":
+                sheet_name=s["properties"]["title"]; break
+        if sheet_name:
+            val_url=f"https://sheets.googleapis.com/v4/spreadsheets/{_sid}/values/{urllib.parse.quote(sheet_name)}"
+            req=urllib.request.Request(val_url,headers=headers)
+            with urllib.request.urlopen(req,timeout=15) as r:
+                raw=json.loads(r.read().decode("utf-8"))
+            rows=raw.get("values",[])
+            result["Status"]={"status":"ok","sheet_name":sheet_name,"total_rows":len(rows)}
+        else:
+            result["Status"]={"status":"error","error":"gid 1570463436 not found"}
+    except Exception as e:
+        result["Status"]={"status":"error","error":str(e)}
     return jsonify(result)
 
 @app.route("/api/nexus/app_data")
@@ -4401,12 +4437,34 @@ def bundling_spa():
     html=BUNDLING_HTML.replace("window.onload=init;","const GUEST="+gflag+";\nconst USER_EMAIL='"+email+"';\n"+rm_js+"\nwindow.onload=init;")
     return render_template_string(html)
 
-def fetch_sheet(name,url,col,start,cx):
+def resolve_sheet_name(sheet_id, gid):
+    """Resolve a gid (tab id) to its sheet title using Sheets API v4 metadata."""
+    try:
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
+        req = urllib.request.Request(url, headers=get_auth_headers())
+        with urllib.request.urlopen(req, timeout=15) as r:
+            meta = json.loads(r.read().decode("utf-8"))
+        for s in meta.get("sheets", []):
+            p = s.get("properties", {})
+            if str(p.get("sheetId", "")) == str(gid):
+                return p.get("title", "")
+    except Exception as e:
+        print(f"[WARN] resolve_sheet_name({sheet_id},{gid}): {e}")
+    return None
+
+def fetch_sheet(name, sheet_id, gid, col, start, cx):
+    sheet_name = resolve_sheet_name(sheet_id, gid)
+    if not sheet_name:
+        print(f"[ERROR] {name}: could not resolve gid {gid} to sheet name")
+        return name, []
+    api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{urllib.parse.quote(sheet_name)}"
     for attempt in range(2):
         try:
-            req=urllib.request.Request(url,headers=get_auth_headers())
-            with urllib.request.urlopen(req,timeout=30,context=cx) as r:
-                data=list(csv.reader(r.read().decode("utf-8",errors="ignore").splitlines()))
+            req = urllib.request.Request(api_url, headers=get_auth_headers())
+            with urllib.request.urlopen(req, timeout=30) as r:
+                raw = json.loads(r.read().decode("utf-8"))
+            rows_raw = raw.get("values", [])
+            data = [[str(c) for c in row] for row in rows_raw]
             rows=[]; lo=ld=lv=lc=lcn=lt=""
             for row in data[start:]:
                 if not row: continue
