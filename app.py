@@ -3891,6 +3891,7 @@ from datetime import datetime, timedelta
 from flask import jsonify, request, session, render_template_string
 
 _bc={"data":None,"time":0}; _jc={"data":None,"time":0}; _sc={"data":None,"time":0}; _rc={"data":None,"time":0}
+_snc={}  # sheet name cache: (sheet_id, gid) -> tab name (permanent, tab names don't change)
 CD=600
 RATES_CD=3600
 
@@ -4096,16 +4097,7 @@ def fetch_status():
     try:
         clean_id = SHEET_ID.strip()
         gid = "1570463436"
-        # Resolve gid → sheet tab name via Sheets API v4 metadata
-        meta_url = f"https://sheets.googleapis.com/v4/spreadsheets/{clean_id}?fields=sheets.properties"
-        req = urllib.request.Request(meta_url, headers=get_auth_headers())
-        with urllib.request.urlopen(req, timeout=15) as r:
-            meta = json.loads(r.read().decode("utf-8"))
-        sheet_name = None
-        for s in meta.get("sheets", []):
-            p = s.get("properties", {})
-            if str(p.get("sheetId", "")) == gid:
-                sheet_name = p.get("title", ""); break
+        sheet_name = resolve_sheet_name(clean_id, gid)
         if not sheet_name:
             print(f"[STATUS] gid {gid} not found"); return {}
         val_url = f"https://sheets.googleapis.com/v4/spreadsheets/{clean_id}/values/{urllib.parse.quote(sheet_name)}"
@@ -4130,19 +4122,9 @@ def fetch_journey():
     try:
         sheet_id = "1493mgOui4QYrJ9hXGKaFHm2Bj21cqW51BkeX6gzWccg"
         gid = "1409345116"
-        # Resolve gid → sheet tab name via Sheets API v4 metadata
-        meta_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
-        req = urllib.request.Request(meta_url, headers=get_auth_headers())
-        with urllib.request.urlopen(req, timeout=15) as r:
-            meta = json.loads(r.read().decode("utf-8"))
-        sheet_name = None
-        for s in meta.get("sheets", []):
-            p = s.get("properties", {})
-            if str(p.get("sheetId", "")) == gid:
-                sheet_name = p.get("title", ""); break
+        sheet_name = resolve_sheet_name(sheet_id, gid)
         if not sheet_name:
             print(f"[JOURNEY] gid {gid} not found in spreadsheet"); return {}
-        # Fetch data via Sheets API v4 (no redirect, no 401)
         val_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{urllib.parse.quote(sheet_name)}"
         req = urllib.request.Request(val_url, headers=get_auth_headers())
         with urllib.request.urlopen(req, timeout=20) as r:
@@ -4472,16 +4454,21 @@ def bundling_spa():
     return render_template_string(html)
 
 def resolve_sheet_name(sheet_id, gid):
-    """Resolve a gid (tab id) to its sheet title using Sheets API v4 metadata."""
+    """Resolve a gid (tab id) to its sheet title using Sheets API v4 metadata. Cached permanently."""
+    global _snc
+    key = (sheet_id, str(gid))
+    if key in _snc:
+        return _snc[key]
     try:
         url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
         req = urllib.request.Request(url, headers=get_auth_headers())
         with urllib.request.urlopen(req, timeout=15) as r:
             meta = json.loads(r.read().decode("utf-8"))
+        # Cache ALL tabs from this spreadsheet in one go
         for s in meta.get("sheets", []):
             p = s.get("properties", {})
-            if str(p.get("sheetId", "")) == str(gid):
-                return p.get("title", "")
+            _snc[(sheet_id, str(p.get("sheetId", "")))] = p.get("title", "")
+        return _snc.get(key)
     except Exception as e:
         print(f"[WARN] resolve_sheet_name({sheet_id},{gid}): {e}")
     return None
@@ -5522,16 +5509,6 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     </button>
   </nav>
   <div class="sb-foot">
-    <button class="theme-pill" onclick="toggleTheme()" id="themePill">
-      <span class="icon">☀️</span>
-      <span id="themeLabel">Light Mode</span>
-    </button>
-    <a href="/" class="sb-back">
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="flex-shrink:0">
-        <path d="M9 11L5 7l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      Main Dashboard
-    </a>
     <div class="sb-foot-divider"></div>
     <div class="sb-user-card" id="sbUserCard">
       <div class="sb-user-avatar" id="sbAvatar">?</div>
@@ -5559,6 +5536,10 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
     </div>
     <div class="tb-actions">
       <button class="tbtn tbtn-refresh" onclick="hardRefresh()">🔄 Refresh</button>
+      <a href="/" class="tbtn tbtn-home" title="Main Dashboard" style="text-decoration:none;display:flex;align-items:center;gap:5px">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 11L5 7l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Main Dashboard
+      </a>
       <button class="tbtn tbtn-theme-inline" id="themeInlineBtn" onclick="toggleTheme()" title="Toggle theme">☀️</button>
     </div>
   </div>
