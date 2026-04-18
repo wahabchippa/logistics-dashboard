@@ -885,6 +885,27 @@ BASE_STYLES = """
     /* Responsive */
     @media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(2, 1fr); } .stats-row-5 { grid-template-columns: repeat(3, 1fr); } .kpi-grid { grid-template-columns: repeat(2, 1fr); } .comparison-grid { grid-template-columns: 1fr; } .comparison-vs { display: none; } }
     @media (max-width: 768px) { .sidebar { width: 60px; } .main-content { margin-left: 60px; } .sidebar-toggle { width: 22px; height: 22px; right: -10px; } .stats-row, .stats-row-5, .kpi-grid { grid-template-columns: 1fr; } }
+
+    /* ===== ORDERS POPUP MODAL ===== */
+    #ordersModal { display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.55); backdrop-filter:blur(4px); align-items:center; justify-content:center; }
+    #ordersModal.open { display:flex; }
+    #ordersModalBox { background:var(--bg-card,#fff); border-radius:16px; width:92%; max-width:900px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.35); overflow:hidden; animation:modalIn .2s ease; }
+    @keyframes modalIn { from{transform:scale(.95);opacity:0} to{transform:scale(1);opacity:1} }
+    #ordersModalHead { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border-color,#e2e8f0); flex-shrink:0; }
+    #ordersModalTitle { font-size:16px; font-weight:700; color:var(--text-primary,#1e293b); }
+    #ordersModalStats { display:flex; gap:16px; font-size:13px; color:var(--text-secondary,#64748b); }
+    #ordersModalStats span b { color:var(--brand-color,#4f46e5); }
+    #ordersModalClose { width:32px; height:32px; border-radius:50%; border:1px solid var(--border-color,#e2e8f0); background:none; cursor:pointer; font-size:18px; color:var(--text-secondary,#64748b); display:flex; align-items:center; justify-content:center; }
+    #ordersModalClose:hover { background:var(--bg-hover,#f1f5f9); }
+    #ordersModalBody { overflow-y:auto; flex:1; padding:0; }
+    #ordersModalLoader { text-align:center; padding:60px; color:var(--text-secondary,#64748b); font-size:14px; }
+    #ordersModalTable { width:100%; border-collapse:collapse; font-size:13px; }
+    #ordersModalTable th { background:var(--bg-secondary,#f8fafc); color:var(--text-secondary,#64748b); padding:10px 16px; text-align:left; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.5px; position:sticky; top:0; }
+    #ordersModalTable td { padding:9px 16px; border-bottom:1px solid var(--border-color,#e2e8f0); color:var(--text-primary,#1e293b); }
+    #ordersModalTable tr:hover td { background:var(--bg-hover,#f8fafc); }
+    #ordersModalFoot { padding:12px 22px; border-top:1px solid var(--border-color,#e2e8f0); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+    #ordersModalCsv { padding:7px 14px; border-radius:8px; border:1px solid var(--border-color,#e2e8f0); background:none; cursor:pointer; font-size:12px; color:var(--text-secondary,#64748b); display:flex; align-items:center; gap:5px; }
+    #ordersModalCsv:hover { background:var(--brand-color,#4f46e5); color:#fff; border-color:var(--brand-color,#4f46e5); }
 </style>
 """
 
@@ -1111,6 +1132,85 @@ if (Notification && Notification.permission === 'default') {
     Notification.requestPermission();
 }
 setInterval(checkNotifications, 30000);
+</script>
+
+<!-- ===== ORDERS POPUP MODAL ===== -->
+<div id="ordersModal">
+  <div id="ordersModalBox">
+    <div id="ordersModalHead">
+      <div>
+        <div id="ordersModalTitle">Orders</div>
+        <div id="ordersModalStats"></div>
+      </div>
+      <button id="ordersModalClose" onclick="closeOrdersModal()">×</button>
+    </div>
+    <div id="ordersModalBody"><div id="ordersModalLoader">⏳ Loading orders...</div></div>
+    <div id="ordersModalFoot">
+      <button id="ordersModalCsv" onclick="exportOrdersCSV()">📥 Export CSV</button>
+      <span id="ordersModalCount" style="font-size:12px;color:var(--text-secondary,#64748b)"></span>
+    </div>
+  </div>
+</div>
+<script>
+// ===== ORDERS MODAL =====
+let _ordersData = [];
+function openOrdersModal(url) {
+    const modal = document.getElementById('ordersModal');
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    document.getElementById('ordersModalBody').innerHTML = '<div id="ordersModalLoader">⏳ Loading orders...</div>';
+    document.getElementById('ordersModalStats').innerHTML = '';
+    document.getElementById('ordersModalCount').textContent = '';
+    _ordersData = [];
+    // Parse URL params and call /api/orders
+    const params = new URL(url, location.origin).searchParams;
+    const apiUrl = '/api/orders?' + params.toString();
+    fetch(apiUrl).then(r => r.json()).then(data => {
+        _ordersData = data.orders || [];
+        const title = (data.provider || 'Orders') + (data.region ? ' — ' + data.region : '') + (data.date_range ? ' · ' + data.date_range : '');
+        document.getElementById('ordersModalTitle').textContent = title;
+        document.getElementById('ordersModalStats').innerHTML =
+            `<span>Orders: <b>${data.total_orders||0}</b></span>` +
+            `<span>Boxes: <b>${data.total_boxes||0}</b></span>` +
+            `<span>Weight: <b>${data.total_weight||0} kg</b></span>`;
+        document.getElementById('ordersModalCount').textContent = _ordersData.length + ' rows';
+        if (!_ordersData.length) {
+            document.getElementById('ordersModalBody').innerHTML = '<div style="text-align:center;padding:60px;color:#64748b">No orders found</div>';
+            return;
+        }
+        let html = '<table id="ordersModalTable"><thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Region</th><th>Boxes</th><th>Weight (kg)</th></tr></thead><tbody>';
+        _ordersData.forEach((o, i) => {
+            html += `<tr><td style="color:#94a3b8">${i+1}</td><td style="font-weight:600;font-family:monospace">${o.order_id}</td><td>${o.date}</td><td>${o.region||'-'}</td><td>${o.boxes}</td><td>${o.weight}</td></tr>`;
+        });
+        html += '</tbody></table>';
+        document.getElementById('ordersModalBody').innerHTML = html;
+    }).catch(e => {
+        document.getElementById('ordersModalBody').innerHTML = '<div style="text-align:center;padding:60px;color:#ef4444">Failed to load orders</div>';
+    });
+}
+function closeOrdersModal() {
+    document.getElementById('ordersModal').classList.remove('open');
+    document.body.style.overflow = '';
+}
+function exportOrdersCSV() {
+    if (!_ordersData.length) return;
+    const rows = [['#','Order ID','Date','Region','Boxes','Weight']];
+    _ordersData.forEach((o,i) => rows.push([i+1, o.order_id, o.date, o.region||'', o.boxes, o.weight]));
+    const csv = rows.map(r => r.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+    const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+    a.download = 'orders.csv'; a.click();
+}
+// Close on backdrop click
+document.getElementById('ordersModal').addEventListener('click', function(e){ if(e.target===this) closeOrdersModal(); });
+// Close on Escape
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeOrdersModal(); });
+// Intercept ALL order links
+document.addEventListener('click', function(e) {
+    const a = e.target.closest('a.orders-link, a.boxes-link, a.weight-link, a.under20-link, a.over20-link');
+    if (!a) return;
+    e.preventDefault();
+    openOrdersModal(a.href);
+}, true);
 </script>
 """
 
@@ -3677,6 +3777,68 @@ def api_notifications():
 
 def add_notification(msg):
     notifications.append(msg)
+
+@app.route('/api/orders')
+@login_required
+def api_orders():
+    if session.get('role') == 'guest':
+        return jsonify({"error": "Access denied"}), 403
+    provider_short = request.args.get('provider')
+    start_str = request.args.get('start')
+    end_str = request.args.get('end')
+    region = request.args.get('region', '').strip()
+    day = request.args.get('day')
+    if not provider_short or not start_str or not end_str:
+        return jsonify({"error": "Missing parameters"}), 400
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0)
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+    except:
+        return jsonify({"error": "Invalid date"}), 400
+    def collect(provider, rows):
+        out = []
+        for row_idx, row in enumerate(rows):
+            if row_idx < provider['start_row'] - 1: continue
+            try:
+                if len(row) <= max(provider['date_col'], provider['box_col'], provider['weight_col'], provider['region_col'], provider.get('order_col', 0)): continue
+                date_val = row[provider['date_col']].strip() if provider['date_col'] < len(row) else ''
+                parsed_date = parse_date(date_val)
+                if not parsed_date or not (start_date <= parsed_date <= end_date): continue
+                row_region = row[provider['region_col']].strip().upper() if provider['region_col'] < len(row) else ''
+                if region and row_region != region: continue
+                if day:
+                    dd = datetime.strptime(day, '%Y-%m-%d')
+                    if parsed_date.date() != dd.date(): continue
+                order_id = row[provider.get('order_col', 0)].strip() if provider.get('order_col', 0) < len(row) else 'N/A'
+                try: boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
+                except: boxes = 0
+                try: weight = round(float(row[provider['weight_col']].replace(',', '')), 1) if row[provider['weight_col']].strip() else 0.0
+                except: weight = 0.0
+                out.append({'order_id': order_id, 'date': parsed_date.strftime('%Y-%m-%d'), 'region': row_region, 'boxes': boxes, 'weight': weight})
+            except: continue
+        return out
+    all_orders = []
+    provider_display = provider_short
+    if provider_short == 'all':
+        provider_display = 'All Providers'
+        for p in PROVIDERS:
+            rows = fetch_sheet_data(p['sheet'])
+            if rows: all_orders.extend(collect(p, rows))
+    else:
+        p = next((x for x in PROVIDERS if x['short'] == provider_short), None)
+        if not p: return jsonify({"error": "Provider not found"}), 404
+        rows = fetch_sheet_data(p['sheet'])
+        if rows: all_orders = collect(p, rows)
+        provider_display = provider_short
+    all_orders.sort(key=lambda x: x['date'])
+    total_boxes = sum(o['boxes'] for o in all_orders)
+    total_weight = round(sum(o['weight'] for o in all_orders), 1)
+    date_range = f"{start_str} → {end_str}" if start_str != end_str else start_str
+    return jsonify({
+        "provider": provider_display, "region": region, "date_range": date_range,
+        "total_orders": len(all_orders), "total_boxes": total_boxes, "total_weight": total_weight,
+        "orders": all_orders
+    })
 
 @app.route('/orders')
 @login_required
