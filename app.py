@@ -290,14 +290,14 @@ BASE_STYLES = """
     [data-theme="dark"] .stat-card:nth-child(even) { background: #0a0a0f; }
 
     /* ===== DARK THEME OVERRIDES — fix all hardcoded light colors ===== */
-    [data-theme="dark"] .trend-badge.up { background: rgba(16,185,129,0.15); color: #34d399; border-color: rgba(16,185,129,0.3); }
-    [data-theme="dark"] .trend-badge.down { background: rgba(239,68,68,0.15); color: #f87171; border-color: rgba(239,68,68,0.3); }
-    [data-theme="dark"] .kpi-trend.up { background: rgba(16,185,129,0.15); color: #34d399; border-color: rgba(16,185,129,0.3); }
-    [data-theme="dark"] .kpi-trend.down { background: rgba(239,68,68,0.15); color: #f87171; border-color: rgba(239,68,68,0.3); }
-    [data-theme="dark"] .winner-card { background: rgba(251,191,36,0.08); border-color: rgba(251,191,36,0.4); }
-    [data-theme="dark"] .rank-1 { background: rgba(251,191,36,0.25); color: #fbbf24; }
-    [data-theme="dark"] .rank-2 { background: rgba(148,163,184,0.2); color: #cbd5e1; }
-    [data-theme="dark"] .rank-3 { background: rgba(249,168,212,0.15); color: #f9a8d4; }
+    body[data-theme="dark"] .trend-badge.up { background: rgba(16,185,129,0.15) !important; color: #34d399 !important; border-color: rgba(16,185,129,0.3) !important; }
+    body[data-theme="dark"] .trend-badge.down { background: rgba(239,68,68,0.15) !important; color: #f87171 !important; border-color: rgba(239,68,68,0.3) !important; }
+    body[data-theme="dark"] .kpi-trend.up { background: rgba(16,185,129,0.15) !important; color: #34d399 !important; border-color: rgba(16,185,129,0.3) !important; }
+    body[data-theme="dark"] .kpi-trend.down { background: rgba(239,68,68,0.15) !important; color: #f87171 !important; border-color: rgba(239,68,68,0.3) !important; }
+    body[data-theme="dark"] .winner-card { background: rgba(251,191,36,0.08) !important; border-color: rgba(251,191,36,0.4) !important; }
+    body[data-theme="dark"] .rank-1 { background: rgba(251,191,36,0.25) !important; color: #fbbf24 !important; }
+    body[data-theme="dark"] .rank-2 { background: rgba(148,163,184,0.2) !important; color: #cbd5e1 !important; }
+    body[data-theme="dark"] .rank-3 { background: rgba(249,168,212,0.15) !important; color: #f9a8d4 !important; }
     [data-theme="dark"] input[type="date"],
     [data-theme="dark"] input[type="text"],
     [data-theme="dark"] select { background: #1a1a1a; color: #f1f5f9; border-color: #333; color-scheme: dark; }
