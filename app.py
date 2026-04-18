@@ -4498,7 +4498,9 @@ def api_debug_data():
             with urllib.request.urlopen(req,timeout=15) as r:
                 raw=json.loads(r.read().decode("utf-8"))
             rows=raw.get("values",[])
-            result["Status"]={"status":"ok","sheet_name":sheet_name,"total_rows":len(rows)}
+            result["Status"]={"status":"ok","sheet_name":sheet_name,"total_rows":len(rows),
+                "header_row":rows[0] if rows else [],
+                "sample_rows":rows[1:4] if len(rows)>1 else []}
         else:
             result["Status"]={"status":"error","error":"gid 1570463436 not found"}
     except Exception as e:
