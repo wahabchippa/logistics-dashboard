@@ -4250,34 +4250,26 @@ def fetch_status():
     now = time.time()
     if _sc["data"] and (now - _sc["time"]) < CD: return _sc["data"]
     try:
-        # SS is a published public CSV — no auth needed, no redirect issues
-        req = urllib.request.Request(SS, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=20, context=ctx()) as r:
-            data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
-        if not data:
-            print("[STATUS] empty response"); return {}
-        # Auto-detect header row and status column
-        header = [c.strip().lower() for c in data[0]] if data else []
-        print(f"[STATUS] header: {header[:10]}")
-        # Try to find status column by header name
-        status_col = 5  # default Column F
-        for i, h in enumerate(header):
-            if h in ["status","order_status","fleek_status","fulfillment_status","dispatch_status"]:
-                status_col = i; break
-        # Find order ID column
-        id_col = 0
-        for i, h in enumerate(header):
-            if h in ["fleek_id","order_id","orderid","order","id"]:
-                id_col = i; break
+        # Status is in the Journey sheet — col E (idx 4) = order ID, col F (idx 5) = status
+        sheet_id = "1493mgOui4QYrJ9hXGKaFHm2Bj21cqW51BkeX6gzWccg"
+        gid = "1409345116"
+        sheet_name = resolve_sheet_name(sheet_id, gid)
+        if not sheet_name:
+            print(f"[STATUS] gid {gid} not found"); return {}
+        val_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{urllib.parse.quote(sheet_name)}"
+        req = urllib.request.Request(val_url, headers=get_auth_headers())
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = json.loads(r.read().decode("utf-8"))
+        rows_raw = raw.get("values", [])
+        data = [[str(c) for c in row] for row in rows_raw]
         sm = {}
         for row in data[1:]:
             p = row + [""] * 20
-            fid = str(p[id_col]).strip()
-            if fid and fid.lower() not in ["", "nan", "fleek_id", "fleek id", "order", "order_id"]:
-                val = str(p[status_col]).strip()
-                if val:
-                    sm[fid.upper()] = val
-        print(f"[STATUS] loaded {len(sm)} statuses, col={status_col}, id_col={id_col}")
+            fid = str(p[4]).strip()   # Column E = order ID
+            status = str(p[5]).strip() # Column F = status
+            if fid and fid.lower() not in ["", "nan", "fleek_id", "fleek id", "order_id"] and status:
+                sm[fid.upper()] = status
+        print(f"[STATUS] loaded {len(sm)} statuses from journey sheet")
         _sc["data"] = sm; _sc["time"] = now; return sm
     except Exception as e:
         print(f"[STATUS] fetch error: {e}"); return {}
