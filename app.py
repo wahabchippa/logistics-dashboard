@@ -284,18 +284,67 @@ BASE_STYLES = """
         --skeleton-highlight: #2a2a3a;
     }
 
-    [data-theme="dark"] .provider-card:nth-child(odd) {
-        background: #0f0f15;
-    }
-    [data-theme="dark"] .provider-card:nth-child(even) {
-        background: #0a0a0f;
-    }
-    [data-theme="dark"] .stat-card:nth-child(odd) {
-        background: #0f0f15;
-    }
-    [data-theme="dark"] .stat-card:nth-child(even) {
-        background: #0a0a0f;
-    }
+    [data-theme="dark"] .provider-card:nth-child(odd) { background: #0f0f15; }
+    [data-theme="dark"] .provider-card:nth-child(even) { background: #0a0a0f; }
+    [data-theme="dark"] .stat-card:nth-child(odd) { background: #0f0f15; }
+    [data-theme="dark"] .stat-card:nth-child(even) { background: #0a0a0f; }
+
+    /* ===== DARK THEME OVERRIDES — fix all hardcoded light colors ===== */
+    [data-theme="dark"] .trend-badge.up { background: rgba(16,185,129,0.15); color: #34d399; border-color: rgba(16,185,129,0.3); }
+    [data-theme="dark"] .trend-badge.down { background: rgba(239,68,68,0.15); color: #f87171; border-color: rgba(239,68,68,0.3); }
+    [data-theme="dark"] .kpi-trend.up { background: rgba(16,185,129,0.15); color: #34d399; border-color: rgba(16,185,129,0.3); }
+    [data-theme="dark"] .kpi-trend.down { background: rgba(239,68,68,0.15); color: #f87171; border-color: rgba(239,68,68,0.3); }
+    [data-theme="dark"] .winner-card { background: rgba(251,191,36,0.08); border-color: rgba(251,191,36,0.4); }
+    [data-theme="dark"] .rank-1 { background: rgba(251,191,36,0.25); color: #fbbf24; }
+    [data-theme="dark"] .rank-2 { background: rgba(148,163,184,0.2); color: #cbd5e1; }
+    [data-theme="dark"] .rank-3 { background: rgba(249,168,212,0.15); color: #f9a8d4; }
+    [data-theme="dark"] input[type="date"],
+    [data-theme="dark"] input[type="text"],
+    [data-theme="dark"] select { background: #1a1a1a; color: #f1f5f9; border-color: #333; color-scheme: dark; }
+    [data-theme="dark"] input::placeholder { color: #555; }
+    [data-theme="dark"] .data-table td { color: #e2e8f0; }
+    [data-theme="dark"] .data-table td.region-col { background: #111; color: #e2e8f0; }
+    [data-theme="dark"] .data-table tr.total-row td { background: rgba(129,140,248,0.12); color: #818cf8; }
+    [data-theme="dark"] .leaderboard-table td { color: #e2e8f0; }
+    [data-theme="dark"] .comparison-name { color: #f1f5f9; }
+    [data-theme="dark"] .comparison-stat-value { color: #f1f5f9; }
+    [data-theme="dark"] .page-title { color: #f1f5f9; }
+    [data-theme="dark"] .provider-name { color: #f1f5f9; }
+    [data-theme="dark"] .stat-value { color: #f1f5f9; }
+    [data-theme="dark"] .kpi-value { color: #f1f5f9; }
+    [data-theme="dark"] .chart-title { color: #f1f5f9; }
+    [data-theme="dark"] .nav-item { color: #94a3b8; }
+    [data-theme="dark"] .nav-item.active { color: #818cf8; background: rgba(129,140,248,0.12); border-left-color: #818cf8; }
+    [data-theme="dark"] .nav-item:hover { background: #1a1a1a; color: #f1f5f9; }
+    [data-theme="dark"] .nav-section-title { color: #555; }
+    [data-theme="dark"] .search-input { background: #111; color: #f1f5f9; }
+    [data-theme="dark"] #search-results { box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+    [data-theme="dark"] .day-data { background: #080808; border-color: #222; }
+    [data-theme="dark"] .day-data span, [data-theme="dark"] .day-data a { border-right-color: #222; }
+    [data-theme="dark"] .date-range-picker { background: #111; border-color: #222; }
+    [data-theme="dark"] .qbtn { background: #1a1a1a; border-color: #333; color: #94a3b8; }
+    [data-theme="dark"] .qbtn:hover { background: #222; color: #f1f5f9; }
+    [data-theme="dark"] .range-input { background: #1a1a1a; border-color: #333; color: #f1f5f9; }
+    [data-theme="dark"] .week-badge { background: rgba(129,140,248,0.12); color: #818cf8; }
+    [data-theme="dark"] .provider-card { border-color: #1a1a1a; }
+    [data-theme="dark"] .card-header { border-bottom-color: #1a1a1a; }
+    [data-theme="dark"] .chart-card { background: #0f0f15; border-color: #1a1a1a; }
+    [data-theme="dark"] .kpi-card { background: #0f0f15; border-color: #1a1a1a; }
+    [data-theme="dark"] .comparison-card { background: #0f0f15; border-color: #1a1a1a; }
+    [data-theme="dark"] .stat-card { border-color: #1a1a1a; }
+    [data-theme="dark"] .stat-icon { background: #1a1a1a; border-color: #222; }
+    [data-theme="dark"] .tab-btn { background: #1a1a1a; border-color: #333; color: #94a3b8; }
+    [data-theme="dark"] .tab-btn:hover { background: #222; color: #f1f5f9; }
+    [data-theme="dark"] .tab-btn.active { background: #818cf8; border-color: #818cf8; color: #fff; }
+    [data-theme="dark"] .action-btn { background: #111; border-color: #333; color: #f1f5f9; }
+    [data-theme="dark"] .action-btn:hover { border-color: #818cf8; color: #818cf8; }
+    [data-theme="dark"] .download-btn { background: #1a1a1a; border-color: #333; color: #94a3b8; }
+    [data-theme="dark"] .download-btn:hover { background: #818cf8; color: #fff; border-color: #818cf8; }
+    [data-theme="dark"] .last-update { border-top-color: #1a1a1a; color: #555; }
+    [data-theme="dark"] .search-item:hover { background: #1a1a1a; }
+    [data-theme="dark"] .search-item-title { color: #f1f5f9; }
+    [data-theme="dark"] .header-main { color: #f1f5f9; }
+    [data-theme="dark"] .logo-icon { background: linear-gradient(145deg, #4f46e5, #7c3aed); }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; font-size: 13px; line-height: 1.4; transition: background 0.3s, color 0.3s; }
@@ -1031,6 +1080,8 @@ function toggleTheme() {
     document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
     localStorage.setItem('theme', isDark ? 'light' : 'dark');
     updateThemeButton();
+    if(typeof applyChartTheme==='function') applyChartTheme();
+    if(typeof loadData==='function') setTimeout(loadData, 50);
 }
 function updateThemeButton() {
     const btn = document.getElementById('theme-toggle-btn');
@@ -2311,8 +2362,12 @@ def analytics():
 ''' + SIDEBAR_SCRIPT + SHARED_JS + '''
 <script>
 let charts = {};
-Chart.defaults.color = '#475569';
-Chart.defaults.borderColor = '#e2e8f0';
+function applyChartTheme(){
+    const dark = document.body.getAttribute('data-theme')==='dark';
+    Chart.defaults.color = dark ? '#94a3b8' : '#475569';
+    Chart.defaults.borderColor = dark ? '#222222' : '#e2e8f0';
+}
+applyChartTheme();
 
 function destroyCharts() { Object.values(charts).forEach(c => c && c.destroy()); charts = {}; }
 
