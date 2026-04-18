@@ -397,7 +397,10 @@ BASE_STYLES = """
         display: flex;
         flex-direction: column;
         overflow-y: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
     }
+    .sidebar::-webkit-scrollbar { display: none; }
     .sidebar.collapsed { width: 60px; }
     .sidebar-header {
         display: flex;
