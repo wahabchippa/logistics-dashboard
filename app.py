@@ -454,6 +454,9 @@ BASE_STYLES = """
         width: 0;
         display: none;
     }
+    .sidebar.collapsed .sidebar-header { justify-content: center; }
+    .sidebar.collapsed .logo-icon { display: none; }
+    .sidebar.collapsed .sidebar-toggle { margin-left: 0; transform: rotate(180deg); }
     .nav-section { margin-bottom: 12px; }
     .nav-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 4px 8px; margin-bottom: 2px; font-weight: 600; }
     .sidebar.collapsed .nav-section-title { opacity: 0; }
