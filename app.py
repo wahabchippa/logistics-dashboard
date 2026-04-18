@@ -4275,9 +4275,9 @@ def fetch_status():
         data = [[str(c) for c in row] for row in rows_raw]
         sm={}
         for row in data[1:]:
-            p=row+[""]*10; fid=str(p[0]).strip()
+            p=row+[""]*20; fid=str(p[0]).strip()
             if fid and fid.lower() not in ["","nan","fleek_id","fleek id","order"]:
-                sm[fid.upper()]=str(p[1]).strip() or "—"
+                sm[fid.upper()]=str(p[5]).strip() or "—"
         _sc["data"]=sm; _sc["time"]=now; return sm
     except Exception as e:
         print(f"[STATUS] fetch error: {e}"); return {}
