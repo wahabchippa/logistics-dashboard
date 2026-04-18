@@ -290,6 +290,7 @@ BASE_STYLES = """
     [data-theme="dark"] .stat-card:nth-child(even) { background: #0a0a0f; }
 
     /* ===== DARK THEME OVERRIDES — fix all hardcoded light colors ===== */
+    /* ===== DARK THEME — ALL FIXES ===== */
     body[data-theme="dark"] .trend-badge.up { background: rgba(16,185,129,0.15) !important; color: #34d399 !important; border-color: rgba(16,185,129,0.3) !important; }
     body[data-theme="dark"] .trend-badge.down { background: rgba(239,68,68,0.15) !important; color: #f87171 !important; border-color: rgba(239,68,68,0.3) !important; }
     body[data-theme="dark"] .kpi-trend.up { background: rgba(16,185,129,0.15) !important; color: #34d399 !important; border-color: rgba(16,185,129,0.3) !important; }
@@ -298,6 +299,50 @@ BASE_STYLES = """
     body[data-theme="dark"] .rank-1 { background: rgba(251,191,36,0.25) !important; color: #fbbf24 !important; }
     body[data-theme="dark"] .rank-2 { background: rgba(148,163,184,0.2) !important; color: #cbd5e1 !important; }
     body[data-theme="dark"] .rank-3 { background: rgba(249,168,212,0.15) !important; color: #f9a8d4 !important; }
+
+    /* All clickable number links — bright in dark mode */
+    body[data-theme="dark"] a.orders-link,
+    body[data-theme="dark"] a.boxes-link,
+    body[data-theme="dark"] a.weight-link,
+    body[data-theme="dark"] a.under20-link,
+    body[data-theme="dark"] a.over20-link { color: #60a5fa !important; }
+    body[data-theme="dark"] a.orders-link:hover,
+    body[data-theme="dark"] a.boxes-link:hover,
+    body[data-theme="dark"] a.weight-link:hover,
+    body[data-theme="dark"] a.under20-link:hover,
+    body[data-theme="dark"] a.over20-link:hover { color: #a78bfa !important; }
+
+    /* Leaderboard table — all text bright */
+    body[data-theme="dark"] .leaderboard-table td { color: #e2e8f0 !important; background: transparent; }
+    body[data-theme="dark"] .leaderboard-table a { color: #60a5fa !important; }
+    body[data-theme="dark"] .leaderboard-table .provider-name-text { color: #f1f5f9 !important; }
+
+    /* Data table cells — bright text */
+    body[data-theme="dark"] .data-table td { color: #e2e8f0 !important; }
+    body[data-theme="dark"] .data-table td.region-col { color: #f1f5f9 !important; background: #111 !important; }
+    body[data-theme="dark"] .data-table tr.total-row td { color: #818cf8 !important; background: rgba(129,140,248,0.1) !important; }
+
+    /* Day-data cells — brighter colors */
+    body[data-theme="dark"] .day-data span:nth-child(1), body[data-theme="dark"] .day-data a:nth-child(1) { color: #93c5fd !important; background: rgba(59,130,246,0.18) !important; }
+    body[data-theme="dark"] .day-data span:nth-child(2), body[data-theme="dark"] .day-data a:nth-child(2) { color: #6ee7b7 !important; background: rgba(16,185,129,0.18) !important; }
+    body[data-theme="dark"] .day-data span:nth-child(3), body[data-theme="dark"] .day-data a:nth-child(3) { color: #fcd34d !important; background: rgba(245,158,11,0.18) !important; }
+    body[data-theme="dark"] .day-data span:nth-child(4), body[data-theme="dark"] .day-data a:nth-child(4) { color: #c4b5fd !important; background: rgba(139,92,246,0.18) !important; }
+    body[data-theme="dark"] .day-data span:nth-child(5), body[data-theme="dark"] .day-data a:nth-child(5) { color: #f9a8d4 !important; background: rgba(236,72,153,0.18) !important; }
+
+    /* Stat values, KPI values — white */
+    body[data-theme="dark"] .stat-value,
+    body[data-theme="dark"] .kpi-value,
+    body[data-theme="dark"] .stat-item .stat-value { color: #f1f5f9 !important; }
+
+    /* Comparison stats */
+    body[data-theme="dark"] .comparison-stat-value { color: #f1f5f9 !important; }
+    body[data-theme="dark"] .comparison-name { color: #f1f5f9 !important; }
+
+    /* Provider name in card header */
+    body[data-theme="dark"] .provider-name { color: #f1f5f9 !important; }
+
+    /* Total row in leaderboard */
+    body[data-theme="dark"] .leaderboard-table tr:last-child td { color: #818cf8 !important; font-weight: 700; }
     [data-theme="dark"] input[type="date"],
     [data-theme="dark"] input[type="text"],
     [data-theme="dark"] select { background: #1a1a1a; color: #f1f5f9; border-color: #333; color-scheme: dark; }
