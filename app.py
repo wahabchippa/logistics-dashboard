@@ -1263,7 +1263,7 @@ def ACTION_BAR_HTML(role):
 SIDEBAR_HTML = """
 <nav class="sidebar" id="sidebar">
     <div class="sidebar-header">
-        <div class="logo-icon">3P</div>
+        <div class="logo-icon">3PL</div>
         <div class="header-titles">
             <div class="header-main">3PL Dashboard</div>
             <div class="header-sub">
@@ -1618,7 +1618,7 @@ LOGIN_HTML = '''
 </head>
 <body>
 <div class="card">
-  <div class="logo">3P</div>
+  <div class="logo">3PL</div>
   <h1>Welcome Back</h1>
   <p class="subtitle">3PL Operations Dashboard</p>
 
@@ -4694,7 +4694,7 @@ BUNDLING_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bundling Intelligence Hub</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111827'/%3E%3Crect x='2' y='2' width='28' height='28' rx='6' fill='%231e1b4b'/%3E%3Ctext x='16' y='14' font-family='Arial' font-size='7' font-weight='900' fill='%23a78bfa' text-anchor='middle'%3E3PL%3C/text%3E%3Ctext x='16' y='24' font-family='Arial' font-size='6' font-weight='700' fill='%2360a5fa' text-anchor='middle'%3EDASH%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -5602,7 +5602,7 @@ table.mx th.ds,table.mx td.ds{border-left:2px solid var(--bd2);}
 <aside class="sidebar" id="sidebar">
   <div class="sb-head">
     <div class="sb-logo-wrap">
-      <div class="sb-ico">3P</div>
+      <div class="sb-ico">3PL</div>
       <div class="sb-info">
         <div class="sb-title">3PL Dashboard</div>
         <div class="sb-sub">Bundling Intelligence Hub</div>
