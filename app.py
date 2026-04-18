@@ -4428,6 +4428,41 @@ def api_debug_rates():
     out={k:[{"min":mn,"max":mx,"rate":r} for mn,mx,r in v] for k,v in rm_brackets.items()}
     return jsonify({"countries":len(rm_brackets),"brackets":out,"averages":rm_avg})
 
+@app.route("/api/nexus/debug_status")
+def api_debug_status():
+    mode=user_mode()
+    if not mode: return jsonify({"error":"Access denied"}),403
+    result={}
+    # 1. Test SS URL directly
+    try:
+        req=urllib.request.Request(SS,headers={"User-Agent":"Mozilla/5.0"})
+        with urllib.request.urlopen(req,timeout=20,context=ctx()) as r:
+            raw=r.read().decode("utf-8",errors="ignore")
+        rows=list(csv.reader(raw.splitlines()))
+        result["ss_url"]={"status":"ok","total_rows":len(rows),
+            "header":rows[0] if rows else [],
+            "row1":rows[1] if len(rows)>1 else [],
+            "row2":rows[2] if len(rows)>2 else [],
+            "row3":rows[3] if len(rows)>3 else []}
+    except Exception as e:
+        result["ss_url"]={"status":"error","error":str(e)}
+    # 2. Show current sm cache sample
+    sm=_sc.get("data") or {}
+    sm_sample=dict(list(sm.items())[:5])
+    result["status_cache"]={"count":len(sm),"sample":sm_sample}
+    # 3. Show bundle order IDs sample
+    sheets=_bc.get("data") or {}
+    bundle_ids=[]
+    for src in ["ECL QC Center","ECL Zone","GE Zone"]:
+        for r in (sheets.get(src) or [])[:3]:
+            bundle_ids.append(r.get("order",""))
+    result["bundle_order_ids_sample"]=bundle_ids
+    # 4. Check overlap
+    if sm and bundle_ids:
+        matches=[oid for oid in bundle_ids if oid.upper() in sm]
+        result["id_match_test"]={"checked":len(bundle_ids),"matched":len(matches),"matches":matches}
+    return jsonify(result)
+
 @app.route("/api/nexus/clear_cache")
 def api_clear_cache():
     global _bc, _sc, _jc, _snc
