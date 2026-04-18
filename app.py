@@ -390,7 +390,7 @@ BASE_STYLES = """
         width: 220px;
         background: var(--bg-sidebar);
         border-right: none;
-        box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+        box-shadow: none;
         padding: 16px 12px;
         transition: all 0.2s ease;
         z-index: 100;
@@ -4092,10 +4092,25 @@ def fetch_status():
     if _sc["data"] and (now - _sc["time"]) < CD: return _sc["data"]
     try:
         clean_id = SHEET_ID.strip()
-        url = f"https://docs.google.com/spreadsheets/d/{clean_id}/export?format=csv&gid=1570463436"
-        req = urllib.request.Request(url, headers=get_auth_headers())
-        with urllib.request.urlopen(req, timeout=20, context=ctx()) as r:
-            data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
+        gid = "1570463436"
+        # Resolve gid → sheet tab name via Sheets API v4 metadata
+        meta_url = f"https://sheets.googleapis.com/v4/spreadsheets/{clean_id}?fields=sheets.properties"
+        req = urllib.request.Request(meta_url, headers=get_auth_headers())
+        with urllib.request.urlopen(req, timeout=15) as r:
+            meta = json.loads(r.read().decode("utf-8"))
+        sheet_name = None
+        for s in meta.get("sheets", []):
+            p = s.get("properties", {})
+            if str(p.get("sheetId", "")) == gid:
+                sheet_name = p.get("title", ""); break
+        if not sheet_name:
+            print(f"[STATUS] gid {gid} not found"); return {}
+        val_url = f"https://sheets.googleapis.com/v4/spreadsheets/{clean_id}/values/{urllib.parse.quote(sheet_name)}"
+        req = urllib.request.Request(val_url, headers=get_auth_headers())
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = json.loads(r.read().decode("utf-8"))
+        rows_raw = raw.get("values", [])
+        data = [[str(c) for c in row] for row in rows_raw]
         sm={}
         for row in data[1:]:
             p=row+[""]*10; fid=str(p[0]).strip()
@@ -4111,10 +4126,26 @@ def fetch_journey():
     if _jc["data"] and (now - _jc["time"]) < CD: return _jc["data"]
     try:
         sheet_id = "1493mgOui4QYrJ9hXGKaFHm2Bj21cqW51BkeX6gzWccg"
-        url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid=1409345116"
-        req = urllib.request.Request(url, headers=get_auth_headers())
-        with urllib.request.urlopen(req, timeout=20, context=ctx()) as r:
-            data = list(csv.reader(r.read().decode("utf-8", errors="ignore").splitlines()))
+        gid = "1409345116"
+        # Resolve gid → sheet tab name via Sheets API v4 metadata
+        meta_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}?fields=sheets.properties"
+        req = urllib.request.Request(meta_url, headers=get_auth_headers())
+        with urllib.request.urlopen(req, timeout=15) as r:
+            meta = json.loads(r.read().decode("utf-8"))
+        sheet_name = None
+        for s in meta.get("sheets", []):
+            p = s.get("properties", {})
+            if str(p.get("sheetId", "")) == gid:
+                sheet_name = p.get("title", ""); break
+        if not sheet_name:
+            print(f"[JOURNEY] gid {gid} not found in spreadsheet"); return {}
+        # Fetch data via Sheets API v4 (no redirect, no 401)
+        val_url = f"https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{urllib.parse.quote(sheet_name)}"
+        req = urllib.request.Request(val_url, headers=get_auth_headers())
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = json.loads(r.read().decode("utf-8"))
+        rows_raw = raw.get("values", [])
+        data = [[str(c) for c in row] for row in rows_raw]
         jm = {}
         for row in data[1:]:
             p = row + [""] * 100
