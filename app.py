@@ -1496,6 +1496,7 @@ USERS = {
     "albash@joinfleek.com":       "Albash123",
     "waris@joinfleek.com":        "waris123",
     "moiz@joinfleek.com":         "moiz1234",
+    "usman@joinfleek.com":         "usman1234",
 }
 
 # Guest login ke liye ek simple password (optional, agar seedha guest button chahiye)
