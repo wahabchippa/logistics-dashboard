@@ -1238,6 +1238,7 @@ ORDERS_MODAL_HTML = """
 #ordersModalTable th{background:var(--bg-secondary,#f8fafc);color:#64748b;padding:10px 16px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;}
 #ordersModalTable td{padding:9px 16px;border-bottom:1px solid var(--border-color,#e2e8f0);}
 #ordersModalTable tr:hover td{background:var(--bg-hover,#f8fafc);}
+body[data-theme="dark"] #ordersModalTable tr:hover td{background:#1e2a3a !important;color:#e2e8f0 !important;}
 </style>
 <script>
 (function(){
@@ -1351,7 +1352,7 @@ SIDEBAR_HTML = """
         <div class="header-titles">
             <div class="header-main">3PL Dashboard</div>
             <div class="header-sub">
-                <span class="admin-name">wahab</span> <span class="admin-role">Admin</span>
+                <span class="admin-name">{user_name}</span> <span class="admin-role">{user_role}</span>
             </div>
         </div>
         <div class="sidebar-toggle" onclick="toggleSidebar()">«</div>
@@ -1422,8 +1423,11 @@ SIDEBAR_HTML = """
     </div>
     <div class="sidebar-footer">
         <div class="admin-info">
-            <div class="admin-avatar">AW</div>
-            <div class="admin-role">{user_role}</div>
+            <div class="admin-avatar">{user_initials}</div>
+            <div style="display:flex;flex-direction:column;overflow:hidden;flex:1;min-width:0;">
+                <span style="font-size:12px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{user_name}</span>
+                <span style="font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{user_email}</span>
+            </div>
         </div>
         <a href="/logout" class="logout-btn">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
@@ -1457,9 +1461,16 @@ document.addEventListener('DOMContentLoaded', function() {
 def sidebar(active, role='guest'):
     keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','whatsapp','achievements','worldmap']
     kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
-    
+    # Get real user info from session
+    email = (session.get('email') or '').strip().lower()
+    name_part = email.split('@')[0] if email else ('Admin' if role == 'admin' else 'Guest')
+    display_name = name_part.replace('.', ' ').replace('_', ' ').title()
+    initials = ''.join([w[0].upper() for w in display_name.split()[:2]]) if display_name else ('A' if role=='admin' else 'G')
+    kwargs['user_name'] = display_name
+    kwargs['user_email'] = email or ''
+    kwargs['user_initials'] = initials
     if role == 'admin':
-        kwargs['user_role'] = 'Administrator'
+        kwargs['user_role'] = 'Admin'
         kwargs['forecast_link'] = """
         <div class="nav-section">
             <div class="nav-section-title">TOOLS</div>
