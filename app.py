@@ -5142,13 +5142,15 @@ body{background:var(--bg);color:var(--txt);}
 .rtitle .rv{font-size:14px;color:var(--txt2);font-weight:600;}
 
 /* Footer */
-.rcard-ft{padding:12px 20px;background:var(--bg3);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-.rft-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--lbl);flex-shrink:0;padding-top:2px;}
-.tid-list{display:flex;flex-wrap:wrap;gap:5px;}
-.tid-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:6px;padding:5px 12px;}
-.tid-n{font-size:10px;font-weight:700;color:#6366f1;}
-.tid-v{font-family:monospace;font-size:13px;color:#818cf8;font-weight:700;}
-.mawb-chip{margin-left:auto;font-family:monospace;font-size:13px;font-weight:800;color:#10b981;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);border-radius:6px;padding:5px 12px;}
+.rcard-ft{padding:14px 20px;background:var(--bg3);border-top:1px solid var(--bd);display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap;}
+.ft-block{display:flex;flex-direction:column;gap:8px;}
+.ft-block.grow{flex:1;}
+.rft-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--lbl);}
+.tid-list{display:flex;flex-wrap:wrap;gap:6px;}
+.tid-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(99,102,241,.12);border:1.5px solid rgba(99,102,241,.3);border-radius:8px;padding:7px 14px;}
+.tid-n{font-size:11px;font-weight:800;color:#a5b4fc;min-width:16px;}
+.tid-v{font-family:monospace;font-size:14px;color:#818cf8;font-weight:800;letter-spacing:.3px;}
+.mawb-chip{font-family:monospace;font-size:15px;font-weight:800;color:#10b981;background:rgba(16,185,129,.12);border:1.5px solid rgba(16,185,129,.3);border-radius:8px;padding:7px 16px;display:inline-block;letter-spacing:.5px;}
 
 /* Empty / loading */
 .empty{text-align:center;padding:70px 20px;}
@@ -5238,15 +5240,16 @@ function doSearch(){
       html+='<div class="rtitle"><span class="rl">Title</span><span class="rv">'+escH(r.title||'—')+'</span></div>';
       // TIDs + MAWB footer
       html+='<div class="rcard-ft">';
-      html+='<span class="rft-label">Tracking IDs'+(tids.length?' ('+tids.length+')':'')+'&nbsp;</span>';
+      html+='<div class="ft-block grow"><div class="rft-label">Tracking IDs'+(tids.length?' ('+tids.length+')':'')+'</div>';
       if(tids.length){
         html+='<div class="tid-list">';
         tids.forEach(function(t,i){html+='<div class="tid-chip"><span class="tid-n">'+(i+1)+'</span><span class="tid-v">'+escH(t)+'</span></div>';});
         html+='</div>';
-      } else { html+='<span style="font-size:12px;color:#253040;">—</span>'; }
-      if(r.mawb&&r.mawb.trim()){
-        html+='<span class="mawb-chip">'+escH(r.mawb)+'</span>';
-      }
+      } else { html+='<span style="font-size:13px;color:var(--lbl);">—</span>'; }
+      html+='</div>';
+      html+='<div class="ft-block"><div class="rft-label">MAWB</div>';
+      html+=(r.mawb&&r.mawb.trim()?'<span class="mawb-chip">'+escH(r.mawb)+'</span>':'<span style="font-size:13px;color:var(--lbl);">—</span>');
+      html+='</div>';
       html+='</div></div>';
     });
     document.getElementById('results').innerHTML=html;
