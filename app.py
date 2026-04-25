@@ -4002,6 +4002,8 @@ def api_order_lookup():
     if not q:
         return jsonify({"results": [], "error": "Enter an order number"})
     q_upper = q.upper()
+    # Also try matching with underscores/spaces stripped for flexible search
+    q_stripped = q_upper.replace('_', '').replace(' ', '').replace('-', '')
     now = time.time()
     def fetch_source(src):
         key = f"{src['sid']}_{src['tab']}"
@@ -4026,7 +4028,9 @@ def api_order_lookup():
             p = row + [''] * 60
             order_val = p[src['o']].strip()
             if not order_val: continue
-            if q_upper not in order_val.upper(): continue
+            order_upper = order_val.upper()
+            order_stripped = order_upper.replace('_', '').replace(' ', '').replace('-', '')
+            if q_upper not in order_upper and q_stripped not in order_stripped: continue
             matches.append({
                 "provider": src['name'],
                 "order": order_val,
@@ -5070,7 +5074,8 @@ body{font-family:'Inter',sans-serif;background:#07070f;color:#e2e8f0;min-height:
 .tid-list{display:flex;flex-wrap:wrap;gap:4px;}
 .tid-chip{display:inline-flex;align-items:center;gap:5px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:5px;padding:3px 9px;}
 .tid-n{font-size:9px;font-weight:700;color:#6366f1;}
-.tid-v{font-family:'Courier New',monospace;font-size:11px;color:#818cf8;font-weight:700;}
+.tid-v{font-family:monospace;font-size:11px;color:#818cf8;font-weight:700;}
+.mawb-chip{margin-left:auto;font-family:monospace;font-size:12px;font-weight:800;color:#10b981;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:5px;padding:3px 10px;}
 
 /* Empty / loading */
 .empty{text-align:center;padding:70px 20px;color:#1a2535;}
@@ -5166,7 +5171,7 @@ function doSearch(){
         html+='</div>';
       } else { html+='<span style="font-size:12px;color:#253040;">—</span>'; }
       if(r.mawb&&r.mawb.trim()){
-        html+='<span style="margin-left:auto;font-family:\'Courier New\',monospace;font-size:12px;font-weight:800;color:#10b981;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:5px;padding:3px 10px;">'+escH(r.mawb)+'</span>';
+        html+='<span class="mawb-chip">'+escH(r.mawb)+'</span>';
       }
       html+='</div></div>';
     });
