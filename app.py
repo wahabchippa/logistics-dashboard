@@ -1507,7 +1507,7 @@ function sidebarForceRefresh() {
 """
 
 def sidebar(active, role='guest'):
-    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','whatsapp','achievements','worldmap']
+    keys = ['dashboard','weekly','daily_region','flight','analytics','kpi','comparison','regions','monthly','whatsapp','achievements','worldmap','orderlookup']
     kwargs = {f'active_{k}': ('active' if k == active else '') for k in keys}
     # Get real user info from session
     email = (session.get('email') or '').strip().lower()
@@ -4056,91 +4056,7 @@ def api_order_lookup():
 def order_lookup_page():
     if (session.get('email') or '').strip().lower() != ORDER_LOOKUP_EMAIL:
         return "Access Denied", 403
-    role = session.get('role', 'guest')
-    return render_template_string('''<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Order Lookup - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''
-<style>
-.lookup-wrap{max-width:960px;margin:0 auto;}
-.lookup-title{font-size:22px;font-weight:700;color:var(--text-main);margin-bottom:4px;}
-.lookup-sub{font-size:13px;color:var(--text-muted);margin-bottom:24px;}
-.search-row{display:flex;gap:10px;margin-bottom:28px;}
-.lookup-input{flex:1;padding:12px 16px;border:1.5px solid var(--border-color);border-radius:10px;font-size:15px;background:var(--bg-card);color:var(--text-main);outline:none;transition:border-color .2s;}
-.lookup-input:focus{border-color:var(--brand-color);}
-.lookup-btn{padding:12px 24px;background:var(--brand-color);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s;white-space:nowrap;}
-.lookup-btn:hover{opacity:.85;}.lookup-btn:disabled{opacity:.5;cursor:not-allowed;}
-.result-card{background:var(--bg-card);border:1px solid var(--border-color);border-radius:14px;padding:18px 22px;margin-bottom:14px;animation:fadeIn .3s ease;}
-.result-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
-.provider-badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px;}
-.order-num{font-size:17px;font-weight:700;font-family:monospace;color:var(--text-main);}
-.result-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
-.result-field{background:var(--hover-bg);border-radius:8px;padding:10px 12px;}
-.result-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:4px;}
-.result-value{font-size:13px;font-weight:500;color:var(--text-main);word-break:break-all;}
-.tid-val{font-family:monospace;font-size:12px;color:var(--brand-color)!important;font-weight:600!important;}
-.mawb-val{font-family:monospace;font-size:12px;color:#10b981!important;font-weight:600!important;}
-.empty-state{text-align:center;padding:60px 20px;color:var(--text-muted);}
-.empty-state .icon{font-size:48px;margin-bottom:12px;}
-.results-count{font-size:13px;color:var(--text-muted);margin-bottom:16px;}
-.results-count b{color:var(--brand-color);}
-</style>
-</head><body>
-''' + sidebar('orderlookup', role) + '''
-<main class="main-content" id="main-content">
-<div class="lookup-wrap">
-  <div class="lookup-title">🔍 Order Lookup</div>
-  <div class="lookup-sub">Search order number across all providers — GE QC, GE Zone, ECL QC, ECL Zone, APX, Kerry</div>
-  <div class="search-row">
-    <input type="text" class="lookup-input" id="lookupInput" placeholder="Enter order number e.g. 86289_70" onkeydown="if(event.key==='Enter')doLookup()">
-    <button class="lookup-btn" id="lookupBtn" onclick="doLookup()">Search</button>
-  </div>
-  <div id="lookupResults"><div class="empty-state"><div class="icon">📦</div><div>Enter an order number to search</div></div></div>
-</div>
-</main>
-''' + SIDEBAR_SCRIPT + '''
-<script>
-function doLookup(){
-  var q=document.getElementById('lookupInput').value.trim();
-  if(!q)return;
-  var btn=document.getElementById('lookupBtn');
-  btn.disabled=true;btn.textContent='Searching...';
-  document.getElementById('lookupResults').innerHTML='<div class="empty-state"><div class="icon">⏳</div><div>Searching all providers...</div></div>';
-  fetch('/api/order-lookup?q='+encodeURIComponent(q))
-  .then(function(r){return r.json();})
-  .then(function(data){
-    btn.disabled=false;btn.textContent='Search';
-    var res=data.results||[];
-    if(!res.length){
-      document.getElementById('lookupResults').innerHTML='<div class="empty-state"><div class="icon">🔎</div><div>No orders found for <b>&quot;'+q+'&quot;</b></div></div>';
-      return;
-    }
-    var html='<div class="results-count">Found <b>'+res.length+'</b> result'+(res.length>1?'s':'')+'</div>';
-    var colors={"GE QC":"#3B82F6","GE Zone":"#8B5CF6","ECL QC":"#10B981","ECL Zone":"#F59E0B","APX":"#EC4899","Kerry":"#EF4444"};
-    res.forEach(function(r){
-      var color=colors[r.provider]||'#4f46e5';
-      html+='<div class="result-card">'
-       +'<div class="result-card-header">'
-       +'<span class="order-num">'+r.order+'</span>'
-       +'<span class="provider-badge" style="background:'+color+'22;color:'+color+'">'+r.provider+'</span>'
-       +'</div><div class="result-grid">'
-       +F('Boxes',r.boxes)+F('Chargeable Wt',r.cw)+F('Vendor',r.vendor)
-       +F('Title',r.title)+F('Item Count',r.item_count)+F('Customer',r.customer)
-       +F('Country',r.country)+FC('Tracking ID',r.tid,'tid-val')+FC('MAWB',r.mawb,'mawb-val')
-       +'</div></div>';
-    });
-    document.getElementById('lookupResults').innerHTML=html;
-  })
-  .catch(function(){
-    btn.disabled=false;btn.textContent='Search';
-    document.getElementById('lookupResults').innerHTML='<div class="empty-state"><div class="icon">❌</div><div>Search failed. Try again.</div></div>';
-  });
-}
-function F(l,v){return '<div class="result-field"><div class="result-label">'+l+'</div><div class="result-value">'+(v||'—')+'</div></div>';}
-function FC(l,v,c){return '<div class="result-field"><div class="result-label">'+l+'</div><div class="result-value '+c+'">'+(v||'—')+'</div></div>';}
-document.getElementById('lookupInput').focus();
-</script>
-</body></html>
-''', favicon=FAVICON)
+    return ORDER_LOOKUP_HTML
 
 @app.route('/orders')
 @login_required
@@ -5035,6 +4951,146 @@ def fetch_sheet(name, sheet_id, gid, col, start, cx):
             print(f"[WARN] {name} attempt {attempt+1}: {e}")
             if attempt==0: time.sleep(0.5)  # shorter retry delay
     return name,[]
+
+ORDER_LOOKUP_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Order Lookup</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:#0f0f1a;color:#e2e8f0;min-height:100vh;}
+:root{--brand:#4f46e5;--brand2:#818cf8;--bg:#0f0f1a;--bg-card:#1a1a2e;--bg-hover:#1e2a3a;--border:#2a2a3e;--text:#e2e8f0;--muted:#64748b;}
+
+/* Header */
+.header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.header-left{display:flex;align-items:center;gap:12px;}
+.logo{width:36px;height:36px;background:var(--brand);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#fff;letter-spacing:-.5px;}
+.header-title{font-size:17px;font-weight:700;color:#fff;}
+.header-sub{font-size:11px;color:var(--muted);margin-top:1px;}
+.back-btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:6px;transition:.2s;}
+.back-btn:hover{border-color:var(--brand2);color:var(--brand2);}
+
+/* Search area */
+.search-wrap{max-width:780px;margin:40px auto 0;padding:0 20px;}
+.search-card{background:var(--bg-card);border:1px solid var(--border);border-radius:18px;padding:32px;margin-bottom:28px;}
+.search-label{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;}
+.search-row{display:flex;gap:10px;}
+.search-input{flex:1;background:#0f0f1a;border:1.5px solid var(--border);border-radius:10px;padding:13px 16px;font-size:15px;color:#fff;outline:none;font-family:inherit;transition:border-color .2s;}
+.search-input:focus{border-color:var(--brand2);}
+.search-input::placeholder{color:#475569;}
+.search-btn{padding:13px 28px;background:var(--brand);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s;white-space:nowrap;}
+.search-btn:hover{background:#4338ca;}.search-btn:disabled{opacity:.5;cursor:not-allowed;}
+.provider-pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
+.pill{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;}
+
+/* Results */
+.results-wrap{max-width:780px;margin:0 auto;padding:0 20px 40px;}
+.results-header{font-size:13px;color:var(--muted);margin-bottom:16px;}
+.results-header b{color:var(--brand2);}
+.result-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:14px;animation:fadeIn .3s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.rc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;}
+.rc-order{font-size:18px;font-weight:700;font-family:monospace;color:#fff;}
+.rc-badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px;}
+.rc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:10px;}
+.rc-field{background:var(--bg-hover);border-radius:8px;padding:11px 13px;}
+.rc-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:5px;}
+.rc-val{font-size:13px;font-weight:500;color:#e2e8f0;word-break:break-all;}
+.rc-val.tid{font-family:monospace;font-size:12px;color:var(--brand2);font-weight:700;}
+.rc-val.mawb{font-family:monospace;font-size:12px;color:#10b981;font-weight:700;}
+.empty{text-align:center;padding:70px 20px;color:var(--muted);}
+.empty .ico{font-size:52px;margin-bottom:14px;}
+.spinner-wrap{text-align:center;padding:70px;color:var(--muted);}
+.spin{width:36px;height:36px;border:3px solid rgba(79,70,229,.2);border-top-color:var(--brand);border-radius:50%;animation:rot 1s linear infinite;margin:0 auto 14px;}
+@keyframes rot{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <div class="logo">3PL</div>
+    <div>
+      <div class="header-title">Order Lookup</div>
+      <div class="header-sub">Search across all providers</div>
+    </div>
+  </div>
+  <a href="/dashboard" class="back-btn">&#8592; Dashboard</a>
+</div>
+
+<div class="search-wrap">
+  <div class="search-card">
+    <div class="search-label">Enter Order Number</div>
+    <div class="search-row">
+      <input type="text" class="search-input" id="searchInput" placeholder="e.g. 86289_70" onkeydown="if(event.key==='Enter')doSearch()">
+      <button class="search-btn" id="searchBtn" onclick="doSearch()">Search</button>
+    </div>
+    <div class="provider-pills">
+      <span class="pill" style="color:#3B82F6;border-color:#3B82F633;background:#3B82F611">GE QC</span>
+      <span class="pill" style="color:#8B5CF6;border-color:#8B5CF633;background:#8B5CF611">GE Zone</span>
+      <span class="pill" style="color:#10B981;border-color:#10B98133;background:#10B98111">ECL QC</span>
+      <span class="pill" style="color:#F59E0B;border-color:#F59E0B33;background:#F59E0B11">ECL Zone</span>
+      <span class="pill" style="color:#EC4899;border-color:#EC489933;background:#EC489911">APX</span>
+      <span class="pill" style="color:#EF4444;border-color:#EF444433;background:#EF444411">Kerry</span>
+    </div>
+  </div>
+</div>
+
+<div class="results-wrap">
+  <div id="resultsArea">
+    <div class="empty"><div class="ico">🔍</div><div>Enter an order number above to search</div></div>
+  </div>
+</div>
+
+<script>
+var COLORS={"GE QC":"#3B82F6","GE Zone":"#8B5CF6","ECL QC":"#10B981","ECL Zone":"#F59E0B","APX":"#EC4899","Kerry":"#EF4444"};
+function doSearch(){
+  var q=document.getElementById('searchInput').value.trim();
+  if(!q)return;
+  var btn=document.getElementById('searchBtn');
+  btn.disabled=true;btn.textContent='Searching...';
+  document.getElementById('resultsArea').innerHTML='<div class="spinner-wrap"><div class="spin"></div><div>Searching all providers...</div></div>';
+  fetch('/api/order-lookup?q='+encodeURIComponent(q))
+  .then(function(r){return r.json();})
+  .then(function(data){
+    btn.disabled=false;btn.textContent='Search';
+    var res=data.results||[];
+    if(!res.length){
+      document.getElementById('resultsArea').innerHTML='<div class="empty"><div class="ico">🔎</div><div>No orders found for <b>'+q+'</b></div></div>';
+      return;
+    }
+    var html='<div class="results-header">Found <b>'+res.length+'</b> result'+(res.length>1?'s':'')+' for <b>'+q+'</b></div>';
+    res.forEach(function(r){
+      var c=COLORS[r.provider]||'#4f46e5';
+      html+='<div class="result-card">'
+       +'<div class="rc-head">'
+       +'<span class="rc-order">'+r.order+'</span>'
+       +'<span class="rc-badge" style="background:'+c+'22;color:'+c+'">'+r.provider+'</span>'
+       +'</div>'
+       +'<div class="rc-grid">'
+       +F('Boxes',r.boxes)+F('Chargeable Wt',r.cw)
+       +F('Vendor',r.vendor)+F('Title',r.title)
+       +F('Item Count',r.item_count)+F('Customer',r.customer)
+       +F('Country',r.country)
+       +FC('Tracking ID',r.tid,'tid')
+       +FC('MAWB',r.mawb,'mawb')
+       +'</div></div>';
+    });
+    document.getElementById('resultsArea').innerHTML=html;
+  })
+  .catch(function(){
+    btn.disabled=false;btn.textContent='Search';
+    document.getElementById('resultsArea').innerHTML='<div class="empty"><div class="ico">❌</div><div>Search failed. Please try again.</div></div>';
+  });
+}
+function F(l,v){return '<div class="rc-field"><div class="rc-label">'+l+'</div><div class="rc-val">'+(v||'—')+'</div></div>';}
+function FC(l,v,c){return '<div class="rc-field"><div class="rc-label">'+l+'</div><div class="rc-val '+c+'">'+(v||'—')+'</div></div>';}
+document.getElementById('searchInput').focus();
+</script>
+</body></html>
+"""
 
 BUNDLING_HTML = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
