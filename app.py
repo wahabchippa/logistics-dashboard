@@ -4001,18 +4001,38 @@ def api_order_lookup():
     q = request.args.get('q', '').strip()
     if not q:
         return jsonify({"results": [], "error": "Enter an order number"})
-    q_upper = q.upper()
-    # Also try matching with underscores/spaces stripped for flexible search
-    q_stripped = q_upper.replace('_', '').replace(' ', '').replace('-', '').replace('/', '')
+
+    def normalize(s):
+        return s.upper().replace('_','').replace(' ','').replace('-','').replace('/','')
+
+    # Support comma-separated multiple terms
+    terms = [t.strip() for t in q.split(',') if t.strip()]
+    terms_upper = [t.upper() for t in terms]
+    terms_norm  = [normalize(t) for t in terms]
+
     now = time.time()
+    def row_matches(order_val, tid_val):
+        o_up   = order_val.upper()
+        o_norm = normalize(order_val)
+        # tid may be comma-separated itself — check each tid token
+        tid_tokens = [t.strip().upper() for t in tid_val.split(',') if t.strip()]
+        tid_norms  = [normalize(t) for t in tid_tokens]
+        for tu, tn in zip(terms_upper, terms_norm):
+            # match order number
+            if tu in o_up or tn in o_norm:
+                return True
+            # match any TID token
+            for tok_up, tok_norm in zip(tid_tokens, tid_norms):
+                if tu in tok_up or tn in tok_norm:
+                    return True
+        return False
+
     def fetch_source(src):
         key = f"{src['sid']}_{src['tab']}"
         cached = _olc.get(key)
         if cached and (now - cached["time"]) < 600:
             rows = cached["rows"]
         else:
-            # Tab name is hardcoded — skip resolve_sheet_name entirely
-            # Limit to columns A:AN (index 0-39) to reduce payload size
             api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{src['sid']}/values/{urllib.parse.quote(src['tab'] + '!A:AN')}"
             try:
                 req = urllib.request.Request(api_url, headers=get_auth_headers())
@@ -4024,13 +4044,16 @@ def api_order_lookup():
                 print(f"[ORDER_LOOKUP] {src['name']}: {e}")
                 return src['name'], []
         matches = []
+        seen = set()
         for row in rows[src['start']:]:
             p = row + [''] * 60
             order_val = p[src['o']].strip()
             if not order_val: continue
-            order_upper = order_val.upper()
-            order_stripped = order_upper.replace('_', '').replace(' ', '').replace('-', '').replace('/', '')
-            if q_upper not in order_upper and q_stripped not in order_stripped: continue
+            tid_val = p[src['tid']].strip()
+            if not row_matches(order_val, tid_val): continue
+            key_dedup = f"{src['name']}|{order_val}"
+            if key_dedup in seen: continue
+            seen.add(key_dedup)
             matches.append({
                 "provider": src['name'],
                 "order": order_val,
@@ -4041,7 +4064,7 @@ def api_order_lookup():
                 "item_count": p[src['ic']].strip(),
                 "customer": p[src['c']].strip(),
                 "country": p[src['cn']].strip(),
-                "tid": p[src['tid']].strip(),
+                "tid": tid_val,
                 "mawb": p[src['mawb']].strip(),
             })
         return src['name'], matches
@@ -5158,7 +5181,7 @@ body{background:var(--bg);color:var(--txt);}
   <div class="hero-sub">Search across GE QC &middot; GE Zone &middot; ECL QC &middot; ECL Zone &middot; APX &middot; Kerry</div>
   <div class="search-wrap">
     <div class="search-box">
-      <input class="si" id="si" placeholder="Enter order number  e.g. 143595_78" onkeydown="if(event.key==='Enter')doSearch()">
+      <input class="si" id="si" placeholder="Order no., TID, or multiple comma-separated  e.g. 143595_78, TRK001" onkeydown="if(event.key==='Enter')doSearch()">
       <button class="sbtn" id="sbtn" onclick="doSearch()">Search</button>
     </div>
     <div class="ws-row"><span id="ws2" style="font-size:11px;color:#334155;"></span></div>
