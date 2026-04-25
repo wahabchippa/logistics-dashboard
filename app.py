@@ -48,6 +48,22 @@ PROVIDERS = [
 
 INVALID_REGIONS = {'', 'N/A', '#N/A', 'COUNTRY', 'REGION', 'DESTINATION', 'ZONE', 'ORDER', 'FLEEK ID', 'DATE', 'CARTONS'}
 
+# ========== ORDER LOOKUP SOURCES ==========
+_GE_SID   = "1Bt8od4x1xim2CO0vHcpYPR8eoA7L0XWqNsXqBsl9FBI"
+_ECL_SID  = "1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA"
+_APX_SID  = "1WrrM_ewt0IcdG9ysKtXfIiSbSla52tsjq6FXP4rRlDo"
+_KERRY_SID= "12p1mTHfQKrmbekNK2H9IROyBxPaaBg1C0T6EDSyioko"
+ORDER_LOOKUP_EMAIL = 'wahab.chippa@joinfleek.com'
+ORDER_LOOKUP_SOURCES = [
+    {"name":"GE QC",    "sid":_GE_SID,    "gid":710036753, "start":1, "o":0,"b":3, "cw":6, "v":12,"ti":13,"ic":14,"c":15,"cn":19,"tid":28,"mawb":31},
+    {"name":"GE Zone",  "sid":_GE_SID,    "gid":10726393,  "start":1, "o":0,"b":3, "cw":6, "v":12,"ti":13,"ic":14,"c":15,"cn":19,"tid":28,"mawb":31},
+    {"name":"ECL QC",   "sid":_ECL_SID,   "gid":0,         "start":1, "o":0,"b":3, "cw":6, "v":10,"ti":11,"ic":12,"c":13,"cn":17,"tid":25,"mawb":27},
+    {"name":"ECL Zone", "sid":_ECL_SID,   "gid":928309568, "start":2, "o":0,"b":4, "cw":8, "v":13,"ti":14,"ic":15,"c":16,"cn":20,"tid":28,"mawb":32},
+    {"name":"APX",      "sid":_APX_SID,   "gid":0,         "start":1, "o":0,"b":3, "cw":6, "v":11,"ti":12,"ic":13,"c":14,"cn":18,"tid":27,"mawb":32},
+    {"name":"Kerry",    "sid":_KERRY_SID, "gid":0,         "start":1, "o":0,"b":4, "cw":7, "v":14,"ti":15,"ic":16,"c":17,"cn":21,"tid":31,"mawb":37},
+]
+_olc = {"data": {}, "time": 0}  # order lookup cache: sheet_key -> rows
+
 ACHIEVEMENTS = {
     'star_5': {'name': '5 Star Week', 'icon': '⭐', 'desc': '1500+ boxes in a week'},
     'star_4': {'name': '4 Star Week', 'icon': '🌟', 'desc': '500+ boxes in a week'},
@@ -1431,6 +1447,7 @@ SIDEBAR_HTML = """
                 <span>Achievements</span>
             </a>
         </div>
+        {tid_link}
     </div>
     <div class="sidebar-footer">
         <div class="admin-info">
@@ -1504,6 +1521,18 @@ def sidebar(active, role='guest'):
         kwargs['user_role'] = 'Admin'
     else:
         kwargs['user_role'] = 'Guest'
+    if email == ORDER_LOOKUP_EMAIL:
+        kwargs['tid_link'] = """
+        <div class="nav-section">
+            <div class="nav-section-title">TOOLS</div>
+            <a href="/order-lookup" class="nav-item {active_orderlookup}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                <span>Order Lookup</span>
+            </a>
+        </div>
+        """.format(**kwargs)
+    else:
+        kwargs['tid_link'] = ''
         
     return SIDEBAR_HTML.format(**kwargs)
 
@@ -3961,6 +3990,157 @@ def api_orders():
         "total_orders": len(all_orders), "total_boxes": total_boxes, "total_weight": total_weight,
         "orders": all_orders
     })
+
+@app.route('/api/order-lookup')
+@login_required
+def api_order_lookup():
+    if (session.get('email') or '').strip().lower() != ORDER_LOOKUP_EMAIL:
+        return jsonify({"error": "Access denied"}), 403
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({"results": [], "error": "Enter an order number"})
+    q_upper = q.upper()
+    cx = ctx()
+    now = time.time()
+    def fetch_source(src):
+        key = f"{src['sid']}_{src['gid']}"
+        if key in _olc["data"] and (now - _olc["time"]) < 600:
+            rows = _olc["data"][key]
+        else:
+            sheet_name = resolve_sheet_name(src['sid'], str(src['gid']))
+            if not sheet_name: return src['name'], []
+            api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{src['sid']}/values/{urllib.parse.quote(sheet_name)}"
+            try:
+                req = urllib.request.Request(api_url, headers=get_auth_headers())
+                with urllib.request.urlopen(req, timeout=25) as r:
+                    raw = json.loads(r.read().decode("utf-8"))
+                rows = [[str(c) for c in row] for row in raw.get("values", [])]
+                _olc["data"][key] = rows
+                _olc["time"] = now
+            except Exception as e:
+                print(f"[ORDER_LOOKUP] {src['name']}: {e}")
+                return src['name'], []
+        matches = []
+        for row in rows[src['start']:]:
+            p = row + [''] * 60
+            order_val = p[src['o']].strip()
+            if not order_val: continue
+            if q_upper not in order_val.upper(): continue
+            matches.append({
+                "provider": src['name'],
+                "order": order_val,
+                "boxes": p[src['b']].strip(),
+                "cw": p[src['cw']].strip(),
+                "vendor": p[src['v']].strip(),
+                "title": p[src['ti']].strip(),
+                "item_count": p[src['ic']].strip(),
+                "customer": p[src['c']].strip(),
+                "country": p[src['cn']].strip(),
+                "tid": p[src['tid']].strip(),
+                "mawb": p[src['mawb']].strip(),
+            })
+        return src['name'], matches
+    all_results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+        futs = {ex.submit(fetch_source, src): src['name'] for src in ORDER_LOOKUP_SOURCES}
+        for f in concurrent.futures.as_completed(futs, timeout=30):
+            try:
+                name, matches = f.result()
+                all_results.extend(matches)
+            except: pass
+    all_results.sort(key=lambda x: x['order'])
+    return jsonify({"results": all_results, "total": len(all_results), "query": q})
+
+@app.route('/order-lookup')
+@login_required
+def order_lookup_page():
+    if (session.get('email') or '').strip().lower() != ORDER_LOOKUP_EMAIL:
+        return "Access Denied", 403
+    role = session.get('role', 'guest')
+    return render_template_string('''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Order Lookup - 3PL</title>{{ favicon|safe }}''' + BASE_STYLES + '''
+<style>
+.lookup-wrap{max-width:960px;margin:0 auto;}
+.lookup-title{font-size:22px;font-weight:700;color:var(--text-main);margin-bottom:4px;}
+.lookup-sub{font-size:13px;color:var(--text-muted);margin-bottom:24px;}
+.search-row{display:flex;gap:10px;margin-bottom:28px;}
+.lookup-input{flex:1;padding:12px 16px;border:1.5px solid var(--border-color);border-radius:10px;font-size:15px;background:var(--bg-card);color:var(--text-main);outline:none;transition:border-color .2s;}
+.lookup-input:focus{border-color:var(--brand-color);}
+.lookup-btn{padding:12px 24px;background:var(--brand-color);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s;white-space:nowrap;}
+.lookup-btn:hover{opacity:.85;}.lookup-btn:disabled{opacity:.5;cursor:not-allowed;}
+.result-card{background:var(--bg-card);border:1px solid var(--border-color);border-radius:14px;padding:18px 22px;margin-bottom:14px;animation:fadeIn .3s ease;}
+.result-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.provider-badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px;}
+.order-num{font-size:17px;font-weight:700;font-family:monospace;color:var(--text-main);}
+.result-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+.result-field{background:var(--hover-bg);border-radius:8px;padding:10px 12px;}
+.result-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:4px;}
+.result-value{font-size:13px;font-weight:500;color:var(--text-main);word-break:break-all;}
+.tid-val{font-family:monospace;font-size:12px;color:var(--brand-color)!important;font-weight:600!important;}
+.mawb-val{font-family:monospace;font-size:12px;color:#10b981!important;font-weight:600!important;}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-muted);}
+.empty-state .icon{font-size:48px;margin-bottom:12px;}
+.results-count{font-size:13px;color:var(--text-muted);margin-bottom:16px;}
+.results-count b{color:var(--brand-color);}
+</style>
+</head><body>
+''' + sidebar('orderlookup', role) + '''
+<main class="main-content" id="main-content">
+<div class="lookup-wrap">
+  <div class="lookup-title">🔍 Order Lookup</div>
+  <div class="lookup-sub">Search order number across all providers — GE QC, GE Zone, ECL QC, ECL Zone, APX, Kerry</div>
+  <div class="search-row">
+    <input type="text" class="lookup-input" id="lookupInput" placeholder="Enter order number e.g. 86289_70" onkeydown="if(event.key==='Enter')doLookup()">
+    <button class="lookup-btn" id="lookupBtn" onclick="doLookup()">Search</button>
+  </div>
+  <div id="lookupResults"><div class="empty-state"><div class="icon">📦</div><div>Enter an order number to search</div></div></div>
+</div>
+</main>
+''' + SIDEBAR_SCRIPT + '''
+<script>
+function doLookup(){
+  var q=document.getElementById('lookupInput').value.trim();
+  if(!q)return;
+  var btn=document.getElementById('lookupBtn');
+  btn.disabled=true;btn.textContent='Searching...';
+  document.getElementById('lookupResults').innerHTML='<div class="empty-state"><div class="icon">⏳</div><div>Searching all providers...</div></div>';
+  fetch('/api/order-lookup?q='+encodeURIComponent(q))
+  .then(function(r){return r.json();})
+  .then(function(data){
+    btn.disabled=false;btn.textContent='Search';
+    var res=data.results||[];
+    if(!res.length){
+      document.getElementById('lookupResults').innerHTML='<div class="empty-state"><div class="icon">🔎</div><div>No orders found for <b>&quot;'+q+'&quot;</b></div></div>';
+      return;
+    }
+    var html='<div class="results-count">Found <b>'+res.length+'</b> result'+(res.length>1?'s':'')+'</div>';
+    var colors={"GE QC":"#3B82F6","GE Zone":"#8B5CF6","ECL QC":"#10B981","ECL Zone":"#F59E0B","APX":"#EC4899","Kerry":"#EF4444"};
+    res.forEach(function(r){
+      var color=colors[r.provider]||'#4f46e5';
+      html+='<div class="result-card">'
+       +'<div class="result-card-header">'
+       +'<span class="order-num">'+r.order+'</span>'
+       +'<span class="provider-badge" style="background:'+color+'22;color:'+color+'">'+r.provider+'</span>'
+       +'</div><div class="result-grid">'
+       +F('Boxes',r.boxes)+F('Chargeable Wt',r.cw)+F('Vendor',r.vendor)
+       +F('Title',r.title)+F('Item Count',r.item_count)+F('Customer',r.customer)
+       +F('Country',r.country)+FC('Tracking ID',r.tid,'tid-val')+FC('MAWB',r.mawb,'mawb-val')
+       +'</div></div>';
+    });
+    document.getElementById('lookupResults').innerHTML=html;
+  })
+  .catch(function(){
+    btn.disabled=false;btn.textContent='Search';
+    document.getElementById('lookupResults').innerHTML='<div class="empty-state"><div class="icon">❌</div><div>Search failed. Try again.</div></div>';
+  });
+}
+function F(l,v){return '<div class="result-field"><div class="result-label">'+l+'</div><div class="result-value">'+(v||'—')+'</div></div>';}
+function FC(l,v,c){return '<div class="result-field"><div class="result-label">'+l+'</div><div class="result-value '+c+'">'+(v||'—')+'</div></div>';}
+document.getElementById('lookupInput').focus();
+</script>
+</body></html>
+''', favicon=FAVICON)
 
 @app.route('/orders')
 @login_required
