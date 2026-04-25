@@ -55,14 +55,14 @@ _APX_SID  = "1WrrM_ewt0IcdG9ysKtXfIiSbSla52tsjq6FXP4rRlDo"
 _KERRY_SID= "12p1mTHfQKrmbekNK2H9IROyBxPaaBg1C0T6EDSyioko"
 ORDER_LOOKUP_EMAIL = 'wahab.chippa@joinfleek.com'
 ORDER_LOOKUP_SOURCES = [
-    {"name":"GE QC",    "sid":_GE_SID,    "gid":710036753, "start":1, "o":0,"b":3, "cw":6, "v":12,"ti":13,"ic":14,"c":15,"cn":19,"tid":28,"mawb":31},
-    {"name":"GE Zone",  "sid":_GE_SID,    "gid":10726393,  "start":1, "o":0,"b":3, "cw":6, "v":12,"ti":13,"ic":14,"c":15,"cn":19,"tid":28,"mawb":31},
-    {"name":"ECL QC",   "sid":_ECL_SID,   "gid":0,         "start":1, "o":0,"b":3, "cw":6, "v":10,"ti":11,"ic":12,"c":13,"cn":17,"tid":25,"mawb":27},
-    {"name":"ECL Zone", "sid":_ECL_SID,   "gid":928309568, "start":2, "o":0,"b":4, "cw":8, "v":13,"ti":14,"ic":15,"c":16,"cn":20,"tid":28,"mawb":32},
-    {"name":"APX",      "sid":_APX_SID,   "gid":0,         "start":1, "o":0,"b":3, "cw":6, "v":11,"ti":12,"ic":13,"c":14,"cn":18,"tid":27,"mawb":32},
-    {"name":"Kerry",    "sid":_KERRY_SID, "gid":0,         "start":1, "o":0,"b":4, "cw":7, "v":14,"ti":15,"ic":16,"c":17,"cn":21,"tid":31,"mawb":37},
+    {"name":"GE QC",    "sid":_GE_SID,    "tab":"Address and Tracking - QC Centre", "start":1, "o":0,"b":3, "cw":6, "v":12,"ti":13,"ic":14,"c":15,"cn":19,"tid":28,"mawb":31},
+    {"name":"GE Zone",  "sid":_GE_SID,    "tab":"Address and Tracking - Zone",       "start":1, "o":0,"b":3, "cw":6, "v":12,"ti":13,"ic":14,"c":15,"cn":19,"tid":28,"mawb":31},
+    {"name":"ECL QC",   "sid":_ECL_SID,   "tab":"Address and Tracking QC Center",    "start":1, "o":0,"b":3, "cw":6, "v":10,"ti":11,"ic":12,"c":13,"cn":17,"tid":25,"mawb":27},
+    {"name":"ECL Zone", "sid":_ECL_SID,   "tab":"Address and Tracking Zone",         "start":2, "o":0,"b":4, "cw":8, "v":13,"ti":14,"ic":15,"c":16,"cn":20,"tid":28,"mawb":32},
+    {"name":"APX",      "sid":_APX_SID,   "tab":"Address and Tracking",              "start":1, "o":0,"b":3, "cw":6, "v":11,"ti":12,"ic":13,"c":14,"cn":18,"tid":27,"mawb":32},
+    {"name":"Kerry",    "sid":_KERRY_SID, "tab":"Address and Tracking",              "start":1, "o":0,"b":4, "cw":7, "v":14,"ti":15,"ic":16,"c":17,"cn":21,"tid":31,"mawb":37},
 ]
-_olc = {"data": {}, "time": 0}  # order lookup cache: sheet_key -> rows
+_olc = {}   # order lookup cache: key -> {"rows": [...], "time": float}
 
 ACHIEVEMENTS = {
     'star_5': {'name': '5 Star Week', 'icon': '⭐', 'desc': '1500+ boxes in a week'},
@@ -4002,23 +4002,21 @@ def api_order_lookup():
     if not q:
         return jsonify({"results": [], "error": "Enter an order number"})
     q_upper = q.upper()
-    cx = ctx()
     now = time.time()
     def fetch_source(src):
-        key = f"{src['sid']}_{src['gid']}"
-        if key in _olc["data"] and (now - _olc["time"]) < 600:
-            rows = _olc["data"][key]
+        key = f"{src['sid']}_{src['tab']}"
+        cached = _olc.get(key)
+        if cached and (now - cached["time"]) < 600:
+            rows = cached["rows"]
         else:
-            sheet_name = resolve_sheet_name(src['sid'], str(src['gid']))
-            if not sheet_name: return src['name'], []
-            api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{src['sid']}/values/{urllib.parse.quote(sheet_name)}"
+            # Tab name is hardcoded — skip resolve_sheet_name entirely
+            api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{src['sid']}/values/{urllib.parse.quote(src['tab'])}"
             try:
                 req = urllib.request.Request(api_url, headers=get_auth_headers())
-                with urllib.request.urlopen(req, timeout=25) as r:
+                with urllib.request.urlopen(req, timeout=30) as r:
                     raw = json.loads(r.read().decode("utf-8"))
                 rows = [[str(c) for c in row] for row in raw.get("values", [])]
-                _olc["data"][key] = rows
-                _olc["time"] = now
+                _olc[key] = {"rows": rows, "time": now}
             except Exception as e:
                 print(f"[ORDER_LOOKUP] {src['name']}: {e}")
                 return src['name'], []
