@@ -78,7 +78,7 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('logged_in'):
-            return redirect(url_for('login'))
+            return redirect(url_for('login', next=request.path))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -1564,6 +1564,8 @@ def login():
     if request.method == 'POST':
         action = request.form.get('action')
 
+        next_url = request.args.get('next') or url_for('dashboard')
+
         # ===== GUEST LOGIN =====
         if action == 'guest':
             session['logged_in'] = True
@@ -1577,9 +1579,9 @@ def login():
 
         if email in USERS and USERS[email] == password:
             session['logged_in'] = True
-            session['role']      = 'admin'   # full access — existing code breaks nahi hoga
-            session['email']     = email      # bundling tool ke liye zarori
-            return redirect(url_for('dashboard'))
+            session['role']      = 'admin'
+            session['email']     = email
+            return redirect(next_url)
         else:
             error = 'Invalid email or password. Please try again.'
 
@@ -4051,7 +4053,7 @@ def api_order_lookup():
     all_results.sort(key=lambda x: x['order'])
     return jsonify({"results": all_results, "total": len(all_results), "query": q})
 
-@app.route('/order-lookup')
+@app.route('/order-lookup', strict_slashes=False)
 @login_required
 def order_lookup_page():
     if (session.get('email') or '').strip().lower() != ORDER_LOOKUP_EMAIL:
