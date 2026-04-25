@@ -594,6 +594,26 @@ BASE_STYLES = """
     .logout-btn:hover { background: rgba(239,68,68,0.1); }
     .logout-btn svg { width: 14px; height: 14px; }
     .sidebar.collapsed .logout-btn span { display: none; }
+    .refresh-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        color: var(--brand-color);
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: 0.2s;
+        width: fit-content;
+    }
+    .refresh-btn:hover { background: rgba(99,102,241,0.1); }
+    .refresh-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .sidebar.collapsed .refresh-btn span { display: none; }
+    .refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
     /* Main Content */
     .main-content { margin-left: 220px; padding: 20px; transition: margin-left 0.2s; min-height: 100vh; }
@@ -1429,6 +1449,10 @@ SIDEBAR_HTML = """
                 <span style="font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{user_email}</span>
             </div>
         </div>
+        <button class="refresh-btn" id="sidebarRefreshBtn" onclick="sidebarForceRefresh()">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            <span>Force Refresh</span>
+        </button>
         <a href="/logout" class="logout-btn">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
             <span>Logout</span>
@@ -1455,6 +1479,22 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('main-content').classList.add('expanded');
     }
 });
+function sidebarForceRefresh() {
+    const btn = document.getElementById('sidebarRefreshBtn');
+    if (!btn) return;
+    btn.classList.add('spinning');
+    btn.disabled = true;
+    fetch('/api/clear-cache')
+        .then(r => r.json())
+        .then(() => {
+            setTimeout(() => { location.reload(); }, 300);
+        })
+        .catch(() => {
+            btn.classList.remove('spinning');
+            btn.disabled = false;
+            alert('Refresh failed. Try again.');
+        });
+}
 </script>
 """
 
@@ -3815,8 +3855,13 @@ def api_daily_summary():
 
 @app.route('/api/clear-cache')
 def clear_cache():
-    global CACHE
+    global CACHE, _bc, _sc, _jc, _rc, _snc
     CACHE = {}
+    _bc["data"] = None; _bc["time"] = 0
+    _sc["data"] = None; _sc["time"] = 0
+    _jc["data"] = None; _jc["time"] = 0
+    _rc["data"] = None; _rc["time"] = 0
+    _snc.clear()
     return jsonify({'status': 'success', 'message': 'Cache cleared'})
 
 @app.route('/api/forecast')
