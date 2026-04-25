@@ -4010,7 +4010,8 @@ def api_order_lookup():
             rows = cached["rows"]
         else:
             # Tab name is hardcoded — skip resolve_sheet_name entirely
-            api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{src['sid']}/values/{urllib.parse.quote(src['tab'])}"
+            # Limit to columns A:AN (index 0-39) to reduce payload size
+            api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{src['sid']}/values/{urllib.parse.quote(src['tab'] + '!A:AN')}"
             try:
                 req = urllib.request.Request(api_url, headers=get_auth_headers())
                 with urllib.request.urlopen(req, timeout=30) as r:
@@ -4050,6 +4051,44 @@ def api_order_lookup():
             except: pass
     all_results.sort(key=lambda x: x['order'])
     return jsonify({"results": all_results, "total": len(all_results), "query": q})
+
+@app.route('/api/order-lookup/warmup')
+@login_required
+def api_order_lookup_warmup():
+    """Pre-fetches all 6 provider sheets into cache so first search is instant."""
+    if (session.get('email') or '').strip().lower() != ORDER_LOOKUP_EMAIL:
+        return jsonify({"error": "Access denied"}), 403
+    now = time.time()
+    fetched = []
+    errors = []
+    def warm_source(src):
+        key = f"{src['sid']}_{src['tab']}"
+        cached = _olc.get(key)
+        if cached and (now - cached["time"]) < 600:
+            return src['name'], True, "cached"
+        api_url = f"https://sheets.googleapis.com/v4/spreadsheets/{src['sid']}/values/{urllib.parse.quote(src['tab'] + '!A:AN')}"
+        try:
+            req = urllib.request.Request(api_url, headers=get_auth_headers())
+            with urllib.request.urlopen(req, timeout=30) as r:
+                raw = json.loads(r.read().decode("utf-8"))
+            rows = [[str(c) for c in row] for row in raw.get("values", [])]
+            _olc[key] = {"rows": rows, "time": now}
+            return src['name'], True, len(rows)
+        except Exception as e:
+            print(f"[WARMUP] {src['name']}: {e}")
+            return src['name'], False, str(e)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+        futs = [ex.submit(warm_source, src) for src in ORDER_LOOKUP_SOURCES]
+        for f in concurrent.futures.as_completed(futs, timeout=35):
+            try:
+                name, ok, info = f.result()
+                if ok:
+                    fetched.append(name)
+                else:
+                    errors.append(name)
+            except Exception as e:
+                errors.append(str(e))
+    return jsonify({"status": "ok", "ready": fetched, "errors": errors})
 
 @app.route('/order-lookup', strict_slashes=False)
 @login_required
@@ -5045,6 +5084,7 @@ body{font-family:'Inter',sans-serif;background:#07070f;color:#e2e8f0;min-height:
     <input class="si" id="si" placeholder="Enter order number e.g. 86289_70" onkeydown="if(event.key==='Enter')doSearch()">
     <button class="sbtn" id="sbtn" onclick="doSearch()">Search</button>
   </div>
+  <div id="wstatus" style="margin-top:10px;font-size:12px;color:#334155;height:18px;transition:color .3s;"></div>
   <div class="pills">
     <span class="pill" style="color:#3B82F6;border-color:#3B82F630;background:#3B82F60e">GE QC</span>
     <span class="pill" style="color:#8B5CF6;border-color:#8B5CF630;background:#8B5CF60e">GE Zone</span>
@@ -5115,6 +5155,29 @@ function fMAWB(l,v){
 }
 function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 document.getElementById('si').focus();
+
+// Warmup: pre-load all sheets in background so first search is instant
+(function warmup(){
+  var ws=document.getElementById('wstatus');
+  ws.style.color='#475569';
+  ws.textContent='⟳ Preparing data for fast search...';
+  fetch('/api/order-lookup/warmup')
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(d.errors&&d.errors.length){
+      ws.style.color='#f59e0b';
+      ws.textContent='⚠ Partial load ('+d.ready.length+'/6). May be slower.';
+    } else {
+      ws.style.color='#10b981';
+      ws.textContent='✓ Ready — all '+d.ready.length+' providers loaded';
+      setTimeout(function(){ws.style.opacity='0';},3000);
+    }
+  })
+  .catch(function(){
+    ws.style.color='#ef4444';
+    ws.textContent='⚠ Could not pre-load data. Search may take longer.';
+  });
+})();
 </script>
 </body></html>
 """
