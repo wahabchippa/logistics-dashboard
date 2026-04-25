@@ -38,12 +38,12 @@ SHEET_ID = '1V03fqI2tGbY3ImkQaoZGwJ98iyrN4z_GXRKRP023zUY        '
 
 # ========== PROVIDERS ==========
 PROVIDERS = [
-    {'name': 'GLOBAL EXPRESS (QC)', 'short': 'GE QC', 'sheet': 'GE QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#3B82F6', 'group': 'GE'},
-    {'name': 'GLOBAL EXPRESS (ZONE)', 'short': 'GE ZONE', 'sheet': 'GE QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 15, 'region_col': 16, 'order_col': 9, 'start_row': 2, 'color': '#8B5CF6', 'group': 'GE'},
-    {'name': 'EXPRESS COURIER LINK  (QC)', 'short': 'ECL QC', 'sheet': 'ECL QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 3, 'color': '#10B981', 'group': 'ECL'},
-    {'name': 'EXPRESS COURIER LINK (ZONE)', 'short': 'ECL ZONE', 'sheet': 'ECL QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 14, 'region_col': 16, 'order_col': 9, 'start_row': 3, 'color': '#F59E0B', 'group': 'ECL'},
-    {'name': 'KERRY', 'short': 'KERRY', 'sheet': 'Kerry', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#EF4444', 'group': 'OTHER'},
-    {'name': 'APX', 'short': 'APX', 'sheet': 'APX', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'order_col': 0, 'start_row': 2, 'color': '#EC4899', 'group': 'OTHER'}
+    {'name': 'GLOBAL EXPRESS (QC)', 'short': 'GE QC', 'sheet': 'GE QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'country_col': 6, 'order_col': 0, 'start_row': 2, 'color': '#3B82F6', 'group': 'GE'},
+    {'name': 'GLOBAL EXPRESS (ZONE)', 'short': 'GE ZONE', 'sheet': 'GE QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 15, 'region_col': 16, 'country_col': 14, 'order_col': 9, 'start_row': 2, 'color': '#8B5CF6', 'group': 'GE'},
+    {'name': 'EXPRESS COURIER LINK  (QC)', 'short': 'ECL QC', 'sheet': 'ECL QC Center & Zone', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'country_col': 6, 'order_col': 0, 'start_row': 3, 'color': '#10B981', 'group': 'ECL'},
+    {'name': 'EXPRESS COURIER LINK (ZONE)', 'short': 'ECL ZONE', 'sheet': 'ECL QC Center & Zone', 'date_col': 10, 'box_col': 11, 'weight_col': 14, 'region_col': 16, 'country_col': 15, 'order_col': 9, 'start_row': 3, 'color': '#F59E0B', 'group': 'ECL'},
+    {'name': 'KERRY', 'short': 'KERRY', 'sheet': 'Kerry', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'country_col': 6, 'order_col': 0, 'start_row': 2, 'color': '#EF4444', 'group': 'OTHER'},
+    {'name': 'APX', 'short': 'APX', 'sheet': 'APX', 'date_col': 1, 'box_col': 2, 'weight_col': 5, 'region_col': 7, 'country_col': 6, 'order_col': 0, 'start_row': 2, 'color': '#EC4899', 'group': 'OTHER'}
 ]
 
 INVALID_REGIONS = {'', 'N/A', '#N/A', 'COUNTRY', 'REGION', 'DESTINATION', 'ZONE', 'ORDER', 'FLEEK ID', 'DATE', 'CARTONS'}
@@ -1281,8 +1281,8 @@ window.openOrdersModal=function(url){
     document.getElementById('ordersModalStats').innerHTML='<span>Orders: <b style="color:var(--brand-color,#4f46e5)">'+(data.total_orders||0)+'</b></span> <span>Boxes: <b style="color:var(--brand-color,#4f46e5)">'+(data.total_boxes||0)+'</b></span> <span>Weight: <b style="color:var(--brand-color,#4f46e5)">'+(data.total_weight||0)+' kg</b></span>';
     document.getElementById('ordersModalCount').textContent=_od.length+' rows';
     if(!_od.length){document.getElementById('ordersModalBody').innerHTML='<div style="text-align:center;padding:60px;color:#64748b">No orders found</div>';return;}
-    var h='<table id="ordersModalTable"><thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Region</th><th>Boxes</th><th>Weight (kg)</th></tr></thead><tbody>';
-    for(var i=0;i<_od.length;i++){var o=_od[i];h+='<tr><td style="color:#94a3b8">'+(i+1)+'</td><td style="font-weight:600;font-family:monospace">'+o.order_id+'</td><td>'+o.date+'</td><td>'+(o.region||'-')+'</td><td>'+o.boxes+'</td><td>'+o.weight+'</td></tr>';}
+    var h='<table id="ordersModalTable"><thead><tr><th>#</th><th>Order ID</th><th>Date</th><th>Region</th><th>Country</th><th>Boxes</th><th>Weight (kg)</th></tr></thead><tbody>';
+    for(var i=0;i<_od.length;i++){var o=_od[i];h+='<tr><td style="color:#94a3b8">'+(i+1)+'</td><td style="font-weight:600;font-family:monospace">'+o.order_id+'</td><td>'+o.date+'</td><td>'+(o.region||'-')+'</td><td>'+(o.country||'-')+'</td><td>'+o.boxes+'</td><td>'+o.weight+'</td></tr>';}
     h+='</tbody></table>';
     document.getElementById('ordersModalBody').innerHTML=h;
   }).catch(function(){document.getElementById('ordersModalBody').innerHTML='<div style="text-align:center;padding:60px;color:#ef4444">Failed to load orders</div>';});
@@ -1294,8 +1294,8 @@ window.closeOrdersModal=function(){
 };
 window.exportOrdersCSV=function(){
   if(!_od.length)return;
-  var rows=[['#','Order ID','Date','Region','Boxes','Weight']];
-  for(var i=0;i<_od.length;i++){var o=_od[i];rows.push([i+1,o.order_id,o.date,o.region||'',o.boxes,o.weight]);}
+  var rows=[['#','Order ID','Date','Region','Country','Boxes','Weight']];
+  for(var i=0;i<_od.length;i++){var o=_od[i];rows.push([i+1,o.order_id,o.date,o.region||'',o.country||'',o.boxes,o.weight]);}
   var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\\n');
   var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,\\uFEFF'+encodeURIComponent(csv);a.download='orders.csv';a.click();
 };
@@ -3930,11 +3930,13 @@ def api_orders():
                     dd = datetime.strptime(day, '%Y-%m-%d')
                     if parsed_date.date() != dd.date(): continue
                 order_id = row[provider.get('order_col', 0)].strip() if provider.get('order_col', 0) < len(row) else 'N/A'
+                country_col = provider.get('country_col')
+                country = row[country_col].strip() if country_col is not None and country_col < len(row) else ''
                 try: boxes = int(float(row[provider['box_col']])) if row[provider['box_col']].strip() else 0
                 except: boxes = 0
                 try: weight = round(float(row[provider['weight_col']].replace(',', '')), 1) if row[provider['weight_col']].strip() else 0.0
                 except: weight = 0.0
-                out.append({'order_id': order_id, 'date': parsed_date.strftime('%Y-%m-%d'), 'region': row_region, 'boxes': boxes, 'weight': weight})
+                out.append({'order_id': order_id, 'date': parsed_date.strftime('%Y-%m-%d'), 'region': row_region, 'country': country, 'boxes': boxes, 'weight': weight})
             except: continue
         return out
     all_orders = []
