@@ -1999,7 +1999,7 @@ def weekly_summary():
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 async function loadData() {
     document.getElementById('content').innerHTML = renderDashboardSkeleton();
@@ -2073,7 +2073,7 @@ def daily_region():
 <div class="stats-row-5" id="stat-cards"></div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <style>
     .provider-section {
         background: var(--bg-card);
@@ -2389,7 +2389,7 @@ def flight_load():
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 async function loadData() {
     document.getElementById('content').innerHTML = renderDashboardSkeleton();
@@ -2456,7 +2456,7 @@ def analytics():
 <div class="chart-card"><div class="chart-title">📊 Weight Categories by 3PL</div><div class="chart-container"><canvas id="weightProviderChart"></canvas></div></div>
 </div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 let charts = {};
 function applyChartTheme(){
@@ -2553,7 +2553,7 @@ def kpi_dashboard():
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 async function loadData() {
     document.getElementById('content').innerHTML = '<div class="kpi-grid">' + 
@@ -2613,7 +2613,7 @@ def comparison():
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <style>
     .comparison-grid {
         display: grid;
@@ -3007,7 +3007,7 @@ def regions():
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 function heatColor(v,mx) {
     const r=v/mx;
@@ -3052,7 +3052,7 @@ def monthly_report():
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 let chart = null;
 async function loadData() {
@@ -3112,7 +3112,7 @@ def whatsapp_report():
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 function copyText(text) {
     navigator.clipboard.writeText(text).then(() => {
@@ -3150,7 +3150,7 @@ def achievements_page():
 </div>
 <div id="content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 async function loadData() {
     document.getElementById('content').innerHTML = renderDashboardSkeleton();
@@ -3189,7 +3189,7 @@ def forecast():
 </div>
 <div id="forecast-content"><div class="loading"><div class="spinner"></div></div></div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 async function loadForecast() {
     document.getElementById('forecast-content').innerHTML = '<div class="forecast-grid">' + 
@@ -3250,7 +3250,7 @@ def logs():
     Last update: <span id="last-update-time">Never</span>
 </div>
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>updateLastUpdateTime();</script>
 </body></html>''', favicon=FAVICON)
 
@@ -3334,7 +3334,7 @@ def world_map():
 <div class="map-legend" id="map-legend"></div>
 
 </main>
-''' + SIDEBAR_SCRIPT + SHARED_JS + '''
+''' + SIDEBAR_SCRIPT + SHARED_JS + ORDERS_MODAL_HTML + '''
 <script>
 let map;
 let markers = [];
