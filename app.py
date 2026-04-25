@@ -4997,114 +4997,95 @@ ORDER_LOOKUP_HTML = """<!DOCTYPE html>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Order Lookup — 3PL</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;font-family:'Inter',sans-serif;background:#06060f;color:#e2e8f0;}
+html,body{height:100%;font-family:'Inter',sans-serif;background:#060610;color:#e2e8f0;}
 body{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
 
 /* ── Topbar ── */
-.topbar{flex-shrink:0;background:#0a0a18;border-bottom:1px solid #151528;padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;z-index:100;}
+.topbar{flex-shrink:0;background:#0b0b1c;border-bottom:1px solid #13132a;padding:0 28px;height:50px;display:flex;align-items:center;justify-content:space-between;}
 .tb-left{display:flex;align-items:center;gap:10px;}
-.tb-logo{width:30px;height:30px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:8px;color:#fff;letter-spacing:-.3px;}
-.tb-title{font-size:13px;font-weight:700;color:#f1f5f9;}
-.tb-dot{width:4px;height:4px;border-radius:50%;background:#1e293b;}
-.tb-sub{font-size:11px;color:#334155;}
-.tb-right{display:flex;align-items:center;gap:10px;}
-.tb-status{font-size:11px;color:#334155;display:flex;align-items:center;gap:5px;}
-.tb-back{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:1px solid #1a2236;background:none;color:#475569;font-size:11px;font-weight:500;text-decoration:none;transition:.15s;}
-.tb-back:hover{border-color:#4f46e5;color:#818cf8;background:rgba(79,70,229,.08);}
+.tb-logo{width:28px;height:28px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:7.5px;color:#fff;letter-spacing:-.3px;}
+.tb-title{font-size:13px;font-weight:700;color:#e2e8f0;}
+.tb-sep{width:1px;height:14px;background:#1a1a35;margin:0 2px;}
+.tb-sub{font-size:11px;color:#2d3d58;}
+.tb-right{display:flex;align-items:center;gap:12px;}
+.tb-status{font-size:11px;color:#2d3d58;}
+.tb-back{padding:5px 14px;border-radius:6px;border:1px solid #1a1a35;background:none;color:#3d4f70;font-size:11px;font-weight:500;text-decoration:none;transition:.15s;white-space:nowrap;}
+.tb-back:hover{border-color:#4f46e5;color:#818cf8;background:rgba(79,70,229,.07);}
 
-/* ── Search strip ── */
-.search-strip{flex-shrink:0;background:#0a0a18;border-bottom:1px solid #151528;padding:14px 24px;}
-.search-row{display:flex;align-items:center;gap:10px;max-width:1400px;margin:0 auto;}
-.sbox{flex:1;display:flex;align-items:center;background:#0f0f22;border:1.5px solid #1a1a35;border-radius:10px;padding:0 6px 0 16px;transition:border-color .2s,box-shadow .2s;max-width:560px;}
+/* ── Search bar ── */
+.searchbar{flex-shrink:0;padding:12px 28px;background:#0b0b1c;border-bottom:1px solid #13132a;display:flex;align-items:center;gap:12px;}
+.sbox{display:flex;align-items:center;gap:8px;flex:0 0 520px;background:#0e0e22;border:1.5px solid #1b1b38;border-radius:10px;padding:0 8px 0 14px;transition:border-color .2s,box-shadow .2s;}
 .sbox:focus-within{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.1);}
-.sico{color:#2a3a5a;margin-right:8px;flex-shrink:0;}
-.si{flex:1;background:none;border:none;outline:none;font-size:14px;color:#f1f5f9;font-family:inherit;padding:10px 0;}
-.si::placeholder{color:#1e2d42;}
-.sbtn{padding:10px 22px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:.2s;white-space:nowrap;font-family:inherit;letter-spacing:.2px;}
-.sbtn:hover{opacity:.9;transform:translateY(-1px);box-shadow:0 4px 14px rgba(79,70,229,.4);}
+.sico{color:#253048;flex-shrink:0;}
+.si{flex:1;background:none;border:none;outline:none;font-size:14px;color:#e2e8f0;font-family:inherit;padding:9px 0;}
+.si::placeholder{color:#1e2c42;}
+.sbtn{flex-shrink:0;padding:9px 24px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.2px;transition:.2s;}
+.sbtn:hover{box-shadow:0 4px 16px rgba(79,70,229,.4);transform:translateY(-1px);}
 .sbtn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none;}
-.pills{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-.pill{padding:4px 11px;border-radius:20px;font-size:10px;font-weight:700;border:1px solid;cursor:default;white-space:nowrap;letter-spacing:.2px;}
+.divider{width:1px;height:20px;background:#13132a;flex-shrink:0;}
+.pills{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.pill{padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;border:1px solid;white-space:nowrap;}
 
-/* ── Main layout ── */
-.main{flex:1;overflow:hidden;display:flex;flex-direction:column;}
-.results-area{flex:1;overflow-y:auto;padding:20px 24px 24px;}
-.results-inner{max-width:1400px;margin:0 auto;}
+/* ── Scrollable results ── */
+.results-wrap{flex:1;overflow-y:auto;padding:18px 28px 32px;}
+.results-wrap::-webkit-scrollbar{width:4px;}
+.results-wrap::-webkit-scrollbar-thumb{background:#1a1a35;border-radius:2px;}
 
-/* scrollbar */
-.results-area::-webkit-scrollbar{width:5px;}
-.results-area::-webkit-scrollbar-track{background:transparent;}
-.results-area::-webkit-scrollbar-thumb{background:#1a1a35;border-radius:3px;}
-
-/* ── Empty / loading states ── */
-.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:calc(100vh - 180px);color:#1e293b;text-align:center;}
-.empty .ico{font-size:48px;margin-bottom:12px;opacity:.6;}
-.empty p{font-size:13px;color:#2a3a52;}
-.spin-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;height:calc(100vh - 180px);color:#2a3a52;}
-.spin{width:34px;height:34px;border:2.5px solid rgba(79,70,229,.1);border-top-color:#4f46e5;border-radius:50%;animation:rot 1s linear infinite;margin-bottom:12px;}
+/* ── State screens ── */
+.state-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;text-align:center;gap:10px;}
+.state-ico{font-size:44px;opacity:.5;}
+.state-txt{font-size:13px;color:#253048;}
+.spin{width:32px;height:32px;border:2.5px solid rgba(79,70,229,.1);border-top-color:#4f46e5;border-radius:50%;animation:rot 1s linear infinite;}
 @keyframes rot{to{transform:rotate(360deg)}}
-.spin-wrap p{font-size:13px;}
 
-/* ── Result count bar ── */
-.rbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
-.rcount{font-size:12px;color:#334155;}
-.rcount b{color:#818cf8;font-weight:700;}
+/* ── Result count ── */
+.rcount{font-size:12px;color:#2d3d58;margin-bottom:14px;}
+.rcount b{color:#6366f1;}
 
-/* ── Result cards grid ── */
-.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(580px,1fr));gap:14px;}
-@media(max-width:700px){.cards-grid{grid-template-columns:1fr;}}
+/* ── Cards — single column, full width ── */
+.rcard{background:#0c0c1e;border:1px solid #14142e;border-radius:12px;margin-bottom:12px;overflow:hidden;animation:fadeup .18s ease;transition:border-color .15s;}
+.rcard:hover{border-color:#21213e;}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
-/* ── Card ── */
-.rcard{background:#0b0b1c;border:1px solid #14142a;border-radius:14px;overflow:hidden;animation:fu .2s ease;transition:border-color .2s,box-shadow .2s;}
-.rcard:hover{border-color:#252545;box-shadow:0 4px 24px rgba(0,0,0,.4);}
-@keyframes fu{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+/* Card: header row */
+.rcard-hd{display:flex;align-items:center;padding:12px 20px;border-bottom:1px solid #14142e;gap:12px;}
+.ro{font-size:17px;font-weight:800;font-family:'Courier New',monospace;color:#f1f5f9;letter-spacing:.4px;flex-shrink:0;}
+.rbadge{padding:2px 11px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.3px;flex-shrink:0;}
+.hd-spacer{flex:1;}
+.rcust{font-size:12px;color:#475569;font-weight:500;}
 
-/* Card header */
-.rcard-hd{display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-bottom:1px solid #14142a;gap:8px;}
-.rcard-hd-left{display:flex;align-items:center;gap:10px;}
-.ro{font-size:16px;font-weight:800;font-family:'Courier New',monospace;color:#f1f5f9;letter-spacing:.5px;}
-.rbadge{padding:3px 12px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.4px;}
-.rcustomer{font-size:12px;color:#475569;font-weight:500;}
+/* Card: info grid — 6 cells in one row */
+.rcard-info{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid #14142e;}
+.ri{padding:10px 16px;border-right:1px solid #14142e;}
+.ri:last-child{border-right:none;}
+.rl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#1f2e44;margin-bottom:4px;}
+.rv{font-size:12px;font-weight:600;color:#94a3b8;line-height:1.3;}
+.rv.hi{color:#c8d4e8;}
+.rv.ac{color:#818cf8;}
+.rv.gr{color:#10b981;font-family:'Courier New',monospace;font-size:11px;letter-spacing:.3px;}
 
-/* Card body: two-column info layout */
-.rcard-bd{padding:13px 18px;display:grid;grid-template-columns:1fr 1fr;gap:0;}
-.rinfo-col{display:flex;flex-direction:column;gap:0;}
-.rinfo-col:first-child{border-right:1px solid #14142a;padding-right:16px;margin-right:16px;}
-.ri{display:flex;align-items:baseline;justify-content:space-between;padding:6px 0;border-bottom:1px solid #0f0f20;}
-.ri:last-child{border-bottom:none;}
-.rl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#253248;flex-shrink:0;margin-right:8px;}
-.rv{font-size:12px;font-weight:500;color:#94a3b8;text-align:right;line-height:1.4;}
-.rv.hi{color:#cbd5e1;font-weight:600;}
-.rv.co{color:#818cf8;}
-
-/* Title bar */
-.rtitle-row{padding:8px 18px;background:#080816;border-top:1px solid #14142a;display:flex;align-items:flex-start;gap:8px;}
-.rtitle-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#253248;flex-shrink:0;padding-top:1px;}
-.rtitle-val{font-size:12px;color:#94a3b8;line-height:1.5;flex:1;}
-
-/* TID + MAWB row */
-.rcard-ft{padding:10px 18px;background:#080816;border-top:1px solid #14142a;display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap;}
-.rft-block{display:flex;flex-direction:column;gap:5px;}
-.rft-block.grow{flex:1;}
-.rft-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#253248;margin-bottom:3px;}
-.tid-wrap{display:flex;flex-wrap:wrap;gap:5px;}
-.tid-row{display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:6px;padding:4px 10px;}
-.tid-n{min-width:16px;height:16px;background:rgba(99,102,241,.25);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#a5b4fc;}
-.tid-v{font-family:'Courier New',monospace;font-size:11px;font-weight:700;color:#818cf8;}
-.mawb-v{font-family:'Courier New',monospace;font-size:13px;font-weight:800;color:#10b981;letter-spacing:.5px;padding:4px 10px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:6px;display:inline-block;}
+/* Card: title + tracking footer */
+.rcard-ft{display:flex;align-items:stretch;border-top:0;}
+.ft-title{flex:1;padding:9px 16px;border-right:1px solid #14142e;}
+.ft-tids{flex:1.6;padding:9px 16px;}
+.ft-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#1f2e44;margin-bottom:5px;}
+.ft-val{font-size:12px;color:#6b7e9a;line-height:1.5;}
+.tid-list{display:flex;flex-wrap:wrap;gap:4px;}
+.tid-chip{display:inline-flex;align-items:center;gap:5px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.18);border-radius:5px;padding:3px 9px;}
+.tid-n{font-size:9px;font-weight:700;color:#6366f1;min-width:12px;}
+.tid-v{font-family:'Courier New',monospace;font-size:11px;color:#818cf8;font-weight:700;}
 </style>
 </head>
 <body>
 
-<!-- Topbar -->
 <div class="topbar">
   <div class="tb-left">
     <div class="tb-logo">3PL</div>
     <span class="tb-title">Order Lookup</span>
-    <span class="tb-dot"></span>
+    <div class="tb-sep"></div>
     <span class="tb-sub">Search across all 6 providers</span>
   </div>
   <div class="tb-right">
@@ -5113,33 +5094,26 @@ body{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
   </div>
 </div>
 
-<!-- Search strip -->
-<div class="search-strip">
-  <div class="search-row">
-    <div class="sbox">
-      <svg class="sico" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      <input class="si" id="si" placeholder="Enter order number  e.g. 141542_30" onkeydown="if(event.key==='Enter')doSearch()">
-    </div>
-    <button class="sbtn" id="sbtn" onclick="doSearch()">Search</button>
-    <div class="pills">
-      <span class="pill" style="color:#3B82F6;border-color:#3B82F625;background:#3B82F60a">GE QC</span>
-      <span class="pill" style="color:#8B5CF6;border-color:#8B5CF625;background:#8B5CF60a">GE Zone</span>
-      <span class="pill" style="color:#10B981;border-color:#10B98125;background:#10B9810a">ECL QC</span>
-      <span class="pill" style="color:#F59E0B;border-color:#F59E0B25;background:#F59E0B0a">ECL Zone</span>
-      <span class="pill" style="color:#EC4899;border-color:#EC489925;background:#EC48990a">APX</span>
-      <span class="pill" style="color:#EF4444;border-color:#EF444425;background:#EF44440a">Kerry</span>
-    </div>
+<div class="searchbar">
+  <div class="sbox">
+    <svg class="sico" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input class="si" id="si" placeholder="Enter order number — e.g. 143595_78" onkeydown="if(event.key==='Enter')doSearch()">
+  </div>
+  <button class="sbtn" id="sbtn" onclick="doSearch()">Search</button>
+  <div class="divider"></div>
+  <div class="pills">
+    <span class="pill" style="color:#3B82F6;border-color:#3B82F622;background:#3B82F608">GE QC</span>
+    <span class="pill" style="color:#8B5CF6;border-color:#8B5CF622;background:#8B5CF608">GE Zone</span>
+    <span class="pill" style="color:#10B981;border-color:#10B98122;background:#10B98108">ECL QC</span>
+    <span class="pill" style="color:#F59E0B;border-color:#F59E0B22;background:#F59E0B08">ECL Zone</span>
+    <span class="pill" style="color:#EC4899;border-color:#EC489922;background:#EC489908">APX</span>
+    <span class="pill" style="color:#EF4444;border-color:#EF444422;background:#EF444408">Kerry</span>
   </div>
 </div>
 
-<!-- Results -->
-<div class="main">
-  <div class="results-area">
-    <div class="results-inner">
-      <div id="results">
-        <div class="empty"><div class="ico">📦</div><p>Enter an order number above to search across all providers</p></div>
-      </div>
-    </div>
+<div class="results-wrap">
+  <div id="results">
+    <div class="state-screen"><div class="state-ico">📦</div><div class="state-txt">Enter an order number above to search</div></div>
   </div>
 </div>
 
@@ -5149,69 +5123,57 @@ function doSearch(){
   var q=document.getElementById('si').value.trim();
   if(!q)return;
   var btn=document.getElementById('sbtn');
-  btn.disabled=true;btn.textContent='Searching...';
-  document.getElementById('results').innerHTML='<div class="spin-wrap"><div class="spin"></div><p>Searching all providers...</p></div>';
+  btn.disabled=true; btn.textContent='Searching...';
+  document.getElementById('results').innerHTML='<div class="state-screen"><div class="spin"></div><div class="state-txt" style="margin-top:10px">Searching all providers...</div></div>';
   fetch('/api/order-lookup?q='+encodeURIComponent(q))
   .then(function(r){return r.json();})
   .then(function(data){
-    btn.disabled=false;btn.textContent='Search';
+    btn.disabled=false; btn.textContent='Search';
     var res=data.results||[];
     if(!res.length){
-      document.getElementById('results').innerHTML='<div class="empty"><div class="ico">🔎</div><p>No orders found for <b>'+escH(q)+'</b></p></div>';
+      document.getElementById('results').innerHTML='<div class="state-screen"><div class="state-ico">🔎</div><div class="state-txt">No orders found for <b style="color:#6366f1">'+escH(q)+'</b></div></div>';
       return;
     }
-    var html='<div class="rbar"><div class="rcount">Found <b>'+res.length+'</b> result'+(res.length>1?'s':'')+' for &ldquo;<b>'+escH(q)+'</b>&rdquo;</div></div>';
-    html+='<div class="cards-grid">';
+    var html='<div class="rcount">Found <b>'+res.length+'</b> result'+(res.length>1?'s':'')+' for <b>'+escH(q)+'</b></div>';
     res.forEach(function(r){
       var c=C[r.provider]||'#4f46e5';
+      var mawb=r.mawb&&r.mawb.trim()?r.mawb:'—';
+      var tids=r.tid&&r.tid.trim()?r.tid.split(',').map(function(t){return t.trim();}).filter(Boolean):[];
       html+='<div class="rcard">';
       // Header
       html+='<div class="rcard-hd">'
-        +'<div class="rcard-hd-left">'
         +'<span class="ro">'+escH(r.order)+'</span>'
-        +'<span class="rbadge" style="background:'+c+'18;color:'+c+'">'+escH(r.provider)+'</span>'
-        +'</div>'
-        +'<span class="rcustomer">'+escH(r.customer||'—')+'</span>'
+        +'<span class="rbadge" style="background:'+c+'15;color:'+c+'">'+escH(r.provider)+'</span>'
+        +'<span class="hd-spacer"></span>'
+        +'<span class="rcust">'+escH(r.customer||'')+'</span>'
         +'</div>';
-      // Two-column info
-      html+='<div class="rcard-bd">';
-      html+='<div class="rinfo-col">'
-        +ri('Country',r.country,'hi')
-        +ri('Boxes',r.boxes)
-        +ri('Chargeable Wt',r.cw ? r.cw+' kg' : '')
+      // 6-col info grid
+      html+='<div class="rcard-info">'
+        +'<div class="ri"><div class="rl">Country</div><div class="rv hi">'+escH(r.country||'—')+'</div></div>'
+        +'<div class="ri"><div class="rl">Boxes</div><div class="rv hi">'+escH(r.boxes||'—')+'</div></div>'
+        +'<div class="ri"><div class="rl">Chargeable Wt</div><div class="rv">'+escH(r.cw?r.cw+' kg':'—')+'</div></div>'
+        +'<div class="ri"><div class="rl">Item Count</div><div class="rv">'+escH(r.item_count||'—')+'</div></div>'
+        +'<div class="ri"><div class="rl">Vendor</div><div class="rv ac">'+escH(r.vendor||'—')+'</div></div>'
+        +'<div class="ri"><div class="rl">MAWB</div><div class="rv gr">'+escH(mawb)+'</div></div>'
         +'</div>';
-      html+='<div class="rinfo-col">'
-        +ri('Item Count',r.item_count)
-        +ri('Vendor',r.vendor,'co')
-        +ri('MAWB', r.mawb ? '<span class="mawb-v">'+escH(r.mawb)+'</span>' : '—', '', true)
-        +'</div>';
-      html+='</div>';
-      // Title
-      if(r.title){html+='<div class="rtitle-row"><span class="rtitle-label">Title</span><span class="rtitle-val">'+escH(r.title)+'</span></div>';}
-      // TIDs footer
-      html+='<div class="rcard-ft">';
-      if(r.tid&&r.tid.trim()){
-        var tids=r.tid.split(',').map(function(t){return t.trim();}).filter(Boolean);
-        html+='<div class="rft-block grow"><div class="rft-label">Tracking IDs <span style="color:#4f46e5;font-size:9px;">('+tids.length+')</span></div><div class="tid-wrap">';
-        tids.forEach(function(t,i){html+='<div class="tid-row"><span class="tid-n">'+(i+1)+'</span><span class="tid-v">'+escH(t)+'</span></div>';});
-        html+='</div></div>';
-      } else {
-        html+='<div class="rft-block"><div class="rft-label">Tracking IDs</div><span style="color:#253248;font-size:12px;">—</span></div>';
-      }
-      html+='</div>';
+      // Footer: title + tids
+      html+='<div class="rcard-ft">'
+        +'<div class="ft-title"><div class="ft-label">Title</div><div class="ft-val">'+escH(r.title||'—')+'</div></div>'
+        +'<div class="ft-tids"><div class="ft-label">Tracking IDs'+(tids.length?' <span style="color:#4f46e5">('+tids.length+')</span>':'')+'</div>';
+      if(tids.length){
+        html+='<div class="tid-list">';
+        tids.forEach(function(t,i){html+='<div class="tid-chip"><span class="tid-n">'+(i+1)+'</span><span class="tid-v">'+escH(t)+'</span></div>';});
+        html+='</div>';
+      } else { html+='<div class="ft-val">—</div>'; }
+      html+='</div></div>';
       html+='</div>';
     });
-    html+='</div>';
     document.getElementById('results').innerHTML=html;
   })
   .catch(function(){
-    btn.disabled=false;btn.textContent='Search';
-    document.getElementById('results').innerHTML='<div class="empty"><div class="ico">❌</div><p>Search failed. Please try again.</p></div>';
+    btn.disabled=false; btn.textContent='Search';
+    document.getElementById('results').innerHTML='<div class="state-screen"><div class="state-ico">❌</div><div class="state-txt">Search failed. Please try again.</div></div>';
   });
-}
-function ri(l,v,cls,raw){
-  var val=(raw?v:(v&&String(v).trim()?escH(String(v)):'—'));
-  return '<div class="ri"><span class="rl">'+l+'</span><span class="rv '+(cls||'')+'">'+val+'</span></div>';
 }
 function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 document.getElementById('si').focus();
