@@ -4963,110 +4963,110 @@ ORDER_LOOKUP_HTML = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',sans-serif;background:#090912;color:#e2e8f0;min-height:100vh;}
+body{font-family:'Inter',sans-serif;background:#07070f;color:#e2e8f0;min-height:100vh;display:flex;flex-direction:column;}
 
-/* Header */
-.hdr{background:#0f0f1e;border-bottom:1px solid #1e1e35;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(10px);}
-.hdr-l{display:flex;align-items:center;gap:14px;}
-.logo{width:38px;height:38px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;color:#fff;letter-spacing:-.3px;box-shadow:0 4px 12px rgba(79,70,229,.4);}
-.hdr-title{font-size:16px;font-weight:700;color:#fff;}
-.hdr-sub{font-size:11px;color:#475569;margin-top:1px;}
-.back-btn{display:flex;align-items:center;gap:6px;padding:7px 16px;border-radius:8px;border:1px solid #1e1e35;background:none;color:#64748b;font-size:12px;font-weight:500;text-decoration:none;transition:.2s;font-family:inherit;}
-.back-btn:hover{border-color:#4f46e5;color:#818cf8;background:rgba(79,70,229,.08);}
+/* Topbar */
+.topbar{background:rgba(15,15,30,.95);border-bottom:1px solid #1a1a2e;padding:0 32px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);}
+.tb-left{display:flex;align-items:center;gap:12px;}
+.tb-logo{width:32px;height:32px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:9px;color:#fff;flex-shrink:0;}
+.tb-title{font-size:14px;font-weight:700;color:#f1f5f9;}
+.tb-sep{width:1px;height:16px;background:#1e2a3a;margin:0 4px;}
+.tb-sub{font-size:12px;color:#475569;}
+.tb-back{display:flex;align-items:center;gap:5px;padding:6px 14px;border-radius:7px;border:1px solid #1e2a3a;background:none;color:#64748b;font-size:12px;font-weight:500;text-decoration:none;transition:.15s;font-family:inherit;}
+.tb-back:hover{border-color:#4f46e5;color:#818cf8;background:rgba(79,70,229,.1);}
 
-/* Layout */
-.page{max-width:860px;margin:0 auto;padding:36px 24px 60px;}
-
-/* Search card */
-.scard{background:#0f0f1e;border:1px solid #1e1e35;border-radius:20px;padding:28px 32px;margin-bottom:24px;box-shadow:0 4px 24px rgba(0,0,0,.3);}
-.slabel{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;}
-.srow{display:flex;gap:10px;}
-.sinput{flex:1;background:#090912;border:1.5px solid #1e1e35;border-radius:12px;padding:14px 18px;font-size:15px;color:#f1f5f9;outline:none;font-family:inherit;transition:border-color .2s,box-shadow .2s;}
-.sinput:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.15);}
-.sinput::placeholder{color:#334155;}
-.sbtn{padding:14px 32px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;transition:.2s;white-space:nowrap;font-family:inherit;letter-spacing:.2px;box-shadow:0 4px 14px rgba(79,70,229,.35);}
-.sbtn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(79,70,229,.45);}
+/* Hero */
+.hero{background:linear-gradient(180deg,#0f0f2a 0%,#07070f 100%);padding:52px 24px 40px;text-align:center;border-bottom:1px solid #1a1a2e;}
+.hero-title{font-size:32px;font-weight:800;color:#fff;letter-spacing:-.5px;margin-bottom:8px;}
+.hero-title span{background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.hero-sub{font-size:14px;color:#475569;margin-bottom:32px;}
+.search-box{max-width:620px;margin:0 auto;display:flex;gap:10px;background:#0f0f1e;border:1.5px solid #1e2a3a;border-radius:14px;padding:6px 6px 6px 18px;transition:border-color .2s,box-shadow .2s;}
+.search-box:focus-within{border-color:#4f46e5;box-shadow:0 0 0 4px rgba(79,70,229,.12);}
+.si{flex:1;background:none;border:none;outline:none;font-size:15px;color:#f1f5f9;font-family:inherit;padding:8px 0;}
+.si::placeholder{color:#2a3a4a;}
+.sbtn{padding:11px 26px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:.2s;white-space:nowrap;font-family:inherit;box-shadow:0 3px 12px rgba(79,70,229,.4);}
+.sbtn:hover{box-shadow:0 5px 18px rgba(79,70,229,.55);transform:translateY(-1px);}
 .sbtn:disabled{opacity:.5;cursor:not-allowed;transform:none;}
-.ppills{display:flex;flex-wrap:wrap;gap:7px;margin-top:18px;}
-.ppill{padding:5px 13px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;letter-spacing:.2px;}
+.pills{display:flex;justify-content:center;flex-wrap:wrap;gap:7px;margin-top:20px;}
+.pill{padding:4px 13px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;cursor:default;}
 
-/* Results */
-.rcount{font-size:13px;color:#475569;margin-bottom:18px;padding:0 2px;}
+/* Content */
+.content{flex:1;max-width:960px;width:100%;margin:0 auto;padding:28px 24px 60px;}
+.rcount{font-size:13px;color:#475569;margin-bottom:20px;}
 .rcount b{color:#818cf8;}
 
-.rcard{background:#0f0f1e;border:1px solid #1e1e35;border-radius:16px;overflow:hidden;margin-bottom:16px;animation:fadeUp .3s ease;transition:border-color .2s;}
-.rcard:hover{border-color:#2a2a4e;}
-@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+/* Result card */
+.rcard{background:#0d0d1e;border:1px solid #1a1a2e;border-radius:16px;margin-bottom:16px;overflow:hidden;animation:fu .25s ease;transition:border-color .2s,transform .2s;}
+.rcard:hover{border-color:#2a2a4e;transform:translateY(-1px);}
+@keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
-.rcard-top{display:flex;align-items:center;justify-content:space-between;padding:18px 24px 14px;border-bottom:1px solid #1a1a2e;flex-wrap:wrap;gap:10px;}
-.rorder{font-size:20px;font-weight:800;font-family:'Courier New',monospace;color:#f1f5f9;letter-spacing:.5px;}
-.rbadge{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.4px;}
+.rcard-hd{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;background:linear-gradient(90deg,#0f0f22,#0d0d1e);border-bottom:1px solid #1a1a2e;flex-wrap:wrap;gap:8px;}
+.ro{font-size:19px;font-weight:800;font-family:'Courier New',monospace;color:#f1f5f9;letter-spacing:.5px;}
+.rbadge{padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px;}
 
-.rcard-body{padding:18px 24px;}
-.rgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.rfield{background:#090912;border:1px solid #1a1a2e;border-radius:10px;padding:12px 14px;}
-.rfield.wide{grid-column:span 3;}
-.rfield.w2{grid-column:span 2;}
-.rlabel{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#334155;margin-bottom:6px;}
-.rval{font-size:13px;font-weight:500;color:#cbd5e1;line-height:1.5;}
-.rval.mono{font-family:'Courier New',monospace;}
+.rcard-bd{padding:16px 22px;}
+.rgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+@media(max-width:600px){.rgrid{grid-template-columns:repeat(2,1fr);}}
+.rf{background:#07070f;border:1px solid #131325;border-radius:10px;padding:11px 14px;}
+.rf.span2{grid-column:span 2;}
+.rf.span3{grid-column:span 3;}
+.rl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#2a3a4a;margin-bottom:5px;}
+.rv{font-size:13px;font-weight:500;color:#94a3b8;line-height:1.5;}
+.rv.em{color:#cbd5e1;}
 
-/* TID badges */
-.tid-list{display:flex;flex-direction:column;gap:5px;margin-top:2px;}
-.tid-item{display:inline-flex;align-items:center;gap:6px;background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.2);border-radius:6px;padding:5px 10px;font-family:'Courier New',monospace;font-size:12px;font-weight:700;color:#818cf8;width:fit-content;}
-.tid-num{background:rgba(129,140,248,.2);border-radius:4px;padding:1px 6px;font-size:10px;color:#a5b4fc;}
+.tid-wrap{display:flex;flex-direction:column;gap:5px;margin-top:4px;}
+.tid-row{display:inline-flex;align-items:center;gap:7px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:7px;padding:5px 11px;width:fit-content;}
+.tid-n{min-width:18px;height:18px;background:rgba(99,102,241,.3);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#a5b4fc;}
+.tid-v{font-family:'Courier New',monospace;font-size:12px;font-weight:700;color:#818cf8;}
+.mawb-v{font-family:'Courier New',monospace;font-size:14px;font-weight:800;color:#10b981;letter-spacing:.5px;}
 
-.mawb-val{font-family:'Courier New',monospace;font-size:14px;font-weight:700;color:#10b981;letter-spacing:.5px;}
-
-/* Empty / Loading */
-.empty{text-align:center;padding:80px 20px;color:#334155;}
-.empty .ico{font-size:56px;margin-bottom:16px;opacity:.7;}
-.empty p{font-size:14px;}
-.spin-wrap{text-align:center;padding:80px;color:#475569;}
-.spin{width:40px;height:40px;border:3px solid rgba(79,70,229,.15);border-top-color:#4f46e5;border-radius:50%;animation:rot 1s linear infinite;margin:0 auto 16px;}
+.empty{text-align:center;padding:80px 20px;color:#1e293b;}
+.empty .ico{font-size:54px;margin-bottom:14px;}
+.empty p{font-size:14px;color:#334155;}
+.spin-wrap{text-align:center;padding:80px;color:#334155;}
+.spin{width:38px;height:38px;border:3px solid rgba(79,70,229,.12);border-top-color:#4f46e5;border-radius:50%;animation:rot 1s linear infinite;margin:0 auto 14px;}
 @keyframes rot{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 
-<div class="hdr">
-  <div class="hdr-l">
-    <div class="logo">3PL</div>
-    <div>
-      <div class="hdr-title">Order Lookup</div>
-      <div class="hdr-sub">Search across GE, ECL, APX & Kerry</div>
-    </div>
+<div class="topbar">
+  <div class="tb-left">
+    <div class="tb-logo">3PL</div>
+    <span class="tb-title">Order Lookup</span>
+    <div class="tb-sep"></div>
+    <span class="tb-sub">Search across all providers</span>
   </div>
-  <a href="/dashboard" class="back-btn">&#8592; Back to Dashboard</a>
+  <a href="/" class="tb-back">&#8592; Dashboard</a>
 </div>
 
-<div class="page">
-  <div class="scard">
-    <div class="slabel">Order Number</div>
-    <div class="srow">
-      <input class="sinput" id="sinput" placeholder="e.g. 86289_70 or 135315_14" onkeydown="if(event.key==='Enter')doSearch()">
-      <button class="sbtn" id="sbtn" onclick="doSearch()">Search</button>
-    </div>
-    <div class="ppills">
-      <span class="ppill" style="color:#3B82F6;border-color:#3B82F630;background:#3B82F60d">GE QC</span>
-      <span class="ppill" style="color:#8B5CF6;border-color:#8B5CF630;background:#8B5CF60d">GE Zone</span>
-      <span class="ppill" style="color:#10B981;border-color:#10B98130;background:#10B9810d">ECL QC</span>
-      <span class="ppill" style="color:#F59E0B;border-color:#F59E0B30;background:#F59E0B0d">ECL Zone</span>
-      <span class="ppill" style="color:#EC4899;border-color:#EC489930;background:#EC48990d">APX</span>
-      <span class="ppill" style="color:#EF4444;border-color:#EF444430;background:#EF44440d">Kerry</span>
-    </div>
+<div class="hero">
+  <div class="hero-title">Find any <span>order instantly</span></div>
+  <div class="hero-sub">Search across GE QC, GE Zone, ECL QC, ECL Zone, APX and Kerry</div>
+  <div class="search-box">
+    <input class="si" id="si" placeholder="Enter order number e.g. 86289_70" onkeydown="if(event.key==='Enter')doSearch()">
+    <button class="sbtn" id="sbtn" onclick="doSearch()">Search</button>
   </div>
+  <div class="pills">
+    <span class="pill" style="color:#3B82F6;border-color:#3B82F630;background:#3B82F60e">GE QC</span>
+    <span class="pill" style="color:#8B5CF6;border-color:#8B5CF630;background:#8B5CF60e">GE Zone</span>
+    <span class="pill" style="color:#10B981;border-color:#10B98130;background:#10B9810e">ECL QC</span>
+    <span class="pill" style="color:#F59E0B;border-color:#F59E0B30;background:#F59E0B0e">ECL Zone</span>
+    <span class="pill" style="color:#EC4899;border-color:#EC489930;background:#EC48990e">APX</span>
+    <span class="pill" style="color:#EF4444;border-color:#EF444430;background:#EF44440e">Kerry</span>
+  </div>
+</div>
 
+<div class="content">
   <div id="results">
-    <div class="empty"><div class="ico">🔍</div><p>Enter an order number to search all providers</p></div>
+    <div class="empty"><div class="ico">📦</div><p>Enter an order number above to get started</p></div>
   </div>
 </div>
 
 <script>
 var C={"GE QC":"#3B82F6","GE Zone":"#8B5CF6","ECL QC":"#10B981","ECL Zone":"#F59E0B","APX":"#EC4899","Kerry":"#EF4444"};
-
 function doSearch(){
-  var q=document.getElementById('sinput').value.trim();
+  var q=document.getElementById('si').value.trim();
   if(!q)return;
   var btn=document.getElementById('sbtn');
   btn.disabled=true;btn.textContent='Searching...';
@@ -5084,15 +5084,15 @@ function doSearch(){
     res.forEach(function(r){
       var c=C[r.provider]||'#4f46e5';
       html+='<div class="rcard">'
-       +'<div class="rcard-top">'
-       +'<span class="rorder">'+escH(r.order)+'</span>'
+       +'<div class="rcard-hd">'
+       +'<span class="ro">'+escH(r.order)+'</span>'
        +'<span class="rbadge" style="background:'+c+'1a;color:'+c+'">'+r.provider+'</span>'
        +'</div>'
-       +'<div class="rcard-body"><div class="rgrid">'
-       +f('Customer',r.customer)+f('Country',r.country)+f('Boxes',r.boxes)
+       +'<div class="rcard-bd"><div class="rgrid">'
+       +f('Customer',r.customer,'em')+f('Country',r.country,'em')+f('Boxes',r.boxes)
        +f('Chargeable Wt',r.cw)+f('Item Count',r.item_count)+f('Vendor',r.vendor)
-       +fWide('Title',r.title)
-       +fTID('Tracking ID',r.tid)
+       +fS3('Title',r.title)
+       +fTID('Tracking IDs',r.tid)
        +fMAWB('MAWB',r.mawb)
        +'</div></div></div>';
     });
@@ -5103,31 +5103,20 @@ function doSearch(){
     document.getElementById('results').innerHTML='<div class="empty"><div class="ico">❌</div><p>Search failed. Please try again.</p></div>';
   });
 }
-
-function f(l,v){
-  return '<div class="rfield"><div class="rlabel">'+l+'</div><div class="rval">'+(v?escH(v):'<span style="color:#1e293b">—</span>')+'</div></div>';
-}
-function fWide(l,v){
-  return '<div class="rfield wide"><div class="rlabel">'+l+'</div><div class="rval">'+(v?escH(v):'<span style="color:#1e293b">—</span>')+'</div></div>';
-}
+function f(l,v,cls){var c=cls||'';return '<div class="rf"><div class="rl">'+l+'</div><div class="rv '+c+'">'+(v?escH(v):'—')+'</div></div>';}
+function fS3(l,v){return '<div class="rf span3"><div class="rl">'+l+'</div><div class="rv em">'+(v?escH(v):'—')+'</div></div>';}
 function fTID(l,v){
-  if(!v||v==='—'||v.trim()===''){
-    return '<div class="rfield w2"><div class="rlabel">'+l+'</div><div class="rval"><span style="color:#1e293b">—</span></div></div>';
-  }
+  if(!v||!v.trim()){return '<div class="rf span2"><div class="rl">'+l+'</div><div class="rv">—</div></div>';}
   var tids=v.split(',').map(function(t){return t.trim();}).filter(Boolean);
-  var inner='<div class="tid-list">';
-  tids.forEach(function(t,i){
-    inner+='<div class="tid-item"><span class="tid-num">'+(i+1)+'</span>'+escH(t)+'</div>';
-  });
-  inner+='</div>';
-  return '<div class="rfield w2"><div class="rlabel">'+l+' ('+tids.length+')</div>'+inner+'</div>';
+  var rows='<div class="tid-wrap">';
+  tids.forEach(function(t,i){rows+='<div class="tid-row"><span class="tid-n">'+(i+1)+'</span><span class="tid-v">'+escH(t)+'</span></div>';});
+  return '<div class="rf span2"><div class="rl">'+l+' &nbsp;<span style="color:#4f46e5;font-size:10px;">('+tids.length+')</span></div>'+rows+'</div></div>';
 }
 function fMAWB(l,v){
-  var disp=v&&v!=='—'?'<span class="mawb-val">'+escH(v)+'</span>':'<span style="color:#1e293b">—</span>';
-  return '<div class="rfield"><div class="rlabel">'+l+'</div><div class="rval">'+disp+'</div></div>';
+  return '<div class="rf"><div class="rl">'+l+'</div><div class="rv">'+(v&&v.trim()?'<span class="mawb-v">'+escH(v)+'</span>':'—')+'</div></div>';
 }
 function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-document.getElementById('sinput').focus();
+document.getElementById('si').focus();
 </script>
 </body></html>
 """
