@@ -4956,138 +4956,176 @@ ORDER_LOOKUP_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Order Lookup</title>
+<title>Order Lookup — 3PL</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%234f46e5'/%3E%3Ctext x='50' y='68' font-size='48' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E3PL%3C/text%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',sans-serif;background:#0f0f1a;color:#e2e8f0;min-height:100vh;}
-:root{--brand:#4f46e5;--brand2:#818cf8;--bg:#0f0f1a;--bg-card:#1a1a2e;--bg-hover:#1e2a3a;--border:#2a2a3e;--text:#e2e8f0;--muted:#64748b;}
+body{font-family:'Inter',sans-serif;background:#090912;color:#e2e8f0;min-height:100vh;}
 
 /* Header */
-.header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
-.header-left{display:flex;align-items:center;gap:12px;}
-.logo{width:36px;height:36px;background:var(--brand);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#fff;letter-spacing:-.5px;}
-.header-title{font-size:17px;font-weight:700;color:#fff;}
-.header-sub{font-size:11px;color:var(--muted);margin-top:1px;}
-.back-btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:6px;transition:.2s;}
-.back-btn:hover{border-color:var(--brand2);color:var(--brand2);}
+.hdr{background:#0f0f1e;border-bottom:1px solid #1e1e35;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(10px);}
+.hdr-l{display:flex;align-items:center;gap:14px;}
+.logo{width:38px;height:38px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:10px;color:#fff;letter-spacing:-.3px;box-shadow:0 4px 12px rgba(79,70,229,.4);}
+.hdr-title{font-size:16px;font-weight:700;color:#fff;}
+.hdr-sub{font-size:11px;color:#475569;margin-top:1px;}
+.back-btn{display:flex;align-items:center;gap:6px;padding:7px 16px;border-radius:8px;border:1px solid #1e1e35;background:none;color:#64748b;font-size:12px;font-weight:500;text-decoration:none;transition:.2s;font-family:inherit;}
+.back-btn:hover{border-color:#4f46e5;color:#818cf8;background:rgba(79,70,229,.08);}
 
-/* Search area */
-.search-wrap{max-width:780px;margin:40px auto 0;padding:0 20px;}
-.search-card{background:var(--bg-card);border:1px solid var(--border);border-radius:18px;padding:32px;margin-bottom:28px;}
-.search-label{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;}
-.search-row{display:flex;gap:10px;}
-.search-input{flex:1;background:#0f0f1a;border:1.5px solid var(--border);border-radius:10px;padding:13px 16px;font-size:15px;color:#fff;outline:none;font-family:inherit;transition:border-color .2s;}
-.search-input:focus{border-color:var(--brand2);}
-.search-input::placeholder{color:#475569;}
-.search-btn{padding:13px 28px;background:var(--brand);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s;white-space:nowrap;}
-.search-btn:hover{background:#4338ca;}.search-btn:disabled{opacity:.5;cursor:not-allowed;}
-.provider-pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
-.pill{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;}
+/* Layout */
+.page{max-width:860px;margin:0 auto;padding:36px 24px 60px;}
+
+/* Search card */
+.scard{background:#0f0f1e;border:1px solid #1e1e35;border-radius:20px;padding:28px 32px;margin-bottom:24px;box-shadow:0 4px 24px rgba(0,0,0,.3);}
+.slabel{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;}
+.srow{display:flex;gap:10px;}
+.sinput{flex:1;background:#090912;border:1.5px solid #1e1e35;border-radius:12px;padding:14px 18px;font-size:15px;color:#f1f5f9;outline:none;font-family:inherit;transition:border-color .2s,box-shadow .2s;}
+.sinput:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(79,70,229,.15);}
+.sinput::placeholder{color:#334155;}
+.sbtn{padding:14px 32px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;transition:.2s;white-space:nowrap;font-family:inherit;letter-spacing:.2px;box-shadow:0 4px 14px rgba(79,70,229,.35);}
+.sbtn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(79,70,229,.45);}
+.sbtn:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+.ppills{display:flex;flex-wrap:wrap;gap:7px;margin-top:18px;}
+.ppill{padding:5px 13px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;letter-spacing:.2px;}
 
 /* Results */
-.results-wrap{max-width:780px;margin:0 auto;padding:0 20px 40px;}
-.results-header{font-size:13px;color:var(--muted);margin-bottom:16px;}
-.results-header b{color:var(--brand2);}
-.result-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:14px;animation:fadeIn .3s ease;}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-.rc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;}
-.rc-order{font-size:18px;font-weight:700;font-family:monospace;color:#fff;}
-.rc-badge{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px;}
-.rc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:10px;}
-.rc-field{background:var(--bg-hover);border-radius:8px;padding:11px 13px;}
-.rc-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:5px;}
-.rc-val{font-size:13px;font-weight:500;color:#e2e8f0;word-break:break-all;}
-.rc-val.tid{font-family:monospace;font-size:12px;color:var(--brand2);font-weight:700;}
-.rc-val.mawb{font-family:monospace;font-size:12px;color:#10b981;font-weight:700;}
-.empty{text-align:center;padding:70px 20px;color:var(--muted);}
-.empty .ico{font-size:52px;margin-bottom:14px;}
-.spinner-wrap{text-align:center;padding:70px;color:var(--muted);}
-.spin{width:36px;height:36px;border:3px solid rgba(79,70,229,.2);border-top-color:var(--brand);border-radius:50%;animation:rot 1s linear infinite;margin:0 auto 14px;}
+.rcount{font-size:13px;color:#475569;margin-bottom:18px;padding:0 2px;}
+.rcount b{color:#818cf8;}
+
+.rcard{background:#0f0f1e;border:1px solid #1e1e35;border-radius:16px;overflow:hidden;margin-bottom:16px;animation:fadeUp .3s ease;transition:border-color .2s;}
+.rcard:hover{border-color:#2a2a4e;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.rcard-top{display:flex;align-items:center;justify-content:space-between;padding:18px 24px 14px;border-bottom:1px solid #1a1a2e;flex-wrap:wrap;gap:10px;}
+.rorder{font-size:20px;font-weight:800;font-family:'Courier New',monospace;color:#f1f5f9;letter-spacing:.5px;}
+.rbadge{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.4px;}
+
+.rcard-body{padding:18px 24px;}
+.rgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.rfield{background:#090912;border:1px solid #1a1a2e;border-radius:10px;padding:12px 14px;}
+.rfield.wide{grid-column:span 3;}
+.rfield.w2{grid-column:span 2;}
+.rlabel{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#334155;margin-bottom:6px;}
+.rval{font-size:13px;font-weight:500;color:#cbd5e1;line-height:1.5;}
+.rval.mono{font-family:'Courier New',monospace;}
+
+/* TID badges */
+.tid-list{display:flex;flex-direction:column;gap:5px;margin-top:2px;}
+.tid-item{display:inline-flex;align-items:center;gap:6px;background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.2);border-radius:6px;padding:5px 10px;font-family:'Courier New',monospace;font-size:12px;font-weight:700;color:#818cf8;width:fit-content;}
+.tid-num{background:rgba(129,140,248,.2);border-radius:4px;padding:1px 6px;font-size:10px;color:#a5b4fc;}
+
+.mawb-val{font-family:'Courier New',monospace;font-size:14px;font-weight:700;color:#10b981;letter-spacing:.5px;}
+
+/* Empty / Loading */
+.empty{text-align:center;padding:80px 20px;color:#334155;}
+.empty .ico{font-size:56px;margin-bottom:16px;opacity:.7;}
+.empty p{font-size:14px;}
+.spin-wrap{text-align:center;padding:80px;color:#475569;}
+.spin{width:40px;height:40px;border:3px solid rgba(79,70,229,.15);border-top-color:#4f46e5;border-radius:50%;animation:rot 1s linear infinite;margin:0 auto 16px;}
 @keyframes rot{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-<div class="header">
-  <div class="header-left">
+
+<div class="hdr">
+  <div class="hdr-l">
     <div class="logo">3PL</div>
     <div>
-      <div class="header-title">Order Lookup</div>
-      <div class="header-sub">Search across all providers</div>
+      <div class="hdr-title">Order Lookup</div>
+      <div class="hdr-sub">Search across GE, ECL, APX & Kerry</div>
     </div>
   </div>
-  <a href="/dashboard" class="back-btn">&#8592; Dashboard</a>
+  <a href="/dashboard" class="back-btn">&#8592; Back to Dashboard</a>
 </div>
 
-<div class="search-wrap">
-  <div class="search-card">
-    <div class="search-label">Enter Order Number</div>
-    <div class="search-row">
-      <input type="text" class="search-input" id="searchInput" placeholder="e.g. 86289_70" onkeydown="if(event.key==='Enter')doSearch()">
-      <button class="search-btn" id="searchBtn" onclick="doSearch()">Search</button>
+<div class="page">
+  <div class="scard">
+    <div class="slabel">Order Number</div>
+    <div class="srow">
+      <input class="sinput" id="sinput" placeholder="e.g. 86289_70 or 135315_14" onkeydown="if(event.key==='Enter')doSearch()">
+      <button class="sbtn" id="sbtn" onclick="doSearch()">Search</button>
     </div>
-    <div class="provider-pills">
-      <span class="pill" style="color:#3B82F6;border-color:#3B82F633;background:#3B82F611">GE QC</span>
-      <span class="pill" style="color:#8B5CF6;border-color:#8B5CF633;background:#8B5CF611">GE Zone</span>
-      <span class="pill" style="color:#10B981;border-color:#10B98133;background:#10B98111">ECL QC</span>
-      <span class="pill" style="color:#F59E0B;border-color:#F59E0B33;background:#F59E0B11">ECL Zone</span>
-      <span class="pill" style="color:#EC4899;border-color:#EC489933;background:#EC489911">APX</span>
-      <span class="pill" style="color:#EF4444;border-color:#EF444433;background:#EF444411">Kerry</span>
+    <div class="ppills">
+      <span class="ppill" style="color:#3B82F6;border-color:#3B82F630;background:#3B82F60d">GE QC</span>
+      <span class="ppill" style="color:#8B5CF6;border-color:#8B5CF630;background:#8B5CF60d">GE Zone</span>
+      <span class="ppill" style="color:#10B981;border-color:#10B98130;background:#10B9810d">ECL QC</span>
+      <span class="ppill" style="color:#F59E0B;border-color:#F59E0B30;background:#F59E0B0d">ECL Zone</span>
+      <span class="ppill" style="color:#EC4899;border-color:#EC489930;background:#EC48990d">APX</span>
+      <span class="ppill" style="color:#EF4444;border-color:#EF444430;background:#EF44440d">Kerry</span>
     </div>
   </div>
-</div>
 
-<div class="results-wrap">
-  <div id="resultsArea">
-    <div class="empty"><div class="ico">🔍</div><div>Enter an order number above to search</div></div>
+  <div id="results">
+    <div class="empty"><div class="ico">🔍</div><p>Enter an order number to search all providers</p></div>
   </div>
 </div>
 
 <script>
-var COLORS={"GE QC":"#3B82F6","GE Zone":"#8B5CF6","ECL QC":"#10B981","ECL Zone":"#F59E0B","APX":"#EC4899","Kerry":"#EF4444"};
+var C={"GE QC":"#3B82F6","GE Zone":"#8B5CF6","ECL QC":"#10B981","ECL Zone":"#F59E0B","APX":"#EC4899","Kerry":"#EF4444"};
+
 function doSearch(){
-  var q=document.getElementById('searchInput').value.trim();
+  var q=document.getElementById('sinput').value.trim();
   if(!q)return;
-  var btn=document.getElementById('searchBtn');
+  var btn=document.getElementById('sbtn');
   btn.disabled=true;btn.textContent='Searching...';
-  document.getElementById('resultsArea').innerHTML='<div class="spinner-wrap"><div class="spin"></div><div>Searching all providers...</div></div>';
+  document.getElementById('results').innerHTML='<div class="spin-wrap"><div class="spin"></div><div>Searching all providers...</div></div>';
   fetch('/api/order-lookup?q='+encodeURIComponent(q))
   .then(function(r){return r.json();})
   .then(function(data){
     btn.disabled=false;btn.textContent='Search';
     var res=data.results||[];
     if(!res.length){
-      document.getElementById('resultsArea').innerHTML='<div class="empty"><div class="ico">🔎</div><div>No orders found for <b>'+q+'</b></div></div>';
+      document.getElementById('results').innerHTML='<div class="empty"><div class="ico">🔎</div><p>No orders found for <b>'+escH(q)+'</b></p></div>';
       return;
     }
-    var html='<div class="results-header">Found <b>'+res.length+'</b> result'+(res.length>1?'s':'')+' for <b>'+q+'</b></div>';
+    var html='<div class="rcount">Found <b>'+res.length+'</b> result'+(res.length>1?'s':'')+' for <b>'+escH(q)+'</b></div>';
     res.forEach(function(r){
-      var c=COLORS[r.provider]||'#4f46e5';
-      html+='<div class="result-card">'
-       +'<div class="rc-head">'
-       +'<span class="rc-order">'+r.order+'</span>'
-       +'<span class="rc-badge" style="background:'+c+'22;color:'+c+'">'+r.provider+'</span>'
+      var c=C[r.provider]||'#4f46e5';
+      html+='<div class="rcard">'
+       +'<div class="rcard-top">'
+       +'<span class="rorder">'+escH(r.order)+'</span>'
+       +'<span class="rbadge" style="background:'+c+'1a;color:'+c+'">'+r.provider+'</span>'
        +'</div>'
-       +'<div class="rc-grid">'
-       +F('Boxes',r.boxes)+F('Chargeable Wt',r.cw)
-       +F('Vendor',r.vendor)+F('Title',r.title)
-       +F('Item Count',r.item_count)+F('Customer',r.customer)
-       +F('Country',r.country)
-       +FC('Tracking ID',r.tid,'tid')
-       +FC('MAWB',r.mawb,'mawb')
-       +'</div></div>';
+       +'<div class="rcard-body"><div class="rgrid">'
+       +f('Customer',r.customer)+f('Country',r.country)+f('Boxes',r.boxes)
+       +f('Chargeable Wt',r.cw)+f('Item Count',r.item_count)+f('Vendor',r.vendor)
+       +fWide('Title',r.title)
+       +fTID('Tracking ID',r.tid)
+       +fMAWB('MAWB',r.mawb)
+       +'</div></div></div>';
     });
-    document.getElementById('resultsArea').innerHTML=html;
+    document.getElementById('results').innerHTML=html;
   })
   .catch(function(){
     btn.disabled=false;btn.textContent='Search';
-    document.getElementById('resultsArea').innerHTML='<div class="empty"><div class="ico">❌</div><div>Search failed. Please try again.</div></div>';
+    document.getElementById('results').innerHTML='<div class="empty"><div class="ico">❌</div><p>Search failed. Please try again.</p></div>';
   });
 }
-function F(l,v){return '<div class="rc-field"><div class="rc-label">'+l+'</div><div class="rc-val">'+(v||'—')+'</div></div>';}
-function FC(l,v,c){return '<div class="rc-field"><div class="rc-label">'+l+'</div><div class="rc-val '+c+'">'+(v||'—')+'</div></div>';}
-document.getElementById('searchInput').focus();
+
+function f(l,v){
+  return '<div class="rfield"><div class="rlabel">'+l+'</div><div class="rval">'+(v?escH(v):'<span style="color:#1e293b">—</span>')+'</div></div>';
+}
+function fWide(l,v){
+  return '<div class="rfield wide"><div class="rlabel">'+l+'</div><div class="rval">'+(v?escH(v):'<span style="color:#1e293b">—</span>')+'</div></div>';
+}
+function fTID(l,v){
+  if(!v||v==='—'||v.trim()===''){
+    return '<div class="rfield w2"><div class="rlabel">'+l+'</div><div class="rval"><span style="color:#1e293b">—</span></div></div>';
+  }
+  var tids=v.split(',').map(function(t){return t.trim();}).filter(Boolean);
+  var inner='<div class="tid-list">';
+  tids.forEach(function(t,i){
+    inner+='<div class="tid-item"><span class="tid-num">'+(i+1)+'</span>'+escH(t)+'</div>';
+  });
+  inner+='</div>';
+  return '<div class="rfield w2"><div class="rlabel">'+l+' ('+tids.length+')</div>'+inner+'</div>';
+}
+function fMAWB(l,v){
+  var disp=v&&v!=='—'?'<span class="mawb-val">'+escH(v)+'</span>':'<span style="color:#1e293b">—</span>';
+  return '<div class="rfield"><div class="rlabel">'+l+'</div><div class="rval">'+disp+'</div></div>';
+}
+function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+document.getElementById('sinput').focus();
 </script>
 </body></html>
 """
