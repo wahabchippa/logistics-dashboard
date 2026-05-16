@@ -53,9 +53,10 @@ _GE_SID   = "1Bt8od4x1xim2CO0vHcpYPR8eoA7L0XWqNsXqBsl9FBI"
 _ECL_SID  = "1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA"
 _APX_SID  = "1WrrM_ewt0IcdG9ysKtXfIiSbSla52tsjq6FXP4rRlDo"
 _KERRY_SID= "12p1mTHfQKrmbekNK2H9IROyBxPaaBg1C0T6EDSyioko"
-ORDER_LOOKUP_EMAIL = 'wahab.chippa@joinfleek.com',
-'abdulrehman@joinfleek.com',
-
+ORDER_LOOKUP_EMAILS = {
+    'wahab.chippa@joinfleek.com',
+    'abdulrehman@joinfleek.com',
+}
 ORDER_LOOKUP_SOURCES = [
     {"name":"GE QC",    "sid":_GE_SID,    "tab":"Address and Tracking - QC Centre", "start":1, "o":0,"b":3, "cw":6, "v":12,"ti":13,"ic":14,"c":15,"cn":19,"tid":28,"mawb":31},
     {"name":"GE Zone",  "sid":_GE_SID,    "tab":"Address and Tracking - Zone",       "start":1, "o":0,"b":3, "cw":6, "v":12,"ti":13,"ic":14,"c":15,"cn":19,"tid":28,"mawb":31},
@@ -1523,7 +1524,7 @@ def sidebar(active, role='guest'):
         kwargs['user_role'] = 'Admin'
     else:
         kwargs['user_role'] = 'Guest'
-    if email == ORDER_LOOKUP_EMAIL:
+    if email in ORDER_LOOKUP_EMAILS:
         kwargs['tid_link'] = """
         <div class="nav-section">
             <div class="nav-section-title">TOOLS</div>
@@ -3999,7 +4000,7 @@ def api_orders():
 @app.route('/api/order-lookup')
 @login_required
 def api_order_lookup():
-    if (session.get('email') or '').strip().lower() != ORDER_LOOKUP_EMAIL:
+    if (session.get('email') or '').strip().lower() not in ORDER_LOOKUP_EMAILS:
         return jsonify({"error": "Access denied"}), 403
     q = request.args.get('q', '').strip()
     if not q:
@@ -4086,7 +4087,7 @@ def api_order_lookup():
 @login_required
 def api_order_lookup_warmup():
     """Pre-fetches all 6 provider sheets into cache so first search is instant."""
-    if (session.get('email') or '').strip().lower() != ORDER_LOOKUP_EMAIL:
+    if (session.get('email') or '').strip().lower() not in ORDER_LOOKUP_EMAILS:
         return jsonify({"error": "Access denied"}), 403
     now = time.time()
     fetched = []
@@ -4123,7 +4124,7 @@ def api_order_lookup_warmup():
 @app.route('/order-lookup', strict_slashes=False)
 @login_required
 def order_lookup_page():
-    if (session.get('email') or '').strip().lower() != ORDER_LOOKUP_EMAIL:
+    if (session.get('email') or '').strip().lower() not in ORDER_LOOKUP_EMAILS:
         return "Access Denied", 403
     return ORDER_LOOKUP_HTML
 
