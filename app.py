@@ -54,8 +54,6 @@ _ECL_SID  = "1VGP6HYxb-vf3pTlKCT-WyjZlf3sy_j8BrZnjjSxUVJA"
 _APX_SID  = "1WrrM_ewt0IcdG9ysKtXfIiSbSla52tsjq6FXP4rRlDo"
 _KERRY_SID= "12p1mTHfQKrmbekNK2H9IROyBxPaaBg1C0T6EDSyioko"
 ORDER_LOOKUP_EMAIL = 'wahab.chippa@joinfleek.com'
-                    'abdulrehman@joinfleek.com'
-
 ORDER_LOOKUP_SOURCES = [
     {"name":"GE QC",    "sid":_GE_SID,    "tab":"Address and Tracking - QC Centre", "start":1, "o":0,"b":3, "cw":6, "v":12,"ti":13,"ic":14,"c":15,"cn":19,"tid":28,"mawb":31},
     {"name":"GE Zone",  "sid":_GE_SID,    "tab":"Address and Tracking - Zone",       "start":1, "o":0,"b":3, "cw":6, "v":12,"ti":13,"ic":14,"c":15,"cn":19,"tid":28,"mawb":31},
@@ -1551,6 +1549,7 @@ USERS = {
     "waris@joinfleek.com":        "waris123",
     "moiz@joinfleek.com":         "moiz1234",
     "usman@joinfleek.com":         "usman1234",
+    "abdulrehman@joinfleek.com"    "rehman1234",
 }
 
 # Guest login ke liye ek simple password (optional, agar seedha guest button chahiye)
@@ -4351,6 +4350,7 @@ FULL_ACCESS = {
     "albash@joinfleek.com",
     "waris@joinfleek.com",
     "moiz@joinfleek.com",
+    "abdulrehman@joinfleek.com",
 }
 
 def user_mode():
